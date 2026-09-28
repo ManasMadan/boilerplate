@@ -80,6 +80,30 @@ if (docker) {
     if (status === "healthy" || status === "running") ok(`${service} ${status}`);
     else problem(`${service} is not running. Run \`bun run db:up\`.`);
   }
+
+  if (running.get("postgres") === "healthy") {
+    // A volume created before the role bootstrap existed has no service roles, and
+    // every service would fail with "password authentication failed".
+    const roles = await version([
+      "docker",
+      "compose",
+      "exec",
+      "-T",
+      "postgres",
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "app",
+      "-Atc",
+      "select count(*) from pg_roles where rolname in ('migrator','app_api','app_worker','app_notifications','app_webhooks','app_ai')",
+    ]);
+    if (roles === "6") ok("database roles bootstrapped");
+    else
+      problem(
+        "Database roles are missing (volume predates infra/postgres/init). Recreate it: `docker compose down -v && bun run setup` (this deletes local data).",
+      );
+  }
 }
 
 console.log(problems ? `\n${problems} problem(s) found.\n` : "\nAll good.\n");

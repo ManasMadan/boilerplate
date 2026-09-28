@@ -145,11 +145,14 @@
       "dependencies": {
         "@prisma/adapter-pg": "catalog:",
         "@prisma/client": "catalog:",
+        "pg": "^8.23.0",
       },
       "devDependencies": {
         "@repo/typescript-config": "workspace:*",
         "@types/node": "catalog:",
+        "@types/pg": "^8.23.1",
         "prisma": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "packages/email": {
