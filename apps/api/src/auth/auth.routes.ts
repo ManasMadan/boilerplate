@@ -2,7 +2,7 @@
  * Serves better-auth under /api/auth/* on the Fastify instance.
  *
  * Fastify has already parsed the JSON body by the time the route runs, so the request
- * is rebuilt as a Web Request for better-auth. Set-Cookie headers are copied one by one:
+ * is rebuilt as a Web Request for better-auth, carrying the verified client IP. Set-Cookie headers are copied one by one:
  * joining them with commas (what a plain header copy does) corrupts cookie attributes.
  */
 import type { FastifyInstance } from "fastify";
@@ -19,6 +19,10 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
         if (value !== undefined)
           headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
       }
+      // better-auth rate-limits and records sessions by the first X-Forwarded-For entry,
+      // which any client can write. Replace it with the address Fastify resolved through
+      // TRUSTED_PROXIES, so only a trusted gateway can vouch for the client IP.
+      headers.set("x-forwarded-for", request.ip);
       const body =
         request.method === "GET" || request.body === undefined
           ? undefined
