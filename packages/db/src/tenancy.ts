@@ -51,16 +51,26 @@ export function withTenant(db: Db, orgId: string) {
 
 export type TenantDb = ReturnType<typeof withTenant>;
 
-export function tenantTx<T>(
-  db: Db,
-  orgId: string,
-  fn: (tx: Prisma.TransactionClient) => Promise<T>,
-): Promise<T> {
-  return db.$transaction(
-    async (tx) => {
-      await setTenant(tx, orgId);
-      return fn(tx);
-    },
-    { maxWait: 10_000, timeout: 5_000 },
-  );
+declare const txBrand: unique symbol;
+
+/**
+ * A client that is inside a database transaction. Only `tenantTx` and `transaction`
+ * produce one, so APIs that must run inside a transaction (writing an outbox event
+ * together with the change it describes) accept `Tx` and cannot be called with a plain
+ * client: forgetting the transaction is a compile error, not a lost event.
+ */
+export type Tx = Prisma.TransactionClient & { readonly [txBrand]: true };
+
+const TX_OPTIONS = { maxWait: 10_000, timeout: 5_000 } as const;
+
+export function tenantTx<T>(db: Db, orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return db.$transaction(async (tx) => {
+    await setTenant(tx, orgId);
+    return fn(tx as Tx);
+  }, TX_OPTIONS);
+}
+
+/** A transaction on non-tenant data (same rules as tenantTx: database calls only inside). */
+export function transaction<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return db.$transaction((tx) => fn(tx as Tx), TX_OPTIONS);
 }

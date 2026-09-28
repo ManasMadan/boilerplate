@@ -1,37 +1,55 @@
-// Owner: apps/api (better-auth). These models follow better-auth's schema; after adding
-// or changing a better-auth plugin, regenerate them (see the db-change skill) and keep
-// the @@schema/@map conventions. Identity columns are published read-only to the
-// notification service (name, email, locale, timezone).
+// Owner: apps/api (better-auth). Model and field names are exactly what better-auth
+// expects (they come from `bun run --filter @repo/api auth:schema`, which prints the
+// schema for the current plugin set); columns, types and ids follow this repo's
+// conventions. After adding or removing a better-auth plugin, regenerate and port the
+// differences here (db-change skill).
+//
+// Published read-only to other services: auth.user identity columns (name, email,
+// locale, timezone) for the notification service.
 
 model User {
-  id            String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false) @map("email_verified")
-  image         String?
+  id               String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name             String
+  email            String       @unique
+  emailVerified    Boolean      @default(false) @map("email_verified")
+  image            String?
   /// BCP 47 language tag from packages/i18n `locales`; drives every email, push and SMS.
-  locale        String    @default("en")
+  locale           String       @default("en")
   /// IANA time zone, used to format dates in notifications and to respect quiet hours.
-  timezone      String    @default("UTC")
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  sessions      Session[]
-  accounts      Account[]
+  timezone         String       @default("UTC")
+  twoFactorEnabled Boolean      @default(false) @map("two_factor_enabled")
+  // admin plugin
+  role             String?
+  banned           Boolean      @default(false)
+  banReason        String?      @map("ban_reason")
+  banExpires       DateTime?    @map("ban_expires") @db.Timestamptz(3)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sessions         Session[]
+  accounts         Account[]
+  twoFactors       TwoFactor[]
+  passkeys         Passkey[]
+  members          Member[]
+  invitations      Invitation[]
 
   @@map("user")
   @@schema("auth")
 }
 
 model Session {
-  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  token     String   @unique
-  userId    String   @map("user_id") @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
-  ipAddress String?  @map("ip_address")
-  userAgent String?  @map("user_agent")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                   String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  token                String   @unique
+  userId               String   @map("user_id") @db.Uuid
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt            DateTime @map("expires_at") @db.Timestamptz(3)
+  ipAddress            String?  @map("ip_address")
+  userAgent            String?  @map("user_agent")
+  // organization plugin: the organization this session is working in.
+  activeOrganizationId String?  @map("active_organization_id") @db.Uuid
+  // admin plugin: set while an admin impersonates this user.
+  impersonatedBy       String?  @map("impersonated_by") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([userId])
   @@map("session")
@@ -44,12 +62,14 @@ model Account {
   providerId            String    @map("provider_id")
   userId                String    @map("user_id") @db.Uuid
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Encrypted at rest by better-auth (account.encryptOAuthTokens).
   accessToken           String?   @map("access_token")
   refreshToken          String?   @map("refresh_token")
   idToken               String?   @map("id_token")
   accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
   scope                 String?
+  /// Password hash (scrypt) for email + password accounts.
   password              String?
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -63,6 +83,7 @@ model Account {
 model Verification {
   id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   identifier String
+  /// Hashed one-time codes (emailOTP storeOTP: "hashed").
   value      String
   expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -70,5 +91,120 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+  @@schema("auth")
+}
+
+model TwoFactor {
+  id                      String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  secret                  String
+  backupCodes             String    @map("backup_codes")
+  userId                  String    @map("user_id") @db.Uuid
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0) @map("failed_verification_count")
+  lockedUntil             DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("two_factor")
+  @@schema("auth")
+}
+
+model Passkey {
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name         String?
+  publicKey    String    @map("public_key")
+  userId       String    @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String    @unique @map("credential_id")
+  counter      Int
+  deviceType   String    @map("device_type")
+  backedUp     Boolean   @map("backed_up")
+  transports   String?
+  aaguid       String?
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("passkey")
+  @@schema("auth")
+}
+
+model Organization {
+  id          String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name        String
+  slug        String       @unique
+  logo        String?
+  metadata    String?
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  members     Member[]
+  invitations Invitation[]
+
+  @@map("organization")
+  @@schema("auth")
+}
+
+model Member {
+  id             String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String       @map("user_id") @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// owner | admin | member (organization plugin access control).
+  role           String       @default("member")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("member")
+  @@schema("auth")
+}
+
+model Invitation {
+  id             String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  /// pending | accepted | rejected | canceled
+  status         String       @default("pending")
+  expiresAt      DateTime     @map("expires_at") @db.Timestamptz(3)
+  inviterId      String       @map("inviter_id") @db.Uuid
+  user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+  @@schema("auth")
+}
+
+model Apikey {
+  id                  String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  configId            String    @default("default") @map("config_id")
+  name                String?
+  /// First characters of the key, shown in the UI to recognise it.
+  start               String?
+  prefix              String?
+  /// Hash of the key; the plaintext key is only shown once, at creation.
+  key                 String    @unique
+  /// The user (or organization) the key acts as.
+  referenceId         String    @map("reference_id") @db.Uuid
+  refillInterval      Int?      @map("refill_interval")
+  refillAmount        Int?      @map("refill_amount")
+  lastRefillAt        DateTime? @map("last_refill_at") @db.Timestamptz(3)
+  enabled             Boolean   @default(true)
+  rateLimitEnabled    Boolean   @default(true) @map("rate_limit_enabled")
+  rateLimitTimeWindow Int       @default(86400000) @map("rate_limit_time_window")
+  rateLimitMax        Int       @default(10) @map("rate_limit_max")
+  requestCount        Int       @default(0) @map("request_count")
+  remaining           Int?
+  lastRequest         DateTime? @map("last_request") @db.Timestamptz(3)
+  expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
+  permissions         String?
+  metadata            String?
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([referenceId])
+  @@map("api_key")
   @@schema("auth")
 }
