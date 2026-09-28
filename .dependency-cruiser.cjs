@@ -50,7 +50,11 @@ module.exports = {
       comment:
         "nest-common, logger and tsdown-config are framework plumbing; domain code lives in the owning service.",
       from: { path: "^packages/(nest-common|logger|tsdown-config)/" },
-      to: { path: "^packages/(contracts|jobs|email|client)/" },
+      // The error-code catalog is platform vocabulary shared by every layer, so it is allowed.
+      to: {
+        path: "^packages/(contracts|jobs|email|client)/",
+        pathNot: "^packages/contracts/src/errors\\.ts$",
+      },
     },
     {
       name: "web-modules-only-via-barrel",

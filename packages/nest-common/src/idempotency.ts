@@ -37,7 +37,7 @@ export class IdempotencyStore {
       const existing = await this.redis.get(redisKey);
       const record = existing ? (JSON.parse(existing) as { state: string; result?: T }) : undefined;
       if (record?.state === "done") return record.result as T;
-      throw new AppError("IDEMPOTENCY_IN_PROGRESS", { status: 409 });
+      throw new AppError("IDEMPOTENCY_IN_PROGRESS");
     }
     try {
       const result = await operation();

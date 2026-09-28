@@ -3,7 +3,7 @@
  *
  *   const limiter = createRateLimiter(redis, { name: "sign-in", points: 5, windowSeconds: 60 });
  *   const result = await limiter.consume(`${ip}:${email}`);
- *   if (!result.allowed) throw new AppError("RATE_LIMITED", { status: 429, params: { retryAfterSeconds } });
+ *   if (!result.allowed) throw new AppError("RATE_LIMITED", { params: { retryAfterSeconds } });
  *
  * Keys are hashed into one Redis Cluster slot per limiter (`{rl:<name>}`) so the limiter
  * keeps working unchanged on a cluster. When Redis is unreachable the limiter fails

@@ -60,11 +60,7 @@ function guardedLookup(allowlist: readonly string[]): LookupFunction {
         const allowed = addresses.filter((entry) => permitted(entry.address, allowlist));
         const chosen = allowed[0];
         if (!chosen) {
-          callback(
-            new AppError("DESTINATION_NOT_ALLOWED", { status: 400, params: { hostname } }),
-            "",
-            4,
-          );
+          callback(new AppError("DESTINATION_NOT_ALLOWED", { params: { hostname } }), "", 4);
           return;
         }
         if (options.all) callback(null, [{ address: chosen.address, family: chosen.family }]);
@@ -92,14 +88,13 @@ export async function safeFetch(
     for (let hop = 0; hop <= 3; hop++) {
       if (current.protocol !== "https:" && !(allowHttp && current.protocol === "http:")) {
         throw new AppError("DESTINATION_NOT_ALLOWED", {
-          status: 400,
           params: { reason: "https-required" },
         });
       }
       // Literal IPs never go through DNS, so check them here.
       const host = current.hostname.replace(/^\[|\]$/g, "");
       if (ipaddr.isValid(host) && !permitted(host, allowedPrivateAddresses)) {
-        throw new AppError("DESTINATION_NOT_ALLOWED", { status: 400, params: { hostname: host } });
+        throw new AppError("DESTINATION_NOT_ALLOWED", { params: { hostname: host } });
       }
 
       const response = await undiciFetch(current, {
@@ -127,7 +122,7 @@ export async function safeFetch(
         size += value.byteLength;
         if (size > maxResponseBytes) {
           await reader.cancel();
-          throw new AppError("RESPONSE_TOO_LARGE", { status: 502, params: { maxResponseBytes } });
+          throw new AppError("RESPONSE_TOO_LARGE", { params: { maxResponseBytes } });
         }
         chunks.push(value);
       }
@@ -137,7 +132,7 @@ export async function safeFetch(
         body: Buffer.concat(chunks).toString("utf8"),
       };
     }
-    throw new AppError("TOO_MANY_REDIRECTS", { status: 502 });
+    throw new AppError("TOO_MANY_REDIRECTS");
   } finally {
     await dispatcher.close();
   }
