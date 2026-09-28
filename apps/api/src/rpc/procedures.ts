@@ -20,6 +20,7 @@ import { contract, type ErrorData } from "@repo/contracts/api";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { AppError, currentContext, updateContext } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
+import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
 
 export interface RpcContext {
@@ -77,7 +78,7 @@ export function isOlderVersion(version: string, minimum: string) {
   return false;
 }
 
-export function createProcedures(auth: Auth) {
+export function createProcedures(auth: Auth, memberships: Memberships) {
   const os = implement(contract).$context<RpcContext>();
 
   const base = os.use(async ({ next }) => {
@@ -97,14 +98,24 @@ export function createProcedures(auth: Auth) {
     return next({ context: { user: result.user, session: result.session } });
   });
 
+  // The session names the active organization; membership is re-checked every time, so
+  // someone removed from it loses access immediately (see auth/memberships.ts).
   const inOrg = authed.use(async ({ context, next }) => {
     const orgId = context.session.activeOrganizationId;
     if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
+    const role = await memberships.role(orgId, context.user.id);
+    if (!role) throw new AppError("NO_ACTIVE_ORGANIZATION");
     updateContext({ orgId });
-    return next({ context: { orgId } });
+    return next({ context: { orgId, role } });
   });
 
-  return { os, base, authed, inOrg };
+  /** Organization owners and admins only (settings, members, audit log). */
+  const orgAdmin = inOrg.use(async ({ context, next }) => {
+    if (context.role === "member") throw new AppError("FORBIDDEN");
+    return next();
+  });
+
+  return { os, base, authed, inOrg, orgAdmin };
 }
 
 export type Procedures = ReturnType<typeof createProcedures>;

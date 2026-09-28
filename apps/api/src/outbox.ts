@@ -16,11 +16,18 @@ import { type EventName, type EventPayload, events } from "@repo/contracts/event
 import type { Tx } from "@repo/db";
 import { currentContext } from "@repo/nest-common";
 
+/** Who and where, when the request context doesn't know (e.g. auth flows before a session exists). */
+export interface EventOrigin {
+  actorId?: string | null;
+  orgId?: string | null;
+}
+
 export async function emitEvent<N extends EventName>(
   tx: Tx,
   name: N,
   key: string,
   payload: EventPayload<N>,
+  origin: EventOrigin = {},
 ) {
   const context = currentContext();
   await tx.appOutboxEvent.create({
@@ -28,11 +35,23 @@ export async function emitEvent<N extends EventName>(
       name,
       key,
       payload: events[name].parse(payload),
-      orgId: context?.orgId ?? null,
-      actorId: context?.userId ?? null,
+      orgId: origin.orgId !== undefined ? origin.orgId : (context?.orgId ?? null),
+      actorId: origin.actorId !== undefined ? origin.actorId : (context?.userId ?? null),
       requestId: context?.requestId ?? null,
     },
   });
   // Wakes the relay immediately (delivered on commit); it also polls as a safety net.
   await tx.$executeRaw`SELECT pg_notify('outbox', 'app')`;
+}
+
+/** Any event with its matching payload, e.g. the result of a mapping function. */
+export type AnyEvent = { [N in EventName]: { name: N; payload: EventPayload<N> } }[EventName];
+
+/**
+ * emitEvent for an `AnyEvent`. TypeScript can't relate a union's `name` to its `payload`
+ * through a generic call, so the pairing is asserted here, once; `events[name].parse`
+ * inside emitEvent still validates the payload at runtime.
+ */
+export function emitAnyEvent(tx: Tx, event: AnyEvent, key: string, origin: EventOrigin = {}) {
+  return emitEvent(tx, event.name, key, event.payload as EventPayload<typeof event.name>, origin);
 }

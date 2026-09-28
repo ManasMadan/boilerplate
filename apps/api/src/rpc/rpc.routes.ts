@@ -16,9 +16,9 @@ import { OpenAPIHandler } from "@orpc/openapi/fastify";
 import { RPCHandler } from "@orpc/server/fastify";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { contract } from "@repo/contracts/api";
-import { negotiateLocale } from "@repo/i18n";
 import { runWithContext } from "@repo/nest-common";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { contextFor, toHeaders } from "../http-context";
 import { toContractError } from "./procedures";
 import type { AppRouter } from "./router";
 
@@ -27,27 +27,6 @@ export interface MountOptions {
   publicUrl: string;
   release: string;
   exposeDocs: boolean;
-}
-
-function toHeaders(request: FastifyRequest) {
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(request.headers)) {
-    if (value !== undefined)
-      headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
-  }
-  return headers;
-}
-
-function contextFor(request: FastifyRequest) {
-  const header = (name: string) => {
-    const value = request.headers[name];
-    return typeof value === "string" ? value : undefined;
-  };
-  return {
-    requestId: request.id,
-    locale: negotiateLocale(header("x-locale") ?? header("accept-language")),
-    clientVersion: header("x-app-version"),
-  };
 }
 
 export async function mountRpc(fastify: FastifyInstance, router: AppRouter, options: MountOptions) {

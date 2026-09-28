@@ -9,14 +9,19 @@ import type { Producer } from "@repo/jobs";
 import { Redis } from "ioredis";
 import { env } from "../env";
 import { createAuth } from "./auth";
+import { createMemberships } from "./memberships";
 
 const notifications = {
   add: () => Promise.reject(new Error("The auth CLI never sends notifications")),
 } as unknown as Producer<"notifications-critical">;
 
+const db = createDb({ url: env.API_DATABASE_URL, poolMax: 1, service: "auth-cli" });
+const redis = new Redis(env.REDIS_URL, { lazyConnect: true });
+
 export const auth = createAuth({
   env,
-  db: createDb({ url: env.API_DATABASE_URL, poolMax: 1, service: "auth-cli" }),
-  redis: new Redis(env.REDIS_URL, { lazyConnect: true }),
+  db,
+  redis,
   notifications,
+  memberships: createMemberships(db, redis),
 });

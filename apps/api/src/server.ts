@@ -5,7 +5,7 @@
 import { createServer } from "@repo/nest-common";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
-import { AUTH, type Auth } from "./auth/auth.module";
+import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.module";
 import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
 import { createProcedures } from "./rpc/procedures";
@@ -21,9 +21,10 @@ export function createApiServer() {
     async configure(app) {
       const fastify = app.getHttpAdapter().getInstance();
       const auth = app.get<Auth>(AUTH);
+      const memberships = app.get<Memberships>(MEMBERSHIPS);
       const logger = app.get(Logger);
       mountAuth(fastify, auth, env.BETTER_AUTH_URL);
-      await mountRpc(fastify, createRouter(createProcedures(auth), app), {
+      await mountRpc(fastify, createRouter(createProcedures(auth, memberships), app), {
         logError: (error) => logger.error(error, "unhandled error in procedure"),
         publicUrl: env.BETTER_AUTH_URL,
         release: env.RELEASE,

@@ -3,22 +3,33 @@ import { DATABASE, type Database, REDIS, type Redis } from "@repo/nest-common";
 import { env } from "../env";
 import { CRITICAL_NOTIFICATIONS, type CriticalNotifications } from "../notifications";
 import { type Auth, createAuth } from "./auth";
+import { createMemberships, type Memberships } from "./memberships";
 
 export const AUTH = Symbol("AUTH");
 export const InjectAuth = () => Inject(AUTH);
-export type { Auth };
+export const MEMBERSHIPS = Symbol("MEMBERSHIPS");
+export type { Auth, Memberships };
 
 /** The better-auth instance, built from the service's own database, Redis and queues. */
 @Global()
 @Module({
   providers: [
     {
+      provide: MEMBERSHIPS,
+      inject: [DATABASE, REDIS],
+      useFactory: (database: Database, redis: Redis) => createMemberships(database.write, redis),
+    },
+    {
       provide: AUTH,
-      inject: [DATABASE, REDIS, CRITICAL_NOTIFICATIONS],
-      useFactory: (database: Database, redis: Redis, notifications: CriticalNotifications) =>
-        createAuth({ env, db: database.write, redis, notifications }),
+      inject: [DATABASE, REDIS, CRITICAL_NOTIFICATIONS, MEMBERSHIPS],
+      useFactory: (
+        database: Database,
+        redis: Redis,
+        notifications: CriticalNotifications,
+        memberships: Memberships,
+      ) => createAuth({ env, db: database.write, redis, notifications, memberships }),
     },
   ],
-  exports: [AUTH],
+  exports: [AUTH, MEMBERSHIPS],
 })
 export class AuthModule {}

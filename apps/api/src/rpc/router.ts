@@ -8,6 +8,7 @@
  */
 import type { INestApplication } from "@nestjs/common";
 import { AiService, aiRouter } from "../modules/ai";
+import { AuditService, auditRouter } from "../modules/audit";
 import { systemRouter } from "../modules/system";
 import { TodoService, todoRouter } from "../modules/todo";
 import { userRouter } from "../modules/user";
@@ -19,6 +20,7 @@ export function createRouter(procedures: Procedures, app: INestApplication) {
     user: userRouter(procedures),
     todo: todoRouter(procedures, app.get(TodoService)),
     ai: aiRouter(procedures, app.get(AiService)),
+    audit: auditRouter(procedures, app.get(AuditService)),
   });
 }
 

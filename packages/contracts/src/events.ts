@@ -25,11 +25,29 @@ export const events = {
   // Account security. Written after better-auth has committed its own change (it owns
   // those writes), so, unlike product events, these are recorded just after the fact.
   "auth.signed_up.v1": userEvent,
-  "auth.signed_in.v1": userEvent.extend({
-    method: z.enum(["password", "passkey", "social", "two-factor"]),
+  "auth.session_started.v1": userEvent.extend({
+    sessionId: z.string(),
+    method: z.enum([
+      "password",
+      "passkey",
+      "social",
+      "two-factor",
+      "email-code",
+      "impersonation",
+      "other",
+    ]),
   }),
-  "auth.signed_out.v1": userEvent,
-  "auth.sessions_revoked.v1": userEvent.extend({ scope: z.enum(["one", "others", "all"]) }),
+  "auth.session_ended.v1": userEvent.extend({
+    sessionId: z.string(),
+    reason: z.enum([
+      "sign-out",
+      "revoked",
+      "password-change",
+      "password-reset",
+      "account-deleted",
+      "other",
+    ]),
+  }),
   "auth.password_changed.v1": userEvent,
   "auth.password_reset.v1": userEvent,
   "auth.email_changed.v1": userEvent,

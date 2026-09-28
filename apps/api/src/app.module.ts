@@ -10,6 +10,7 @@ import {
 import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
 import { AiModule } from "./modules/ai";
+import { AuditModule } from "./modules/audit";
 import { TodoModule } from "./modules/todo";
 import { NotificationsProducerModule } from "./notifications";
 
@@ -33,6 +34,7 @@ import { NotificationsProducerModule } from "./notifications";
     AuthModule,
     TodoModule,
     AiModule,
+    AuditModule,
   ],
 })
 export class AppModule {}

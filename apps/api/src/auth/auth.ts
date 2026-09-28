@@ -26,7 +26,8 @@ import {
   PASSWORD_MIN_LENGTH,
   userAdditionalFields,
 } from "@repo/contracts/auth";
-import type { Db } from "@repo/db";
+import type { EventName, EventPayload } from "@repo/contracts/events";
+import { type Db, transaction } from "@repo/db";
 import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
 import type { JobMeta, Producer } from "@repo/jobs";
 import { currentContext } from "@repo/nest-common";
@@ -42,6 +43,9 @@ import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Redis } from "ioredis";
 import type { Env } from "../env";
 import { features } from "../features";
+import { type EventOrigin, emitAnyEvent, emitEvent } from "../outbox";
+import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
+import type { Memberships } from "./memberships";
 import { securityAlertFor } from "./security-alerts";
 
 export interface AuthDependencies {
@@ -49,6 +53,7 @@ export interface AuthDependencies {
   db: Db;
   redis: Redis;
   notifications: Producer<"notifications-critical">;
+  memberships: Memberships;
 }
 
 const MINUTE = 60;
@@ -65,8 +70,20 @@ function jobMeta(): JobMeta {
   };
 }
 
-export function createAuth({ env, db, redis, notifications }: AuthDependencies) {
+export function createAuth({ env, db, redis, notifications, memberships }: AuthDependencies) {
   const webOrigin = new URL(env.WEB_URL);
+
+  /** Records an audit event for auth activity (see auth-events.ts for why it's separate). */
+  function record<N extends EventName>(
+    name: N,
+    key: string,
+    payload: EventPayload<N>,
+    origin: EventOrigin,
+  ) {
+    return transaction(db, (tx) => emitEvent(tx, name, key, payload, origin));
+  }
+  /** The signed-in user performing an auth action, when there is one. */
+  const actor = (fallback: string) => currentContext()?.userId ?? fallback;
 
   /** Language for an email address: the account's saved locale, else the browser's. */
   async function localeFor(email: string, headers: Headers | undefined): Promise<Locale> {
@@ -166,7 +183,18 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
               });
             }
           }
-          await db.organization.deleteMany({ where: { id: { in: soleMember } } });
+          await transaction(db, async (tx) => {
+            await tx.organization.deleteMany({ where: { id: { in: soleMember } } });
+            for (const organizationId of soleMember) {
+              await emitEvent(
+                tx,
+                "org.deleted.v1",
+                organizationId,
+                { organizationId },
+                { actorId: user.id, orgId: organizationId },
+              );
+            }
+          });
         },
       },
       // Email changes go only through the code-based flow in emailOTP below; the
@@ -195,6 +223,17 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
         if (isAPIError(ctx.context.returned)) return;
         const alert = securityAlertFor(ctx);
         if (!alert) return;
+        const userId =
+          ctx.context.session?.user.id ??
+          (await db.user.findUnique({ where: { email: alert.email }, select: { id: true } }))?.id;
+        if (userId) {
+          await transaction(db, (tx) =>
+            emitAnyEvent(tx, auditEventForAlert(alert.event, userId), userId, {
+              actorId: userId,
+              orgId: null,
+            }),
+          );
+        }
         await notifications.add(
           "send",
           {
@@ -232,14 +271,35 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
           // Every user gets a personal workspace, so tenant-scoped features work from
           // the first sign-in, for solo users and teams alike.
           after: async (user) => {
-            await db.organization.create({
-              data: {
-                name: user.name,
-                slug: `personal-${user.id}`,
-                metadata: JSON.stringify({ personal: true }),
-                members: { create: { userId: user.id, role: "owner" } },
-              },
+            await transaction(db, async (tx) => {
+              const org = await tx.organization.create({
+                data: {
+                  name: user.name,
+                  slug: `personal-${user.id}`,
+                  metadata: JSON.stringify({ personal: true }),
+                  members: { create: { userId: user.id, role: "owner" } },
+                },
+              });
+              const origin = { actorId: user.id, orgId: org.id };
+              await emitEvent(tx, "auth.signed_up.v1", user.id, { userId: user.id }, origin);
+              await emitEvent(
+                tx,
+                "org.created.v1",
+                org.id,
+                { organizationId: org.id, name: org.name },
+                origin,
+              );
             });
+          },
+        },
+        delete: {
+          after: async (user) => {
+            await record(
+              "auth.account_deleted.v1",
+              user.id,
+              { userId: user.id },
+              { actorId: user.id, orgId: null },
+            );
           },
         },
         // Profile edits go through the same rules: an unknown language or zone is refused
@@ -278,6 +338,28 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
               data: { ...session, activeOrganizationId: membership?.organizationId ?? null },
             };
           },
+          after: async (session, ctx) => {
+            await record(
+              "auth.session_started.v1",
+              session.id,
+              { userId: session.userId, sessionId: session.id, method: sessionMethod(ctx?.path) },
+              { actorId: session.userId, orgId: null },
+            );
+          },
+        },
+        delete: {
+          after: async (session, ctx) => {
+            await record(
+              "auth.session_ended.v1",
+              session.id,
+              {
+                userId: session.userId,
+                sessionId: session.id,
+                reason: sessionEndReason(ctx?.path),
+              },
+              { actorId: actor(session.userId), orgId: null },
+            );
+          },
         },
       },
     },
@@ -312,6 +394,79 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
       organization({
         creatorRole: "owner",
         invitationExpiresIn: INVITATION_DAYS * DAY,
+        // Every membership change is audited (in the organization's own log, so its
+        // admins see it) and forgets the cached role, so access follows immediately.
+        organizationHooks: {
+          afterCreateOrganization: async ({ organization: org, user }) => {
+            await memberships.forget(org.id, user.id);
+            await record(
+              "org.created.v1",
+              org.id,
+              { organizationId: org.id, name: org.name },
+              { actorId: user.id, orgId: org.id },
+            );
+          },
+          beforeDeleteOrganization: async ({ organization: org }) => {
+            await memberships.forgetOrganization(org.id);
+          },
+          afterDeleteOrganization: async ({ organization: org, user }) => {
+            await record(
+              "org.deleted.v1",
+              org.id,
+              { organizationId: org.id },
+              { actorId: user.id, orgId: org.id },
+            );
+          },
+          afterAddMember: async ({ member, organization: org }) => {
+            await memberships.forget(org.id, member.userId);
+            await record(
+              "org.member_added.v1",
+              member.id,
+              { organizationId: org.id, userId: member.userId, role: member.role },
+              { actorId: actor(member.userId), orgId: org.id },
+            );
+          },
+          afterAcceptInvitation: async ({ member, organization: org }) => {
+            await memberships.forget(org.id, member.userId);
+            await record(
+              "org.member_added.v1",
+              member.id,
+              { organizationId: org.id, userId: member.userId, role: member.role },
+              { actorId: member.userId, orgId: org.id },
+            );
+          },
+          afterRemoveMember: async ({ member, organization: org }) => {
+            await memberships.forget(org.id, member.userId);
+            await record(
+              "org.member_removed.v1",
+              member.id,
+              { organizationId: org.id, userId: member.userId, role: member.role },
+              { actorId: actor(member.userId), orgId: org.id },
+            );
+          },
+          afterUpdateMemberRole: async ({ member, previousRole, organization: org }) => {
+            await memberships.forget(org.id, member.userId);
+            await record(
+              "org.member_role_changed.v1",
+              member.id,
+              { organizationId: org.id, userId: member.userId, role: member.role, previousRole },
+              { actorId: actor(member.userId), orgId: org.id },
+            );
+          },
+          afterCreateInvitation: async ({ invitation, inviter, organization: org }) => {
+            await record(
+              "org.invitation_sent.v1",
+              invitation.id,
+              {
+                organizationId: org.id,
+                invitationId: invitation.id,
+                email: invitation.email,
+                role: String(invitation.role),
+              },
+              { actorId: inviter.id, orgId: org.id },
+            );
+          },
+        },
         sendInvitationEmail: async ({ id, email, organization: org, inviter }, request) => {
           await notifications.add(
             "send",

@@ -239,6 +239,130 @@ describe("time limits", () => {
   });
 });
 
+describe("organizations and the audit trail", () => {
+  /** Outbox rows (events) for an aggregate key, read as the database superuser. */
+  async function outbox(where: string, params: unknown[]) {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    try {
+      const { rows } = await client.query<{
+        name: string;
+        payload: Record<string, unknown>;
+        org_id: string | null;
+        actor_id: string | null;
+      }>(
+        `SELECT name, payload, org_id, actor_id FROM app.outbox_event WHERE ${where} ORDER BY id`,
+        params,
+      );
+      return rows;
+    } finally {
+      await client.end();
+    }
+  }
+
+  /** A team organization with an owner and a member (who joined by invitation). */
+  async function team() {
+    const owner = await signedInUser();
+    const member = await signedInUser();
+    const org = await owner.session.auth<{ id: string }>("/organization/create", {
+      name: "Team",
+      slug: `team-${randomUUID().slice(0, 8)}`,
+    });
+    await owner.session.auth("/organization/invite-member", {
+      email: member.email,
+      role: "member",
+      organizationId: org.body.id,
+    });
+    const invitation = await takeNotification(harness, "org.invitation", member.email);
+    const invitationId = new URL(invitation.data.acceptUrl).pathname.split("/").at(-1);
+    await member.session.auth("/organization/accept-invitation", { invitationId });
+    await member.session.auth("/organization/set-active", { organizationId: org.body.id });
+    await owner.session.auth("/organization/set-active", { organizationId: org.body.id });
+    const memberId = (await member.session.rpc.user.me()).id;
+    return { owner, member, orgId: org.body.id, memberId };
+  }
+
+  it("records sign-up, the personal workspace and sessions as events", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const events = await outbox("actor_id = $1::uuid", [userId]);
+    const names = events.map((event) => event.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["auth.signed_up.v1", "org.created.v1", "auth.session_started.v1"]),
+    );
+    expect(events.find((e) => e.name === "auth.session_started.v1")?.payload).toMatchObject({
+      userId,
+      method: "email-code",
+    });
+
+    await session.auth("/sign-out");
+    const after = await outbox("actor_id = $1::uuid AND name = 'auth.session_ended.v1'", [userId]);
+    expect(after.at(-1)?.payload).toMatchObject({ reason: "sign-out" });
+  });
+
+  it("records membership changes in the organization's own log, with who did them", async () => {
+    const { owner, orgId, memberId } = await team();
+    const { id: ownerId } = await owner.session.rpc.user.me();
+    const { members } = await owner.session.authGet<{ members: { id: string; userId: string }[] }>(
+      `/organization/list-members?organizationId=${orgId}`,
+    );
+    const target = members.find((m) => m.userId === memberId)?.id;
+    await owner.session.auth("/organization/update-member-role", {
+      memberId: target,
+      role: "admin",
+      organizationId: orgId,
+    });
+
+    const events = await outbox("org_id = $1::uuid", [orgId]);
+    // Creating an organization adds its creator as the first member.
+    expect(events.map((e) => e.name)).toEqual([
+      "org.member_added.v1",
+      "org.created.v1",
+      "org.invitation_sent.v1",
+      "org.member_added.v1",
+      "org.member_role_changed.v1",
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      actor_id: ownerId,
+      payload: { role: "admin", previousRole: "member" },
+    });
+  });
+
+  it("a removed member loses access on their very next request", async () => {
+    const { owner, member, orgId } = await team();
+    await member.session.rpc.todo.create({ title: "Mine for now" });
+
+    await owner.session.auth("/organization/remove-member", {
+      memberIdOrEmail: member.email,
+      organizationId: orgId,
+    });
+    await expectError(member.session.rpc.todo.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
+    await expectError(
+      member.session.rpc.todo.create({ title: "Sneaky" }),
+      "NO_ACTIVE_ORGANIZATION",
+    );
+  });
+
+  it("only owners and admins read the audit log, and only their organization's", async () => {
+    const { owner, member, orgId } = await team();
+    // The worker writes the audit log; here, rows are written directly as it would.
+    const admin = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await admin.connect();
+    await admin.query("SELECT audit.ensure_partitions(1, 1)");
+    await admin.query(
+      `INSERT INTO audit.audit_log (id, occurred_at, name, key, payload, org_id, source)
+       VALUES (uuidv7(), now(), 'todo.created.v1', 'k', '{"title":"Audited"}', $1, 'app'),
+              (uuidv7(), now(), 'todo.created.v1', 'k', '{"title":"Other org"}', $2, 'app')`,
+      [orgId, randomUUID()],
+    );
+    await admin.end();
+
+    const log = await owner.session.rpc.audit.list({ limit: 20 });
+    expect(log.items.map((entry) => entry.payload.title)).toEqual(["Audited"]);
+    await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
+  });
+});
+
 describe("account deletion", () => {
   /** Counts an organization's todos and reports whether the org still exists (as the migrator). */
   async function orgState(orgId: string) {
