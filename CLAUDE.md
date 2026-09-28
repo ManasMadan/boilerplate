@@ -1,0 +1,64 @@
+# Boilerplate
+
+Full-stack monorepo: a hackathon starter built to production standards. Everything is
+driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
+
+## Commands
+
+| Task | Command |
+|---|---|
+| First-time setup (idempotent) | `bun run setup` |
+| Health check (tools, .env drift, services) | `bun run doctor` |
+| Develop (core profile: web, api, notifications, worker) | `bun dev` |
+| Develop with every service (AI, files, billing, …) | `bun dev:full` |
+| Lint, formatting, architecture boundaries | `bun run lint` (`bun run format` to fix) |
+| Types | `bun run check-types` |
+| Unit tests (fast, cached) | `bun run test` |
+| Integration tests (real Postgres/Valkey/Mailpit) | `bun run test:integration` |
+| Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
+| New database migration | `bun run db:migrate` |
+| Set a secret in .env (you cannot read .env) | `bun run env:set KEY=value` |
+
+Run commands from the repo root. Never `cd` into a package to run tools directly.
+
+## Principles (non-negotiable)
+
+1. **Fix root causes.** No workarounds, no `as any`, no `@ts-ignore`, no disabling a
+   lint rule to get green. If the design forces a workaround, change the design.
+2. **Validate at every boundary**: env (t3-env), HTTP input (contract schemas), queue
+   payloads (`parseJob`), cross-service data. Types come from schemas, never duplicated.
+3. **One implementation per concern.** Before writing a helper, search `packages/` for it.
+4. **Seams, not rewrites.** Integrations that will change at scale (translations,
+   templates, email/SMS/push providers, storage, search, queues) sit behind one
+   interface. Call the interface, never the provider. Each seam's file documents how to
+   swap it; the full list is in README "Scaling path".
+5. **Services never import each other.** They share `packages/*` and talk through the
+   API contract, queues and events. `bun run lint:boundaries` enforces this.
+6. **Every user-facing string goes through `packages/i18n`** (UI, emails, push, SMS).
+7. Comments explain *why*, in plain prose. No decision IDs, no "as discussed".
+
+## Layout
+
+- `apps/web` Next.js, render-only (no route handlers or server actions; enforced)
+- `apps/api` NestJS on Fastify: auth (better-auth) and the oRPC API
+- `apps/notifications` NestJS worker: every notification channel
+- `apps/worker` NestJS: outbox relay, audit log, scheduled jobs
+- `apps/webhooks` NestJS: inbound provider webhooks and outbound delivery
+- `apps/ai` Python (FastAPI, Pydantic AI, LangGraph, BullMQ worker)
+- `apps/mobile` Expo
+- `packages/contracts` API contract, input schemas, limits, error codes
+- `packages/client` data hooks for web and mobile (the only way apps call the API)
+- `packages/db` Prisma schema, migrations, client factory
+- `packages/nest-common` shared Nest plumbing (env fragments, db, redis, logging, health)
+- `packages/jobs` queue contracts and producer
+- `packages/i18n` every translation; `packages/email` email templates; `packages/ui` components
+
+## Working rules
+
+- Generated files (`**/generated/**`, `*.gen.ts`, `openapi.json`), applied migrations,
+  lockfiles and `.env` are protected by hooks. Change the source and regenerate.
+- When you finish a change, the Stop hook runs lint, types and unit tests for affected
+  packages. For anything touching the database, queues or HTTP, also run the `verify` skill.
+- Commits: Conventional Commits with a workspace scope, e.g. `feat(api): add todo sharing`.
+- New environment variables go in the service's `src/env.ts`, `.env.example`, and
+  docs/environment.md, in the same change.
