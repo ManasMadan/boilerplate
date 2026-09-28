@@ -9,7 +9,7 @@
   },
   "scripts": {
     "check-types": "tsc",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@orpc/contract": "catalog:",

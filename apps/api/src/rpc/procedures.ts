@@ -16,7 +16,7 @@
  */
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";
-import { contract } from "@repo/contracts/api";
+import { contract, type ErrorData } from "@repo/contracts/api";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { AppError, currentContext, updateContext } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
@@ -26,7 +26,7 @@ export interface RpcContext {
   headers: Headers;
 }
 
-type ErrorParams = Record<string, string | number | boolean>;
+type ErrorParams = ErrorData["params"];
 
 /** Maps anything thrown inside a procedure to the contract's error shape. */
 export function toContractError(

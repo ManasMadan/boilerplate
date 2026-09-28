@@ -9,9 +9,11 @@
  */
 import { apiKeyClient } from "@better-auth/api-key/client";
 import { passkeyClient } from "@better-auth/passkey/client";
+import { userAdditionalFields } from "@repo/contracts/auth";
 import {
   adminClient,
   emailOTPClient,
+  inferAdditionalFields,
   organizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
@@ -26,6 +28,7 @@ export const authClientPlugins = (options: { onTwoFactorRequired?: () => void } 
   organizationClient(),
   adminClient(),
   apiKeyClient(),
+  inferAdditionalFields({ user: userAdditionalFields }),
 ];
 
 export interface AuthClientOptions {

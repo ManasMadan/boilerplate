@@ -16,9 +16,9 @@ export function errorCode(error: unknown): ErrorCode {
 /** The i18n key (packages/i18n `errors.*`) for an error. */
 export const errorMessageKey = (error: unknown) => `errors.${errorCode(error)}` as const;
 
-export function errorParams(error: unknown): Record<string, string | number | boolean> {
+export function errorParams(error: unknown): Record<string, string | number> {
   if (error instanceof ORPCError) {
-    const data = error.data as { params?: Record<string, string | number | boolean> } | undefined;
+    const data = error.data as { params?: Record<string, string | number> } | undefined;
     return data?.params ?? {};
   }
   return {};

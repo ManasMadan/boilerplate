@@ -9,8 +9,11 @@ import { z } from "zod";
 import { ERROR_CODES, type ErrorCode } from "../errors";
 
 export const errorData = z.object({
-  /** Values the client needs to render the translated message. */
-  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
+  /**
+   * Values the client needs to render the translated message. Strings and numbers only:
+   * they're ICU message arguments (use `{flag, select, yes {…} other {…}}` for choices).
+   */
+  params: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
   /** Correlates the error with server logs; show it on error screens. */
   requestId: z.string().optional(),
   /** Per-field problems for VALIDATION_FAILED: path + code, translated client-side. */

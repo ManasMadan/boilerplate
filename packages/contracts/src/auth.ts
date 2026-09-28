@@ -15,3 +15,14 @@ export const emailSchema = z.email().max(254).toLowerCase();
 export const passwordSchema = z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH);
 export const nameSchema = z.string().trim().min(1).max(NAME_MAX_LENGTH);
 export const otpSchema = z.string().regex(new RegExp(`^\\d{${OTP_LENGTH}}$`));
+
+/**
+ * Extra columns on the auth user, in better-auth's field format. The server registers
+ * them (`user.additionalFields`) and clients infer them (`inferAdditionalFields`), so
+ * `authClient.updateUser({ locale })` and `session.user.timezone` are typed on both
+ * sides. No defaultValue: see the sign-up hook in apps/api/src/auth/auth.ts.
+ */
+export const userAdditionalFields = {
+  locale: { type: "string", required: false, input: true },
+  timezone: { type: "string", required: false, input: true },
+} as const;

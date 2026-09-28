@@ -17,14 +17,14 @@ export type { ErrorCode };
 
 export interface AppErrorOptions {
   /** Values the client needs to render the message, e.g. { retryAfterSeconds: 30 }. */
-  params?: Record<string, string | number | boolean>;
+  params?: Record<string, string | number>;
   cause?: unknown;
 }
 
 export class AppError extends Error {
   readonly code: ErrorCode;
   readonly status: number;
-  readonly params: Record<string, string | number | boolean>;
+  readonly params: Record<string, string | number>;
 
   constructor(code: ErrorCode, options: AppErrorOptions = {}) {
     super(code, { cause: options.cause });

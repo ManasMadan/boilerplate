@@ -24,6 +24,7 @@ import {
   OTP_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  userAdditionalFields,
 } from "@repo/contracts/auth";
 import type { Db } from "@repo/db";
 import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
@@ -31,6 +32,7 @@ import type { JobMeta, Producer } from "@repo/jobs";
 import { currentContext } from "@repo/nest-common";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -130,13 +132,9 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
     },
 
     user: {
-      additionalFields: {
-        // Captured from the browser at sign-up and normalised in databaseHooks below. No
-        // defaultValue here: it would be filled in before the hook runs and hide the
-        // browser's language; the database supplies the defaults.
-        locale: { type: "string", required: false, input: true },
-        timezone: { type: "string", required: false, input: true },
-      },
+      // locale + timezone: captured from the browser at sign-up and normalised in
+      // databaseHooks below. Shared with clients so they're typed there too.
+      additionalFields: userAdditionalFields,
       deleteUser: { enabled: true },
       changeEmail: { enabled: true },
     },
@@ -184,6 +182,27 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
                 members: { create: { userId: user.id, role: "owner" } },
               },
             });
+          },
+        },
+        // Profile edits go through the same rules: an unknown language or zone is refused
+        // rather than stored, so emails and dates never render with garbage settings.
+        update: {
+          before: async (user) => {
+            if (
+              (user.locale !== undefined && !isLocale(user.locale)) ||
+              (user.timezone !== undefined && !isTimeZone(user.timezone))
+            ) {
+              // Returning false would skip the write but still report success.
+              throw new APIError("BAD_REQUEST", { code: "VALIDATION_FAILED" });
+            }
+            return {
+              data: {
+                ...user,
+                ...(typeof user.name === "string" && {
+                  name: user.name.trim().slice(0, NAME_MAX_LENGTH),
+                }),
+              },
+            };
           },
         },
       },
