@@ -6,6 +6,9 @@
   // runtime. "loose" lets variables exported in the shell (CI, hosting platforms) reach
   // tasks unchanged. Cache correctness is handled per task through `env` below.
   "envMode": "loose",
+  // Turbo writes an AGENTS.md when it detects an AI agent. This repo uses CLAUDE.md
+  // only, which already points at the docs bundled with the installed version.
+  "agentGuidance": false,
   "tasks": {
     // Code generation (Prisma client, OpenAPI → TypeScript) runs before anything that
     // type-checks, tests or bundles, so a fresh clone never sees missing types.

@@ -55,6 +55,9 @@ Run commands from the repo root. Never `cd` into a package to run tools directly
 
 ## Working rules
 
+- Libraries change faster than your training data. For Next.js, Turborepo and other tools
+  that bundle docs, read the installed version's docs first:
+  `node_modules/next/dist/docs/`, `node_modules/turbo/docs/`.
 - Generated files (`**/generated/**`, `*.gen.ts`, `openapi.json`), applied migrations,
   lockfiles and `.env` are protected by hooks. Change the source and regenerate.
 - When you finish a change, the Stop hook runs lint, types and unit tests for affected
