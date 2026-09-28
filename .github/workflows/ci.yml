@@ -79,8 +79,16 @@ jobs:
       mailpit:
         image: axllent/mailpit:v1.31.3
         ports: ["1025:1025", "8025:8025"]
+    # Services connect as their own least-privileged roles, exactly as in production.
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/app
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      SHADOW_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app_shadow
+      API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
+      WORKER_DATABASE_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      WORKER_DATABASE_DIRECT_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      NOTIFICATIONS_DATABASE_URL: postgresql://app_notifications:app_notifications@localhost:5432/app
+      WEBHOOKS_DATABASE_URL: postgresql://app_webhooks:app_webhooks@localhost:5432/app
+      AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
       REDIS_URL: redis://localhost:6379
       SMTP_URL: smtp://localhost:1025
       MAILPIT_URL: http://localhost:8025
@@ -90,8 +98,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
+      # The same roles and databases local Docker gets from infra/postgres/init.
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
       - name: Apply migrations
         run: bun run db:deploy
+      # `migrate diff` exits 0 silently without a datasource, so the URLs above are required.
+      - name: Migrations match the Prisma schema
+        working-directory: packages/db
+        run: |
+          bunx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code
+          bunx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code
       - run: bunx turbo run test:integration
 
   python:
