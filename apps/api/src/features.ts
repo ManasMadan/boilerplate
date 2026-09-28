@@ -22,6 +22,11 @@ export const features: Record<Feature, boolean> = {
     env.GOOGLE_CLIENT_SECRET,
   ),
   ai: Boolean(env.AI_URL),
+  captcha: pair(
+    "Captcha (TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY)",
+    env.TURNSTILE_SITE_KEY,
+    env.TURNSTILE_SECRET_KEY,
+  ),
   // Wired in later steps; off until their configuration exists.
   billing: false,
   files: false,

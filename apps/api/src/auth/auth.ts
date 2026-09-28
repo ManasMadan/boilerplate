@@ -52,6 +52,7 @@ export interface AuthDependencies {
 }
 
 const MINUTE = 60;
+const HOUR = 60 * MINUTE;
 const DAY = 24 * 60 * MINUTE;
 const INVITATION_DAYS = 7;
 
@@ -97,8 +98,11 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
       updateAge: DAY,
       // Keep the durable copy so users can see and revoke their devices.
       storeSessionInDatabase: true,
-      // Changing email, password, 2FA or deleting the account requires a recent sign-in.
-      freshAge: 15 * MINUTE,
+      // "Sudo mode": listing devices, adding a passkey and unlinking a social account
+      // need a session signed in within this window (better-auth's fresh-session rule);
+      // after it, the web app asks the user to sign in again. Password, 2FA and account
+      // deletion always ask for the password, and email changes need emailed codes.
+      freshAge: 2 * HOUR,
       // Deliberately no cookieCache: a cached session would outlive sign-out/revocation.
     },
 
@@ -328,7 +332,7 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
       admin({ impersonationSessionDuration: 60 * MINUTE }),
       // API keys for third-party REST access; hashed at rest, rate limited per key.
       apiKey({ defaultPrefix: "bp_", enableMetadata: true }),
-      ...(env.TURNSTILE_SECRET_KEY
+      ...(features.captcha && env.TURNSTILE_SECRET_KEY
         ? [
             captcha({
               provider: "cloudflare-turnstile",

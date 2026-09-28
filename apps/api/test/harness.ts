@@ -147,5 +147,41 @@ export async function takeOtp(harness: Harness, email: string) {
   return { otp: payload.data.otp, locale: payload.to.locale, purpose: payload.data.purpose };
 }
 
+/** The Redis key holding a session (better-auth secondary storage, keyPrefix "auth:"). */
+function sessionKey(session: { cookies(): Map<string, string> }) {
+  const cookie = session.cookies().get("better-auth.session_token");
+  if (!cookie) throw new Error("not signed in");
+  return `auth:${decodeURIComponent(cookie).split(".")[0]}`;
+}
+
+/** Rewrites a stored session in place (to simulate time passing). */
+export async function editSession(
+  harness: Harness,
+  session: { cookies(): Map<string, string> },
+  edit: (stored: { createdAt: string; expiresAt: string }) => void,
+) {
+  const key = sessionKey(session);
+  const stored = JSON.parse((await harness.redis.get(key)) ?? "null") as {
+    session: { createdAt: string; expiresAt: string };
+  } | null;
+  if (!stored) throw new Error(`no session at ${key}`);
+  edit(stored.session);
+  await harness.redis.set(key, JSON.stringify(stored), "KEEPTTL");
+}
+
+/** Moves every pending one-time code for `email` past its expiry. */
+export async function expireOtps(harness: Harness, email: string) {
+  let expired = 0;
+  for (const key of await harness.redis.keys("auth:verification:*")) {
+    const raw = await harness.redis.get(key);
+    if (!raw?.includes(email)) continue;
+    const stored = JSON.parse(raw) as { expiresAt: string };
+    stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+    await harness.redis.set(key, JSON.stringify(stored), "KEEPTTL");
+    expired += 1;
+  }
+  if (!expired) throw new Error(`no pending code for ${email}`);
+}
+
 export const newEmail = () => `user-${randomUUID()}@test.dev`;
 export const newPassword = () => `Pw-${randomUUID()}`;

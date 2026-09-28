@@ -7,6 +7,8 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createSession,
+  editSession,
+  expireOtps,
   type Harness,
   newEmail,
   newPassword,
@@ -192,6 +194,48 @@ describe("account security", () => {
     const { session } = await signedInUser();
     const response = await session.auth("/change-email", { newEmail: newEmail() });
     expect(response.status).not.toBe(200);
+  });
+});
+
+describe("time limits", () => {
+  it("an expired verification code is refused, and a new one works", async () => {
+    const session = createSession(harness);
+    const email = newEmail();
+    await session.auth("/sign-up/email", { email, password: newPassword(), name: "Late" });
+    const { otp } = await takeOtp(harness, email);
+    await expireOtps(harness, email);
+    const late = await session.auth<{ code: string }>("/email-otp/verify-email", { email, otp });
+    expect(late.status).toBe(400);
+    expect(late.body.code).toBe("OTP_EXPIRED");
+
+    await session.auth("/email-otp/send-verification-otp", { email, type: "email-verification" });
+    const fresh = await takeOtp(harness, email);
+    expect((await session.auth("/email-otp/verify-email", { email, otp: fresh.otp })).status).toBe(
+      200,
+    );
+  });
+
+  it("a session older than the fresh window can't list devices or add passkeys", async () => {
+    const { session } = await signedInUser();
+    expect((await session.authGet<unknown[]>("/list-sessions")).length).toBe(1);
+    await editSession(harness, session, (stored) => {
+      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    });
+
+    const devices = await session.authGet<{ code: string }>("/list-sessions");
+    expect(devices.code).toBe("SESSION_NOT_FRESH");
+    const passkey = await session.authGet<{ code: string }>("/passkey/generate-register-options");
+    expect(passkey.code).toBe("SESSION_NOT_FRESH");
+    // Everyday use is unaffected.
+    expect((await session.rpc.user.me()).email).toBeDefined();
+  });
+
+  it("a session past its expiry is rejected", async () => {
+    const { session } = await signedInUser();
+    await editSession(harness, session, (stored) => {
+      stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+    });
+    await expectError(session.rpc.user.me(), "UNAUTHENTICATED");
   });
 });
 

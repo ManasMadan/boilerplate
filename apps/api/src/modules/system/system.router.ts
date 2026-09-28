@@ -7,5 +7,6 @@ export const systemRouter = ({ base }: Procedures) => ({
     release: env.RELEASE,
     features,
     minimumClientVersion: env.MINIMUM_CLIENT_VERSION,
+    captchaSiteKey: features.captcha ? (env.TURNSTILE_SITE_KEY ?? null) : null,
   })),
 });
