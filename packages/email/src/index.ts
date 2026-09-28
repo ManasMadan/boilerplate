@@ -39,6 +39,12 @@ export {
   orgInvitationSubject,
 } from "./templates/org-invitation";
 export {
+  default as SecurityAlertEmail,
+  type SecurityAlertEmailProps,
+  type SecurityEventName,
+  securityAlertSubject,
+} from "./templates/security-alert";
+export {
   default as TodoReminderEmail,
   type TodoReminderEmailProps,
   todoReminderSubject,

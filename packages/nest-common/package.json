@@ -4,7 +4,8 @@
   "type": "module",
   "description": "Framework plumbing shared by every NestJS service. Never put domain logic here.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "check-types": "tsc",

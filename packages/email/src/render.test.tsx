@@ -1,6 +1,12 @@
 import { bundledMessages, createI18n } from "@repo/i18n";
 import { describe, expect, it } from "vitest";
-import { AuthOtpEmail, authOtpSubject, renderEmail } from "./index";
+import {
+  AuthOtpEmail,
+  authOtpSubject,
+  renderEmail,
+  SecurityAlertEmail,
+  securityAlertSubject,
+} from "./index";
 
 const i18n = createI18n(bundledMessages);
 
@@ -30,5 +36,20 @@ describe("renderEmail", () => {
     expect(email.subject).toBe("Restablece tu contraseña");
     expect(email.html).toContain('lang="es"');
     expect(email.text).toContain("Este código caduca en 1 minuto.");
+  });
+});
+
+describe("security alert", () => {
+  it("names the new address and links to security settings", async () => {
+    const email = await renderEmail(SecurityAlertEmail, securityAlertSubject, {
+      locale: "en",
+      t: await i18n.getTranslator("en"),
+      event: "email-changed",
+      newEmail: "new@example.com",
+      securityUrl: "https://app.example/settings/security",
+    });
+    expect(email.subject).toBe("Your email address was changed");
+    expect(email.text).toContain("new@example.com");
+    expect(email.html).toContain("https://app.example/settings/security");
   });
 });

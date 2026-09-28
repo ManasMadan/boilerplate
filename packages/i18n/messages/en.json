@@ -80,23 +80,22 @@
     "INVALID_EMAIL_OR_PASSWORD": "That email and password don't match.",
     "EMAIL_NOT_VERIFIED": "Verify your email first. We've sent you a new code.",
     "USER_ALREADY_EXISTS": "An account with this email already exists.",
-    "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL": "An account with this email already exists.",
     "PASSWORD_COMPROMISED": "This password appeared in a data breach. Choose a different one.",
     "INVALID_PASSWORD": "That password is wrong.",
     "INVALID_OTP": "That code is wrong or has expired.",
     "OTP_EXPIRED": "That code has expired. Request a new one.",
     "TOO_MANY_ATTEMPTS": "Too many attempts. Request a new code.",
-    "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE": "Too many attempts. Request a new code.",
     "INVALID_CODE": "That code is wrong.",
     "INVALID_BACKUP_CODE": "That backup code is wrong or was already used.",
     "INVALID_TWO_FACTOR_COOKIE": "This sign-in attempt expired. Sign in again.",
     "SESSION_EXPIRED": "For your security, sign in again to do that.",
-    "SESSION_NOT_FRESH": "For your security, sign in again to do that.",
     "PASSKEY_NOT_FOUND": "This passkey isn't registered to any account.",
     "PREVIOUSLY_REGISTERED": "This passkey is already added.",
     "AUTHENTICATION_FAILED": "The passkey couldn't be verified.",
     "VALIDATION_FAILED": "Some of those details aren't valid.",
     "RATE_LIMITED": "Too many attempts. Wait a minute and try again.",
+    "PASSKEY_CANCELLED": "The passkey prompt was closed before finishing. Try again, or use your password.",
+    "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again."
   },
   "nav": {
@@ -137,7 +136,22 @@
       "name": "Name",
       "language": "Language",
       "timeZone": "Time zone",
-      "saved": "Profile saved"
+      "saved": "Profile saved",
+      "email": {
+        "title": "Email",
+        "description": "You sign in with this address, and we send account emails to it.",
+        "current": "Current email",
+        "change": "Change email",
+        "start": "We'll send a code to {email} to confirm it's you.",
+        "sendCurrent": "Send code",
+        "currentCode": "Code sent to {email}",
+        "newEmail": "New email",
+        "sendNew": "Send code to new email",
+        "newCode": "Code sent to {email}",
+        "confirm": "Change email",
+        "changed": "Email changed to {email}",
+        "sameEmail": "That's already your email."
+      }
     },
     "security": {
       "title": "Security",
@@ -160,7 +174,8 @@
         "scan": "Scan this code with your authenticator app, then enter the code it shows.",
         "backupCodes": "Backup codes",
         "backupCodesDescription": "Store these somewhere safe. Each works once if you lose your device.",
-        "confirmPassword": "Confirm with your password"
+        "confirmPassword": "Confirm with your password",
+        "manualKey": "Can't scan it? Enter this key in your app instead:"
       },
       "passkeys": {
         "title": "Passkeys",
@@ -220,7 +235,7 @@
       "email-verification": {
         "subject": "Verify your email",
         "heading": "Verify your email address",
-        "body": "Enter this code to finish creating your account."
+        "body": "Enter this code to confirm your email address."
       },
       "forget-password": {
         "subject": "Reset your password",
@@ -249,6 +264,34 @@
       "body": "{inviterName} invited you to collaborate in {organizationName}.",
       "cta": "Accept invitation",
       "expires": "This invitation expires in {days, plural, one {# day} other {# days}}."
+    },
+    "securityAlert": {
+      "email-changed": {
+        "subject": "Your email address was changed",
+        "body": "The email address on your account was changed to {newEmail}. You'll now sign in with that address."
+      },
+      "password-changed": {
+        "subject": "Your password was changed",
+        "body": "The password for your account was just changed, and your other devices were signed out."
+      },
+      "password-reset": {
+        "subject": "Your password was reset",
+        "body": "The password for your account was reset using a code sent to this address. Every device was signed out."
+      },
+      "two-factor-enabled": {
+        "subject": "Two-step verification is on",
+        "body": "Signing in to your account now also needs a code from your authenticator app."
+      },
+      "two-factor-disabled": {
+        "subject": "Two-step verification was turned off",
+        "body": "Signing in to your account no longer needs a code from your authenticator app."
+      },
+      "passkey-added": {
+        "subject": "A passkey was added",
+        "body": "A new passkey was added to your account. It can be used to sign in without a password."
+      },
+      "notYou": "If this wasn't you, reset your password now and sign out of devices you don't recognise.",
+      "cta": "Review security settings"
     }
   },
   "notification": {

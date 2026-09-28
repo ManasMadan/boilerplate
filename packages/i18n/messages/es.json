@@ -80,23 +80,22 @@
     "INVALID_EMAIL_OR_PASSWORD": "El correo y la contraseña no coinciden.",
     "EMAIL_NOT_VERIFIED": "Primero verifica tu correo. Te hemos enviado un código nuevo.",
     "USER_ALREADY_EXISTS": "Ya existe una cuenta con este correo.",
-    "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL": "Ya existe una cuenta con este correo.",
     "PASSWORD_COMPROMISED": "Esta contraseña apareció en una filtración de datos. Elige otra.",
     "INVALID_PASSWORD": "La contraseña es incorrecta.",
     "INVALID_OTP": "El código es incorrecto o ha caducado.",
     "OTP_EXPIRED": "El código ha caducado. Solicita uno nuevo.",
     "TOO_MANY_ATTEMPTS": "Demasiados intentos. Solicita un código nuevo.",
-    "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE": "Demasiados intentos. Solicita un código nuevo.",
     "INVALID_CODE": "El código es incorrecto.",
     "INVALID_BACKUP_CODE": "El código de respaldo es incorrecto o ya se usó.",
     "INVALID_TWO_FACTOR_COOKIE": "Este intento de inicio de sesión caducó. Vuelve a iniciar sesión.",
     "SESSION_EXPIRED": "Por seguridad, vuelve a iniciar sesión para hacer esto.",
-    "SESSION_NOT_FRESH": "Por seguridad, vuelve a iniciar sesión para hacer esto.",
     "PASSKEY_NOT_FOUND": "Esta llave de acceso no está registrada en ninguna cuenta.",
     "PREVIOUSLY_REGISTERED": "Esta llave de acceso ya está añadida.",
     "AUTHENTICATION_FAILED": "No se pudo verificar la llave de acceso.",
     "VALIDATION_FAILED": "Algunos de esos datos no son válidos.",
     "RATE_LIMITED": "Demasiados intentos. Espera un minuto y vuelve a intentarlo.",
+    "PASSKEY_CANCELLED": "Se cerró la ventana de la llave de acceso antes de terminar. Inténtalo de nuevo o usa tu contraseña.",
+    "ORGANIZATION_NEEDS_OWNER": "Eres propietario de un espacio compartido. Haz propietario a otra persona antes de eliminar tu cuenta.",
     "generic": "Algo salió mal. Inténtalo de nuevo."
   },
   "nav": {
@@ -137,7 +136,22 @@
       "name": "Nombre",
       "language": "Idioma",
       "timeZone": "Zona horaria",
-      "saved": "Perfil guardado"
+      "saved": "Perfil guardado",
+      "email": {
+        "title": "Correo electrónico",
+        "description": "Inicias sesión con esta dirección y te enviamos a ella los correos de la cuenta.",
+        "current": "Correo actual",
+        "change": "Cambiar correo",
+        "start": "Enviaremos un código a {email} para confirmar que eres tú.",
+        "sendCurrent": "Enviar código",
+        "currentCode": "Código enviado a {email}",
+        "newEmail": "Nuevo correo",
+        "sendNew": "Enviar código al nuevo correo",
+        "newCode": "Código enviado a {email}",
+        "confirm": "Cambiar correo",
+        "changed": "Correo cambiado a {email}",
+        "sameEmail": "Ese ya es tu correo."
+      }
     },
     "security": {
       "title": "Seguridad",
@@ -160,7 +174,8 @@
         "scan": "Escanea este código con tu app de autenticación e introduce el código que muestra.",
         "backupCodes": "Códigos de respaldo",
         "backupCodesDescription": "Guárdalos en un lugar seguro. Cada uno sirve una vez si pierdes tu dispositivo.",
-        "confirmPassword": "Confirma con tu contraseña"
+        "confirmPassword": "Confirma con tu contraseña",
+        "manualKey": "¿No puedes escanearlo? Introduce esta clave en tu aplicación:"
       },
       "passkeys": {
         "title": "Llaves de acceso",
@@ -220,7 +235,7 @@
       "email-verification": {
         "subject": "Verifica tu correo",
         "heading": "Verifica tu dirección de correo",
-        "body": "Introduce este código para terminar de crear tu cuenta."
+        "body": "Introduce este código para confirmar tu dirección de correo."
       },
       "forget-password": {
         "subject": "Restablece tu contraseña",
@@ -249,6 +264,34 @@
       "body": "{inviterName} te invitó a colaborar en {organizationName}.",
       "cta": "Aceptar invitación",
       "expires": "Esta invitación caduca en {days, plural, one {# día} other {# días}}."
+    },
+    "securityAlert": {
+      "email-changed": {
+        "subject": "Tu correo electrónico cambió",
+        "body": "El correo de tu cuenta cambió a {newEmail}. A partir de ahora iniciarás sesión con esa dirección."
+      },
+      "password-changed": {
+        "subject": "Tu contraseña cambió",
+        "body": "La contraseña de tu cuenta acaba de cambiar y se cerró la sesión en tus otros dispositivos."
+      },
+      "password-reset": {
+        "subject": "Tu contraseña se restableció",
+        "body": "La contraseña de tu cuenta se restableció con un código enviado a esta dirección. Se cerró la sesión en todos los dispositivos."
+      },
+      "two-factor-enabled": {
+        "subject": "La verificación en dos pasos está activada",
+        "body": "Para iniciar sesión en tu cuenta ahora también se necesita un código de tu aplicación de autenticación."
+      },
+      "two-factor-disabled": {
+        "subject": "Se desactivó la verificación en dos pasos",
+        "body": "Para iniciar sesión en tu cuenta ya no se necesita un código de tu aplicación de autenticación."
+      },
+      "passkey-added": {
+        "subject": "Se añadió una llave de acceso",
+        "body": "Se añadió una nueva llave de acceso a tu cuenta. Puede usarse para iniciar sesión sin contraseña."
+      },
+      "notYou": "Si no fuiste tú, restablece tu contraseña ahora y cierra la sesión en los dispositivos que no reconozcas.",
+      "cta": "Revisar la seguridad"
     }
   },
   "notification": {

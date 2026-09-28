@@ -11,7 +11,8 @@ import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Contract } from "@repo/contracts/api";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
-import { parseJob, queuePrefix } from "@repo/jobs";
+import { type NotificationPayload, parseJob, queuePrefix } from "@repo/jobs";
+import { redisDatabase } from "@repo/nest-common/testing";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 
@@ -27,7 +28,7 @@ export async function startApi(env: Record<string, string> = {}): Promise<Harnes
   Object.assign(process.env, {
     API_DATABASE_URL: testDb.urlFor("app_api"),
     // A private Redis database: queued jobs and sessions never mix with local dev.
-    REDIS_URL: "redis://localhost:6379/13",
+    REDIS_URL: redisDatabase(13),
     ...env,
   });
   const redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: null });
@@ -86,6 +87,11 @@ export function createSession(
       store(response);
       return { status: response.status, body: (await response.json().catch(() => null)) as T };
     },
+    async authGet<T = unknown>(path: string): Promise<T> {
+      const response = await fetch(`${harness.baseUrl}/api/auth${path}`, { headers: headers() });
+      store(response);
+      return (await response.json()) as T;
+    },
     rpc: createORPCClient<ContractRouterClient<Contract>>(
       new RPCLink({
         url: `${harness.baseUrl}/rpc`,
@@ -104,8 +110,15 @@ export function createSession(
   };
 }
 
-/** Reads the one-time code queued for an email address (no worker runs in these tests). */
-export async function takeOtp(harness: Harness, email: string) {
+/**
+ * Takes the first queued notification matching `match` (no worker runs in these tests),
+ * waiting up to 5 seconds for it to be enqueued.
+ */
+export async function takeNotification<T extends NotificationPayload["template"]>(
+  harness: Harness,
+  template: T,
+  email: string,
+): Promise<Extract<NotificationPayload, { template: T }>> {
   const queue = new Queue("notifications-critical", {
     connection: harness.redis,
     prefix: queuePrefix("notifications-critical"),
@@ -115,21 +128,23 @@ export async function takeOtp(harness: Harness, email: string) {
       const jobs = await queue.getJobs(["waiting", "delayed", "prioritized"]);
       for (const job of jobs.reverse()) {
         const { payload } = parseJob("notifications-critical", "send", job.data);
-        if (payload.template === "auth.otp" && payload.to.email === email) {
+        if (payload.template === template && "email" in payload.to && payload.to.email === email) {
           await job.remove();
-          return {
-            otp: payload.data.otp,
-            locale: payload.to.locale,
-            purpose: payload.data.purpose,
-          };
+          return payload as Extract<NotificationPayload, { template: T }>;
         }
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    throw new Error(`No code queued for ${email}`);
+    throw new Error(`No ${template} queued for ${email}`);
   } finally {
     await queue.close();
   }
+}
+
+/** Reads the one-time code queued for an email address. */
+export async function takeOtp(harness: Harness, email: string) {
+  const payload = await takeNotification(harness, "auth.otp", email);
+  return { otp: payload.data.otp, locale: payload.to.locale, purpose: payload.data.purpose };
 }
 
 export const newEmail = () => `user-${randomUUID()}@test.dev`;

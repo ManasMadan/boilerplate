@@ -1,0 +1,61 @@
+import { describe, expect, it } from "vitest";
+import { securityAlertFor } from "./security-alerts";
+
+const session = (twoFactorEnabled = false) => ({
+  user: { email: "owner@example.com", twoFactorEnabled },
+});
+
+describe("securityAlertFor", () => {
+  it.each([
+    ["/change-password", "password-changed"],
+    ["/two-factor/disable", "two-factor-disabled"],
+    ["/passkey/verify-registration", "passkey-added"],
+  ] as const)("%s alerts the signed-in user", (path, event) => {
+    expect(securityAlertFor({ path, context: { session: session() } })).toEqual({
+      event,
+      email: "owner@example.com",
+    });
+  });
+
+  it("sends an email change to the old address, naming the new one", () => {
+    expect(
+      securityAlertFor({
+        path: "/email-otp/change-email",
+        body: { newEmail: "New@Example.com" },
+        context: { session: session() },
+      }),
+    ).toEqual({ event: "email-changed", email: "owner@example.com", newEmail: "new@example.com" });
+  });
+
+  it("alerts a password reset by the address in the request (no session)", () => {
+    expect(
+      securityAlertFor({
+        path: "/email-otp/reset-password",
+        body: { email: "Owner@Example.com" },
+        context: {},
+      }),
+    ).toEqual({
+      event: "password-reset",
+      email: "owner@example.com",
+    });
+  });
+
+  it("treats a TOTP check as setup only when signed in and not yet enabled", () => {
+    expect(
+      securityAlertFor({ path: "/two-factor/verify-totp", context: { session: session(false) } })
+        ?.event,
+    ).toBe("two-factor-enabled");
+    // Signing in with a code: already enabled, or no session yet.
+    expect(
+      securityAlertFor({ path: "/two-factor/verify-totp", context: { session: session(true) } }),
+    ).toBeUndefined();
+    expect(securityAlertFor({ path: "/two-factor/verify-totp", context: {} })).toBeUndefined();
+  });
+
+  it("ignores everything else", () => {
+    expect(
+      securityAlertFor({ path: "/sign-in/email", context: { session: session() } }),
+    ).toBeUndefined();
+    expect(securityAlertFor({ path: "/change-password", context: {} })).toBeUndefined();
+  });
+});

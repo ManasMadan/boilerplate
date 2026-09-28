@@ -1,9 +1,19 @@
 /**
  * The API's security and behaviour guarantees, against the real app, database and Redis.
  */
+import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createSession, type Harness, newEmail, newPassword, startApi, takeOtp } from "./harness";
+import {
+  createSession,
+  type Harness,
+  newEmail,
+  newPassword,
+  startApi,
+  takeNotification,
+  takeOtp,
+} from "./harness";
 
 let harness: Harness;
 
@@ -116,6 +126,154 @@ describe("session revocation", () => {
     }
     expect(statuses.slice(0, 5).every((status) => status !== 429)).toBe(true);
     expect(statuses.at(-1)).toBe(429);
+  });
+});
+
+describe("account security", () => {
+  it("changing the password emails a security alert to the account", async () => {
+    const { session, email, password } = await signedInUser();
+    const changed = await session.auth("/change-password", {
+      currentPassword: password,
+      newPassword: newPassword(),
+    });
+    expect(changed.status).toBe(200);
+    const alert = await takeNotification(harness, "auth.security-alert", email);
+    expect(alert.data).toMatchObject({
+      event: "password-changed",
+      securityUrl: expect.stringContaining("/settings/security"),
+    });
+  });
+
+  it("a failed change sends no alert", async () => {
+    const { session, email } = await signedInUser();
+    const failed = await session.auth("/change-password", {
+      currentPassword: "wrong-password",
+      newPassword: newPassword(),
+    });
+    expect(failed.status).toBe(400);
+    await expect(takeNotification(harness, "auth.security-alert", email)).rejects.toThrow(
+      /No auth.security-alert/,
+    );
+  });
+
+  it("changing the email needs codes from both addresses and alerts the old one", async () => {
+    const { session, email, password } = await signedInUser();
+    const next = newEmail();
+
+    // Without the current address's code, nothing is sent to the new one.
+    const blocked = await session.auth("/email-otp/request-email-change", { newEmail: next });
+    expect(blocked.status).toBe(400);
+
+    await session.auth("/email-otp/send-verification-otp", { email, type: "email-verification" });
+    const current = await takeOtp(harness, email);
+    expect(
+      (await session.auth("/email-otp/request-email-change", { newEmail: next, otp: current.otp }))
+        .status,
+    ).toBe(200);
+    const confirmation = await takeOtp(harness, next);
+    expect(confirmation.purpose).toBe("change-email");
+    expect(
+      (await session.auth("/email-otp/change-email", { newEmail: next, otp: confirmation.otp }))
+        .status,
+    ).toBe(200);
+
+    const alert = await takeNotification(harness, "auth.security-alert", email);
+    expect(alert.data).toMatchObject({ event: "email-changed", newEmail: next });
+    expect((await session.rpc.user.me()).email).toBe(next);
+    // The new address signs in; the old one no longer exists.
+    const fresh = createSession(harness);
+    expect((await fresh.auth("/sign-in/email", { email: next, password })).status).toBe(200);
+    expect((await createSession(harness).auth("/sign-in/email", { email, password })).status).toBe(
+      401,
+    );
+  });
+
+  it("the link-based email change is disabled", async () => {
+    const { session } = await signedInUser();
+    const response = await session.auth("/change-email", { newEmail: newEmail() });
+    expect(response.status).not.toBe(200);
+  });
+});
+
+describe("account deletion", () => {
+  /** Counts an organization's todos and reports whether the org still exists (as the migrator). */
+  async function orgState(orgId: string) {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("migrator") });
+    await client.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
+      const todos = await client.query<{ count: string; created: string }>(
+        "SELECT count(*) AS count, count(created_by_id) AS created FROM app.todo",
+      );
+      const org = await client.query("SELECT 1 FROM auth.organization WHERE id = $1", [orgId]);
+      await client.query("COMMIT");
+      return {
+        exists: org.rowCount === 1,
+        todos: Number(todos.rows[0]?.count),
+        withCreator: Number(todos.rows[0]?.created),
+      };
+    } finally {
+      await client.end();
+    }
+  }
+
+  it("removes the personal workspace and its data", async () => {
+    const { session, password } = await signedInUser();
+    await session.rpc.todo.create({ title: "Private" });
+    const orgId = (await session.rpc.user.me()).activeOrganizationId as string;
+    expect(await orgState(orgId)).toMatchObject({ exists: true, todos: 1 });
+
+    expect((await session.auth("/delete-user", { password })).status).toBe(200);
+    expect(await orgState(orgId)).toEqual({ exists: false, todos: 0, withCreator: 0 });
+  });
+
+  it("won't leave a shared workspace without an owner, and keeps its data", async () => {
+    const owner = await signedInUser();
+    const member = await signedInUser();
+    const team = await owner.session.auth<{ id: string }>("/organization/create", {
+      name: "Team",
+      slug: `team-${randomUUID().slice(0, 8)}`,
+    });
+    await owner.session.auth("/organization/invite-member", {
+      email: member.email,
+      role: "member",
+      organizationId: team.body.id,
+    });
+    const invitation = await takeNotification(harness, "org.invitation", member.email);
+    const invitationId = new URL(invitation.data.acceptUrl).pathname.split("/").at(-1);
+    expect(
+      (await member.session.auth("/organization/accept-invitation", { invitationId })).status,
+    ).toBe(200);
+    await owner.session.auth("/organization/set-active", { organizationId: team.body.id });
+    await owner.session.rpc.todo.create({ title: "Team work" });
+
+    const blocked = await owner.session.auth<{ code: string }>("/delete-user", {
+      password: owner.password,
+    });
+    expect(blocked.status).toBe(400);
+    expect(blocked.body.code).toBe("ORGANIZATION_NEEDS_OWNER");
+
+    const { id: memberUserId } = await member.session.rpc.user.me();
+    const { members } = await owner.session.authGet<{ members: { id: string; userId: string }[] }>(
+      `/organization/list-members?organizationId=${team.body.id}`,
+    );
+    const target = members.find((m) => m.userId === memberUserId)?.id;
+    expect(
+      (
+        await owner.session.auth("/organization/update-member-role", {
+          memberId: target,
+          role: "owner",
+          organizationId: team.body.id,
+        })
+      ).status,
+    ).toBe(200);
+
+    expect((await owner.session.auth("/delete-user", { password: owner.password })).status).toBe(
+      200,
+    );
+    // The team and its todo survive; the todo just no longer names its creator.
+    expect(await orgState(team.body.id)).toEqual({ exists: true, todos: 1, withCreator: 0 });
   });
 });
 

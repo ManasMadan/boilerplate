@@ -42,6 +42,17 @@ export const jobMeta = z.object({
 export type JobMeta = z.infer<typeof jobMeta>;
 
 const email = z.email();
+
+/** Account changes the owner is emailed about, so a takeover can't happen silently. */
+export const SECURITY_EVENTS = [
+  "email-changed",
+  "password-changed",
+  "password-reset",
+  "two-factor-enabled",
+  "two-factor-disabled",
+  "passkey-added",
+] as const;
+export type SecurityEvent = (typeof SECURITY_EVENTS)[number];
 const locale = z.enum(locales);
 
 /** Notification templates. The notification service owns rendering and channels. */
@@ -66,6 +77,19 @@ export const notificationPayload = z.discriminatedUnion("template", [
       inviterName: z.string(),
       acceptUrl: z.url(),
       expiresInDays: z.number().int().positive(),
+    }),
+  }),
+  z.object({
+    template: z.literal("auth.security-alert"),
+    // Sent to the address that was on the account at the time: after an email change,
+    // that is the old one, which is exactly who needs to hear about it.
+    to: z.object({ email, locale }),
+    data: z.object({
+      event: z.enum(SECURITY_EVENTS),
+      /** For email-changed: the address the account moved to. */
+      newEmail: email.optional(),
+      /** Where to review devices and change the password. */
+      securityUrl: z.url(),
     }),
   }),
   z.object({
@@ -107,6 +131,7 @@ export const queues = {
 export const notificationQueue = {
   "auth.otp": "notifications-critical",
   "org.invitation": "notifications-critical",
+  "auth.security-alert": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
 

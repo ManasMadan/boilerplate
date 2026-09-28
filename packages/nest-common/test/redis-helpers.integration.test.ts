@@ -6,8 +6,9 @@ import { CacheService } from "../src/cache";
 import { AppError } from "../src/errors";
 import { IdempotencyStore } from "../src/idempotency";
 import { createRateLimiter } from "../src/rate-limit";
+import { redisDatabase } from "../src/testing";
 
-const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+const redis = new Redis(redisDatabase(12), {
   maxRetriesPerRequest: null,
 });
 afterAll(() => redis.quit());

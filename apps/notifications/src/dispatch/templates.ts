@@ -18,6 +18,8 @@ import {
   orgInvitationSubject,
   type RenderedEmail,
   renderEmail,
+  SecurityAlertEmail,
+  securityAlertSubject,
   TodoReminderEmail,
   todoReminderSubject,
 } from "@repo/email";
@@ -47,6 +49,14 @@ const templates = {
   "org.invitation": {
     email: (payload, { recipient, t }) =>
       renderEmail(OrgInvitationEmail, orgInvitationSubject, {
+        locale: recipient.locale,
+        t,
+        ...payload.data,
+      }),
+  },
+  "auth.security-alert": {
+    email: (payload, { recipient, t }) =>
+      renderEmail(SecurityAlertEmail, securityAlertSubject, {
         locale: recipient.locale,
         t,
         ...payload.data,

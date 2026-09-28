@@ -32,7 +32,7 @@ import type { JobMeta, Producer } from "@repo/jobs";
 import { currentContext } from "@repo/nest-common";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -42,6 +42,7 @@ import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Redis } from "ioredis";
 import type { Env } from "../env";
 import { features } from "../features";
+import { securityAlertFor } from "./security-alerts";
 
 export interface AuthDependencies {
   env: Env;
@@ -135,8 +136,37 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
       // locale + timezone: captured from the browser at sign-up and normalised in
       // databaseHooks below. Shared with clients so they're typed there too.
       additionalFields: userAdditionalFields,
-      deleteUser: { enabled: true },
-      changeEmail: { enabled: true },
+      deleteUser: {
+        enabled: true,
+        // Workspaces only this user belongs to are deleted with the account, and their
+        // data with them (tenant tables cascade from auth.organization). A shared
+        // workspace would be left without an owner, so that blocks deletion until
+        // ownership is handed over.
+        beforeDelete: async (user) => {
+          const owned = await db.member.findMany({
+            where: { userId: user.id, role: "owner" },
+            select: {
+              organizationId: true,
+              organization: { select: { members: { select: { userId: true, role: true } } } },
+            },
+          });
+          const soleMember: string[] = [];
+          for (const { organizationId, organization } of owned) {
+            const others = organization.members.filter((member) => member.userId !== user.id);
+            if (others.length === 0) soleMember.push(organizationId);
+            else if (!others.some((member) => member.role === "owner")) {
+              throw new APIError("BAD_REQUEST", {
+                code: "ORGANIZATION_NEEDS_OWNER",
+                message:
+                  "Transfer ownership of your shared workspaces before deleting your account.",
+              });
+            }
+          }
+          await db.organization.deleteMany({ where: { id: { in: soleMember } } });
+        },
+      },
+      // Email changes go only through the code-based flow in emailOTP below; the
+      // link-based /change-email endpoint stays off so there's one audited path.
     },
 
     account: {
@@ -151,6 +181,30 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
         env.GOOGLE_CLIENT_SECRET && {
           google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
         }),
+    },
+
+    // Security alerts: every sensitive change is emailed to the account's address, so a
+    // takeover (or a mistake) never goes unnoticed. Runs after the endpoint, only when
+    // it succeeded, and never fails the request: the email is queued with retries.
+    hooks: {
+      after: createAuthMiddleware(async (ctx) => {
+        if (isAPIError(ctx.context.returned)) return;
+        const alert = securityAlertFor(ctx);
+        if (!alert) return;
+        await notifications.add(
+          "send",
+          {
+            template: "auth.security-alert",
+            to: { email: alert.email, locale: await localeFor(alert.email, ctx.headers) },
+            data: {
+              event: alert.event,
+              ...(alert.newEmail && { newEmail: alert.newEmail }),
+              securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
+            },
+          },
+          { jobId: randomUUID(), meta: jobMeta() },
+        );
+      }),
     },
 
     databaseHooks: {
@@ -232,6 +286,9 @@ export function createAuth({ env, db, redis, notifications }: AuthDependencies) 
         sendVerificationOnSignUp: true,
         // Only a hash is stored, so a database leak exposes no live codes.
         storeOTP: "hashed",
+        // Changing the email needs a code from the current address and one from the new
+        // address, so a hijacked session alone can't move the account elsewhere.
+        changeEmail: { enabled: true, verifyCurrentEmail: true },
         sendVerificationOTP: async ({ email, otp, type }, ctx) => {
           await notifications.add(
             "send",

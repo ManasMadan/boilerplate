@@ -10,6 +10,7 @@ import { createDb } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer, type Producer } from "@repo/jobs";
 import { createRedis } from "@repo/nest-common";
+import { redisDatabase } from "@repo/nest-common/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
@@ -41,6 +42,12 @@ describe("notifications service", () => {
     testDb = await createTestDatabase();
     // The service connects as its own least-privileged role, exactly as in production.
     process.env.NOTIFICATIONS_DATABASE_URL = testDb.urlFor("app_notifications");
+    // A private Redis database, so a notifications service running locally for
+    // development can't take this test's jobs (the API tests use 13).
+    process.env.REDIS_URL = redisDatabase(14);
+    const redis = createRedis(process.env.REDIS_URL);
+    await redis.flushdb();
+    await redis.quit();
     // Imported after the env is set: env.ts validates at import time.
     const { AppModule } = await import("../src/app.module");
     const { env } = await import("../src/env");
