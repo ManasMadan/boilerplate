@@ -1,0 +1,114 @@
+{
+  "common": {
+    "appName": "Boilerplate",
+    "signIn": "Sign in",
+    "signUp": "Create account",
+    "signOut": "Sign out",
+    "dashboard": "Dashboard",
+    "email": "Email",
+    "password": "Password",
+    "name": "Full name",
+    "continue": "Continue",
+    "loading": "Loading…",
+    "or": "or",
+    "somethingWentWrong": "Something went wrong. Please try again.",
+    "theme": {
+      "toggle": "Toggle theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "language": "Language"
+  },
+  "home": {
+    "title": "Ship your idea this weekend.",
+    "subtitle": "Auth, database, typed API, jobs, AI and deploys are already wired. Start building the part that matters.",
+    "cta": "Get started",
+    "ctaSignedIn": "Open dashboard"
+  },
+  "auth": {
+    "signInTitle": "Welcome back",
+    "signInDescription": "Sign in with your email and password.",
+    "signUpTitle": "Create your account",
+    "signUpDescription": "We'll email you a code to verify your address.",
+    "google": "Continue with Google",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "verifyTitle": "Check your email",
+    "verifyDescription": "Enter the 6-digit code we sent to {email}.",
+    "resendCode": "Resend code",
+    "codeSent": "A new code is on its way.",
+    "verified": "Email verified. Welcome!",
+    "forgotTitle": "Reset your password",
+    "forgotDescription": "We'll email you a code to set a new password.",
+    "sendCode": "Send code",
+    "resetTitle": "Choose a new password",
+    "resetDescription": "Enter the code sent to {email} and your new password.",
+    "newPassword": "New password",
+    "passwordUpdated": "Password updated. Sign in with your new password.",
+    "code": "Verification code",
+    "backToSignIn": "Back to sign in"
+  },
+  "validation": {
+    "email": "Enter a valid email address",
+    "passwordMin": "Use at least {min} characters",
+    "nameMin": "Enter your name",
+    "code": "Enter the 6-digit code"
+  },
+  "dashboard": {
+    "greeting": "Hi {name}",
+    "todos": {
+      "title": "Todos",
+      "description": "Stored in Postgres, served over tRPC, fully typed end to end.",
+      "placeholder": "What needs doing?",
+      "add": "Add",
+      "empty": "Nothing to do. Add your first todo above.",
+      "delete": "Delete {title}"
+    },
+    "ai": {
+      "title": "Sentiment (Python)",
+      "description": "Runs in the FastAPI service. Types flow from Pydantic to this page.",
+      "placeholder": "Type something to classify…",
+      "analyze": "Analyze",
+      "result": "{label} ({score}% confidence, model {model})"
+    }
+  },
+  "email": {
+    "footer": "You received this email because of activity on your {appName} account.",
+    "otp": {
+      "expires": "This code expires in {minutes, plural, one {# minute} other {# minutes}}.",
+      "email-verification": {
+        "subject": "Verify your email",
+        "heading": "Verify your email address",
+        "body": "Enter this code to finish creating your account."
+      },
+      "forget-password": {
+        "subject": "Reset your password",
+        "heading": "Reset your password",
+        "body": "Enter this code to choose a new password. If you didn't ask for this, you can ignore this email."
+      },
+      "sign-in": {
+        "subject": "Your sign-in code",
+        "heading": "Sign in",
+        "body": "Enter this code to sign in."
+      },
+      "change-email": {
+        "subject": "Confirm your new email",
+        "heading": "Confirm your new email address",
+        "body": "Enter this code to confirm the change."
+      }
+    },
+    "todoReminder": {
+      "subject": "Reminder: {title}",
+      "greeting": "Hi {name},",
+      "body": "This is your reminder for “{title}”."
+    }
+  },
+  "notification": {
+    "todoReminder": {
+      "title": "Reminder",
+      "body": "{title}"
+    }
+  }
+}

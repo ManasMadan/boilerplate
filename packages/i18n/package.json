@@ -1,0 +1,22 @@
+{
+  "name": "@repo/i18n",
+  "private": true,
+  "type": "module",
+  "description": "Every user-facing string, for every surface: web, mobile, emails, push, SMS and in-app notifications.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./messages/*.json": "./messages/*.json"
+  },
+  "scripts": {
+    "check-types": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "use-intl": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

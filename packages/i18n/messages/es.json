@@ -1,0 +1,114 @@
+{
+  "common": {
+    "appName": "Boilerplate",
+    "signIn": "Iniciar sesión",
+    "signUp": "Crear cuenta",
+    "signOut": "Cerrar sesión",
+    "dashboard": "Panel",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "name": "Nombre completo",
+    "continue": "Continuar",
+    "loading": "Cargando…",
+    "or": "o",
+    "somethingWentWrong": "Algo salió mal. Inténtalo de nuevo.",
+    "theme": {
+      "toggle": "Cambiar tema",
+      "light": "Claro",
+      "dark": "Oscuro",
+      "system": "Sistema"
+    },
+    "language": "Idioma"
+  },
+  "home": {
+    "title": "Lanza tu idea este fin de semana.",
+    "subtitle": "Autenticación, base de datos, API tipada, trabajos, IA y despliegues ya están listos. Construye lo que importa.",
+    "cta": "Empezar",
+    "ctaSignedIn": "Abrir panel"
+  },
+  "auth": {
+    "signInTitle": "Bienvenido de nuevo",
+    "signInDescription": "Inicia sesión con tu correo y contraseña.",
+    "signUpTitle": "Crea tu cuenta",
+    "signUpDescription": "Te enviaremos un código para verificar tu correo.",
+    "google": "Continuar con Google",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "noAccount": "¿No tienes cuenta?",
+    "haveAccount": "¿Ya tienes cuenta?",
+    "verifyTitle": "Revisa tu correo",
+    "verifyDescription": "Introduce el código de 6 dígitos enviado a {email}.",
+    "resendCode": "Reenviar código",
+    "codeSent": "Te enviamos un nuevo código.",
+    "verified": "Correo verificado. ¡Bienvenido!",
+    "forgotTitle": "Restablece tu contraseña",
+    "forgotDescription": "Te enviaremos un código para elegir una nueva contraseña.",
+    "sendCode": "Enviar código",
+    "resetTitle": "Elige una nueva contraseña",
+    "resetDescription": "Introduce el código enviado a {email} y tu nueva contraseña.",
+    "newPassword": "Nueva contraseña",
+    "passwordUpdated": "Contraseña actualizada. Inicia sesión con la nueva.",
+    "code": "Código de verificación",
+    "backToSignIn": "Volver a iniciar sesión"
+  },
+  "validation": {
+    "email": "Introduce un correo válido",
+    "passwordMin": "Usa al menos {min} caracteres",
+    "nameMin": "Introduce tu nombre",
+    "code": "Introduce el código de 6 dígitos"
+  },
+  "dashboard": {
+    "greeting": "Hola {name}",
+    "todos": {
+      "title": "Tareas",
+      "description": "Guardadas en Postgres, servidas por tRPC, tipadas de extremo a extremo.",
+      "placeholder": "¿Qué hay que hacer?",
+      "add": "Añadir",
+      "empty": "Nada pendiente. Añade tu primera tarea.",
+      "delete": "Eliminar {title}"
+    },
+    "ai": {
+      "title": "Sentimiento (Python)",
+      "description": "Se ejecuta en el servicio FastAPI. Los tipos fluyen de Pydantic a esta página.",
+      "placeholder": "Escribe algo para clasificar…",
+      "analyze": "Analizar",
+      "result": "{label} ({score}% de confianza, modelo {model})"
+    }
+  },
+  "email": {
+    "footer": "Recibes este correo por actividad en tu cuenta de {appName}.",
+    "otp": {
+      "expires": "Este código caduca en {minutes, plural, one {# minuto} other {# minutos}}.",
+      "email-verification": {
+        "subject": "Verifica tu correo",
+        "heading": "Verifica tu dirección de correo",
+        "body": "Introduce este código para terminar de crear tu cuenta."
+      },
+      "forget-password": {
+        "subject": "Restablece tu contraseña",
+        "heading": "Restablece tu contraseña",
+        "body": "Introduce este código para elegir una nueva contraseña. Si no lo pediste, ignora este correo."
+      },
+      "sign-in": {
+        "subject": "Tu código de acceso",
+        "heading": "Iniciar sesión",
+        "body": "Introduce este código para iniciar sesión."
+      },
+      "change-email": {
+        "subject": "Confirma tu nuevo correo",
+        "heading": "Confirma tu nueva dirección de correo",
+        "body": "Introduce este código para confirmar el cambio."
+      }
+    },
+    "todoReminder": {
+      "subject": "Recordatorio: {title}",
+      "greeting": "Hola {name},",
+      "body": "Este es tu recordatorio para «{title}»."
+    }
+  },
+  "notification": {
+    "todoReminder": {
+      "title": "Recordatorio",
+      "body": "{title}"
+    }
+  }
+}
