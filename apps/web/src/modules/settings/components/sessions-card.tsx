@@ -11,7 +11,7 @@ import {
 } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useNow, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "@/modules/auth";
@@ -48,6 +48,8 @@ function deviceName(userAgent: string | null | undefined) {
 export function SessionsCard() {
   const t = useTranslations("settings.security.sessions");
   const format = useFormatter();
+  // An explicit, ticking "now" keeps server and client renders in agreement.
+  const now = useNow({ updateInterval: 60_000 });
   const errorMessage = useAuthErrorMessage();
   const queryClient = useQueryClient();
   const { data: current } = authClient.useSession();
@@ -98,7 +100,9 @@ export function SessionsCard() {
                       {isCurrent ? <Badge variant="secondary">{t("current")}</Badge> : null}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {t("lastActive", { date: format.relativeTime(new Date(session.updatedAt)) })}
+                      {t("lastActive", {
+                        date: format.relativeTime(new Date(session.updatedAt), now),
+                      })}
                       {session.ipAddress ? ` · ${session.ipAddress}` : ""}
                     </span>
                   </div>
