@@ -24,7 +24,12 @@ describe("SecretBox", () => {
   it("rejects tampered ciphertexts and unknown keys", () => {
     const box = new SecretBox(keysFromEnv(`k1:${key()}`));
     const stored = box.encrypt("secret");
-    const tampered = `${stored.slice(0, -2)}AA`;
+    // Flip one bit of the encrypted body (editing base64 text can land on padding bits
+    // that decode to the same bytes, which would make this test pass by luck).
+    const [version, id, iv, body] = stored.split(".");
+    const bytes = Buffer.from(body ?? "", "base64url");
+    bytes[0] = (bytes[0] ?? 0) ^ 1;
+    const tampered = [version, id, iv, bytes.toString("base64url")].join(".");
     expect(() => box.decrypt(tampered)).toThrow();
     expect(() => new SecretBox(keysFromEnv(`k9:${key()}`)).decrypt(stored)).toThrow(
       /Unknown encryption key/,

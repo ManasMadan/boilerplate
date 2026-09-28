@@ -9,8 +9,8 @@
   },
   "scripts": {
     "check-types": "tsc",
-    "test": "vitest run src",
-    "test:integration": "bun --env-file=../../.env run vitest run test"
+    "test": "vitest run --project unit --passWithNoTests",
+    "test:integration": "bun --env-file=../../.env run vitest run --project integration"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1142.0",
