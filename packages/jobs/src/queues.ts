@@ -58,6 +58,17 @@ export const notificationPayload = z.discriminatedUnion("template", [
     }),
   }),
   z.object({
+    template: z.literal("org.invitation"),
+    // Invitees may not have an account yet, so the address carries its own locale.
+    to: z.object({ email, locale }),
+    data: z.object({
+      organizationName: z.string(),
+      inviterName: z.string(),
+      acceptUrl: z.url(),
+      expiresInDays: z.number().int().positive(),
+    }),
+  }),
+  z.object({
     template: z.literal("todo.reminder"),
     to: z.object({ userId: z.string() }),
     data: z.object({ todoId: z.string(), title: z.string() }),
@@ -95,6 +106,7 @@ export const queues = {
 /** Which notification queue a template goes to. A new template must pick one. */
 export const notificationQueue = {
   "auth.otp": "notifications-critical",
+  "org.invitation": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
 

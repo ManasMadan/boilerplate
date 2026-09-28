@@ -34,6 +34,11 @@ export {
   type OtpPurpose,
 } from "./templates/auth-otp";
 export {
+  default as OrgInvitationEmail,
+  type OrgInvitationEmailProps,
+  orgInvitationSubject,
+} from "./templates/org-invitation";
+export {
   default as TodoReminderEmail,
   type TodoReminderEmailProps,
   todoReminderSubject,

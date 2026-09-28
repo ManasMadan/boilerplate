@@ -103,6 +103,13 @@
       "subject": "Recordatorio: {title}",
       "greeting": "Hola {name},",
       "body": "Este es tu recordatorio para «{title}»."
+    },
+    "orgInvitation": {
+      "subject": "{inviterName} te invitó a {organizationName}",
+      "heading": "Únete a {organizationName}",
+      "body": "{inviterName} te invitó a colaborar en {organizationName}.",
+      "cta": "Aceptar invitación",
+      "expires": "Esta invitación caduca en {days, plural, one {# día} other {# días}}."
     }
   },
   "notification": {

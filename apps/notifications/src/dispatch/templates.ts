@@ -14,6 +14,8 @@ import { Injectable } from "@nestjs/common";
 import {
   AuthOtpEmail,
   authOtpSubject,
+  OrgInvitationEmail,
+  orgInvitationSubject,
   type RenderedEmail,
   renderEmail,
   TodoReminderEmail,
@@ -41,6 +43,14 @@ const templates = {
   "auth.otp": {
     email: (payload, { recipient, t }) =>
       renderEmail(AuthOtpEmail, authOtpSubject, { locale: recipient.locale, t, ...payload.data }),
+  },
+  "org.invitation": {
+    email: (payload, { recipient, t }) =>
+      renderEmail(OrgInvitationEmail, orgInvitationSubject, {
+        locale: recipient.locale,
+        t,
+        ...payload.data,
+      }),
   },
   "todo.reminder": {
     email: (payload, { recipient, t }) =>
