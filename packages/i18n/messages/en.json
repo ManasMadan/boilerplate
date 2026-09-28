@@ -5,13 +5,19 @@
     "signUp": "Create account",
     "signOut": "Sign out",
     "dashboard": "Dashboard",
+    "settings": "Settings",
     "email": "Email",
     "password": "Password",
     "name": "Full name",
     "continue": "Continue",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saved": "Saved",
+    "delete": "Delete",
     "loading": "Loading…",
     "or": "or",
-    "somethingWentWrong": "Something went wrong. Please try again.",
+    "retry": "Try again",
+    "requestId": "Reference: {requestId}",
     "theme": {
       "toggle": "Toggle theme",
       "light": "Light",
@@ -19,6 +25,10 @@
       "system": "System"
     },
     "language": "Language"
+  },
+  "meta": {
+    "title": "Boilerplate",
+    "description": "Ship your idea this weekend, on a foundation that scales."
   },
   "home": {
     "title": "Ship your idea this weekend.",
@@ -32,6 +42,7 @@
     "signUpTitle": "Create your account",
     "signUpDescription": "We'll email you a code to verify your address.",
     "google": "Continue with Google",
+    "passkey": "Sign in with a passkey",
     "forgotPassword": "Forgot password?",
     "noAccount": "Don't have an account?",
     "haveAccount": "Already have an account?",
@@ -48,31 +59,159 @@
     "newPassword": "New password",
     "passwordUpdated": "Password updated. Sign in with your new password.",
     "code": "Verification code",
-    "backToSignIn": "Back to sign in"
+    "backToSignIn": "Back to sign in",
+    "twoFactorTitle": "Two-step verification",
+    "twoFactorDescription": "Enter the 6-digit code from your authenticator app.",
+    "useBackupCode": "Use a backup code instead",
+    "backupCode": "Backup code",
+    "useAuthenticator": "Use your authenticator app",
+    "trustDevice": "Trust this device for 30 days"
   },
   "validation": {
     "email": "Enter a valid email address",
     "passwordMin": "Use at least {min} characters",
+    "passwordMax": "Use at most {max} characters",
     "nameMin": "Enter your name",
-    "code": "Enter the 6-digit code"
+    "code": "Enter the 6-digit code",
+    "required": "Required",
+    "tooLong": "Too long (max {max})"
+  },
+  "authErrors": {
+    "INVALID_EMAIL_OR_PASSWORD": "That email and password don't match.",
+    "EMAIL_NOT_VERIFIED": "Verify your email first. We've sent you a new code.",
+    "USER_ALREADY_EXISTS": "An account with this email already exists.",
+    "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL": "An account with this email already exists.",
+    "PASSWORD_COMPROMISED": "This password appeared in a data breach. Choose a different one.",
+    "INVALID_PASSWORD": "That password is wrong.",
+    "INVALID_OTP": "That code is wrong or has expired.",
+    "OTP_EXPIRED": "That code has expired. Request a new one.",
+    "TOO_MANY_ATTEMPTS": "Too many attempts. Request a new code.",
+    "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE": "Too many attempts. Request a new code.",
+    "INVALID_CODE": "That code is wrong.",
+    "INVALID_BACKUP_CODE": "That backup code is wrong or was already used.",
+    "INVALID_TWO_FACTOR_COOKIE": "This sign-in attempt expired. Sign in again.",
+    "SESSION_EXPIRED": "For your security, sign in again to do that.",
+    "SESSION_NOT_FRESH": "For your security, sign in again to do that.",
+    "PASSKEY_NOT_FOUND": "This passkey isn't registered to any account.",
+    "PREVIOUSLY_REGISTERED": "This passkey is already added.",
+    "AUTHENTICATION_FAILED": "The passkey couldn't be verified.",
+    "VALIDATION_FAILED": "Some of those details aren't valid.",
+    "RATE_LIMITED": "Too many attempts. Wait a minute and try again.",
+    "generic": "Something went wrong. Please try again."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "settings": "Settings",
+    "security": "Security"
   },
   "dashboard": {
     "greeting": "Hi {name}",
     "todos": {
       "title": "Todos",
-      "description": "Stored in Postgres, served over tRPC, fully typed end to end.",
+      "description": "Stored in Postgres, served through the typed API, isolated per workspace.",
       "placeholder": "What needs doing?",
       "add": "Add",
       "empty": "Nothing to do. Add your first todo above.",
-      "delete": "Delete {title}"
+      "delete": "Delete {title}",
+      "loadMore": "Load more"
     },
     "ai": {
       "title": "Sentiment (Python)",
-      "description": "Runs in the FastAPI service. Types flow from Pydantic to this page.",
+      "description": "Runs in the Python service. Its Pydantic types flow all the way to this page.",
       "placeholder": "Type something to classify…",
       "analyze": "Analyze",
-      "result": "{label} ({score}% confidence, model {model})"
+      "labels": {
+        "positive": "Positive",
+        "negative": "Negative",
+        "neutral": "Neutral"
+      },
+      "result": "{score}% confidence · model {model}",
+      "disabled": "The AI service isn't configured."
     }
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": {
+      "title": "Profile",
+      "description": "How you appear and how we talk to you.",
+      "name": "Name",
+      "language": "Language",
+      "timeZone": "Time zone",
+      "saved": "Profile saved"
+    },
+    "security": {
+      "title": "Security",
+      "sessions": {
+        "title": "Signed-in devices",
+        "description": "Sign out of devices you don't recognise.",
+        "current": "This device",
+        "revoke": "Sign out",
+        "revokeOthers": "Sign out of all other devices",
+        "revoked": "Signed out",
+        "lastActive": "Last active {date}",
+        "unknownDevice": "Unknown device"
+      },
+      "twoFactor": {
+        "title": "Two-step verification",
+        "description": "Require a code from an authenticator app when signing in.",
+        "enable": "Turn on",
+        "disable": "Turn off",
+        "enabled": "Two-step verification is on",
+        "scan": "Scan this code with your authenticator app, then enter the code it shows.",
+        "backupCodes": "Backup codes",
+        "backupCodesDescription": "Store these somewhere safe. Each works once if you lose your device.",
+        "confirmPassword": "Confirm with your password"
+      },
+      "passkeys": {
+        "title": "Passkeys",
+        "description": "Sign in with your fingerprint, face or device PIN instead of a password.",
+        "add": "Add a passkey",
+        "empty": "No passkeys yet.",
+        "added": "Passkey added",
+        "remove": "Remove"
+      },
+      "password": {
+        "title": "Password",
+        "description": "Changing it signs out every other device.",
+        "current": "Current password",
+        "new": "New password",
+        "change": "Change password",
+        "changed": "Password changed"
+      },
+      "danger": {
+        "title": "Delete account",
+        "description": "Permanently delete your account and everything in it. This can't be undone.",
+        "confirm": "Enter your password to confirm",
+        "delete": "Delete my account",
+        "deleted": "Your account was deleted"
+      }
+    }
+  },
+  "invitations": {
+    "title": "You're invited",
+    "description": "Join {organizationName} to start collaborating.",
+    "accept": "Accept invitation",
+    "decline": "Decline",
+    "accepted": "You joined {organizationName}",
+    "invalid": "This invitation is invalid or has expired."
+  },
+  "legal": {
+    "terms": "Terms of service",
+    "privacy": "Privacy policy",
+    "termsBody": "These terms govern your use of this service. Replace this text with your own terms before launch.",
+    "privacyBody": "This policy explains what data we collect and why. Replace this text with your own policy before launch.",
+    "lastUpdated": "Last updated {date}"
+  },
+  "errorPage": {
+    "notFoundTitle": "Page not found",
+    "notFoundDescription": "The page you're looking for doesn't exist or was moved.",
+    "errorTitle": "Something went wrong",
+    "errorDescription": "An unexpected error occurred. Try again, and contact support with the reference below if it keeps happening.",
+    "home": "Go home"
+  },
+  "updateRequired": {
+    "title": "Update required",
+    "description": "A newer version of the app is available. Please update to continue."
   },
   "email": {
     "footer": "You received this email because of activity on your {appName} account.",

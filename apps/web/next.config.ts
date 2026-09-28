@@ -1,0 +1,60 @@
+/**
+ * Next.js configuration.
+ *
+ * The web app renders UI only (a hard rule, enforced by `bun run lint:boundaries`):
+ * no route handlers with logic, no server actions, no database. Everything it shows
+ * comes from apps/api through packages/client. It runs as a Node server
+ * (`output: "standalone"`) so it can render public pages on the server, redirect
+ * signed-out users before any HTML is sent, set a per-request CSP nonce, and serve
+ * dynamic routes like /invitations/[id].
+ *
+ * The browser always calls the API on this site's own origin (/rpc, /api). In deployed
+ * environments the gateway routes those paths to apps/api before they reach Next; in
+ * local development the rewrites below forward them, so both setups behave the same
+ * and cookies stay first-party.
+ */
+import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+import { env } from "./src/env";
+
+const config: NextConfig = {
+  output: "standalone",
+  // Workspace packages ship TypeScript source; Next compiles them like app code.
+  transpilePackages: ["@repo/ui", "@repo/client", "@repo/contracts", "@repo/i18n"],
+  // `<Link href>` and `router.push()` only accept routes that exist.
+  typedRoutes: true,
+  // Automatic memoization: `useMemo`/`useCallback` are rarely needed.
+  reactCompiler: true,
+  poweredByHeader: false,
+  // This repo's agent instructions live in CLAUDE.md (Next would otherwise write AGENTS.md).
+  agentRules: false,
+  async rewrites() {
+    return [
+      { source: "/rpc/:path*", destination: `${env.API_URL}/rpc/:path*` },
+      { source: "/api/:path*", destination: `${env.API_URL}/api/:path*` },
+      { source: "/docs", destination: `${env.API_URL}/docs` },
+    ];
+  },
+  async headers() {
+    // The Content-Security-Policy is set per request in src/proxy.ts (it needs a nonce).
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=()",
+          },
+        ],
+      },
+    ];
+  },
+};
+
+export default createNextIntlPlugin("./src/i18n/request.ts")(config);
