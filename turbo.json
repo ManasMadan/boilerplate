@@ -1,0 +1,49 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  // Every package script loads the root .env itself (`bun --env-file` / `node
+  // --env-file-if-exists`), so turbo does not need to know individual variables at
+  // runtime. "loose" lets variables exported in the shell (CI, hosting platforms) reach
+  // tasks unchanged. Cache correctness is handled per task through `env` below.
+  "envMode": "loose",
+  "tasks": {
+    // Code generation (Prisma client, OpenAPI → TypeScript) runs before anything that
+    // type-checks, tests or bundles, so a fresh clone never sees missing types.
+    "gen": {
+      "dependsOn": ["^gen"],
+      "outputs": ["src/generated/**", "src/**/*.gen.ts", "openapi.json"]
+    },
+    "build": {
+      "dependsOn": ["^build", "gen", "^gen"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "storybook-static/**"]
+    },
+    "check-types": {
+      "dependsOn": ["gen", "^gen"]
+    },
+    "lint": {},
+    // Unit tests are pure (no network, no services), so their results are cacheable.
+    "test": {
+      "dependsOn": ["gen", "^gen"]
+    },
+    // Integration tests talk to real Postgres/Valkey/Mailpit: never cached, since a
+    // cache hit would skip checking the live dependencies.
+    "test:integration": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false
+    },
+    "test:e2e": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

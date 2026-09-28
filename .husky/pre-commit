@@ -1,0 +1,2 @@
+# Formats and lints only the staged files (seconds, not minutes). The full suite runs in CI.
+bunx lint-staged

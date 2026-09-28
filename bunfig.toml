@@ -1,0 +1,8 @@
+# Bun configuration shared by every workspace.
+
+[install]
+# Hoisted layout (one root node_modules, like npm/yarn): bundled services inline only
+# our own @repo/* packages and resolve every npm dependency from the root at runtime,
+# which also keeps Docker images simple (`turbo prune` + install). Undeclared
+# dependencies, the one thing isolated installs catch, are caught by knip in CI.
+linker = "hoisted"
