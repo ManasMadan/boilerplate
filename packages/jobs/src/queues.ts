@@ -15,6 +15,7 @@
  * Python consumers (apps/ai) read the same queues; their Pydantic models are generated
  * from these schemas (see docs/jobs-and-events.md).
  */
+import { type EventName, eventEnvelope, webhookEvents } from "@repo/contracts/events";
 import { locales } from "@repo/i18n";
 import type { JobsOptions } from "bullmq";
 import { z } from "zod";
@@ -125,6 +126,34 @@ export const queues = {
       removeOnFail: { age: 7 * DAY },
     },
   },
+  /**
+   * Domain events, one queue per consumer (see `eventSubscribers`). The relay in
+   * apps/worker fills them from the outbox with jobId = event id, so a redelivered event
+   * is ignored while its job is still kept; consumers are idempotent on the event id
+   * beyond that window.
+   */
+  "events-audit": {
+    jobs: { event: eventEnvelope },
+    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+  },
+  "events-webhooks": {
+    jobs: { event: eventEnvelope },
+    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+  },
+  /** Scheduled housekeeping in apps/worker (retention, partitions). */
+  maintenance: {
+    jobs: {
+      "outbox-retention": z.object({}),
+      "audit-partitions": z.object({}),
+      "session-retention": z.object({}),
+    },
+    options: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 60_000 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { age: 30 * DAY },
+    },
+  },
 } as const satisfies Record<string, { jobs: Record<string, z.ZodType>; options: JobsOptions }>;
 
 /** Which notification queue a template goes to. A new template must pick one. */
@@ -134,9 +163,22 @@ export const notificationQueue = {
   "auth.security-alert": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
+export type NotificationQueue = (typeof notificationQueue)[NotificationTemplate];
 
 export type QueueName = keyof typeof queues;
 export type JobName<Q extends QueueName> = keyof (typeof queues)[Q]["jobs"] & string;
 export type JobPayload<Q extends QueueName, J extends JobName<Q>> = z.infer<
   (typeof queues)[Q]["jobs"][J]
 >;
+
+/**
+ * Who receives which domain events. The relay copies each event into every queue whose
+ * filter accepts it. A new consumer gets a queue above and a line here; it sees events
+ * from the moment it's added (older ones can be replayed from the outbox's retention).
+ */
+const customerFacing = new Set<EventName>(webhookEvents);
+export const eventSubscribers = {
+  "events-audit": () => true,
+  "events-webhooks": (name: EventName) => customerFacing.has(name),
+} as const satisfies Partial<Record<QueueName, (name: EventName) => boolean>>;
+export type EventQueue = keyof typeof eventSubscribers;

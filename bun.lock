@@ -130,6 +130,34 @@
         "vitest": "catalog:",
       },
     },
+    "apps/worker": {
+      "name": "@repo/worker",
+      "dependencies": {
+        "@nestjs/bullmq": "catalog:",
+        "@nestjs/common": "catalog:",
+        "@nestjs/core": "catalog:",
+        "@repo/contracts": "workspace:*",
+        "@repo/db": "workspace:*",
+        "@repo/jobs": "workspace:*",
+        "@repo/logger": "workspace:*",
+        "@repo/nest-common": "workspace:*",
+        "@t3-oss/env-core": "catalog:",
+        "bullmq": "catalog:",
+        "ioredis": "catalog:",
+        "pg": "^8.23.0",
+        "reflect-metadata": "catalog:",
+        "rxjs": "catalog:",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@repo/tsdown-config": "workspace:*",
+        "@repo/typescript-config": "workspace:*",
+        "@types/node": "catalog:",
+        "@types/pg": "^8.23.1",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
     "packages/ai-client": {
       "name": "@repo/ai-client",
       "dependencies": {
@@ -225,6 +253,7 @@
     "packages/jobs": {
       "name": "@repo/jobs",
       "dependencies": {
+        "@repo/contracts": "workspace:*",
         "@repo/i18n": "workspace:*",
         "bullmq": "catalog:",
         "ioredis": "catalog:",
@@ -1047,6 +1076,8 @@
     "@repo/ui": ["@repo/ui@workspace:packages/ui"],
 
     "@repo/web": ["@repo/web@workspace:apps/web"],
+
+    "@repo/worker": ["@repo/worker@workspace:apps/worker"],
 
     "@rolldown/binding-android-arm-eabi": ["@rolldown/binding-android-arm-eabi@1.2.11", "", { "os": "android", "cpu": "arm" }, "sha512-A5kXfGKvKWWZE0TtPrfsvT+q4Y5d1QG8gGUzpYjGydM+fARM9MuX90PrXYXe0XbsDVgyxxNzHo6giCj90bsFNw=="],
 

@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/contracts": "workspace:*",
     "@repo/i18n": "workspace:*",
     "bullmq": "catalog:",
     "ioredis": "catalog:",

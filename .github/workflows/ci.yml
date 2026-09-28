@@ -136,6 +136,8 @@ jobs:
       MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
       API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
       NOTIFICATIONS_DATABASE_URL: postgresql://app_notifications:app_notifications@localhost:5432/app
+      WORKER_DATABASE_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      WORKER_DATABASE_DIRECT_URL: postgresql://app_worker:app_worker@localhost:5432/app
       AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
       REDIS_URL: redis://localhost:6379
       EMAIL_PROVIDER: smtp
@@ -160,7 +162,7 @@ jobs:
       - name: Generate a throwaway auth secret
         run: echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
       - name: Build the services under test
-        run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/web
+        run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/web
       - name: Install the browser
         working-directory: apps/web
         run: bunx playwright install --with-deps chromium
@@ -169,9 +171,10 @@ jobs:
           mkdir -p logs
           (cd apps/api && nohup bun run start > ../../logs/api.log 2>&1 &)
           (cd apps/notifications && nohup bun run start > ../../logs/notifications.log 2>&1 &)
+          (cd apps/worker && nohup bun run start > ../../logs/worker.log 2>&1 &)
           (cd apps/ai && nohup bun run start > ../../logs/ai.log 2>&1 &)
           (cd apps/web && nohup bun run start > ../../logs/web.log 2>&1 &)
-          for url in http://localhost:3001/health/ready http://localhost:3003/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
+          for url in http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
             if ! timeout 90 bash -c "until curl -sf $url > /dev/null; do sleep 1; done"; then
               echo "::error::$url never became ready"; tail -n 50 logs/*.log; exit 1
             fi

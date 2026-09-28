@@ -58,6 +58,22 @@ export function createProducer<Q extends QueueName>(queue: Q, connection: Connec
         options,
       );
     },
+    /** Many jobs in one round trip (same validation and required ids as `add`). */
+    async addBulk<J extends JobName<Q>>(
+      jobs: {
+        name: J;
+        payload: JobPayload<Q, J>;
+        options: Omit<JobsOptions, "jobId"> & { jobId: string; meta?: JobMeta };
+      }[],
+    ) {
+      return bull.addBulk(
+        jobs.map(({ name, payload, options: { meta = {}, ...options } }) => ({
+          name,
+          data: { meta: jobMeta.parse(meta), payload: schemaFor(queue, name).parse(payload) },
+          opts: options,
+        })),
+      );
+    },
     close: () => bull.close(),
   };
 }

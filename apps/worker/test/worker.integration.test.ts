@@ -1,0 +1,304 @@
+/**
+ * The worker against a real (cloned) database and a private Redis database: outbox relay,
+ * audit log, retention and the database guarantees behind them.
+ */
+import { randomUUID } from "node:crypto";
+import type { INestApplicationContext } from "@nestjs/common";
+import { NestFactory } from "@nestjs/core";
+import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
+import { queuePrefix } from "@repo/jobs";
+import { createRedis } from "@repo/nest-common";
+import { redisDatabase } from "@repo/nest-common/testing";
+import { Queue } from "bullmq";
+import pg from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { MaintenanceProcessor as Maintenance } from "../src/maintenance/maintenance.processor";
+import type { OutboxRelay as Relay } from "../src/outbox/relay.service";
+
+let testDb: TestDatabase;
+let app: INestApplicationContext;
+let relay: Relay;
+let maintenance: Maintenance;
+
+async function asRole<T>(role: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: testDb.urlFor(role) });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
+/** Emits events the way apps/api does: an outbox row plus a NOTIFY, in one transaction. */
+async function emit(count: number, orgId: string | null = randomUUID()) {
+  const ids: string[] = [];
+  await asRole("app_api", async (client) => {
+    await client.query("BEGIN");
+    for (let i = 0; i < count; i++) {
+      const todoId = randomUUID();
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO app.outbox_event (name, key, payload, org_id)
+         VALUES ('todo.created.v1', $1, $2, $3) RETURNING id`,
+        [todoId, JSON.stringify({ todoId, title: `Task ${i}` }), orgId],
+      );
+      ids.push(rows[0]?.id as string);
+    }
+    await client.query("SELECT pg_notify('outbox', 'app')");
+    await client.query("COMMIT");
+  });
+  return ids;
+}
+
+/**
+ * Which of these event ids are in the audit log. Read as the database superuser: the test
+ * observes rows across organizations, which no application role can (row-level security).
+ */
+async function audited(ids: string[]) {
+  return asRole("postgres", async (client) => {
+    const { rows } = await client.query<{ id: string }>(
+      "SELECT id FROM audit.audit_log WHERE id = ANY($1::uuid[])",
+      [ids],
+    );
+    return rows.map((row) => row.id);
+  });
+}
+
+async function eventually<T>(
+  fn: () => Promise<T>,
+  done: (value: T) => boolean,
+  timeoutMs = 15_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await fn();
+    if (done(value) || Date.now() > deadline) return value;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+beforeAll(async () => {
+  testDb = await createTestDatabase();
+  Object.assign(process.env, {
+    WORKER_DATABASE_URL: testDb.urlFor("app_worker"),
+    WORKER_DATABASE_DIRECT_URL: testDb.urlFor("app_worker"),
+    REDIS_URL: redisDatabase(15),
+    RELAY_POLL_INTERVAL_MS: "200",
+  });
+  const redis = createRedis(process.env.REDIS_URL as string);
+  await redis.flushdb();
+  await redis.quit();
+  const { AppModule } = await import("../src/app.module");
+  const { OutboxRelay } = await import("../src/outbox/relay.service");
+  const { MaintenanceProcessor } = await import("../src/maintenance/maintenance.processor");
+  app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  await app.init();
+  relay = app.get(OutboxRelay);
+  maintenance = app.get(MaintenanceProcessor);
+});
+
+afterAll(async () => {
+  await app?.close();
+  await testDb?.drop();
+});
+
+describe("outbox relay", () => {
+  it("delivers a committed event to the audit log within moments", async () => {
+    const [id] = await emit(1);
+    const rows = await eventually(
+      () => audited([id as string]),
+      (found) => found.length === 1,
+    );
+    expect(rows).toEqual([id]);
+  });
+
+  it("drains a backlog larger than one batch, publishing every event exactly once", async () => {
+    const ids = await emit(250);
+    // A second relay competing for the same rows, as another replica would.
+    await Promise.all([relay.drainBatch("app"), relay.drainBatch("app"), relay.drainBatch("app")]);
+    const rows = await eventually(
+      () => audited(ids),
+      (found) => found.length === ids.length,
+    );
+    expect(new Set(rows).size).toBe(250);
+    const unpublished = await asRole("app_worker", async (client) => {
+      const { rows: left } = await client.query(
+        "SELECT count(*)::int AS n FROM app.outbox_event WHERE published_at IS NULL AND id = ANY($1::uuid[])",
+        [ids],
+      );
+      return left[0].n as number;
+    });
+    expect(unpublished).toBe(0);
+  });
+
+  it("republishing a batch (a crash before commit) doesn't duplicate audit rows", async () => {
+    const [id] = await emit(1);
+    await eventually(
+      () => audited([id as string]),
+      (found) => found.length === 1,
+    );
+    // Put the row back as unpublished, as if the commit never happened, and relay again.
+    await asRole("migrator", (client) =>
+      client.query("UPDATE app.outbox_event SET published_at = NULL WHERE id = $1", [id]),
+    );
+    relay.kick();
+    await eventually(
+      () =>
+        asRole("app_worker", async (client) => {
+          const { rows } = await client.query(
+            "SELECT published_at FROM app.outbox_event WHERE id = $1",
+            [id],
+          );
+          return rows[0]?.published_at as Date | null;
+        }),
+      (published) => published !== null,
+    );
+    expect(await audited([id as string])).toEqual([id]);
+  });
+});
+
+describe("audit log guarantees", () => {
+  it("is append-only: the worker can't change or delete rows, the api can't write", async () => {
+    const [id] = await emit(1);
+    await eventually(
+      () => audited([id as string]),
+      (found) => found.length === 1,
+    );
+    await expect(
+      asRole("app_worker", (client) => client.query("UPDATE audit.audit_log SET name = 'x'")),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asRole("app_worker", (client) => client.query("DELETE FROM audit.audit_log")),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asRole("app_api", (client) =>
+        client.query(
+          `INSERT INTO audit.audit_log (id, occurred_at, name, key, payload, source)
+           VALUES (gen_random_uuid(), now(), 'x', 'x', '{}', 'app')`,
+        ),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("the api reads only the current organization's events", async () => {
+    const orgA = randomUUID();
+    const orgB = randomUUID();
+    const [a] = await emit(1, orgA);
+    const [b] = await emit(1, orgB);
+    await eventually(
+      () => audited([a as string, b as string]),
+      (found) => found.length === 2,
+    );
+    const seen = await asRole("app_api", async (client) => {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      const { rows } = await client.query<{ id: string }>("SELECT id FROM audit.audit_log");
+      await client.query("COMMIT");
+      return rows.map((row) => row.id);
+    });
+    expect(seen).toEqual([a]);
+    const unscoped = await asRole("app_api", async (client) => {
+      const { rows } = await client.query("SELECT id FROM audit.audit_log");
+      return rows;
+    });
+    expect(unscoped).toEqual([]);
+  });
+});
+
+describe("maintenance", () => {
+  it("keeps partitions around now and drops months past retention", async () => {
+    const result = await maintenance.run("audit-partitions");
+    expect(result.created).toBe(0); // boot already created them
+    const partitions = await asRole("migrator", async (client) => {
+      const { rows } = await client.query<{ relname: string }>(
+        `SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
+         WHERE i.inhparent = 'audit.audit_log'::regclass ORDER BY 1`,
+      );
+      return rows.map((row) => row.relname);
+    });
+    expect(partitions).toHaveLength(5);
+
+    // An old partition (as if the service had run for years) is dropped by retention.
+    await asRole("migrator", (client) =>
+      client.query(
+        `CREATE TABLE audit.audit_log_2020_01 PARTITION OF audit.audit_log
+         FOR VALUES FROM ('2020-01-01') TO ('2020-02-01')`,
+      ),
+    );
+    expect((await maintenance.run("audit-partitions")).dropped).toBe(1);
+  });
+
+  it("deletes only published outbox rows older than the retention window", async () => {
+    const [old, recent] = await emit(2);
+    await eventually(
+      () => audited([old as string, recent as string]),
+      (found) => found.length === 2,
+    );
+    const [pending] = await emit(1);
+    await asRole("migrator", (client) =>
+      client.query(
+        `UPDATE app.outbox_event SET published_at = now() - interval '30 days' WHERE id = $1`,
+        [old],
+      ),
+    );
+    await asRole("migrator", (client) =>
+      client.query("UPDATE app.outbox_event SET published_at = NULL WHERE id = $1", [pending]),
+    );
+    await maintenance.run("outbox-retention");
+    const remaining = await asRole("app_worker", async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        "SELECT id FROM app.outbox_event WHERE id = ANY($1::uuid[])",
+        [[old, recent, pending]],
+      );
+      return rows.map((row) => row.id).sort();
+    });
+    expect(remaining).toEqual([recent, pending].sort());
+  });
+
+  it("purges expired database sessions and verifications", async () => {
+    const userId = randomUUID();
+    await asRole("app_api", async (client) => {
+      await client.query(
+        `INSERT INTO auth."user" (id, name, email, updated_at) VALUES ($1, 'U', $2, now())`,
+        [userId, `${userId}@test.dev`],
+      );
+      await client.query(
+        `INSERT INTO auth.session (token, user_id, expires_at, updated_at) VALUES
+         ($1, $3, now() - interval '1 day', now()), ($2, $3, now() + interval '1 day', now())`,
+        [`expired-${userId}`, `live-${userId}`, userId],
+      );
+    });
+    await maintenance.run("session-retention");
+    const tokens = await asRole("app_api", async (client) => {
+      const { rows } = await client.query<{ token: string }>(
+        "SELECT token FROM auth.session WHERE user_id = $1",
+        [userId],
+      );
+      return rows.map((row) => row.token);
+    });
+    expect(tokens).toEqual([`live-${userId}`]);
+  });
+
+  it("registers every schedule with BullMQ once", async () => {
+    const queue = new Queue("maintenance", {
+      connection: createRedis(process.env.REDIS_URL as string),
+      prefix: queuePrefix("maintenance"),
+    });
+    const schedulers = await queue.getJobSchedulers();
+    expect(schedulers.map((s) => s.key).sort()).toEqual([
+      "audit-partitions",
+      "outbox-retention",
+      "session-retention",
+    ]);
+    await queue.close();
+  });
+
+  it("the worker can't run the functions' SQL itself", async () => {
+    await expect(
+      asRole("app_worker", (client) => client.query("DELETE FROM app.outbox_event")),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asRole("app_api", (client) => client.query("SELECT auth.purge_expired()")),
+    ).rejects.toThrow(/permission denied/);
+  });
+});

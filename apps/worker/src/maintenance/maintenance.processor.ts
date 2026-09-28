@@ -1,0 +1,97 @@
+/**
+ * Scheduled housekeeping. Every task runs a database function that owns the details
+ * (see the audit_log_and_retention migration): the worker's role can't delete from other
+ * services' tables or create partitions, only call these narrowly granted functions.
+ *
+ * Schedules are BullMQ job schedulers (upserted at boot, so changing a pattern here and
+ * deploying is all it takes). BullMQ runs each occurrence once, whatever the replica
+ * count, so there's no separate cron or leader election.
+ */
+import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq";
+import type { OnApplicationBootstrap } from "@nestjs/common";
+import { type JobName, parseJob, queuePrefix } from "@repo/jobs";
+import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import type { Job, Queue } from "bullmq";
+import { env } from "../env";
+import { OUTBOX_SOURCES } from "../outbox/sources";
+
+type Task = JobName<"maintenance">;
+
+/** When each task runs (cron, UTC). */
+export const SCHEDULES: Record<Task, string> = {
+  "audit-partitions": "0 2 * * *",
+  "outbox-retention": "15 3 * * *",
+  "session-retention": "0 * * * *",
+};
+
+// Partitions exist this far around "now", so late and early timestamps always land.
+const PARTITIONS_BACK = 1;
+const PARTITIONS_AHEAD = 3;
+
+@Processor("maintenance", { concurrency: 1, prefix: queuePrefix("maintenance") })
+export class MaintenanceProcessor extends WorkerHost implements OnApplicationBootstrap {
+  constructor(
+    @InjectDatabase() private readonly database: Database,
+    @InjectQueue("maintenance") private readonly queue: Queue,
+    @InjectPinoLogger(MaintenanceProcessor.name) private readonly log: PinoLogger,
+  ) {
+    super();
+  }
+
+  async onApplicationBootstrap() {
+    // Before any audit event arrives, make sure its month has a partition.
+    await this.run("audit-partitions");
+    for (const [task, pattern] of Object.entries(SCHEDULES) as [Task, string][]) {
+      await this.queue.upsertJobScheduler(
+        task,
+        { pattern, tz: "UTC" },
+        { name: task, data: { meta: {}, payload: {} } },
+      );
+    }
+  }
+
+  async process(job: Job) {
+    parseJob("maintenance", job.name as Task, job.data);
+    await this.run(job.name as Task);
+  }
+
+  /** Runs one task now; also used by tests and the ops scripts. */
+  async run(task: Task) {
+    const db = this.database.write;
+    const result: Record<string, number> = {};
+    switch (task) {
+      case "audit-partitions": {
+        const cutoff = new Date();
+        cutoff.setUTCMonth(cutoff.getUTCMonth() - env.AUDIT_RETENTION_MONTHS);
+        const [created] = await db.$queryRaw<[{ n: number }]>`
+          SELECT audit.ensure_partitions(${PARTITIONS_BACK}::int, ${PARTITIONS_AHEAD}::int) AS n`;
+        const [dropped] = await db.$queryRaw<[{ n: number }]>`
+          SELECT audit.drop_partitions_before(${cutoff}::timestamptz) AS n`;
+        result.created = created.n;
+        result.dropped = dropped.n;
+        break;
+      }
+      case "outbox-retention":
+        for (const source of OUTBOX_SOURCES) {
+          const [outbox] = await db.$queryRawUnsafe<[{ n: bigint }]>(
+            `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
+            env.OUTBOX_RETENTION_DAYS,
+          );
+          const [processed] = await db.$queryRawUnsafe<[{ n: bigint }]>(
+            `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
+            env.PROCESSED_EVENT_RETENTION_DAYS,
+          );
+          result[`${source}.outbox`] = Number(outbox.n);
+          result[`${source}.processed`] = Number(processed.n);
+        }
+        break;
+      case "session-retention": {
+        const [purged] = await db.$queryRaw<[{ n: bigint }]>`SELECT auth.purge_expired() AS n`;
+        result.expired = Number(purged.n);
+        break;
+      }
+    }
+    this.log.info({ task, ...result }, "maintenance task finished");
+    return result;
+  }
+}
