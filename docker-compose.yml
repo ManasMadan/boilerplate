@@ -1,0 +1,101 @@
+# Local infrastructure for development and tests.
+#
+# Profiles keep the default fast: with no profile you get the core that every flow
+# needs (Postgres, Valkey, Mailpit). `bun dev:full` / `bun run db:up --full` add the rest.
+#
+#   core     Postgres  localhost:5432   pgvector; `app` and `app_test` databases
+#            Valkey    localhost:6379   Redis-compatible: sessions, cache, rate limits, queues
+#            Mailpit   localhost:8025   catches every email sent in dev (SMTP :1025)
+#   files    RustFS    localhost:9000   S3-compatible object storage (console :9001)
+#   billing  stripe-mock localhost:12111 offline Stripe API
+#
+# Images are pinned; Renovate proposes upgrades. Ports can be overridden in .env.
+name: boilerplate
+
+services:
+  postgres:
+    # The official Postgres image plus pgvector, on the same Debian (trixie) base as the
+    # CloudNativePG image used in Kubernetes, so extensions and collation match.
+    image: pgvector/pgvector:0.8.6-pg18-trixie
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes:
+      - postgres:/var/lib/postgresql
+      # Creates the separate `app_test` database used by integration tests.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  valkey:
+    image: valkey/valkey:9.1.2-alpine
+    # Queued jobs live here: never evict keys (noeviction) and persist with AOF.
+    command: ["valkey-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["${VALKEY_PORT:-6379}:6379"]
+    volumes: [valkey:/data]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # RustFS: Apache-2.0, S3-compatible object storage (MinIO stopped publishing images).
+  rustfs:
+    image: rustfs/rustfs:1.0.0
+    profiles: [files, full]
+    environment:
+      RUSTFS_ACCESS_KEY: rustfs
+      RUSTFS_SECRET_KEY: rustfs-secret
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports: ["${S3_PORT:-9000}:9000", "${S3_CONSOLE_PORT:-9001}:9001"]
+    volumes: [rustfs:/data]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Creates the uploads bucket once storage is up, so `bun dev` needs no manual step.
+  s3-init:
+    image: amazon/aws-cli:2.37.5
+    profiles: [files, full]
+    depends_on:
+      rustfs: { condition: service_healthy }
+    environment:
+      AWS_ACCESS_KEY_ID: rustfs
+      AWS_SECRET_ACCESS_KEY: rustfs-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    # Browsers upload straight to the bucket with presigned PUTs, so it needs CORS for
+    # the web origin; production buckets get the same rule from OpenTofu.
+    command:
+      - |
+        set -e
+        S3="aws --endpoint-url http://rustfs:9000"
+        $$S3 s3api head-bucket --bucket uploads 2>/dev/null || $$S3 s3 mb s3://uploads
+        $$S3 s3api put-bucket-cors --bucket uploads --cors-configuration '{"CORSRules":[{"AllowedOrigins":["http://localhost:3000"],"AllowedMethods":["PUT","GET"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}'
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    ports: ["${MAILPIT_SMTP_PORT:-1025}:1025", "${MAILPIT_UI_PORT:-8025}:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  stripe-mock:
+    image: stripe/stripe-mock:v0.205.0
+    profiles: [billing, full]
+    ports: ["${STRIPE_MOCK_PORT:-12111}:12111"]
+
+volumes:
+  postgres:
+  valkey:
+  rustfs:
