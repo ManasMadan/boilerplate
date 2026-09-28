@@ -9,11 +9,15 @@ import underPressure from "@fastify/under-pressure";
 import type { INestApplication, Type } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { createLogger, type LogLevel } from "@repo/logger";
 import { Logger } from "nestjs-pino";
 import { createRequestIdGenerator, REQUEST_ID_HEADER } from "./logging";
 
 export interface BootstrapOptions {
   port: number;
+  /** Service name on every log line (matches LoggerModule's `service`). */
+  service: string;
+  logLevel?: LogLevel;
   /** Peers allowed to set X-Forwarded-For / x-request-id (see `coreEnv.TRUSTED_PROXIES`). */
   trustedProxies: string[];
   /** Browser origins allowed to call this service with credentials. Omit for internal services. */
@@ -22,10 +26,11 @@ export interface BootstrapOptions {
   configure?: (app: NestFastifyApplication) => Promise<void> | void;
 }
 
-export async function bootstrap(
+/** Builds and configures the application without listening (used by tests and bootstrap). */
+export async function createServer(
   module: Type,
-  options: BootstrapOptions,
-): Promise<INestApplication> {
+  options: Omit<BootstrapOptions, "port">,
+): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
     // Behind a load balancer the client IP arrives in X-Forwarded-For. Only trusted
     // proxies may set it, otherwise any caller could forge the IP that rate limiting,
@@ -74,6 +79,28 @@ export async function bootstrap(
     });
   }
 
+  // One line per completed request, with the final status Fastify sent. Health probes
+  // run every few seconds and are skipped. Keys are flat on purpose: pino applies its
+  // request/response serializers to any `req`/`res` key.
+  const requestLog = createLogger({ service: options.service, level: options.logLevel });
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook("onResponse", async (request, reply) => {
+      if (request.url.startsWith("/health")) return;
+      const status = reply.statusCode;
+      const line = {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+        status,
+        durationMs: Math.round(reply.elapsedTime),
+      };
+      if (status >= 500) requestLog.error(line, "request completed");
+      else if (status >= 400) requestLog.warn(line, "request completed");
+      else requestLog.info(line, "request completed");
+    });
+
   // Echo the id so clients and upstream proxies can correlate their logs with ours.
   app
     .getHttpAdapter()
@@ -87,6 +114,15 @@ export async function bootstrap(
   app.enableShutdownHooks();
 
   await options.configure?.(app);
+  return app;
+}
+
+/** Builds the application and starts listening on all interfaces. */
+export async function bootstrap(
+  module: Type,
+  options: BootstrapOptions,
+): Promise<INestApplication> {
+  const app = await createServer(module, options);
   await app.listen({ port: options.port, host: "0.0.0.0" });
   return app;
 }

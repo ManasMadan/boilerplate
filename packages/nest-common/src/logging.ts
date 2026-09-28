@@ -10,7 +10,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { type DynamicModule, RequestMethod } from "@nestjs/common";
+import type { DynamicModule } from "@nestjs/common";
 import { type LoggerConfig, loggerOptions } from "@repo/logger";
 import { LoggerModule as PinoLoggerModule } from "nestjs-pino";
 import proxyAddr from "proxy-addr";
@@ -39,21 +39,21 @@ export function createRequestIdGenerator(trustedProxies: string[]) {
 export const LoggerModule = {
   forRoot(config: LoggerConfig): DynamicModule {
     return PinoLoggerModule.forRoot({
-      // Health probes run every few seconds; logging them is pure noise.
-      exclude: [{ method: RequestMethod.ALL, path: "health/*path" }],
       pinoHttp: {
         ...loggerOptions(config),
         // Request, user and org ids on every line written inside a request or job.
         mixin: contextLogFields,
-        customLogLevel: (_req, res, error) =>
-          error || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
+        // Completion lines are written by Fastify's onResponse hook (see bootstrap.ts),
+        // which knows the final status for every route, including those mounted directly
+        // on Fastify (oRPC, better-auth); pino-http's own line can miss it there.
+        autoLogging: false,
+        // Keep the per-request binding small: never log headers (cookies, tokens).
         serializers: {
           req: (req: { id: string; method: string; url: string }) => ({
             id: req.id,
             method: req.method,
             url: req.url,
           }),
-          res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
         },
       },
     });
