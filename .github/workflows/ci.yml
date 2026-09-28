@@ -1,0 +1,146 @@
+# Every check a change must pass before it can merge. Branch protection requires the
+# `ci-ok` job, which only succeeds when all others do, so adding a job here never
+# needs a settings change.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  merge_group:
+
+# One run per PR/branch: a new push cancels the outdated run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: jobs get read access to the code and nothing else.
+permissions: {}
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+  NODE_ENV: test
+
+jobs:
+  lint:
+    name: Lint and boundaries
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - run: bunx biome ci .
+      - run: bun run lint:boundaries
+
+  types:
+    name: Type-check
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - run: bun run check-types
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - run: bun run test
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports: ["1025:1025", "8025:8025"]
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+      SMTP_URL: smtp://localhost:1025
+      MAILPIT_URL: http://localhost:8025
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - name: Apply migrations
+        run: bun run db:deploy
+      - run: bunx turbo run test:integration
+
+  python:
+    name: Python service
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    defaults:
+      run: { working-directory: apps/ai }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with: { enable-cache: true, cache-dependency-glob: apps/ai/uv.lock }
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run basedpyright
+      - run: uv run pytest
+
+  codegen:
+    name: Generated code is committed
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - run: bun run gen
+      - name: Fail if generation changed tracked files
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::Generated files are out of date. Run \`bun run gen\` and commit the result."
+            exit 1
+          fi
+
+  ci-ok:
+    name: CI passed
+    if: always()
+    needs: [lint, types, unit, integration, python, codegen]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require every job to succeed
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            exit 1
+          fi
