@@ -1,0 +1,38 @@
+{
+  "name": "@repo/nest-common",
+  "private": true,
+  "type": "module",
+  "description": "Framework plumbing shared by every NestJS service. Never put domain logic here.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/helmet": "^13.1.1",
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@nestjs/platform-fastify": "catalog:",
+    "@nestjs/terminus": "^12",
+    "@repo/db": "workspace:*",
+    "@repo/logger": "workspace:*",
+    "@t3-oss/env-core": "catalog:",
+    "fastify": "catalog:",
+    "ioredis": "catalog:",
+    "nestjs-pino": "^5.2.1",
+    "pino-http": "^11.0.0",
+    "proxy-addr": "^2.0.8",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/proxy-addr": "^2.0.3",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
