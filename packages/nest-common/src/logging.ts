@@ -14,6 +14,7 @@ import { type DynamicModule, RequestMethod } from "@nestjs/common";
 import { type LoggerConfig, loggerOptions } from "@repo/logger";
 import { LoggerModule as PinoLoggerModule } from "nestjs-pino";
 import proxyAddr from "proxy-addr";
+import { contextLogFields } from "./context";
 
 export const REQUEST_ID_HEADER = "x-request-id";
 
@@ -42,6 +43,8 @@ export const LoggerModule = {
       exclude: [{ method: RequestMethod.ALL, path: "health/*path" }],
       pinoHttp: {
         ...loggerOptions(config),
+        // Request, user and org ids on every line written inside a request or job.
+        mixin: contextLogFields,
         customLogLevel: (_req, res, error) =>
           error || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
         serializers: {

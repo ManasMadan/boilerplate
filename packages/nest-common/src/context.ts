@@ -1,0 +1,48 @@
+/**
+ * Request context: who is acting, for which organization, in which language, under
+ * which request id. Available anywhere in the call chain without passing it around,
+ * and stamped on every log line.
+ *
+ *   await runWithContext({ requestId }, () => handle(request));   // HTTP entry points
+ *   await runWithContext(job.data.meta, () => process(job));        // queue workers
+ *   currentContext()?.orgId                                         // anywhere below
+ *
+ * Built on Node's AsyncLocalStorage, so it follows awaits, timers and promise chains.
+ * Producers copy it into job metadata and outbox rows, which is how one request id
+ * traces through api → queue → worker → email.
+ */
+import { AsyncLocalStorage } from "node:async_hooks";
+
+export interface RequestContext {
+  requestId: string;
+  userId?: string | undefined;
+  orgId?: string | undefined;
+  locale?: string | undefined;
+  timeZone?: string | undefined;
+  /** App version sent by web/mobile clients (x-app-version). */
+  clientVersion?: string | undefined;
+}
+
+const storage = new AsyncLocalStorage<RequestContext>();
+
+export function runWithContext<T>(context: RequestContext, fn: () => T): T {
+  return storage.run({ ...context }, fn);
+}
+
+export function currentContext(): RequestContext | undefined {
+  return storage.getStore();
+}
+
+/** Adds what is learned mid-request (e.g. the user, once the session is resolved). */
+export function updateContext(patch: Partial<Omit<RequestContext, "requestId">>) {
+  const context = storage.getStore();
+  if (context) Object.assign(context, patch);
+}
+
+/** Fields safe to attach to every log line (ids only, never personal data). */
+export function contextLogFields() {
+  const context = storage.getStore();
+  if (!context) return {};
+  const { requestId, userId, orgId } = context;
+  return { requestId, ...(userId && { userId }), ...(orgId && { orgId }) };
+}

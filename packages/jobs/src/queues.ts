@@ -29,6 +29,18 @@ import { z } from "zod";
  */
 export const queuePrefix = (queue: string) => `{${queue}}`;
 
+/**
+ * Who and what caused a job, copied from the producer's request context. Workers
+ * restore it before processing, so their logs carry the same request id as the HTTP
+ * request that enqueued the job. Every job is stored as `{ meta, payload }`.
+ */
+export const jobMeta = z.object({
+  requestId: z.string().optional(),
+  userId: z.string().optional(),
+  orgId: z.string().optional(),
+});
+export type JobMeta = z.infer<typeof jobMeta>;
+
 const email = z.email();
 const locale = z.enum(locales);
 

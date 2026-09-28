@@ -1,5 +1,6 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
-import { type NotificationPayload, parseJob, type QueueName, queuePrefix } from "@repo/jobs";
+import { parseJob, type QueueName, queuePrefix } from "@repo/jobs";
+import { runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { env } from "../env";
 import { Dispatcher } from "./dispatcher";
@@ -13,9 +14,13 @@ import { Dispatcher } from "./dispatcher";
 async function handle(queue: QueueName, job: Job, dispatcher: Dispatcher) {
   if (job.name !== "send") throw new Error(`Unknown job "${job.name}" on ${queue}`);
   if (!job.id) throw new Error(`Job on ${queue} has no id; producers must set jobId`);
-  const payload: NotificationPayload = parseJob(queue, "send", job.data);
-  // The producer-chosen job id is stable across retries and Redis restarts.
-  await dispatcher.dispatch(payload, job.id);
+  const { meta, payload } = parseJob(queue, "send", job.data);
+  const jobId = job.id;
+  // Restore the producer's request context so these logs carry its request id.
+  await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${jobId}` }, () =>
+    // The producer-chosen job id is stable across retries and Redis restarts.
+    dispatcher.dispatch(payload, jobId),
+  );
 }
 
 @Processor("notifications-critical", {

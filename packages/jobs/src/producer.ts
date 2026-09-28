@@ -13,8 +13,16 @@
  * auto-increment ids restart after a Redis flush and must never be used for that.
  */
 import { type ConnectionOptions, type JobsOptions, Queue } from "bullmq";
-import type { z } from "zod";
-import { type JobName, type JobPayload, type QueueName, queuePrefix, queues } from "./queues";
+import { z } from "zod";
+import {
+  type JobMeta,
+  type JobName,
+  type JobPayload,
+  jobMeta,
+  type QueueName,
+  queuePrefix,
+  queues,
+} from "./queues";
 
 /**
  * The payload schema for one job. TypeScript cannot relate an indexed lookup on a
@@ -42,9 +50,13 @@ export function createProducer<Q extends QueueName>(queue: Q, connection: Connec
     async add<J extends JobName<Q>>(
       job: J,
       payload: JobPayload<Q, J>,
-      options: Omit<JobsOptions, "jobId"> & { jobId: string },
+      { meta = {}, ...options }: Omit<JobsOptions, "jobId"> & { jobId: string; meta?: JobMeta },
     ) {
-      return bull.add(job, schemaFor(queue, job).parse(payload), options);
+      return bull.add(
+        job,
+        { meta: jobMeta.parse(meta), payload: schemaFor(queue, job).parse(payload) },
+        options,
+      );
     },
     close: () => bull.close(),
   };
@@ -52,11 +64,15 @@ export function createProducer<Q extends QueueName>(queue: Q, connection: Connec
 
 export type Producer<Q extends QueueName> = ReturnType<typeof createProducer<Q>>;
 
-/** Validates a consumed job's payload against its contract. Throws (so the job fails) on mismatch. */
+/**
+ * Validates a consumed job against its contract and returns its metadata and payload.
+ * Throws (so the job fails and is kept for inspection) on any mismatch.
+ */
 export function parseJob<Q extends QueueName, J extends JobName<Q>>(
   queue: Q,
   job: J,
   data: unknown,
-): JobPayload<Q, J> {
-  return schemaFor(queue, job).parse(data);
+): { meta: JobMeta; payload: JobPayload<Q, J> } {
+  const envelope = z.object({ meta: jobMeta, payload: z.unknown() }).parse(data);
+  return { meta: envelope.meta, payload: schemaFor(queue, job).parse(envelope.payload) };
 }

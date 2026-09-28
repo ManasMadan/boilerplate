@@ -7,25 +7,34 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "check-types": "tsc"
+    "check-types": "tsc",
+    "test": "vitest run src",
+    "test:integration": "bun --env-file=../../.env run vitest run test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1142.0",
+    "@aws-sdk/s3-request-presigner": "^3.1142.0",
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
+    "@fastify/under-pressure": "^9.2.0",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "@nestjs/platform-fastify": "catalog:",
     "@nestjs/terminus": "^12",
     "@repo/db": "workspace:*",
+    "@repo/i18n": "workspace:*",
     "@repo/logger": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "fastify": "catalog:",
     "ioredis": "catalog:",
+    "ipaddr.js": "^2.5.0",
     "nestjs-pino": "^5.2.1",
     "pino-http": "^11.0.0",
     "proxy-addr": "^2.0.8",
+    "rate-limiter-flexible": "^11.2.1",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
+    "undici": "^8.11.2",
     "zod": "catalog:"
   },
   "devDependencies": {
