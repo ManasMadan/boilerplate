@@ -112,6 +112,84 @@ jobs:
           bunx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code
       - run: bunx turbo run test:integration
 
+  e2e:
+    name: End-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions: { contents: read }
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports: ["1025:1025", "8025:8025"]
+    # The same configuration as local development (.env.example), minus secrets.
+    env:
+      NODE_ENV: production
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
+      NOTIFICATIONS_DATABASE_URL: postgresql://app_notifications:app_notifications@localhost:5432/app
+      AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+      EMAIL_PROVIDER: smtp
+      SMTP_URL: smtp://localhost:1025
+      EMAIL_FROM: Boilerplate <no-reply@example.com>
+      MAILPIT_URL: http://localhost:8025
+      BETTER_AUTH_URL: http://localhost:3000
+      WEB_URL: http://localhost:3000
+      API_URL: http://localhost:3001
+      AI_URL: http://localhost:8000
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      - run: bun run db:deploy
+      - name: Generate a throwaway auth secret
+        run: echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - name: Build the services under test
+        run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/web
+      - name: Install the browser
+        working-directory: apps/web
+        run: bunx playwright install --with-deps chromium
+      - name: Start the stack
+        run: |
+          mkdir -p logs
+          (cd apps/api && nohup bun run start > ../../logs/api.log 2>&1 &)
+          (cd apps/notifications && nohup bun run start > ../../logs/notifications.log 2>&1 &)
+          (cd apps/ai && nohup bun run start > ../../logs/ai.log 2>&1 &)
+          (cd apps/web && nohup bun run start > ../../logs/web.log 2>&1 &)
+          for url in http://localhost:3001/health/ready http://localhost:3003/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
+            if ! timeout 90 bash -c "until curl -sf $url > /dev/null; do sleep 1; done"; then
+              echo "::error::$url never became ready"; tail -n 50 logs/*.log; exit 1
+            fi
+          done
+      - name: Run Playwright
+        working-directory: apps/web
+        run: bun run test:e2e
+      - name: Keep the report and service logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            logs
+          retention-days: 7
+
   python:
     name: Python service
     runs-on: ubuntu-latest
@@ -153,7 +231,7 @@ jobs:
   ci-ok:
     name: CI passed
     if: always()
-    needs: [lint, types, unit, integration, python, codegen]
+    needs: [lint, types, unit, integration, e2e, python, codegen]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
