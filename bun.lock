@@ -140,6 +140,28 @@
         "typescript": "catalog:",
       },
     },
+    "packages/client": {
+      "name": "@repo/client",
+      "dependencies": {
+        "@better-auth/api-key": "catalog:",
+        "@better-auth/passkey": "catalog:",
+        "@orpc/client": "catalog:",
+        "@orpc/contract": "catalog:",
+        "@orpc/tanstack-query": "catalog:",
+        "@repo/contracts": "workspace:*",
+        "better-auth": "catalog:",
+      },
+      "devDependencies": {
+        "@repo/typescript-config": "workspace:*",
+        "@types/react": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "@tanstack/react-query": "catalog:",
+        "react": "catalog:",
+      },
+    },
     "packages/contracts": {
       "name": "@repo/contracts",
       "dependencies": {
@@ -192,6 +214,7 @@
         "use-intl": "catalog:",
       },
       "devDependencies": {
+        "@repo/contracts": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "typescript": "catalog:",
         "vitest": "catalog:",
@@ -832,6 +855,8 @@
 
     "@orpc/standard-server-peer": ["@orpc/standard-server-peer@1.15.4", "", { "dependencies": { "@orpc/shared": "1.15.4", "@orpc/standard-server": "1.15.4" } }, "sha512-qWH7gf+8Iv2oXVIQZIQIvAyk2LYUHcj0CXF+AKF5WzHU22vJInD4FKbl8+UesVU+nT8O+BrVmOXzrQ40TqngpQ=="],
 
+    "@orpc/tanstack-query": ["@orpc/tanstack-query@1.15.4", "", { "dependencies": { "@orpc/shared": "1.15.4" }, "peerDependencies": { "@orpc/client": "1.15.4", "@tanstack/query-core": ">=5.80.2" } }, "sha512-oP4XuCI5AuelIhhv722sGXzZNYTH4Y6ueS4H4TtIICdG9Q6tJeiERqyEk0dm3ebh3yo+iM/NVmcRkpUrgzIZzw=="],
+
     "@orpc/zod": ["@orpc/zod@1.15.4", "", { "dependencies": { "@orpc/json-schema": "1.15.4", "@orpc/openapi": "1.15.4", "@orpc/shared": "1.15.4", "escape-string-regexp": "^5.0.0", "wildcard-match": "^5.1.4" }, "peerDependencies": { "@orpc/contract": "1.15.4", "@orpc/server": "1.15.4", "zod": ">=3.25.0" } }, "sha512-k7W5yvagfcGztACr7qpB7Yyp3iMF9BzCJX9uDH9EEouuM2gt/WzsGtkDw//LTpPPsJQerltdKrdGfaWnbrGBhQ=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.151.0", "", {}, "sha512-J1yXrIlNDZVzE3ada310xeAw7nH8yCAyLPuUIsjKatFPmfn5bS1oW+cM+QsGOtVWd5nhSpbwZWx/rue+r5Z+PA=="],
@@ -989,6 +1014,8 @@
     "@repo/ai-client": ["@repo/ai-client@workspace:packages/ai-client"],
 
     "@repo/api": ["@repo/api@workspace:apps/api"],
+
+    "@repo/client": ["@repo/client@workspace:packages/client"],
 
     "@repo/contracts": ["@repo/contracts@workspace:packages/contracts"],
 

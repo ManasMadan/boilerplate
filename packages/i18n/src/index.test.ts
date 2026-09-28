@@ -36,3 +36,15 @@ describe("createI18n", () => {
     expect(load).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("catalog completeness", () => {
+  it("has a translated message for every API error code", async () => {
+    const { ERROR_CODES } = await import("@repo/contracts/errors");
+    for (const locale of ["en", "es"] as const) {
+      const messages = await bundledMessages.load(locale);
+      for (const code of Object.keys(ERROR_CODES)) {
+        expect(messages.errors, `${locale} is missing errors.${code}`).toHaveProperty(code);
+      }
+    }
+  });
+});

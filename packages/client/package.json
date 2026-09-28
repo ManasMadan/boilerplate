@@ -1,0 +1,34 @@
+{
+  "name": "@repo/client",
+  "private": true,
+  "type": "module",
+  "description": "Everything web and mobile use to talk to the API: the typed client, auth client, and one hook per API operation.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth/client.ts",
+    "./api/*": "./src/api/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@better-auth/api-key": "catalog:",
+    "@better-auth/passkey": "catalog:",
+    "@orpc/client": "catalog:",
+    "@orpc/contract": "catalog:",
+    "@orpc/tanstack-query": "catalog:",
+    "@repo/contracts": "workspace:*",
+    "better-auth": "catalog:"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "catalog:",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/react": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

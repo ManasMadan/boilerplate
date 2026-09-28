@@ -117,5 +117,27 @@
       "title": "Recordatorio",
       "body": "{title}"
     }
+  },
+  "errors": {
+    "BAD_REQUEST": "No se pudo procesar la solicitud.",
+    "VALIDATION_FAILED": "Algunos campos necesitan atención.",
+    "UNAUTHENTICATED": "Inicia sesión para continuar.",
+    "FORBIDDEN": "No tienes permiso para hacer eso.",
+    "NOT_FOUND": "No encontramos lo que buscas.",
+    "CONFLICT": "Hay un conflicto con un cambio reciente. Actualiza e inténtalo de nuevo.",
+    "RATE_LIMITED": "Demasiados intentos. Inténtalo de nuevo en {retryAfterSeconds, plural, one {# segundo} other {# segundos}}.",
+    "INTERNAL": "Algo salió mal por nuestra parte. Inténtalo de nuevo.",
+    "SERVICE_UNAVAILABLE": "No podemos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
+    "IDEMPOTENCY_IN_PROGRESS": "Eso ya se está procesando.",
+    "FEATURE_DISABLED": "Esta función no está disponible.",
+    "CLIENT_OUTDATED": "Hay una nueva versión disponible. Actualiza para continuar.",
+    "FRESH_SESSION_REQUIRED": "Por tu seguridad, vuelve a iniciar sesión para hacer eso.",
+    "DESTINATION_NOT_ALLOWED": "Esa dirección no está permitida.",
+    "RESPONSE_TOO_LARGE": "La respuesta era demasiado grande.",
+    "TOO_MANY_REDIRECTS": "La dirección redirigió demasiadas veces.",
+    "UPSTREAM_UNAVAILABLE": "Un servicio del que dependemos no está disponible. Inténtalo de nuevo.",
+    "NO_ACTIVE_ORGANIZATION": "Primero elige un espacio de trabajo.",
+    "TODO_NOT_FOUND": "Esa tarea ya no existe.",
+    "TODO_VERSION_CONFLICT": "Otra persona cambió esta tarea. Cargamos la versión más reciente."
   }
 }

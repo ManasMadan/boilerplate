@@ -15,6 +15,7 @@
     "use-intl": "catalog:"
   },
   "devDependencies": {
+    "@repo/contracts": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"

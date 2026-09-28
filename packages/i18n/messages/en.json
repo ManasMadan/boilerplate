@@ -117,5 +117,27 @@
       "title": "Reminder",
       "body": "{title}"
     }
+  },
+  "errors": {
+    "BAD_REQUEST": "That request couldn't be processed.",
+    "VALIDATION_FAILED": "Some fields need attention.",
+    "UNAUTHENTICATED": "Please sign in to continue.",
+    "FORBIDDEN": "You don't have permission to do that.",
+    "NOT_FOUND": "We couldn't find that.",
+    "CONFLICT": "That conflicts with a recent change. Refresh and try again.",
+    "RATE_LIMITED": "Too many attempts. Try again in {retryAfterSeconds, plural, one {# second} other {# seconds}}.",
+    "INTERNAL": "Something went wrong on our side. Please try again.",
+    "SERVICE_UNAVAILABLE": "We can't reach the server. Check your connection and try again.",
+    "IDEMPOTENCY_IN_PROGRESS": "That's already being processed.",
+    "FEATURE_DISABLED": "This feature isn't available.",
+    "CLIENT_OUTDATED": "A new version is available. Please update to continue.",
+    "FRESH_SESSION_REQUIRED": "For your security, sign in again to do that.",
+    "DESTINATION_NOT_ALLOWED": "That address isn't allowed.",
+    "RESPONSE_TOO_LARGE": "The response was too large.",
+    "TOO_MANY_REDIRECTS": "The address redirected too many times.",
+    "UPSTREAM_UNAVAILABLE": "A service we depend on is unavailable. Please try again.",
+    "NO_ACTIVE_ORGANIZATION": "Choose a workspace first.",
+    "TODO_NOT_FOUND": "That todo no longer exists.",
+    "TODO_VERSION_CONFLICT": "Someone else changed this todo. We've loaded the latest version."
   }
 }
