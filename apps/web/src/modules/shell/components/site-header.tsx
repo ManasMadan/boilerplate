@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@repo/ui/components/button";
+import { buttonVariants } from "@repo/ui/components/button";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -27,9 +27,9 @@ export function SiteHeader() {
           ) : session ? (
             <UserMenu user={session.user} />
           ) : (
-            <Button nativeButton={false} render={<Link href="/sign-in" />} size="sm">
+            <Link href="/sign-in" className={buttonVariants({ size: "sm" })}>
               {t("signIn")}
-            </Button>
+            </Link>
           )}
         </nav>
       </div>

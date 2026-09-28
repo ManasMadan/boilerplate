@@ -7,7 +7,7 @@ import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone, getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { env } from "@/env";
-import { SiteHeader, TimeZoneCookie } from "@/modules/shell";
+import { PreferenceSync, SiteHeader } from "@/modules/shell";
 import { Providers } from "./providers";
 
 // Right-to-left languages; extend when adding e.g. Arabic or Hebrew to packages/i18n.
@@ -52,7 +52,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           nonce={nonce}
           appVersion={env.RELEASE}
         >
-          <TimeZoneCookie current={timeZone} />
+          <PreferenceSync timeZone={timeZone} />
           <SiteHeader />
           <main className="mx-auto w-full max-w-5xl px-4 py-10">{children}</main>
         </Providers>

@@ -34,6 +34,8 @@ export function VerifyEmailPage() {
     if (!email) return;
     const { error } = await authClient.emailOtp.verifyEmail({ email, otp });
     if (error) {
+      // Clear the rejected code so the next one can be typed straight in.
+      form.setValue("otp", "");
       form.setError("otp", { message: errorMessage(error) });
       return;
     }
@@ -50,7 +52,10 @@ export function VerifyEmailPage() {
       type: "email-verification",
     });
     if (error) toast.error(errorMessage(error));
-    else toast.success(t("auth.codeSent"));
+    else {
+      form.reset({ otp: "" });
+      toast.success(t("auth.codeSent"));
+    }
   }
 
   return (

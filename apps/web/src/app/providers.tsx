@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { type AbstractIntlMessages, NextIntlClientProvider } from "next-intl";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
+import { authClient } from "@/lib/auth-client";
+import { GUEST_PATHS, matchesPath } from "@/lib/routes";
 
 interface ProvidersProps {
   locale: Locale;
@@ -39,8 +41,17 @@ export function Providers({
       <NextIntlClientProvider locale={locale} timeZone={timeZone} messages={messages}>
         <ApiProvider
           options={{ appVersion, getLocale: () => locale }}
-          // The session ended (signed out elsewhere, expired, revoked): back to sign-in.
-          onUnauthenticated={() => router.replace("/sign-in")}
+          // The session ended (signed out elsewhere, expired, revoked). Signing out clears
+          // the now-useless cookie; otherwise the proxy would still see it and bounce the
+          // user from /sign-in back to the dashboard.
+          // Several requests can fail together; only one redirect is wanted, and never
+          // from an auth page (that would nest ?next= inside ?next=).
+          onUnauthenticated={async () => {
+            await authClient.signOut();
+            const { pathname, search } = window.location;
+            if (matchesPath(pathname, GUEST_PATHS)) return;
+            router.replace(`/sign-in?next=${encodeURIComponent(pathname + search)}`);
+          }}
           onOutdated={() => window.location.reload()}
         >
           {children}

@@ -32,7 +32,8 @@ import { authClient } from "@/lib/auth-client";
 import { setPreferenceCookie } from "@/lib/cookies";
 import { useAuthErrorMessage } from "@/modules/auth";
 
-const TIME_ZONES = Intl.supportedValuesOf("timeZone");
+// Browsers list canonical zones only, without "UTC", which is our default for new users.
+const TIME_ZONES = ["UTC", ...Intl.supportedValuesOf("timeZone").filter((zone) => zone !== "UTC")];
 const nativeName = (locale: string) =>
   new Intl.DisplayNames([locale], { type: "language" }).of(locale) ?? locale;
 
@@ -67,6 +68,7 @@ function ProfileForm({ initial }: { initial: { name: string; locale: Locale; tim
   const router = useRouter();
   const queryClient = useQueryClient();
   const errorMessage = useAuthErrorMessage();
+  const { refetch: refetchSession } = authClient.useSession();
   const schema = z.object({
     name: z
       .string()
@@ -82,6 +84,8 @@ function ProfileForm({ initial }: { initial: { name: string; locale: Locale; tim
       toast.error(errorMessage(error));
       return;
     }
+    // Session first: PreferenceSync treats the saved language as the truth.
+    await refetchSession();
     setPreferenceCookie("locale", values.locale);
     setPreferenceCookie("tz", values.timezone);
     await queryClient.invalidateQueries();

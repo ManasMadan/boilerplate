@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui/components/button";
+import { buttonVariants } from "@repo/ui/components/button";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
@@ -8,9 +8,9 @@ export default async function NotFound() {
     <section className="flex flex-col items-start gap-4 py-16">
       <h1 className="text-3xl font-semibold tracking-tight">{t("notFoundTitle")}</h1>
       <p className="text-muted-foreground">{t("notFoundDescription")}</p>
-      <Button nativeButton={false} render={<Link href="/" />}>
+      <Link href="/" className={buttonVariants()}>
         {t("home")}
-      </Button>
+      </Link>
     </section>
   );
 }

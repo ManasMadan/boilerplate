@@ -22,12 +22,16 @@ export function LanguageSwitcher() {
   const t = useTranslations("common");
   const current = useLocale();
   const router = useRouter();
-  const { data: session } = authClient.useSession();
+  const { data: session, refetch } = authClient.useSession();
 
   async function choose(locale: string) {
+    // Signed-in users keep the choice everywhere (emails, other devices). Save it and
+    // reload the session first: PreferenceSync treats the saved language as the truth.
+    if (session) {
+      await authClient.updateUser({ locale });
+      await refetch();
+    }
     setPreferenceCookie("locale", locale);
-    // Signed-in users keep the choice everywhere (emails, other devices).
-    if (session) await authClient.updateUser({ locale });
     router.refresh();
   }
 

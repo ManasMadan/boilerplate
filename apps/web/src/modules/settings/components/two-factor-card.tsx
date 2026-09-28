@@ -99,6 +99,12 @@ function ConfirmSetup({ setup, onDone }: { setup: Setup; onDone: () => Promise<v
       <div className="self-start rounded-lg bg-white p-3">
         <QRCode value={setup.totpURI} size={160} aria-label={t("title")} />
       </div>
+      <div className="text-sm">
+        <p className="text-muted-foreground">{t("manualKey")}</p>
+        <code className="font-mono break-all" data-testid="totp-secret">
+          {new URL(setup.totpURI).searchParams.get("secret")}
+        </code>
+      </div>
       <div>
         <h3 className="text-sm font-medium">{t("backupCodes")}</h3>
         <p className="text-sm text-muted-foreground">{t("backupCodesDescription")}</p>
@@ -113,6 +119,8 @@ function ConfirmSetup({ setup, onDone }: { setup: Setup; onDone: () => Promise<v
         onSubmit={form.handleSubmit(async ({ code }) => {
           const { error } = await authClient.twoFactor.verifyTotp({ code });
           if (error) {
+            // Clear the rejected code so the next one can be typed straight in.
+            form.setValue("code", "");
             form.setError("code", { message: errorMessage(error) });
             return;
           }

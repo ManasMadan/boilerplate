@@ -10,30 +10,19 @@
  *    then signs out (packages/client). This check is only about not flashing the wrong page.
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { APP_PATHS, GUEST_PATHS, matchesPath } from "@/lib/routes";
 import { hasSessionCookie } from "@/lib/session-cookie";
-
-const APP_PATHS = ["/dashboard", "/settings", "/invitations"];
-const GUEST_PATHS = [
-  "/sign-in",
-  "/sign-up",
-  "/verify-email",
-  "/forgot-password",
-  "/reset-password",
-];
-
-const matches = (pathname: string, prefixes: string[]) =>
-  prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const signedIn = hasSessionCookie(request.cookies);
 
-  if (!signedIn && matches(pathname, APP_PATHS)) {
+  if (!signedIn && matchesPath(pathname, APP_PATHS)) {
     const url = new URL("/sign-in", request.url);
     url.searchParams.set("next", pathname + search);
     return NextResponse.redirect(url);
   }
-  if (signedIn && matches(pathname, GUEST_PATHS)) {
+  if (signedIn && matchesPath(pathname, GUEST_PATHS)) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

@@ -13,7 +13,7 @@ import { z } from "zod";
 import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
-import { isCancelled, useAuthErrorMessage } from "../hooks/use-auth-error";
+import { useAuthErrorMessage } from "../hooks/use-auth-error";
 import { useAuthStepHref, useNextPath } from "../hooks/use-next-path";
 import { useAuthSchemas } from "../hooks/use-schemas";
 
@@ -54,7 +54,7 @@ export function SignInPage() {
   async function signInWithPasskey() {
     const result = await authClient.signIn.passkey();
     if (!result?.error) done();
-    else if (!isCancelled(result.error)) toast.error(errorMessage(result.error));
+    else toast.error(errorMessage(result.error));
   }
 
   return (

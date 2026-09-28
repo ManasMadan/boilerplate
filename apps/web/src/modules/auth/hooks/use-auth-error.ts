@@ -7,9 +7,22 @@ export interface AuthError {
   status?: number | undefined;
 }
 
-/** The user dismissed the browser's passkey prompt: not an error worth reporting. */
-export const isCancelled = (error: AuthError | null | undefined) =>
-  error?.code === "AUTH_CANCELLED" || error?.code === "REGISTRATION_CANCELLED";
+/**
+ * Several codes mean the same thing to a user. Passkey prompts in particular fail in
+ * browser-specific ways: dismissing the dialog surfaces as the browser's NotAllowedError
+ * (ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY), an aborted ceremony, or the plugin's own
+ * *_CANCELLED codes.
+ */
+const ALIASES: Record<string, string> = {
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "USER_ALREADY_EXISTS",
+  TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE: "TOO_MANY_ATTEMPTS",
+  SESSION_NOT_FRESH: "SESSION_EXPIRED",
+  AUTH_CANCELLED: "PASSKEY_CANCELLED",
+  REGISTRATION_CANCELLED: "PASSKEY_CANCELLED",
+  ERROR_CEREMONY_ABORTED: "PASSKEY_CANCELLED",
+  ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY: "PASSKEY_CANCELLED",
+  ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED: "PREVIOUSLY_REGISTERED",
+};
 
 /**
  * better-auth reports failures with codes (INVALID_EMAIL_OR_PASSWORD, INVALID_OTP, ...).
@@ -21,7 +34,8 @@ export function useAuthErrorMessage() {
   const t = useTranslations("authErrors");
   return (error: AuthError | null | undefined) => {
     // The rate limiter answers 429 without a code.
-    const code = error?.status === 429 ? "RATE_LIMITED" : error?.code;
+    const raw = error?.status === 429 ? "RATE_LIMITED" : error?.code;
+    const code = raw && (ALIASES[raw] ?? raw);
     return code && t.has(code as "generic") ? t(code as "generic") : t("generic");
   };
 }

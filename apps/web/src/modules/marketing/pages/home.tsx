@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui/components/button";
+import { buttonVariants } from "@repo/ui/components/button";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
@@ -11,13 +11,9 @@ export async function HomePage({ signedIn }: { signedIn: boolean }) {
         {t("title")}
       </h1>
       <p className="max-w-xl text-lg text-muted-foreground">{t("subtitle")}</p>
-      <Button
-        nativeButton={false}
-        render={<Link href={signedIn ? "/dashboard" : "/sign-up"} />}
-        size="lg"
-      >
+      <Link href={signedIn ? "/dashboard" : "/sign-up"} className={buttonVariants({ size: "lg" })}>
         {signedIn ? t("ctaSignedIn") : t("cta")}
-      </Button>
+      </Link>
     </section>
   );
 }

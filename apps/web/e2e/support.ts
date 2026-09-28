@@ -1,0 +1,208 @@
+/**
+ * Shared e2e helpers. Tests run against the real stack; emails are read back from Mailpit.
+ *
+ * Each test (and each extra "device") gets its own client IP through X-Forwarded-For, so
+ * the per-IP auth rate limits never make parallel tests fail each other. This works
+ * locally because every hop is on loopback, which the API trusts (TRUSTED_PROXIES).
+ */
+import { createHmac, randomInt, randomUUID } from "node:crypto";
+import AxeBuilder from "@axe-core/playwright";
+import {
+  type Browser,
+  type BrowserContext,
+  test as base,
+  expect,
+  type Page,
+} from "@playwright/test";
+
+const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
+export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
+const randomIp = () => `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
+
+export const test = base.extend({
+  extraHTTPHeaders: async ({ extraHTTPHeaders }, use) => {
+    await use({ ...extraHTTPHeaders, "x-forwarded-for": randomIp() });
+  },
+});
+export { expect };
+
+/** A second browser (another device) for the same or another user. */
+export async function newDevice(browser: Browser, options: { locale?: string } = {}) {
+  const context = await browser.newContext({
+    baseURL: BASE_URL,
+    locale: options.locale ?? "en-US",
+    extraHTTPHeaders: { "x-forwarded-for": randomIp() },
+  });
+  return { context, page: await context.newPage() };
+}
+
+export type User = { name: string; email: string; password: string };
+
+export const newUser = (): User => ({
+  name: `E2E ${randomUUID().slice(0, 8)}`,
+  email: `e2e-${randomUUID()}@example.com`,
+  // Random, so the breached-password check never rejects it.
+  password: `pw-${randomUUID()}`,
+});
+
+// ---------------------------------------------------------------------------- email
+
+interface MailSummary {
+  ID: string;
+  Subject: string;
+}
+
+async function messagesTo(to: string): Promise<MailSummary[]> {
+  const response = await fetch(
+    `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`,
+  );
+  return ((await response.json()) as { messages?: MailSummary[] }).messages ?? [];
+}
+
+/** A mailbox: remembers how many emails it has seen, so `next()` never returns an old one. */
+export async function mailbox(to: string) {
+  let seen = (await messagesTo(to)).length;
+  return {
+    /** The next email to arrive (plain text, HTML and subject). */
+    async next() {
+      let latest: MailSummary | undefined;
+      await expect
+        .poll(
+          async () => {
+            const messages = await messagesTo(to);
+            latest = messages.length > seen ? messages[0] : undefined;
+            return Boolean(latest);
+          },
+          { timeout: 20_000, message: `an email to ${to}` },
+        )
+        .toBe(true);
+      seen += 1;
+      const message = (await fetch(`${MAILPIT}/api/v1/message/${latest?.ID}`).then((r) =>
+        r.json(),
+      )) as { Text: string; HTML: string; Subject: string };
+      return message;
+    },
+    async nextCode() {
+      const { Text } = await this.next();
+      const code = /\b(\d{6})\b/.exec(Text)?.[1];
+      expect(code, "a 6-digit code in the email").toBeDefined();
+      return code as string;
+    },
+    async count() {
+      return (await messagesTo(to)).length;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------- auth flows
+
+export async function signUp(
+  page: Page,
+  user: User = newUser(),
+  options: { expectUrl?: RegExp } = {},
+) {
+  const inbox = await mailbox(user.email);
+  if (!/\/sign-up/.test(page.url())) await page.goto("/sign-up");
+  await page.getByLabel("Full name").fill(user.name);
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/verify-email/);
+  await page.getByLabel("Verification code").fill(await inbox.nextCode());
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(options.expectUrl ?? /\/dashboard/);
+  return user;
+}
+
+export async function signIn(page: Page, user: User, options: { expectUrl?: RegExp } = {}) {
+  if (!/\/sign-in/.test(page.url())) await page.goto("/sign-in");
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("main").getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(options.expectUrl ?? /\/dashboard/);
+}
+
+export async function signOut(page: Page, user: User) {
+  await page.getByRole("button", { name: user.name }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(`${BASE_URL}/`);
+}
+
+/** Calls a better-auth endpoint as the page's signed-in user (for setup the UI doesn't offer yet). */
+export async function authApi<T = unknown>(page: Page, path: string, body: unknown): Promise<T> {
+  const response = await page.request.post(`/api/auth${path}`, {
+    data: body,
+    headers: { origin: BASE_URL },
+  });
+  expect(response.ok(), `${path} → ${response.status()} ${await response.text()}`).toBe(true);
+  return (await response.json()) as T;
+}
+
+// ---------------------------------------------------------------------------- TOTP
+
+function base32Decode(input: string) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const char of input.replace(/=+$/, "").toUpperCase())
+    bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
+  const bytes = bits.match(/.{8}/g) ?? [];
+  return Buffer.from(bytes.map((byte) => Number.parseInt(byte, 2)));
+}
+
+/** RFC 6238 code for a base32 secret (what an authenticator app shows). */
+export function totp(secret: string, at = Date.now()) {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 1000 / 30)));
+  const hmac = createHmac("sha1", base32Decode(secret)).update(counter).digest();
+  const offset = (hmac.at(-1) ?? 0) & 0xf;
+  const value = (hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
+  return value.toString().padStart(6, "0");
+}
+
+// ---------------------------------------------------------------------------- passkeys
+
+/**
+ * A virtual platform authenticator (Chrome DevTools Protocol) that approves every prompt,
+ * standing in for Touch ID / Windows Hello. `setPresence(false)` makes it refuse, the
+ * same outcome as the user closing the browser's passkey dialog.
+ */
+export async function virtualAuthenticator(context: BrowserContext, page: Page) {
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: {
+      protocol: "ctap2",
+      transport: "internal",
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+  return {
+    async credentials() {
+      return (await cdp.send("WebAuthn.getCredentials", { authenticatorId })).credentials;
+    },
+    async clear() {
+      await cdp.send("WebAuthn.clearCredentials", { authenticatorId });
+    },
+    async setVerified(isUserVerified: boolean) {
+      await cdp.send("WebAuthn.setUserVerified", { authenticatorId, isUserVerified });
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------- accessibility
+
+/** Fails on any WCAG 2.2 A/AA violation on the current page. */
+export async function expectAccessible(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  const violations = results.violations.map(
+    (v) =>
+      `${v.id}: ${v.help} → ${v.nodes.map((n) => `${n.target.join(" ")} ${n.failureSummary ?? ""}`).join(" | ")}`,
+  );
+  expect(violations).toEqual([]);
+}

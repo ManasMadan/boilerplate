@@ -24,7 +24,7 @@ const ApiContext = createContext<ApiContextValue | null>(null);
 
 export interface ApiProviderProps {
   options?: ApiClientOptions;
-  onUnauthenticated?: () => void;
+  onUnauthenticated?: () => void | Promise<void>;
   onOutdated?: () => void;
   children: ReactNode;
 }
@@ -42,7 +42,7 @@ export function ApiProvider({
       const code = errorCode(error);
       if (code === "UNAUTHENTICATED") {
         queryClient.clear();
-        onUnauthenticated?.();
+        void onUnauthenticated?.();
       } else if (code === "CLIENT_OUTDATED") {
         onOutdated?.();
       }

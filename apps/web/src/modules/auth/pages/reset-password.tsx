@@ -34,6 +34,8 @@ export function ResetPasswordPage() {
     if (!email) return;
     const { error } = await authClient.emailOtp.resetPassword({ email, otp, password });
     if (error) {
+      // Clear the rejected code so the next one can be typed straight in.
+      form.setValue("otp", "");
       form.setError("otp", { message: errorMessage(error) });
       return;
     }

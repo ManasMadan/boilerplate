@@ -34,6 +34,8 @@ export function TwoFactorPage() {
       ? await authClient.twoFactor.verifyBackupCode({ code, trustDevice })
       : await authClient.twoFactor.verifyTotp({ code, trustDevice });
     if (error) {
+      // Clear the rejected code so the next one can be typed straight in.
+      form.setValue("code", "");
       form.setError("code", { message: errorMessage(error) });
       return;
     }

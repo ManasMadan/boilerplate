@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@repo/ui/components/button";
+import { Button, buttonVariants } from "@repo/ui/components/button";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
@@ -19,14 +19,14 @@ export default function ErrorPage({
       <p className="text-muted-foreground">{t("errorPage.errorDescription")}</p>
       {error.digest ? (
         <p className="font-mono text-xs text-muted-foreground">
-          {t("common.requestId")}: {error.digest}
+          {t("common.requestId", { requestId: error.digest })}
         </p>
       ) : null}
       <div className="flex gap-2">
         <Button onClick={reset}>{t("common.retry")}</Button>
-        <Button variant="outline" nativeButton={false} render={<Link href="/" />}>
+        <Link href="/" className={buttonVariants({ variant: "outline" })}>
           {t("errorPage.home")}
-        </Button>
+        </Link>
       </div>
     </section>
   );

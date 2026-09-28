@@ -12,7 +12,7 @@ import { Skeleton } from "@repo/ui/components/skeleton";
 import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
-import { isCancelled, useAuthErrorMessage } from "@/modules/auth";
+import { useAuthErrorMessage } from "@/modules/auth";
 
 export function PasskeysCard() {
   const t = useTranslations("settings.security.passkeys");
@@ -23,7 +23,7 @@ export function PasskeysCard() {
   async function add() {
     const result = await authClient.passkey.addPasskey();
     if (result?.error) {
-      if (!isCancelled(result.error)) toast.error(errorMessage(result.error));
+      toast.error(errorMessage(result.error));
       return;
     }
     toast.success(t("added"));
