@@ -1,0 +1,25 @@
+{
+  "name": "@repo/jobs",
+  "private": true,
+  "type": "module",
+  "description": "Queue names and job payload contracts shared by producers and consumers.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/i18n": "workspace:*",
+    "bullmq": "catalog:",
+    "ioredis": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
