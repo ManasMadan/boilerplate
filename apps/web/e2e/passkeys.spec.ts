@@ -74,6 +74,7 @@ test("the same authenticator can't be added twice", async ({ page, context }) =>
   await page.goto("/settings/security");
   const card = page.locator("[data-slot=card]", { hasText: "Passkeys" });
   await card.getByRole("button", { name: "Add a passkey" }).click();
+  await expect(page.getByText("Passkey added")).toBeVisible();
   await expect(card.getByRole("button", { name: "Remove" })).toHaveCount(1);
   await card.getByRole("button", { name: "Add a passkey" }).click();
   await expect(page.getByText("This passkey is already added.")).toBeVisible();

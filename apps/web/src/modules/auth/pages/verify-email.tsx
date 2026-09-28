@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useCaptcha } from "@/components/captcha";
 import { OtpField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
@@ -22,6 +23,7 @@ export function VerifyEmailPage() {
   const email = useEmailParam();
   const next = useNextPath();
   const errorMessage = useAuthErrorMessage();
+  const captcha = useCaptcha();
   const schema = z.object({ otp: useAuthSchemas().otp });
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { otp: "" } });
 
@@ -50,7 +52,9 @@ export function VerifyEmailPage() {
     const { error } = await authClient.emailOtp.sendVerificationOtp({
       email,
       type: "email-verification",
+      fetchOptions: { headers: captcha.headers() },
     });
+    captcha.reset();
     if (error) toast.error(errorMessage(error));
     else {
       form.reset({ otp: "" });
@@ -66,7 +70,8 @@ export function VerifyEmailPage() {
           <Button type="submit" disabled={form.formState.isSubmitting}>
             {t("common.continue")}
           </Button>
-          <Button type="button" variant="ghost" onClick={resend}>
+          {captcha.widget}
+          <Button type="button" variant="ghost" onClick={resend} disabled={!captcha.ready}>
             {t("auth.resendCode")}
           </Button>
         </FieldGroup>

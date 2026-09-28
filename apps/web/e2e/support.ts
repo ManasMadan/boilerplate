@@ -14,6 +14,7 @@ import {
   expect,
   type Page,
 } from "@playwright/test";
+import { Redis } from "ioredis";
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
 export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
@@ -205,4 +206,50 @@ export async function expectAccessible(page: Page) {
       `${v.id}: ${v.help} → ${v.nodes.map((n) => `${n.target.join(" ")} ${n.failureSummary ?? ""}`).join(" | ")}`,
   );
   expect(violations).toEqual([]);
+}
+
+// ---------------------------------------------------------------------------- simulated time
+
+/**
+ * The stack's Redis, where better-auth keeps sessions and one-time codes. Tests reach
+ * in to simulate time passing (an old session, an expired code) instead of waiting.
+ */
+let redis: Redis | undefined;
+const authStore = () => {
+  redis ??= new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { lazyConnect: false });
+  return redis;
+};
+test.afterAll(async () => {
+  await redis?.quit();
+  redis = undefined;
+});
+
+/** Makes the context's session look as if it was signed in `ms` ago. */
+export async function ageSession(context: BrowserContext, ms: number) {
+  const cookie = (await context.cookies()).find((c) =>
+    c.name.endsWith("better-auth.session_token"),
+  );
+  expect(cookie, "a session cookie").toBeDefined();
+  const key = `auth:${decodeURIComponent(cookie?.value ?? "").split(".")[0]}`;
+  const stored = JSON.parse((await authStore().get(key)) ?? "null") as {
+    session: { createdAt: string };
+  } | null;
+  expect(stored, `a session at ${key}`).not.toBeNull();
+  if (!stored) return;
+  stored.session.createdAt = new Date(Date.now() - ms).toISOString();
+  await authStore().set(key, JSON.stringify(stored), "KEEPTTL");
+}
+
+/** Moves every pending one-time code for `email` past its expiry. */
+export async function expireCodes(email: string) {
+  let expired = 0;
+  for (const key of await authStore().keys("auth:verification:*")) {
+    const raw = await authStore().get(key);
+    if (!raw?.includes(email)) continue;
+    const stored = JSON.parse(raw) as { expiresAt: string };
+    stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+    await authStore().set(key, JSON.stringify(stored), "KEEPTTL");
+    expired += 1;
+  }
+  expect(expired, `a pending code for ${email}`).toBeGreaterThan(0);
 }

@@ -5,8 +5,8 @@
   "description": "The web app: renders UI only. All data and logic come from apps/api through packages/client.",
   "scripts": {
     "dev": "bun --env-file=../../.env run next dev --port 3000",
-    "build": "bun --env-file=../../.env run next build",
-    "start": "bun --env-file=../../.env run next start --port 3000",
+    "build": "bun --env-file=../../.env run next build && bun run scripts/copy-static.ts",
+    "start": "node --env-file-if-exists=../../.env .next/standalone/apps/web/server.js",
     "check-types": "SKIP_ENV_VALIDATION=1 next typegen && tsc",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "playwright test"
@@ -41,6 +41,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "babel-plugin-react-compiler": "^1.0.0",
+    "ioredis": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

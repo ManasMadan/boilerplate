@@ -24,7 +24,8 @@
       "dark": "Oscuro",
       "system": "Sistema"
     },
-    "language": "Idioma"
+    "language": "Idioma",
+    "captchaFailed": "No se pudo cargar la verificación de seguridad. Revisa tu conexión, permite challenges.cloudflare.com si usas un bloqueador y recarga la página."
   },
   "meta": {
     "title": "Boilerplate",
@@ -183,7 +184,8 @@
         "add": "Añadir llave de acceso",
         "empty": "Aún no tienes llaves de acceso.",
         "added": "Llave de acceso añadida",
-        "remove": "Quitar"
+        "remove": "Quitar",
+        "unnamed": "Llave de acceso"
       },
       "password": {
         "title": "Contraseña",
@@ -199,6 +201,11 @@
         "confirm": "Introduce tu contraseña para confirmar",
         "delete": "Eliminar mi cuenta",
         "deleted": "Tu cuenta fue eliminada"
+      },
+      "reauth": {
+        "title": "Confirma que eres tú",
+        "body": "Por seguridad, vuelve a iniciar sesión para ver o cambiar esto.",
+        "action": "Volver a iniciar sesión"
       }
     }
   },

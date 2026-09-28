@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useCaptcha } from "@/components/captcha";
 import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
@@ -19,12 +20,17 @@ export function ForgotPasswordPage() {
   const t = useTranslations();
   const router = useRouter();
   const errorMessage = useAuthErrorMessage();
+  const captcha = useCaptcha();
   const schema = z.object({ email: useAuthSchemas().email });
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { email: "" } });
 
   async function onSubmit({ email }: z.infer<typeof schema>) {
     // Answers the same whether or not the account exists, so emails can't be enumerated.
-    const { error } = await authClient.emailOtp.requestPasswordReset({ email });
+    const { error } = await authClient.emailOtp.requestPasswordReset({
+      email,
+      fetchOptions: { headers: captcha.headers() },
+    });
+    captcha.reset();
     if (error) {
       toast.error(errorMessage(error));
       return;
@@ -43,7 +49,8 @@ export function ForgotPasswordPage() {
             type="email"
             autoComplete="email"
           />
-          <Button type="submit" disabled={form.formState.isSubmitting}>
+          {captcha.widget}
+          <Button type="submit" disabled={form.formState.isSubmitting || !captcha.ready}>
             {t("auth.sendCode")}
           </Button>
           <Link href="/sign-in" className="text-center text-sm underline underline-offset-4">

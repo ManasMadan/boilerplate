@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useCaptcha } from "@/components/captcha";
 import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
@@ -21,6 +22,7 @@ export function SignUpPage() {
   const router = useRouter();
   const stepHref = useAuthStepHref();
   const errorMessage = useAuthErrorMessage();
+  const captcha = useCaptcha();
   const schemas = useAuthSchemas();
   const schema = z.object({
     name: schemas.name,
@@ -35,7 +37,12 @@ export function SignUpPage() {
   async function onSubmit(values: z.infer<typeof schema>) {
     // The language comes from the browser (Accept-Language); the time zone is sent explicitly.
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const { error } = await authClient.signUp.email({ ...values, timezone });
+    const { error } = await authClient.signUp.email({
+      ...values,
+      timezone,
+      fetchOptions: { headers: captcha.headers() },
+    });
+    captcha.reset();
     if (error) {
       toast.error(errorMessage(error));
       return;
@@ -67,7 +74,8 @@ export function SignUpPage() {
             type="password"
             autoComplete="new-password"
           />
-          <Button type="submit" disabled={form.formState.isSubmitting}>
+          {captcha.widget}
+          <Button type="submit" disabled={form.formState.isSubmitting || !captcha.ready}>
             {t("common.signUp")}
           </Button>
           <p className="text-center text-sm text-muted-foreground">

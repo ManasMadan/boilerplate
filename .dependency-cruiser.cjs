@@ -34,8 +34,9 @@ module.exports = {
       severity: "error",
       comment:
         "The web app only renders. Data and logic come from the API through packages/client. " +
-        "Database, queue, server framework and auth-server code must never be bundled into it.",
-      from: { path: "^apps/(web|mobile)/" },
+        "Database, queue, server framework and auth-server code must never be bundled into it. " +
+        "(Test harnesses under e2e/ may reach the stack's services to simulate time.)",
+      from: { path: "^apps/(web|mobile)/", pathNot: "^apps/(web|mobile)/e2e/" },
       to: {
         path: [
           "^packages/(db|nest-common|jobs|logger|email)/",

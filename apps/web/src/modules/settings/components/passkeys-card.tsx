@@ -9,31 +9,48 @@ import {
   CardTitle,
 } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "@/modules/auth";
+import { needsRecentSignIn, ReauthPrompt } from "./reauth-prompt";
+
+const PASSKEYS_KEY = ["auth", "passkeys"] as const;
 
 export function PasskeysCard() {
   const t = useTranslations("settings.security.passkeys");
   const format = useFormatter();
   const errorMessage = useAuthErrorMessage();
-  const passkeys = authClient.useListPasskeys();
+  const queryClient = useQueryClient();
+  const passkeys = useQuery({
+    queryKey: PASSKEYS_KEY,
+    queryFn: async () => {
+      const { data, error } = await authClient.passkey.listUserPasskeys();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const [staleSession, setStaleSession] = useState(false);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: PASSKEYS_KEY });
 
   async function add() {
     const result = await authClient.passkey.addPasskey();
     if (result?.error) {
-      toast.error(errorMessage(result.error));
+      if (needsRecentSignIn(result.error)) setStaleSession(true);
+      else toast.error(errorMessage(result.error));
       return;
     }
+    // The list is up to date by the time the confirmation shows.
+    await refresh();
     toast.success(t("added"));
-    passkeys.refetch();
   }
 
   async function remove(id: string) {
     const { error } = await authClient.passkey.deletePasskey({ id });
     if (error) toast.error(errorMessage(error));
-    passkeys.refetch();
+    await refresh();
   }
 
   return (
@@ -43,6 +60,7 @@ export function PasskeysCard() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {staleSession ? <ReauthPrompt /> : null}
         {passkeys.isPending ? (
           <Skeleton className="h-10" />
         ) : passkeys.data?.length ? (
@@ -50,7 +68,7 @@ export function PasskeysCard() {
             {passkeys.data.map((passkey) => (
               <li key={passkey.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span>
-                  {passkey.name ?? passkey.deviceType}
+                  {passkey.name ?? t("unnamed")}
                   {passkey.createdAt ? (
                     <span className="ms-2 text-muted-foreground">
                       {format.dateTime(new Date(passkey.createdAt), { dateStyle: "medium" })}

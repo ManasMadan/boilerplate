@@ -24,7 +24,8 @@
       "dark": "Dark",
       "system": "System"
     },
-    "language": "Language"
+    "language": "Language",
+    "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload."
   },
   "meta": {
     "title": "Boilerplate",
@@ -183,7 +184,8 @@
         "add": "Add a passkey",
         "empty": "No passkeys yet.",
         "added": "Passkey added",
-        "remove": "Remove"
+        "remove": "Remove",
+        "unnamed": "Passkey"
       },
       "password": {
         "title": "Password",
@@ -199,6 +201,11 @@
         "confirm": "Enter your password to confirm",
         "delete": "Delete my account",
         "deleted": "Your account was deleted"
+      },
+      "reauth": {
+        "title": "Confirm it's you",
+        "body": "For your security, sign in again to see or change this.",
+        "action": "Sign in again"
       }
     }
   },

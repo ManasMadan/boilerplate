@@ -15,6 +15,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "@/modules/auth";
+import { needsRecentSignIn, ReauthPrompt } from "./reauth-prompt";
 
 const SESSIONS_KEY = ["auth", "sessions"] as const;
 
@@ -57,6 +58,8 @@ export function SessionsCard() {
       if (error) throw error;
       return data;
     },
+    // A stale session (see ReauthPrompt) won't become fresh by retrying.
+    retry: false,
   });
 
   async function run(action: () => Promise<{ error: { code?: string | undefined } | null }>) {
@@ -75,6 +78,14 @@ export function SessionsCard() {
       <CardContent className="flex flex-col gap-4">
         {sessions.isPending ? (
           <Skeleton className="h-16" />
+        ) : sessions.isError ? (
+          needsRecentSignIn(sessions.error) ? (
+            <ReauthPrompt />
+          ) : (
+            <p className="text-sm text-destructive">
+              {errorMessage(sessions.error as { code?: string })}
+            </p>
+          )
         ) : (
           <ul className="flex flex-col divide-y">
             {sessions.data?.map((session) => {

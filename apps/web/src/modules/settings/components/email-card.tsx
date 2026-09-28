@@ -16,6 +16,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useCaptcha } from "@/components/captcha";
 import { OtpField, TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage, useAuthSchemas } from "@/modules/auth";
@@ -33,13 +34,16 @@ export function EmailCard() {
   const { data: session, refetch } = authClient.useSession();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>({ name: "start" });
+  const captcha = useCaptcha();
   const email = session?.user.email ?? "";
 
   async function sendCurrentCode() {
     const { error } = await authClient.emailOtp.sendVerificationOtp({
       email,
       type: "email-verification",
+      fetchOptions: { headers: captcha.headers() },
     });
+    captcha.reset();
     if (error) toast.error(errorMessage(error));
     else setStep({ name: "current" });
   }
@@ -58,7 +62,8 @@ export function EmailCard() {
         {step.name === "start" ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-muted-foreground">{t("start", { email })}</p>
-            <Button variant="outline" onClick={sendCurrentCode} disabled={!email}>
+            {captcha.widget}
+            <Button variant="outline" onClick={sendCurrentCode} disabled={!email || !captcha.ready}>
               {t("change")}
             </Button>
           </div>
