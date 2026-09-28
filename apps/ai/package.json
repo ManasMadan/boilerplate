@@ -1,0 +1,13 @@
+{
+  "name": "@repo/ai",
+  "private": true,
+  "description": "Thin wrapper so turbo can run the Python service's tasks alongside the TypeScript ones.",
+  "scripts": {
+    "dev": "uv run --env-file=../../.env fastapi dev app/main.py --port 8000",
+    "start": "uv run --env-file=../../.env fastapi run app/main.py --port 8000",
+    "gen": "uv run python -m app.export_openapi openapi.json",
+    "check-types": "uv run basedpyright",
+    "lint": "uv run ruff check . && uv run ruff format --check .",
+    "test": "uv run pytest"
+  }
+}

@@ -1,0 +1,42 @@
+[project]
+name = "ai"
+version = "0.1.0"
+description = "Python inference service. Its Pydantic models are the source of truth for the TypeScript client in packages/ai-client."
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi[standard]>=0.141.1",
+  "pydantic>=2.13.5",
+]
+
+[dependency-groups]
+dev = [
+  "basedpyright>=1.40.1",
+  "httpx2>=2.13.1",
+  "pytest>=9.1.1",
+  "ruff>=0.16.9",
+]
+
+[tool.uv]
+# This is an application, not a library; don't try to build/install it as a package.
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# Pyflakes, pycodestyle, isort, bugbear, pyupgrade, simplify, ruff-specific.
+select = ["F", "E", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.basedpyright]
+# Strict mode: every function signature and model field must be typed. This is what
+# keeps the generated OpenAPI schema (and therefore the TypeScript types) precise.
+typeCheckingMode = "strict"
+pythonVersion = "3.13"
+include = ["app", "tests"]
+reportUnusedCallResult = false
+reportAny = false
+reportExplicitAny = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
