@@ -6,3 +6,7 @@
 # which also keeps Docker images simple (`turbo prune` + install). Undeclared
 # dependencies, the one thing isolated installs catch, are caught by knip in CI.
 linker = "hoisted"
+# Never auto-install missing peer dependencies: Bun would pick their latest versions,
+# which for React Native pulls native modules the Expo SDK wasn't built against.
+# Every dependency, peer or not, is declared explicitly (and checked by knip).
+peer = false

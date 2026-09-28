@@ -100,6 +100,17 @@
           }
         }
       }
+    },
+    {
+      "includes": [".claude/hooks/**", "scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUndeclaredEnvVars": "off",
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ],
   "css": {
