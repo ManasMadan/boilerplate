@@ -433,7 +433,10 @@ jobs:
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with: { version: v4.3.0 }
       - name: Install helm-unittest
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.1.2 --verify=false
+        env:
+          # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
+          VERSION: v1.1.2
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version "$VERSION" --verify=false
       # Lint, unit tests, every environment rendered and validated against the Kubernetes
       # and CRD schemas, the platform add-ons at their pinned versions, the Argo CD manifests.
       - run: bun run charts:check
@@ -478,10 +481,13 @@ jobs:
             *.cache-to=type=gha,mode=max
             *.args.RELEASE=${{ github.sha }}
       - name: Scan the images
+        env:
+          # renovate: datasource=docker depName=aquasec/trivy
+          TRIVY: aquasec/trivy:0.74.0
         run: |
           for image in api worker notifications webhooks web ai migrate; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-              aquasec/trivy:0.74.0 image --quiet --exit-code 1 --ignore-unfixed \
+              "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed \
               --severity CRITICAL,HIGH "boilerplate/$image:dev"
           done
 

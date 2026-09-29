@@ -11,6 +11,7 @@ on:
       - "docker-bake.hcl"
       - "scripts/k8s.ts"
       - "packages/db/prisma/**"
+      - ".github/workflows/kind.yml"
   schedule:
     - cron: "43 2 * * *"
   workflow_dispatch:
@@ -36,9 +37,14 @@ jobs:
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with: { version: v4.3.0 }
       - name: Install kind
+        env:
+          # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+          VERSION: v0.33.0
+          # The published kind-linux-amd64.sha256sum of that release: update both together.
+          SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
         run: |
-          curl -fsSLo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
-          echo "aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  kind" | sha256sum -c -
+          curl -fsSLo kind "https://github.com/kubernetes-sigs/kind/releases/download/$VERSION/kind-linux-amd64"
+          echo "$SHA256  kind" | sha256sum -c -
           sudo install -m 0755 kind /usr/local/bin/kind
       - run: bun run k8s:up
       - name: Show what went wrong

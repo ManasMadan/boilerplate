@@ -8,12 +8,12 @@
 # Dependencies come from uv.lock exactly (no dev group), into a virtualenv that the
 # runtime image copies as is. Python matches the lockfile's, so compiled wheels load.
 
-ARG PYTHON_VERSION=3.14
+ARG PYTHON_IMAGE=python:3.14-slim-trixie
 ARG UV_VERSION=0.12.17
 
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
-FROM python:${PYTHON_VERSION}-slim-trixie AS build
+FROM ${PYTHON_IMAGE} AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -25,7 +25,7 @@ RUN --mount=type=cache,id=uv,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 COPY apps/ai/app ./app
 
-FROM python:${PYTHON_VERSION}-slim-trixie
+FROM ${PYTHON_IMAGE}
 ARG RELEASE=dev
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \

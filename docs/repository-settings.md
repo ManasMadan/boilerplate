@@ -30,19 +30,23 @@ repository starts shipping.
 ## The GitHub App
 
 Workflows that write to the repository use a GitHub App's token instead of
-`GITHUB_TOKEN`: pull requests opened with `GITHUB_TOKEN` never start CI (so the release
-and promotion pull requests could never pass **CI passed**), and `GITHUB_TOKEN` can't be
-put on the ruleset's bypass list for the staging bump.
+`GITHUB_TOKEN`: pull requests opened with `GITHUB_TOKEN` never start CI (so the release,
+promotion and dependency pull requests could never pass **CI passed**), and
+`GITHUB_TOKEN` can't be put on the ruleset's bypass list for the staging bump. The same
+App runs Renovate (`renovate.yml`, configured in `renovate.json5`).
 
 1. **Settings → Developer settings → GitHub Apps → New GitHub App** (on your account or
-   organization). No webhook. Repository permissions: **Contents: Read and write**,
-   **Pull requests: Read and write**. Only on this account.
+   organization). No webhook. Repository permissions: **Contents**, **Pull requests**,
+   **Issues** (Renovate's dependency dashboard) and **Workflows** (Renovate updates the
+   pinned actions): Read and write; **Checks** and **Commit statuses**: Read. Only on
+   this account.
 2. Generate a private key, and install the App on this repository only.
 3. In this repository: variable `BOT_APP_CLIENT_ID` (the App's client ID) and secret
    `BOT_APP_PRIVATE_KEY` (the key file's contents).
 4. Add the App to the `master` ruleset's bypass list.
 
-Without the App the workflows fall back to `GITHUB_TOKEN` and say so in a warning.
+Without the App the release and deploy workflows fall back to `GITHUB_TOKEN` and say
+so in a warning, and Renovate doesn't run.
 
 ## Environments
 

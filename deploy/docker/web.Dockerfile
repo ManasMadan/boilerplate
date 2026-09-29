@@ -9,16 +9,17 @@
 # baked in: every setting (WEB_URL, RELEASE, STORAGE_ORIGIN) is read when the server
 # starts, so the same image runs in every environment.
 
-ARG BUN_VERSION=1.3.6
+ARG BUN_IMAGE=oven/bun:1.3.6-slim
+# renovate: datasource=npm depName=turbo
 ARG TURBO_VERSION=2.11.5
 
-FROM oven/bun:${BUN_VERSION}-slim AS prune
+FROM ${BUN_IMAGE} AS prune
 ARG TURBO_VERSION
 WORKDIR /repo
 COPY . .
 RUN bunx turbo@${TURBO_VERSION} prune @repo/web --docker --out-dir /pruned
 
-FROM oven/bun:${BUN_VERSION}-slim AS build
+FROM ${BUN_IMAGE} AS build
 ARG TURBO_VERSION
 ENV TURBO_TELEMETRY_DISABLED=1 \
     NEXT_TELEMETRY_DISABLED=1

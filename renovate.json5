@@ -1,0 +1,135 @@
+// Dependency updates, by Renovate running in this repository's Actions (renovate.yml).
+// Everything is pinned, so nothing moves without a pull request that CI checks: npm and
+// Python packages and their lockfiles, images, actions (by digest), Helm charts, OpenTofu
+// providers and the tool versions pinned in scripts and workflows (the custom managers
+// below; a `# renovate:` comment marks a version on the next line).
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:best-practices", ":semanticCommits", ":semanticCommitScope(deps)"],
+  timezone: "Etc/UTC",
+  schedule: ["before 6am on monday"],
+  // A release must have been out this long first: most malicious or broken releases are
+  // pulled within days.
+  minimumReleaseAge: "3 days",
+  prConcurrentLimit: 10,
+  lockFileMaintenance: { enabled: true, schedule: ["before 6am on monday"] },
+  // Our charts don't use the repository/tag convention; their images are in a custom
+  // manager below.
+  "helm-values": { enabled: false },
+  customManagers: [
+    {
+      description: "Bun's catalog in the root package.json (Renovate's Bun manager doesn't read catalogs)",
+      customType: "regex",
+      managerFilePatterns: ["/^package\\.json$/"],
+      matchStringsStrategy: "recursive",
+      matchStrings: ['"catalog": \\{[^}]*\\}', '"(?<depName>[^"]+)": "(?<currentValue>[^"]+)"'],
+      datasourceTemplate: "npm",
+      versioningTemplate: "npm",
+    },
+    {
+      description: "Versions marked with a `# renovate:` (or `// renovate:`) comment",
+      customType: "regex",
+      managerFilePatterns: [
+        "/(^|/)[^/]*Dockerfile$/",
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/^infra/tofu/.+\\.tf$/",
+        "/^scripts/.+\\.ts$/",
+      ],
+      matchStrings: [
+        "(?:#|//) renovate: datasource=(?<datasource>[\\w-]+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s*\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+(?:\\.\\d+)?(?:-[\\w.]+)?)\\b",
+      ],
+    },
+    {
+      description: "Images the scripts run with `docker run`",
+      customType: "regex",
+      managerFilePatterns: ["/^scripts/.+\\.ts$/", "/(^|/)package\\.json$/"],
+      matchStrings: [
+        "(?:^|[\\s\"'])(?<depName>[a-z0-9][a-z0-9.-]*(?:/[a-z0-9][a-z0-9._-]*)+):(?<currentValue>v?\\d[\\w.-]*)[\\s\"']",
+      ],
+      datasourceTemplate: "docker",
+    },
+    {
+      description: "Images in the charts' values and the local manifests",
+      customType: "regex",
+      managerFilePatterns: ["/^deploy/.+\\.ya?ml$/"],
+      matchStrings: [
+        "(?:image|imageName|imageRef): [\"']?(?<depName>[a-z0-9][a-z0-9.-]*(?:/[a-z0-9][a-z0-9._-]*)+):(?<currentValue>\\w[\\w.-]*)[\"']?\\s",
+      ],
+      datasourceTemplate: "docker",
+    },
+    {
+      description: "Platform add-on charts from Helm repositories (deploy/platform/addons)",
+      customType: "regex",
+      managerFilePatterns: ["/^deploy/platform/addons/.+\\.yaml$/"],
+      matchStrings: [
+        "repoURL: (?<registryUrl>https://\\S+)\\nchart: (?<depName>\\S+)\\nversion: (?<currentValue>\\S+)",
+      ],
+      datasourceTemplate: "helm",
+    },
+    {
+      description: "Platform add-on charts from OCI registries (deploy/platform/addons)",
+      customType: "regex",
+      managerFilePatterns: ["/^deploy/platform/addons/.+\\.yaml$/"],
+      matchStrings: [
+        "repoURL: (?<packageName>[a-z0-9][^\\s:]*)\\nchart: (?<depName>\\S+)\\nversion: (?<currentValue>\\S+)",
+      ],
+      packageNameTemplate: "{{{packageName}}}/{{{depName}}}",
+      datasourceTemplate: "docker",
+    },
+  ],
+  packageRules: [
+    {
+      description: "Catalog updates raise the range and refresh bun.lock, as the Bun manager does for the rest",
+      matchManagers: ["custom.regex"],
+      matchFileNames: ["package.json"],
+      rangeStrategy: "bump",
+      postUpgradeTasks: {
+        commands: ["bun install"],
+        fileFilters: ["bun.lock"],
+        executionMode: "branch",
+        installTools: { bun: {} },
+      },
+    },
+    {
+      description: "OpenTofu's required_version is a floor we raise on purpose, not a Terraform release",
+      matchDepTypes: ["required_version"],
+      enabled: false,
+    },
+    {
+      description: "Bun: the package manager, the image builds and its types move together",
+      matchPackageNames: ["bun", "oven/bun", "@types/bun"],
+      groupName: "bun",
+    },
+    {
+      description: "Python: the local version, the image and the lockfile's",
+      matchPackageNames: ["python"],
+      groupName: "python",
+    },
+    {
+      description: "Trivy: the image scan and the configuration scan",
+      matchPackageNames: ["aquasec/trivy", "aquasecurity/trivy"],
+      groupName: "trivy",
+    },
+    {
+      description: "Helm: the CLI in CI and its unittest plugin",
+      matchPackageNames: ["helm", "helm/helm", "helm-unittest/helm-unittest"],
+      groupName: "helm",
+    },
+    {
+      description: "The mobile app's React Native and React versions come from the Expo SDK: upgrade them together with `bunx expo install --fix`",
+      matchPackageNames: ["expo", "expo-*", "@expo/*", "react-native", "react-native-*", "react", "react-dom", "@types/react", "@types/react-dom"],
+      groupName: "Expo SDK",
+    },
+    {
+      description: "kind's download is checked against a pinned checksum",
+      matchPackageNames: ["kubernetes-sigs/kind"],
+      prBodyNotes: ["Update `SHA256` in `.github/workflows/kind.yml` to the release's `kind-linux-amd64.sha256sum` before merging."],
+    },
+    {
+      description: "Postgres majors need a dump and restore (or pg_upgrade), never a tag bump",
+      matchPackageNames: ["pgvector/pgvector", "ghcr.io/cloudnative-pg/postgresql", "docker.io/library/postgres"],
+      matchUpdateTypes: ["major"],
+      enabled: false,
+    },
+  ],
+}

@@ -9,16 +9,17 @@
 # Every migration must be safe to run while the previous release is still serving
 # (expand, deploy, then contract in a later release).
 
-ARG BUN_VERSION=1.3.6
+ARG BUN_IMAGE=oven/bun:1.3.6-slim
+# renovate: datasource=npm depName=turbo
 ARG TURBO_VERSION=2.11.5
 
-FROM oven/bun:${BUN_VERSION}-slim AS prune
+FROM ${BUN_IMAGE} AS prune
 ARG TURBO_VERSION
 WORKDIR /repo
 COPY . .
 RUN bunx turbo@${TURBO_VERSION} prune @repo/db --docker --out-dir /pruned
 
-FROM oven/bun:${BUN_VERSION}-slim AS build
+FROM ${BUN_IMAGE} AS build
 WORKDIR /repo
 COPY --from=prune /pruned/json/ .
 # The Prisma CLI is a development dependency of the db package, and it's all this
