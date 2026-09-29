@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+#
+# The web app (Next.js standalone server).
+#
+#   docker buildx bake web            (docker-bake.hcl at the repo root)
+#
+# Next traces exactly the files the server needs into .next/standalone, so the runtime
+# image is that directory on a distroless Node base. Nothing environment-specific is
+# baked in: every setting (WEB_URL, RELEASE, STORAGE_ORIGIN) is read when the server
+# starts, so the same image runs in every environment.
+
+ARG BUN_VERSION=1.3.6
+ARG TURBO_VERSION=2.11.5
+
+FROM oven/bun:${BUN_VERSION}-slim AS prune
+ARG TURBO_VERSION
+WORKDIR /repo
+COPY . .
+RUN bunx turbo@${TURBO_VERSION} prune @repo/web --docker --out-dir /pruned
+
+FROM oven/bun:${BUN_VERSION}-slim AS build
+ARG TURBO_VERSION
+ENV TURBO_TELEMETRY_DISABLED=1 \
+    NEXT_TELEMETRY_DISABLED=1
+WORKDIR /repo
+COPY --from=prune /pruned/json/ .
+RUN --mount=type=cache,id=bun-install,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
+COPY --from=prune /pruned/full/ .
+# The build validates configuration like the server does; this origin only satisfies
+# that check (pages that use the origin render per request, from the runtime value).
+RUN WEB_URL=http://build.invalid bunx turbo@${TURBO_VERSION} run build --filter=@repo/web --only
+
+FROM gcr.io/distroless/nodejs24-debian13:nonroot
+ARG RELEASE=dev
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000 \
+    RELEASE=${RELEASE}
+COPY --from=build /repo/apps/web/.next/standalone /app
+WORKDIR /app/apps/web
+USER 10001:10001
+EXPOSE 3000
+# Next writes its render cache under .next/cache: mount a writable volume there when
+# the root filesystem is read-only (the Helm chart does).
+CMD ["server.js"]
