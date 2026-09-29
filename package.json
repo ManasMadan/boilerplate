@@ -140,6 +140,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,cjs,json,jsonc,css}": "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true",
+    "deploy/{environments/*/secrets,platform/secrets/*}/*": "bun scripts/secrets-check.ts",
     "apps/ai/**/*.py": [
       "uv run --project apps/ai ruff check --fix",
       "uv run --project apps/ai ruff format"

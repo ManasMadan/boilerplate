@@ -12,7 +12,8 @@
  *      Argo CD's chart with deploy/argocd/argo-cd-values.yaml, and the Argo CD manifests;
  *   4. every file under deploy/environments/<env>/secrets/ and
  *      deploy/platform/secrets/<env>/ is a SOPS-encrypted Secret: nothing in plain text
- *      is ever committed there.
+ *      is ever committed there (scripts/secrets-check.ts, which the pre-commit hook runs
+ *      on staged files too).
  *
  * Needs helm with the unittest plugin (`helm plugin install
  * https://github.com/helm-unittest/helm-unittest`) and either kubeconform or Docker.
@@ -21,6 +22,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail, ok, ROOT } from "./lib";
+import { unsafeSecret } from "./secrets-check";
 
 const CHARTS = join(ROOT, "deploy/charts");
 const ENVIRONMENTS = join(ROOT, "deploy/environments");
@@ -234,56 +236,6 @@ const argocd = ["root.yaml", "projects.yaml", "repositories.yaml"]
 check("Argo CD manifests are valid", kubeconform(argocd));
 
 // ----------------------------------------------------------------------------- secrets
-
-/**
- * Why a file in a secrets directory isn't safe to commit, or null when it is: a
- * Kubernetes Secret encrypted by SOPS with age, every value encrypted. `.gitkeep` (empty)
- * holds a directory that has no secrets yet. Application Secrets name no namespace (they
- * go to their Application's: the environment's, or each preview's); platform ones must.
- */
-function unsafeSecret(name: string, text: string, platform: boolean): string | null {
-  if (name === ".gitkeep") return text.trim() === "" ? null : ".gitkeep must be empty";
-  if (!name.endsWith(".sops.yaml")) return "only *.sops.yaml files belong here";
-  let doc: unknown;
-  try {
-    doc = Bun.YAML.parse(text);
-  } catch (error) {
-    return `not YAML: ${(error as Error).message}`;
-  }
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) return "not one YAML document";
-  const { kind, metadata, sops, data, stringData } = doc as Record<string, unknown>;
-  if (kind !== "Secret") return "not a Secret";
-  const meta = (metadata ?? {}) as Record<string, unknown>;
-  if (platform && !meta.namespace) return "a platform Secret names its namespace";
-  if (!platform && meta.namespace) {
-    return "an application Secret names no namespace (it goes to its Application's)";
-  }
-  const encryption = sops as { mac?: unknown; age?: unknown[] } | undefined;
-  if (!encryption?.mac || !Array.isArray(encryption.age) || encryption.age.length === 0) {
-    return "not encrypted with sops and age (sops --encrypt --in-place)";
-  }
-  const values = Object.entries({
-    ...((data ?? {}) as Record<string, unknown>),
-    ...((stringData ?? {}) as Record<string, unknown>),
-  });
-  if (values.length === 0) return "has no values";
-  const plain = values.filter(([, value]) => !String(value).startsWith("ENC[AES256_GCM,"));
-  return plain.length > 0 ? `values in plain text: ${plain.map(([key]) => key).join(", ")}` : null;
-}
-
-// The check checks itself first: a plaintext Secret must fail it, an encrypted one pass.
-const sample = (value: string, extra = "") =>
-  `apiVersion: v1\nkind: Secret\nmetadata:\n  name: boilerplate-api\n${extra}stringData:\n  BETTER_AUTH_SECRET: ${value}\n`;
-const encrypted = `${sample("ENC[AES256_GCM,data:abc,iv:def,tag:ghi,type:str]")}sops:\n  age:\n    - recipient: age1example\n      enc: x\n  mac: ENC[AES256_GCM,data:m,iv:i,tag:t,type:str]\n`;
-check("the secrets check tells encrypted from plain", {
-  ok:
-    unsafeSecret("api.sops.yaml", encrypted, false) === null &&
-    unsafeSecret("api.sops.yaml", sample("hunter2"), false) !== null &&
-    unsafeSecret("api.sops.yaml", `${sample("ENC[AES256_GCM,x]")}sops: {}\n`, false) !== null &&
-    unsafeSecret("api.yaml", encrypted, false) !== null &&
-    unsafeSecret("api.sops.yaml", encrypted, true) !== null,
-  output: "unsafeSecret in scripts/charts.ts accepts a secret it must refuse, or the reverse",
-});
 
 const secretDirs = [
   ...readdirSync(ENVIRONMENTS).map((env) => ({
