@@ -23,6 +23,15 @@ export interface Harness {
   close(): Promise<void>;
 }
 
+/** Local object storage (docker compose --profile files); CI runs the same. */
+export const LOCAL_STORAGE = {
+  S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
+  S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://localhost:9000",
+  S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? "rustfs",
+  S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? "rustfs-secret",
+  S3_FORCE_PATH_STYLE: "true",
+};
+
 export async function startApi(env: Record<string, string> = {}): Promise<Harness> {
   const testDb = await createTestDatabase();
   Object.assign(process.env, {

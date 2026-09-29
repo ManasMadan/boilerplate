@@ -13,6 +13,7 @@ import { type JobName, parseJob, queuePrefix } from "@repo/jobs";
 import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import type { Job, Queue } from "bullmq";
 import { env } from "../env";
+import { FilesCleanup } from "../files/files.cleanup";
 import { OUTBOX_SOURCES } from "../outbox/sources";
 
 type Task = JobName<"maintenance">;
@@ -22,6 +23,7 @@ export const SCHEDULES: Record<Task, string> = {
   "audit-partitions": "0 2 * * *",
   "outbox-retention": "15 3 * * *",
   "session-retention": "0 * * * *",
+  "files-cleanup": "30 * * * *",
 };
 
 // Partitions exist this far around "now", so late and early timestamps always land.
@@ -33,6 +35,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
   constructor(
     @InjectDatabase() private readonly database: Database,
     @InjectQueue("maintenance") private readonly queue: Queue,
+    private readonly files: FilesCleanup,
     @InjectPinoLogger(MaintenanceProcessor.name) private readonly log: PinoLogger,
   ) {
     super();
@@ -92,6 +95,9 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
             SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`;
           result["notifications.history"] = Number(notifications.n);
         }
+        break;
+      case "files-cleanup":
+        Object.assign(result, await this.files.run());
         break;
       case "session-retention": {
         const [purged] = await db.$queryRaw<[{ n: bigint }]>`SELECT auth.purge_expired() AS n`;

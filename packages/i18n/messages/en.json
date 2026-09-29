@@ -153,6 +153,17 @@
         "confirm": "Change email",
         "changed": "Email changed to {email}",
         "sameEmail": "That's already your email."
+      },
+      "avatar": {
+        "title": "Profile picture",
+        "description": "Shown next to your name. We crop it to a square and remove location and camera details.",
+        "upload": "Upload a picture",
+        "change": "Change picture",
+        "remove": "Remove",
+        "uploading": "Uploading…",
+        "checking": "Checking your picture…",
+        "updated": "Profile picture updated",
+        "removed": "Profile picture removed"
       }
     },
     "security": {
@@ -381,7 +392,14 @@
     "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another.",
     "UNSUBSCRIBE_LINK_INVALID": "This unsubscribe link isn't valid. Change what you receive in notification settings instead.",
     "PHONE_CODE_INVALID": "That code isn't right, or it expired. Check the text or send a new code.",
-    "PHONE_NUMBER_TAKEN": "That number is already on an account."
+    "PHONE_NUMBER_TAKEN": "That number is already on an account.",
+    "FILE_NOT_FOUND": "That file doesn't exist, or it isn't yours.",
+    "FILE_TYPE_NOT_ALLOWED": "That kind of file isn't allowed here. Use one of: {types}.",
+    "FILE_TOO_LARGE": "That file is too big. The limit is {maxBytes, number, ::unit/byte unit-width-narrow compact-short}.",
+    "FILE_INFECTED": "That file looks harmful, so it was deleted.",
+    "FILE_UNREADABLE": "That file couldn't be read. It may be damaged; try another.",
+    "FILE_NOT_UPLOADED": "The file didn't finish uploading. Try again.",
+    "FILE_NOT_READY": "That file is still being checked. Try again in a moment."
   },
   "workspace": {
     "switcher": {

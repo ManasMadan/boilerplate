@@ -179,10 +179,12 @@
         "@repo/nest-common": "workspace:*",
         "@t3-oss/env-core": "catalog:",
         "bullmq": "catalog:",
+        "file-type": "^22.1.1",
         "ioredis": "catalog:",
         "pg": "^8.23.0",
         "reflect-metadata": "catalog:",
         "rxjs": "catalog:",
+        "sharp": "^0.35.5",
         "zod": "catalog:",
       },
       "devDependencies": {

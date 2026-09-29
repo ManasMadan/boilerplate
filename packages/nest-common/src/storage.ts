@@ -49,6 +49,9 @@ export interface Storage {
     options?: { filename?: string; expiresInSeconds?: number },
   ): Promise<{ url: string; expiresAt: Date }>;
   head(key: string): Promise<StoredObject | null>;
+  /** The object's bytes; refuses objects larger than `maxBytes` (they're never buffered). */
+  read(key: string, maxBytes: number): Promise<Buffer>;
+  write(key: string, body: Buffer, contentType: string): Promise<void>;
   move(from: string, to: string): Promise<void>;
   delete(key: string): Promise<void>;
 }
@@ -134,6 +137,28 @@ export class S3Storage implements Storage {
     }
   }
 
+  async read(key: string, maxBytes: number) {
+    const result = await this.client.send(
+      new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
+    );
+    if ((result.ContentLength ?? 0) > maxBytes)
+      throw new Error(`${key} is larger than ${maxBytes} bytes`);
+    const bytes = await result.Body?.transformToByteArray();
+    if (!bytes) throw new Error(`${key} has no body`);
+    return Buffer.from(bytes);
+  }
+
+  async write(key: string, body: Buffer, contentType: string) {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.options.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    );
+  }
+
   async move(from: string, to: string) {
     await this.client.send(
       new CopyObjectCommand({
@@ -149,3 +174,25 @@ export class S3Storage implements Storage {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.options.bucket, Key: key }));
   }
 }
+
+/** The configured storage, or null when files are off (no S3_BUCKET). */
+export function createStorage(env: {
+  S3_BUCKET?: string | undefined;
+  S3_REGION: string;
+  S3_ENDPOINT?: string | undefined;
+  S3_ACCESS_KEY_ID?: string | undefined;
+  S3_SECRET_ACCESS_KEY?: string | undefined;
+  S3_FORCE_PATH_STYLE: boolean;
+}): Storage | null {
+  if (!env.S3_BUCKET) return null;
+  return new S3Storage({
+    bucket: env.S3_BUCKET,
+    region: env.S3_REGION,
+    forcePathStyle: env.S3_FORCE_PATH_STYLE,
+    ...(env.S3_ENDPOINT && { endpoint: env.S3_ENDPOINT }),
+    ...(env.S3_ACCESS_KEY_ID && { accessKeyId: env.S3_ACCESS_KEY_ID }),
+    ...(env.S3_SECRET_ACCESS_KEY && { secretAccessKey: env.S3_SECRET_ACCESS_KEY }),
+  });
+}
+
+export const STORAGE = Symbol("STORAGE");

@@ -15,6 +15,9 @@ export const env = createEnv({
     API_URL: z.url().default("http://localhost:3001"),
     // The deployed version (image tag); sent to the API as x-app-version.
     RELEASE: z.string().default("dev"),
+    // When file uploads are on: the object storage origin browsers upload to and load
+    // files from (presigned URLs), allowed by the Content-Security-Policy.
+    STORAGE_ORIGIN: z.url().optional(),
   },
   experimental__runtimeEnv: {},
   emptyStringAsUndefined: true,

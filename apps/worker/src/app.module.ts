@@ -10,6 +10,7 @@ import {
 } from "@repo/nest-common";
 import { AuditModule } from "./audit/audit.module";
 import { env } from "./env";
+import { FilesModule } from "./files/files.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { OutboxModule } from "./outbox/outbox.module";
 import { RealtimeModule } from "./realtime/realtime.module";
@@ -34,6 +35,7 @@ import { RealtimeModule } from "./realtime/realtime.module";
     HealthModule.forRoot(["db", "redis"]),
     OutboxModule,
     AuditModule,
+    FilesModule,
     MaintenanceModule,
     RealtimeModule,
   ],

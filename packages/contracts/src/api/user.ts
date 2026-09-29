@@ -32,4 +32,8 @@ export const userContract = {
     .input(z.object({ phoneNumber: phoneNumberSchema, code: phoneCodeSchema }))
     .output(meSchema),
   removePhone: route("POST", "/me/phone/remove", "Remove the phone number").output(meSchema),
+  /** A ready avatar upload of the user's (FILE_NOT_READY otherwise), or null to remove it. */
+  setAvatar: route("POST", "/me/avatar", "Set or remove the profile picture")
+    .input(z.object({ fileId: z.uuid().nullable() }))
+    .output(meSchema),
 };

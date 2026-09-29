@@ -7,11 +7,13 @@ import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { queuePrefix } from "@repo/jobs";
-import { createRedis } from "@repo/nest-common";
+import { createRedis, S3Storage } from "@repo/nest-common";
 import { redisDatabase } from "@repo/nest-common/testing";
 import { Queue } from "bullmq";
 import pg from "pg";
+import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { FilesProcessor as Files } from "../src/files/files.processor";
 import type { MaintenanceProcessor as Maintenance } from "../src/maintenance/maintenance.processor";
 import type { OutboxRelay as Relay } from "../src/outbox/relay.service";
 
@@ -19,6 +21,24 @@ let testDb: TestDatabase;
 let app: INestApplicationContext;
 let relay: Relay;
 let maintenance: Maintenance;
+let files: Files;
+
+// Local object storage and clamd (docker compose --profile files); CI runs the same.
+const S3 = {
+  S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
+  S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://localhost:9000",
+  S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? "rustfs",
+  S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? "rustfs-secret",
+  S3_FORCE_PATH_STYLE: "true",
+};
+const storage = new S3Storage({
+  bucket: S3.S3_BUCKET,
+  region: "us-east-1",
+  endpoint: S3.S3_ENDPOINT,
+  accessKeyId: S3.S3_ACCESS_KEY_ID,
+  secretAccessKey: S3.S3_SECRET_ACCESS_KEY,
+  forcePathStyle: true,
+});
 
 async function asRole<T>(role: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = new pg.Client({ connectionString: testDb.urlFor(role) });
@@ -84,6 +104,8 @@ beforeAll(async () => {
     WORKER_DATABASE_DIRECT_URL: testDb.urlFor("app_worker"),
     REDIS_URL: redisDatabase(15),
     RELAY_POLL_INTERVAL_MS: "200",
+    ...S3,
+    CLAMAV_URL: process.env.CLAMAV_URL ?? "tcp://localhost:3310",
   });
   const redis = createRedis(process.env.REDIS_URL as string);
   await redis.flushdb();
@@ -95,6 +117,8 @@ beforeAll(async () => {
   await app.init();
   relay = app.get(OutboxRelay);
   maintenance = app.get(MaintenanceProcessor);
+  const { FilesProcessor } = await import("../src/files/files.processor");
+  files = app.get(FilesProcessor);
 });
 
 afterAll(async () => {
@@ -351,6 +375,7 @@ describe("maintenance", () => {
     const schedulers = await queue.getJobSchedulers();
     expect(schedulers.map((s) => s.key).sort()).toEqual([
       "audit-partitions",
+      "files-cleanup",
       "outbox-retention",
       "session-retention",
     ]);
@@ -363,6 +388,205 @@ describe("maintenance", () => {
     ).rejects.toThrow(/permission denied/);
     await expect(
       asRole("app_api", (client) => client.query("SELECT auth.purge_expired()")),
+    ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("uploads", () => {
+  // The EICAR test file: every antivirus detects it, and it's harmless.
+  const EICAR = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+
+  async function newUser() {
+    const userId = randomUUID();
+    await asRole("app_api", (client) =>
+      client.query(
+        `INSERT INTO auth."user" (id, name, email, updated_at) VALUES ($1, 'U', $2, now())`,
+        [userId, `${userId}@test.dev`],
+      ),
+    );
+    return userId;
+  }
+
+  /** An upload as the browser leaves it: a pending row and the bytes in quarantine. */
+  async function upload(bytes: Buffer, declaredType = "image/png", declaredSize = bytes.length) {
+    const userId = await newUser();
+    const fileId = randomUUID();
+    await asRole("postgres", (client) =>
+      client.query(
+        `INSERT INTO files.file (id, user_id, purpose, filename, declared_type, declared_size, updated_at)
+         VALUES ($1, $2, 'avatar', 'me.png', $3, $4, now())`,
+        [fileId, userId, declaredType, declaredSize],
+      ),
+    );
+    await storage.write(`quarantine/${fileId}`, bytes, declaredType);
+    return { userId, fileId };
+  }
+
+  async function row(fileId: string) {
+    return asRole("postgres", async (client) => {
+      const { rows } = await client.query(
+        "SELECT status, reject_reason, content_type, size, sha256, ready_at FROM files.file WHERE id = $1",
+        [fileId],
+      );
+      return rows[0];
+    });
+  }
+
+  async function photoWithMetadata() {
+    return sharp({ create: { width: 1200, height: 800, channels: 3, background: "#3366cc" } })
+      .jpeg()
+      .withExif({ IFD0: { Artist: "Secret Name", Copyright: "GPS 51.5,-0.12" } })
+      .toBuffer();
+  }
+
+  it("accepts a photo as a 512px WebP with its metadata gone", async () => {
+    const photo = await photoWithMetadata();
+    expect((await sharp(photo).metadata()).exif).toBeDefined();
+    const { fileId, userId } = await upload(photo, "image/jpeg");
+
+    // The uploader's screens are told when it's done.
+    const subscriber = createRedis(process.env.REDIS_URL as string);
+    const messages: string[] = [];
+    await subscriber.subscribe(`realtime:user:${userId}`);
+    subscriber.on("message", (_channel, message) => messages.push(message));
+
+    await files.check(fileId);
+    const stored = await storage.read(`files/${fileId}`, 10_000_000);
+    const metadata = await sharp(stored).metadata();
+    expect(metadata).toMatchObject({ format: "webp", width: 512, height: 512 });
+    expect(metadata.exif).toBeUndefined();
+    expect(stored.includes(Buffer.from("Secret Name"))).toBe(false);
+    expect(await storage.head(`quarantine/${fileId}`)).toBeNull();
+    expect(await row(fileId)).toMatchObject({
+      status: "ready",
+      reject_reason: null,
+      content_type: "image/webp",
+      size: stored.length,
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      ready_at: expect.any(Date),
+    });
+    await eventually(
+      async () => messages,
+      (received) => received.length > 0,
+    );
+    expect(messages.map((message) => JSON.parse(message))).toContainEqual({
+      type: "files.changed",
+    });
+    await subscriber.quit();
+  });
+
+  it("rejects a virus, whatever it claims to be, and deletes it", async () => {
+    const { fileId } = await upload(Buffer.from(EICAR));
+    await files.check(fileId);
+    expect(await row(fileId)).toMatchObject({ status: "rejected", reject_reason: "FILE_INFECTED" });
+    expect(await storage.head(`quarantine/${fileId}`)).toBeNull();
+    expect(await storage.head(`files/${fileId}`)).toBeNull();
+  });
+
+  it("judges the type by the bytes, not by what the client said", async () => {
+    const { fileId } = await upload(Buffer.from("<svg onload=alert(1)></svg>"), "image/png");
+    await files.check(fileId);
+    expect(await row(fileId)).toMatchObject({
+      status: "rejected",
+      reject_reason: "FILE_TYPE_NOT_ALLOWED",
+    });
+  });
+
+  it("rejects an image that doesn't decode", async () => {
+    const jpeg = await sharp({ create: { width: 64, height: 64, channels: 3, background: "red" } })
+      .jpeg()
+      .toBuffer();
+    // Recognisably a JPEG from its first bytes, then garbage the decoder chokes on.
+    const broken = Buffer.concat([jpeg.subarray(0, 20), Buffer.alloc(200, 0xab)]);
+    const { fileId } = await upload(broken, "image/jpeg");
+    await files.check(fileId);
+    expect(await row(fileId)).toMatchObject({
+      status: "rejected",
+      reject_reason: "FILE_UNREADABLE",
+    });
+  });
+
+  it("rejects an object that isn't the size that was signed for", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "red" } })
+      .png()
+      .toBuffer();
+    const { fileId } = await upload(png, "image/png", png.length + 10);
+    await files.check(fileId);
+    expect(await row(fileId)).toMatchObject({
+      status: "rejected",
+      reject_reason: "FILE_TOO_LARGE",
+    });
+  });
+
+  it("checks each upload once, through the queue", async () => {
+    const photo = await photoWithMetadata();
+    const { fileId } = await upload(photo, "image/jpeg");
+    const queue = new Queue("files", {
+      connection: createRedis(process.env.REDIS_URL as string),
+      prefix: queuePrefix("files"),
+    });
+    await queue.add("process", { meta: {}, payload: { fileId } }, { jobId: fileId });
+    await queue.add("process", { meta: {}, payload: { fileId } }, { jobId: fileId });
+    const done = await eventually(
+      () => row(fileId),
+      (found) => found?.status === "ready",
+    );
+    expect(done?.status).toBe("ready");
+    await queue.close();
+    // Already checked: nothing happens a second time.
+    await files.check(fileId);
+    expect((await row(fileId))?.status).toBe("ready");
+  });
+
+  it("forgets abandoned uploads and removes deleted files' objects", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "red" } })
+      .png()
+      .toBuffer();
+    const abandoned = await upload(png);
+    await asRole("postgres", (client) =>
+      client.query("UPDATE files.file SET created_at = now() - interval '2 days' WHERE id = $1", [
+        abandoned.fileId,
+      ]),
+    );
+    const kept = await upload(png);
+    await files.check(kept.fileId);
+    expect(await storage.head(`files/${kept.fileId}`)).not.toBeNull();
+
+    // The user is deleted: the database queues their files' objects for removal.
+    await asRole("postgres", (client) =>
+      client.query(`DELETE FROM auth."user" WHERE id = $1`, [kept.userId]),
+    );
+    await maintenance.run("files-cleanup");
+    expect(await row(abandoned.fileId)).toBeUndefined();
+    expect(await storage.head(`quarantine/${abandoned.fileId}`)).toBeNull();
+    expect(await storage.head(`files/${kept.fileId}`)).toBeNull();
+    expect(
+      await asRole("postgres", async (client) => {
+        const { rows } = await client.query(
+          "SELECT key FROM files.object_deletion WHERE key LIKE ANY($1)",
+          [[`%${abandoned.fileId}`, `%${kept.fileId}`]],
+        );
+        return rows;
+      }),
+    ).toEqual([]);
+  });
+
+  it("only the uploader and the worker see a pending upload", async () => {
+    const { userId, fileId } = await upload(Buffer.from("x"));
+    const seenBy = async (viewer: string) =>
+      asRole("app_api", async (client) => {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.user_id', $1, true)", [viewer]);
+        const { rows } = await client.query("SELECT id FROM files.file WHERE id = $1", [fileId]);
+        await client.query("COMMIT");
+        return rows.length;
+      });
+    expect(await seenBy(userId)).toBe(1);
+    expect(await seenBy(randomUUID())).toBe(0);
+    await expect(
+      asRole("app_worker", (client) =>
+        client.query("UPDATE files.file SET purpose = 'x' WHERE id = $1", [fileId]),
+      ),
     ).rejects.toThrow(/permission denied/);
   });
 });

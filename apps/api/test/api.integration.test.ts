@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
-import { createSignedTokens } from "@repo/nest-common";
+import { createSignedTokens, S3Storage } from "@repo/nest-common";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ import {
   editSession,
   expireOtps,
   type Harness,
+  LOCAL_STORAGE,
   newEmail,
   newPassword,
   startApi,
@@ -30,6 +31,7 @@ beforeAll(async () => {
     // The test receiver below runs on loopback.
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
     VAPID_PUBLIC_KEY: "BPublicVapidKeyForTests",
+    ...LOCAL_STORAGE,
   });
 });
 afterAll(() => harness?.close());
@@ -814,6 +816,218 @@ describe("phone number", () => {
       createSession(harness).rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
       "UNAUTHENTICATED",
     );
+  });
+});
+
+describe("uploads and the profile picture", () => {
+  const storage = new S3Storage({
+    bucket: LOCAL_STORAGE.S3_BUCKET,
+    region: "us-east-1",
+    endpoint: LOCAL_STORAGE.S3_ENDPOINT,
+    accessKeyId: LOCAL_STORAGE.S3_ACCESS_KEY_ID,
+    secretAccessKey: LOCAL_STORAGE.S3_SECRET_ACCESS_KEY,
+    forcePathStyle: true,
+  });
+  const png = Buffer.from(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005050201a5b2a1d20000000049454e44ae426082",
+    "hex",
+  );
+
+  async function sql(query: string, params: unknown[] = []) {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    try {
+      return (await client.query(query, params)).rows;
+    } finally {
+      await client.end();
+    }
+  }
+
+  /** What apps/worker does once it has checked an upload. */
+  async function markReady(fileId: string) {
+    await storage.write(`files/${fileId}`, png, "image/webp");
+    await sql(
+      "UPDATE files.file SET status = 'ready', content_type = 'image/webp', size = $2, ready_at = now() WHERE id = $1",
+      [fileId, png.length],
+    );
+  }
+
+  async function uploaded(session: ReturnType<typeof createSession>) {
+    const { file, upload } = await session.rpc.files.createUpload({
+      purpose: "avatar",
+      filename: "me.png",
+      contentType: "image/png",
+      size: png.length,
+    });
+    const put = await fetch(upload.url, { method: "PUT", headers: upload.headers, body: png });
+    expect(put.status).toBe(200);
+    return file;
+  }
+
+  it("signs an upload for exactly the file described, straight into quarantine", async () => {
+    const { session } = await signedInUser();
+    const { file, upload } = await session.rpc.files.createUpload({
+      purpose: "avatar",
+      filename: "me.png",
+      contentType: "image/png",
+      size: png.length,
+    });
+    expect(file).toMatchObject({ purpose: "avatar", status: "pending", filename: "me.png" });
+    expect(new URL(upload.url).pathname).toContain(`/quarantine/${file.id}`);
+
+    // A different type or size than was signed for is refused by storage itself.
+    const swapped = await fetch(upload.url, {
+      method: "PUT",
+      headers: { ...upload.headers, "Content-Type": "text/html" },
+      body: png,
+    });
+    expect(swapped.status).toBe(403);
+    const bigger = Buffer.concat([png, png]);
+    const resized = await fetch(upload.url, {
+      method: "PUT",
+      headers: { ...upload.headers, "Content-Length": String(bigger.length) },
+      body: bigger,
+    });
+    expect(resized.status).toBe(403);
+
+    const put = await fetch(upload.url, { method: "PUT", headers: upload.headers, body: png });
+    expect(put.status).toBe(200);
+    expect(await storage.head(`quarantine/${file.id}`)).toMatchObject({ size: png.length });
+  });
+
+  it("refuses types and sizes the purpose doesn't allow, before signing anything", async () => {
+    const { session } = await signedInUser();
+    const upload = (contentType: string, size: number) =>
+      session.rpc.files.createUpload({ purpose: "avatar", filename: "x", contentType, size });
+    const type = await expectError(upload("image/svg+xml", 100), "FILE_TYPE_NOT_ALLOWED");
+    expect(type.data?.params).toMatchObject({ types: expect.stringContaining("image/png") });
+    const size = await expectError(upload("image/png", 5_000_001), "FILE_TOO_LARGE");
+    expect(size.data?.params).toMatchObject({ maxBytes: 5_000_000 });
+    await expectError(upload("image/png", 0), "VALIDATION_FAILED");
+  });
+
+  it("completing queues one check, and only after the bytes are there", async () => {
+    const { session } = await signedInUser();
+    const { file } = await session.rpc.files.createUpload({
+      purpose: "avatar",
+      filename: "me.png",
+      contentType: "image/png",
+      size: png.length,
+    });
+    await expectError(session.rpc.files.completeUpload({ fileId: file.id }), "FILE_NOT_UPLOADED");
+
+    const done = await uploaded(session);
+    await session.rpc.files.completeUpload({ fileId: done.id });
+    await session.rpc.files.completeUpload({ fileId: done.id });
+    const queue = new Queue("files", { connection: harness.redis, prefix: queuePrefix("files") });
+    const jobs = (await queue.getJobs(["waiting", "delayed", "prioritized"])).filter(
+      (job) => job.data.payload.fileId === done.id,
+    );
+    await queue.close();
+    expect(jobs.map((job) => job.id)).toEqual([done.id]);
+  });
+
+  it("keeps each user's uploads private", async () => {
+    const owner = await signedInUser();
+    const file = await uploaded(owner.session);
+    const other = await signedInUser();
+    await expectError(other.session.rpc.files.get({ fileId: file.id }), "FILE_NOT_FOUND");
+    await expectError(
+      other.session.rpc.files.completeUpload({ fileId: file.id }),
+      "FILE_NOT_FOUND",
+    );
+    await expect(owner.session.rpc.files.get({ fileId: file.id })).resolves.toMatchObject({
+      id: file.id,
+    });
+  });
+
+  it("sets a checked upload as the picture, served to anyone signed in", async () => {
+    const { session } = await signedInUser();
+    const file = await uploaded(session);
+    await expectError(session.rpc.user.setAvatar({ fileId: file.id }), "FILE_NOT_READY");
+    await markReady(file.id);
+
+    const me = await session.rpc.user.setAvatar({ fileId: file.id });
+    expect(me.image).toBe(`/api/v1/files/${file.id}/content`);
+    expect((await session.rpc.user.me()).image).toBe(me.image);
+
+    // Anyone signed in gets a short-lived storage URL; nobody signed out does.
+    const viewer = await signedInUser();
+    const content = await fetch(`${harness.baseUrl}${me.image}`, {
+      headers: { cookie: [...viewer.session.cookies()].map(([k, v]) => `${k}=${v}`).join("; ") },
+      redirect: "manual",
+    });
+    expect(content.status).toBe(302);
+    expect(content.headers.get("cache-control")).toBe("private, max-age=240");
+    const image = await fetch(content.headers.get("location") as string);
+    expect(image.status).toBe(200);
+    expect(Buffer.from(await image.arrayBuffer())).toEqual(png);
+    expect((await fetch(`${harness.baseUrl}${me.image}`, { redirect: "manual" })).status).toBe(401);
+  });
+
+  it("a picture must be the user's own, ready avatar", async () => {
+    const owner = await signedInUser();
+    const theirs = await uploaded(owner.session);
+    await markReady(theirs.id);
+    const other = await signedInUser();
+    await expectError(other.session.rpc.user.setAvatar({ fileId: theirs.id }), "FILE_NOT_FOUND");
+    await expectError(other.session.rpc.user.setAvatar({ fileId: randomUUID() }), "FILE_NOT_FOUND");
+    // Pending files aren't served to anyone else, even by id.
+    const pending = await uploaded(owner.session);
+    const response = await fetch(`${harness.baseUrl}/api/v1/files/${pending.id}/content`, {
+      headers: { cookie: [...other.session.cookies()].map(([k, v]) => `${k}=${v}`).join("; ") },
+      redirect: "manual",
+    });
+    expect(response.status).toBe(404);
+  });
+
+  it("replacing or removing the picture deletes the old file and queues its objects", async () => {
+    const { session } = await signedInUser();
+    const first = await uploaded(session);
+    await markReady(first.id);
+    await session.rpc.user.setAvatar({ fileId: first.id });
+    const second = await uploaded(session);
+    await markReady(second.id);
+    await session.rpc.user.setAvatar({ fileId: second.id });
+
+    expect(await sql("SELECT id FROM files.file WHERE id = $1", [first.id])).toEqual([]);
+    expect(
+      (await sql("SELECT key FROM files.object_deletion WHERE key LIKE $1", [`%${first.id}`]))
+        .map((row) => row.key)
+        .sort(),
+    ).toEqual([`files/${first.id}`, `quarantine/${first.id}`]);
+
+    expect((await session.rpc.user.setAvatar({ fileId: null })).image).toBeNull();
+    expect(await sql("SELECT id FROM files.file WHERE id = $1", [second.id])).toEqual([]);
+  });
+
+  it("the picture can't be set to an arbitrary URL through the auth API", async () => {
+    const { session } = await signedInUser();
+    const response = await session.auth("/update-user", {
+      image: "https://tracker.example/pixel.gif",
+    });
+    expect(response.status).toBe(400);
+    expect((await session.rpc.user.me()).image).toBeNull();
+    // Other profile changes still work.
+    expect((await session.auth("/update-user", { name: "Renamed" })).status).toBe(200);
+  });
+
+  it("limits how many uploads a user can start", async () => {
+    const { session } = await signedInUser();
+    const start = () =>
+      session.rpc.files.createUpload({
+        purpose: "avatar",
+        filename: "x.png",
+        contentType: "image/png",
+        size: 10,
+      });
+    for (let i = 0; i < 30; i++) await start();
+    await expectError(start(), "RATE_LIMITED");
+  });
+
+  it("reports files as on", async () => {
+    const info = await createSession(harness).rpc.system.info();
+    expect(info.features.files).toBe(true);
   });
 });
 

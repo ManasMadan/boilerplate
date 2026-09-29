@@ -85,3 +85,21 @@ export const redisEnv = {
 export function requiredInProduction(schema: z.ZodType<string, string>, devDefault: string) {
   return process.env.NODE_ENV === "production" ? schema : schema.default(devDefault);
 }
+
+/**
+ * Object storage (S3 API). Files are on when S3_BUCKET is set; the rest describe where.
+ * Locally: RustFS from `docker compose --profile files`. AWS: omit the endpoint and
+ * keys (workload identity). R2/GCS: their S3 endpoint and HMAC keys.
+ */
+export const storageEnv = {
+  S3_BUCKET: z.string().min(3).optional(),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_ENDPOINT: z.url().optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  /** RustFS/MinIO-style servers without virtual-hosted buckets. */
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+};

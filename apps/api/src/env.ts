@@ -7,7 +7,7 @@
  * variables; see src/features.ts. Add new variables here, to .env.example and to
  * docs/environment.md in the same change.
  */
-import { coreEnv, databaseEnv, port, redisEnv } from "@repo/nest-common";
+import { coreEnv, databaseEnv, port, redisEnv, storageEnv } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
@@ -16,6 +16,8 @@ export const env = createEnv({
     ...coreEnv,
     ...databaseEnv("API"),
     ...redisEnv,
+    // Optional: file uploads (profile pictures), on when S3_BUCKET is set.
+    ...storageEnv,
     PORT: port(3001),
 
     BETTER_AUTH_SECRET: z.string().min(32, "Generate one with: openssl rand -base64 32"),

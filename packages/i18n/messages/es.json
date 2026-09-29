@@ -153,6 +153,17 @@
         "confirm": "Cambiar correo",
         "changed": "Correo cambiado a {email}",
         "sameEmail": "Ese ya es tu correo."
+      },
+      "avatar": {
+        "title": "Foto de perfil",
+        "description": "Se muestra junto a tu nombre. La recortamos en cuadrado y quitamos los datos de ubicación y de la cámara.",
+        "upload": "Subir una foto",
+        "change": "Cambiar foto",
+        "remove": "Quitar",
+        "uploading": "Subiendo…",
+        "checking": "Revisando tu foto…",
+        "updated": "Foto de perfil actualizada",
+        "removed": "Foto de perfil quitada"
       }
     },
     "security": {
@@ -381,7 +392,14 @@
     "WEBHOOK_ENDPOINT_LIMIT": "Este espacio ya tiene {max} endpoints de webhook. Elimina uno para añadir otro.",
     "UNSUBSCRIBE_LINK_INVALID": "Este enlace para darse de baja no es válido. Cambia lo que recibes en los ajustes de notificaciones.",
     "PHONE_CODE_INVALID": "Ese código no es correcto o ha caducado. Revisa el SMS o pide un código nuevo.",
-    "PHONE_NUMBER_TAKEN": "Ese número ya está en una cuenta."
+    "PHONE_NUMBER_TAKEN": "Ese número ya está en una cuenta.",
+    "FILE_NOT_FOUND": "Ese archivo no existe o no es tuyo.",
+    "FILE_TYPE_NOT_ALLOWED": "Ese tipo de archivo no está permitido aquí. Usa uno de estos: {types}.",
+    "FILE_TOO_LARGE": "Ese archivo es demasiado grande. El límite es {maxBytes, number, ::unit/byte unit-width-narrow compact-short}.",
+    "FILE_INFECTED": "Ese archivo parece dañino, así que se eliminó.",
+    "FILE_UNREADABLE": "No se pudo leer ese archivo. Puede estar dañado; prueba con otro.",
+    "FILE_NOT_UPLOADED": "El archivo no terminó de subirse. Inténtalo de nuevo.",
+    "FILE_NOT_READY": "Todavía estamos revisando ese archivo. Inténtalo de nuevo en un momento."
   },
   "workspace": {
     "switcher": {

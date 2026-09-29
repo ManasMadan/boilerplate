@@ -311,7 +311,12 @@ export function createAuth({ env, db, redis, notifications, memberships }: AuthD
         // Profile edits go through the same rules: an unknown language or zone is refused
         // rather than stored, so emails and dates never render with garbage settings.
         update: {
-          before: async (user) => {
+          before: async (user, ctx) => {
+            // The picture is set only by the avatar flow (a checked upload), never to a
+            // URL a client picks.
+            if (ctx?.path === "/update-user" && user.image !== undefined) {
+              throw new APIError("BAD_REQUEST", { code: "VALIDATION_FAILED" });
+            }
             if (
               (user.locale !== undefined && !isLocale(user.locale)) ||
               (user.timezone !== undefined && !isTimeZone(user.timezone))

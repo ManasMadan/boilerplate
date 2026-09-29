@@ -1,4 +1,6 @@
+import { fileContentPath } from "@repo/contracts/files";
 import type { Procedures } from "../../rpc/procedures";
+import type { AvatarService } from "./avatar.service";
 import type { PhoneService } from "./phone.service";
 
 interface UserRow {
@@ -22,11 +24,26 @@ const toMe = (user: UserRow, activeOrganizationId: string | null | undefined) =>
   phoneNumber: user.phoneNumber ?? null,
 });
 
-export const userRouter = ({ authed, fresh }: Procedures, phone: PhoneService) => ({
+export const userRouter = (
+  { authed, fresh }: Procedures,
+  phone: PhoneService,
+  avatar: AvatarService,
+) => ({
   me: authed.user.me.handler(async ({ context: { user, session } }) =>
     // The phone number isn't part of better-auth's session user.
     toMe({ ...user, phoneNumber: await phone.current(user.id) }, session.activeOrganizationId),
   ),
+  setAvatar: authed.user.setAvatar.handler(async ({ context: { user, session }, input }) => {
+    await avatar.set(user.id, input.fileId);
+    return toMe(
+      {
+        ...user,
+        image: input.fileId ? fileContentPath(input.fileId) : null,
+        phoneNumber: await phone.current(user.id),
+      },
+      session.activeOrganizationId,
+    );
+  }),
   sendPhoneCode: fresh.user.sendPhoneCode.handler(({ context, input }) =>
     phone.sendCode(context.user.id, context.user.locale, input.phoneNumber),
   ),

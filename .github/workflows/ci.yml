@@ -98,6 +98,9 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
+      - name: Start object storage and virus scanning
+        run: docker compose --profile files up -d rustfs clamav
       - uses: ./.github/actions/setup
       # The same roles and databases local Docker gets from infra/postgres/init.
       - name: Bootstrap database roles
@@ -117,6 +120,10 @@ jobs:
         run: |
           bunx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code
           bunx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code
+      - name: Wait for storage and clamd, and create the bucket
+        run: |
+          docker compose --profile files up -d --wait rustfs clamav
+          docker compose --profile files run --rm s3-init
       - run: bunx turbo run test:integration
 
   e2e:
@@ -161,11 +168,21 @@ jobs:
       WEB_URL: http://localhost:3000
       API_URL: http://localhost:3001
       AI_URL: http://localhost:8000
+      # Uploads on, against the local RustFS and ClamAV started below.
+      S3_BUCKET: uploads
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY_ID: rustfs
+      S3_SECRET_ACCESS_KEY: rustfs-secret
+      S3_FORCE_PATH_STYLE: "true"
+      STORAGE_ORIGIN: http://localhost:9000
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
+      - name: Start object storage and virus scanning
+        run: docker compose --profile files up -d rustfs clamav
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - name: Bootstrap database roles
@@ -190,6 +207,10 @@ jobs:
       - name: Install the browser
         working-directory: apps/web
         run: bunx playwright install --with-deps chromium
+      - name: Wait for storage and clamd, and create the bucket
+        run: |
+          docker compose --profile files up -d --wait rustfs clamav
+          docker compose --profile files run --rm s3-init
       - name: Start the stack
         run: |
           mkdir -p logs

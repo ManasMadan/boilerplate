@@ -232,11 +232,20 @@ export const queues = {
     },
   },
   /** Scheduled housekeeping in apps/worker (retention, partitions). */
+  /**
+   * Checking uploads (apps/worker): type sniffing, virus scan, image re-encoding. The job
+   * id is the file id, so completing an upload twice checks it once.
+   */
+  files: {
+    jobs: { process: z.object({ fileId: z.uuid() }) },
+    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
+  },
   maintenance: {
     jobs: {
       "outbox-retention": z.object({}),
       "audit-partitions": z.object({}),
       "session-retention": z.object({}),
+      "files-cleanup": z.object({}),
     },
     options: {
       attempts: 3,

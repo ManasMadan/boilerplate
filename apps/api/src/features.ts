@@ -27,7 +27,7 @@ export const features: Record<Feature, boolean> = {
     env.TURNSTILE_SITE_KEY,
     env.TURNSTILE_SECRET_KEY,
   ),
-  // Wired in later steps; off until their configuration exists.
+  files: Boolean(env.S3_BUCKET),
+  // Wired in a later step; off until its configuration exists.
   billing: false,
-  files: false,
 };

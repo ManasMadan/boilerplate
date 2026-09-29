@@ -2,7 +2,14 @@
  * Validated environment for the worker. Shared variables come from @repo/nest-common's
  * fragments; add new ones here, to .env.example and to docs/environment.md.
  */
-import { coreEnv, databaseEnv, directDatabaseEnv, port, redisEnv } from "@repo/nest-common";
+import {
+  coreEnv,
+  databaseEnv,
+  directDatabaseEnv,
+  port,
+  redisEnv,
+  storageEnv,
+} from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
@@ -31,7 +38,18 @@ export const env = createEnv({
     WEBHOOK_HISTORY_DAYS: positive.default(30),
     // Delivery log, and in-app notifications read longer ago than this.
     NOTIFICATION_HISTORY_DAYS: positive.default(90),
+
+    // Uploads: checked here when files are on (S3_BUCKET set).
+    ...storageEnv,
+    FILES_CONCURRENCY: positive.default(2),
+    // clamd for virus scanning; "none" skips scanning (development only).
+    FILE_SCANNER: z.enum(["clamav", "none"]).default("clamav"),
+    CLAMAV_URL: z.url({ protocol: /^tcp$/ }).default("tcp://localhost:3310"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
 });
+
+if (env.NODE_ENV === "production" && env.S3_BUCKET && env.FILE_SCANNER === "none") {
+  throw new Error("FILE_SCANNER=none is for development only: uploads must be scanned");
+}

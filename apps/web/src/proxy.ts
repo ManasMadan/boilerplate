@@ -10,6 +10,7 @@
  *    then signs out (packages/client). This check is only about not flashing the wrong page.
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { env } from "@/env";
 import { APP_PATHS, GUEST_PATHS, matchesPath } from "@/lib/routes";
 import { hasSessionCookie } from "@/lib/session-cookie";
 
@@ -28,17 +29,19 @@ export function proxy(request: NextRequest) {
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const development = process.env.NODE_ENV === "development";
+  // Uploads go straight to storage, and files load from it (presigned URLs).
+  const storage = env.STORAGE_ORIGIN ? ` ${new URL(env.STORAGE_ORIGIN).origin}` : "";
   const csp = [
     "default-src 'self'",
     // 'strict-dynamic' lets Next's nonce'd bootstrap load its chunks; dev needs eval for HMR.
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
+    `img-src 'self' data: blob: https:${storage}`,
     "font-src 'self'",
     // The push service worker (public/sw.js).
     "worker-src 'self'",
     // The API is on this origin; Turnstile (captcha) needs its origin when enabled.
-    "connect-src 'self' https://challenges.cloudflare.com",
+    `connect-src 'self' https://challenges.cloudflare.com${storage}`,
     "frame-src https://challenges.cloudflare.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",

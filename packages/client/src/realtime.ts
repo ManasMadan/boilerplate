@@ -70,6 +70,7 @@ export function useLiveUpdates(activeOrganizationId: string | null | undefined) 
     "todos.changed": () => queryClient.invalidateQueries({ queryKey: api.todo.list.key() }),
     "notifications.changed": () =>
       queryClient.invalidateQueries({ queryKey: api.notifications.key() }),
+    "files.changed": () => queryClient.invalidateQueries({ queryKey: api.files.key() }),
   } satisfies Record<RealtimeMessage["type"], () => Promise<void>>;
 
   useRealtime(
