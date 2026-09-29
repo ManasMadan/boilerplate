@@ -1,0 +1,43 @@
+# kind (`bun run k8s:up`): images built and loaded locally, one replica each, no
+# autoscalers, plain HTTP on http://boilerplate.localhost.
+image:
+  registry: boilerplate
+  tag: dev
+  pullPolicy: IfNotPresent
+site:
+  host: boilerplate.localhost
+  scheme: http
+gateway:
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+      sectionName: http
+env:
+  LOG_LEVEL: debug
+defaults:
+  replicas: 1
+  topologySpread: false
+  pdb:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+services:
+  web:
+    autoscaling: { enabled: false }
+  api:
+    autoscaling: { enabled: false }
+    env:
+      # Local stand-ins, as in development.
+      MINIMUM_CLIENT_VERSION: "0.0.0"
+  worker:
+    keda: { enabled: false }
+    env:
+      # No ClamAV locally (uploads are off without an S3 bucket).
+      FILE_SCANNER: none
+  notifications:
+    keda: { enabled: false }
+  webhooks:
+    keda: { enabled: false }
+  ai-worker:
+    keda: { enabled: false }

@@ -1,0 +1,28 @@
+# Production. image.tag changes only through a promotion pull request (merge = deploy).
+image:
+  tag: ""
+site:
+  # Your production host.
+  host: app.example.com
+env:
+  LOG_LEVEL: info
+secrets:
+  externalSecrets:
+    enabled: true
+    keyPrefix: boilerplate/production/
+defaults:
+  replicas: 3
+  resources:
+    requests: { cpu: 250m, memory: 384Mi }
+    limits: { memory: 768Mi }
+  keda:
+    minReplicas: 2
+    maxReplicas: 20
+services:
+  web:
+    autoscaling: { minReplicas: 3, maxReplicas: 20 }
+  api:
+    autoscaling: { minReplicas: 3, maxReplicas: 30 }
+  clamav:
+    enabled: true
+    replicas: 2

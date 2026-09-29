@@ -1,0 +1,40 @@
+{{- /*
+Each service accepts connections only from the gateway (if it has routes) and from
+the services of this release listed in its `allowFrom`. Outbound traffic is open:
+services call providers (email, SMS, Stripe, customers' webhooks) on the internet.
+*/}}
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if and $svc.enabled $svc.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "stack.selectorLabels" (list $ $name) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    {{- if and $svc.routes $.Values.gateway.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $.Values.gateway.namespaceSelector | nindent 14 }}
+      ports:
+        - port: {{ $svc.port }}
+    {{- end }}
+    {{- range $from := $svc.allowFrom }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "stack.selectorLabels" (list $ $from) | nindent 14 }}
+      ports:
+        - port: {{ $svc.port }}
+    {{- end }}
+    {{- /* Health checks come from the node (kubelet), which network policies don't cover. */}}
+{{- end }}
+{{- end }}

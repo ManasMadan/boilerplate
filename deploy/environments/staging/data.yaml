@@ -1,0 +1,9 @@
+# Staging uses managed Postgres and Valkey (provisioned by OpenTofu, which writes their
+# credentials to the secret manager).
+credentials:
+  source: extract
+  keyPrefix: boilerplate/staging/
+postgres:
+  enabled: false
+valkey:
+  enabled: false

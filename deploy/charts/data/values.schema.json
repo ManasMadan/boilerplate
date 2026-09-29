@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "data chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": { "type": "object" },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "secretPrefix", "roles"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
+        "secretPrefix": { "type": "string" },
+        "roles": {
+          "type": "array",
+          "contains": { "const": "migrator" },
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" }
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": { "enum": ["generate", "extract", "provided"] },
+        "storeRef": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "enum": ["ClusterSecretStore", "SecretStore"] },
+            "name": { "type": "string" }
+          }
+        },
+        "keyPrefix": { "type": "string" }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "instances": { "type": "integer", "minimum": 1 },
+        "imageName": { "type": "string", "minLength": 1 },
+        "storage": { "$ref": "#/$defs/storage" },
+        "resources": { "$ref": "#/$defs/resources" },
+        "parameters": { "type": "object", "additionalProperties": { "type": "string" } },
+        "backups": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "objectStore": { "type": "string" },
+            "schedule": { "type": "string" }
+          }
+        }
+      }
+    },
+    "valkey": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "type": "string", "minLength": 1 },
+        "secretName": { "type": "string", "minLength": 1 },
+        "storage": { "$ref": "#/$defs/storage" },
+        "resources": { "$ref": "#/$defs/resources" },
+        "maxmemory": { "type": "string", "pattern": "^[0-9]+(kb|mb|gb)$" }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string" },
+        "quota": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size"],
+      "properties": {
+        "size": { "type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$" },
+        "storageClass": { "type": "string" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "type": "string" } },
+        "limits": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  }
+}

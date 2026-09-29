@@ -1,0 +1,18 @@
+# Staging: production's shape at a smaller size. CI sets image.tag on every merge to
+# master (a commit to this file).
+image:
+  tag: ""
+site:
+  # Your staging host.
+  host: staging.example.com
+secrets:
+  externalSecrets:
+    enabled: true
+    keyPrefix: boilerplate/staging/
+services:
+  web:
+    autoscaling: { minReplicas: 2, maxReplicas: 4 }
+  api:
+    autoscaling: { minReplicas: 2, maxReplicas: 4 }
+  clamav:
+    enabled: true

@@ -1,0 +1,265 @@
+# The application's services. Environments override these in
+# deploy/environments/<env>/stack.yaml; values.schema.json rejects unknown keys, so a
+# typo fails `helm template` instead of silently doing nothing.
+
+# Every image is <registry>/<service image>:<tag>. CI builds them all with one tag
+# (sha-<commit>), and RELEASE in every service is set to it.
+image:
+  registry: ghcr.io/manasmadan/boilerplate
+  # Required: the build to run.
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# The public site. One host for everything: the gateway routes paths to services, so
+# the browser only ever talks to one origin (first-party cookies, no CORS).
+site:
+  # Required, e.g. app.example.com.
+  host: ""
+  scheme: https
+
+# Gateway API routes to the services (Envoy Gateway in this repo's platform).
+gateway:
+  enabled: true
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+      sectionName: https
+  # Pods of the gateway, allowed through each routed service's network policy.
+  namespaceSelector:
+    kubernetes.io/metadata.name: gateway-system
+
+# Settings every service gets. Values are templates, so they can refer to the site or
+# to other services (`{{ include "stack.url" (list $ "api") }}`).
+env:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  # Who may set X-Forwarded-For: the gateway, which reaches pods from private addresses.
+  TRUSTED_PROXIES: uniquelocal
+
+# Connection URLs, one Secret per database role with keys `url` (through the pooler,
+# when there is one) and `directUrl` (straight to the primary). The data chart writes
+# them for in-cluster Postgres; with a managed database, External Secrets does.
+database:
+  secretPrefix: db-
+
+# The Secret with Valkey's connection details: keys `url`, `host`, `port`, `password`.
+redis:
+  secretName: valkey
+
+# Everything else secret (auth secret, API keys, signing keys): one Secret per service,
+# `<release>-<service>`, loaded as environment variables.
+secrets:
+  # Create those Secrets from a secret manager with External Secrets. Off, they must
+  # already exist (the kind setup creates them from generated values).
+  externalSecrets:
+    enabled: false
+    storeRef:
+      kind: ClusterSecretStore
+      name: platform
+    refreshInterval: 15m
+    # Each service's remote secret is `<keyPrefix><service>`: one JSON object whose keys
+    # are the variable names.
+    keyPrefix: ""
+
+# The database migration: `prisma migrate deploy` as the migrator role, before every
+# install and upgrade. Its URL is in the `<secretPrefix>migrator` Secret.
+migrate:
+  enabled: true
+  image: migrate
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+# What every service starts from; each entry under `services` overrides any of it.
+defaults:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  terminationGracePeriodSeconds: 30
+  nodeSelector: {}
+  tolerations: []
+  podAnnotations: {}
+  # Annotations for the service account: workload identity (EKS Pod Identity, GKE and
+  # Azure workload identity) is granted to it per service.
+  serviceAccountAnnotations: {}
+  # Spread replicas across nodes and zones where the cluster has them.
+  topologySpread: true
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  keda:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    # Jobs waiting per replica before another one starts.
+    listLength: 20
+    queues: []
+  # Other services of this release allowed to connect to this one (besides the gateway,
+  # for routed services).
+  allowFrom: []
+  # Paths the process may write to (the root filesystem is read-only; /tmp always is).
+  writablePaths: []
+
+services:
+  web:
+    enabled: true
+    image: web
+    port: 3000
+    probes:
+      liveness: /healthz
+      readiness: /healthz
+    routes:
+      - path: /
+    writablePaths:
+      - /app/apps/web/.next/cache
+    env:
+      WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
+      STORAGE_ORIGIN: ""
+    autoscaling:
+      enabled: true
+
+  api:
+    enabled: true
+    image: api
+    port: 3001
+    database: { role: app_api, envPrefix: API }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    routes:
+      - path: /api
+      - path: /docs
+      # oRPC over HTTP, including the live-update event streams: no request timeout.
+      - path: /rpc
+        timeout: 0s
+      - path: /.well-known/oauth-authorization-server/api/auth
+        match: Exact
+      - path: /.well-known/openid-configuration/api/auth
+        match: Exact
+      - path: /.well-known/oauth-protected-resource/api/mcp
+        match: Exact
+    env:
+      PORT: "3001"
+      WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
+      BETTER_AUTH_URL: "{{ include \"stack.siteUrl\" $ }}"
+      AI_URL: "{{ include \"stack.url\" (list $ \"ai\") }}"
+    # The AI service fetches the api's signing keys (MCP tokens) directly.
+    allowFrom: [ai]
+    autoscaling:
+      enabled: true
+
+  worker:
+    enabled: true
+    image: worker
+    port: 3002
+    database: { role: app_worker, envPrefix: WORKER, directUrl: true }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    # Long jobs (scans, audit batches) get time to finish on shutdown.
+    terminationGracePeriodSeconds: 120
+    env:
+      PORT: "3002"
+      CLAMAV_URL: "tcp://{{ include \"stack.host\" (list $ \"clamav\") }}:3310"
+    keda:
+      enabled: true
+      queues: [events-audit, events-realtime, files, maintenance]
+
+  notifications:
+    enabled: true
+    image: notifications
+    port: 3003
+    database: { role: app_notifications, envPrefix: NOTIFICATIONS }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    terminationGracePeriodSeconds: 60
+    env:
+      PORT: "3003"
+      WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
+    keda:
+      enabled: true
+      queues: [notifications-critical, notifications-bulk, events-notifications]
+
+  webhooks:
+    enabled: true
+    image: webhooks
+    port: 3004
+    database: { role: app_webhooks, envPrefix: WEBHOOKS }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    routes:
+      # Inbound provider webhooks (Stripe).
+      - path: /webhooks
+    terminationGracePeriodSeconds: 60
+    env:
+      PORT: "3004"
+    keda:
+      enabled: true
+      queues: [events-webhooks, webhook-deliveries]
+
+  ai:
+    enabled: true
+    image: ai
+    port: 8000
+    database: { role: app_ai, envPrefix: AI }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    routes:
+      - path: /ai/mcp
+      - path: /.well-known/oauth-protected-resource/ai/mcp
+        match: Exact
+    allowFrom: [api]
+    env:
+      BETTER_AUTH_URL: "{{ include \"stack.siteUrl\" $ }}"
+      API_URL: "{{ include \"stack.url\" (list $ \"api\") }}"
+
+  ai-worker:
+    enabled: true
+    image: ai
+    command: [python, -m, app.worker]
+    database: { role: app_ai, envPrefix: AI }
+    redis: true
+    # Its secrets are the AI service's.
+    secretFrom: ai
+    terminationGracePeriodSeconds: 120
+    env:
+      API_URL: "{{ include \"stack.url\" (list $ \"api\") }}"
+    keda:
+      enabled: true
+      queues: [ai-ingest]
+
+  # Virus scanning for uploads (only needed when file uploads are on).
+  clamav:
+    enabled: false
+    image: ""
+    imageRef: docker.io/clamav/clamav:1.5
+    port: 3310
+    tcpProbe: true
+    replicas: 1
+    # Signature updates rewrite its database; it runs as the image's own user.
+    readOnlyRootFilesystem: false
+    runAsUser: 100
+    resources:
+      requests: { cpu: 200m, memory: 1536Mi }
+      limits: { memory: 3Gi }
+    allowFrom: [worker]
+    secretFrom: none
+    pdb:
+      enabled: false

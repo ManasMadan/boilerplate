@@ -1,0 +1,15 @@
+# kind: `bun run k8s:up` creates the credentials Secrets (no External Secrets locally).
+credentials:
+  source: provided
+postgres:
+  instances: 1
+  storage: { size: 2Gi }
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+valkey:
+  storage: { size: 1Gi }
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+  maxmemory: 200mb

@@ -82,6 +82,7 @@
     "test:integration": "docker compose --profile full up -d --wait && turbo run test:integration",
     "test:e2e": "bun scripts/e2e.ts",
     "test:load": "bun run --cwd load test:load",
+    "charts:check": "bun scripts/charts.ts",
     "gen": "turbo run gen",
     "db:up": "docker compose up -d --wait",
     "db:up:full": "docker compose --profile full up -d --wait",

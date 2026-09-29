@@ -1,0 +1,14 @@
+# A preview's own database and Valkey, in its own namespace, gone with the PR.
+credentials:
+  source: generate
+postgres:
+  instances: 1
+  storage: { size: 2Gi }
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+valkey:
+  storage: { size: 1Gi }
+  maxmemory: 200mb
+preview:
+  enabled: true

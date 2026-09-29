@@ -1,0 +1,58 @@
+suite: network policies and secrets
+templates: [networkpolicy.yaml, externalsecret.yaml]
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+tests:
+  - it: lets the gateway reach routed services
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: gateway-system } } }]
+              ports: [{ port: 3000 }]
+
+  - it: lets only the listed services reach the AI service directly
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: api, app.kubernetes.io/instance: demo } } }]
+            ports: [{ port: 8000 }]
+
+  - it: accepts no connections to a service without routes or callers
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-notifications }
+    asserts:
+      - isNullOrEmpty: { path: spec.ingress }
+      - equal: { path: spec.policyTypes, value: [Ingress] }
+
+  - it: creates no ExternalSecrets unless asked to
+    template: externalsecret.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: loads each service's secrets from the secret manager, once per secret
+    template: externalsecret.yaml
+    set:
+      secrets.externalSecrets.enabled: true
+      secrets.externalSecrets.keyPrefix: boilerplate/production/
+    asserts:
+      # ai-worker shares the AI service's secret, and ClamAV (disabled) has none.
+      - hasDocuments: { count: 6 }
+
+  - it: names the remote secret after the service
+    template: externalsecret.yaml
+    set:
+      secrets.externalSecrets.enabled: true
+      secrets.externalSecrets.keyPrefix: boilerplate/production/
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate/production/api } }] }
+      - equal: { path: spec.target, value: { name: demo-api, creationPolicy: Owner } }
+      - equal: { path: spec.secretStoreRef, value: { kind: ClusterSecretStore, name: platform } }

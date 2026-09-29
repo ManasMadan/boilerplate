@@ -1,0 +1,8 @@
+# Production uses managed Postgres and Valkey (provisioned by OpenTofu).
+credentials:
+  source: extract
+  keyPrefix: boilerplate/production/
+postgres:
+  enabled: false
+valkey:
+  enabled: false

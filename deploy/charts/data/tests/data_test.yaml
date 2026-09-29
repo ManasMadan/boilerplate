@@ -1,0 +1,122 @@
+suite: data
+release: { name: demo, namespace: apps }
+tests:
+  - it: bootstraps Postgres with the migrator owning the database
+    template: postgres.yaml
+    documentSelector: { path: kind, value: Cluster }
+    asserts:
+      - equal: { path: spec.bootstrap.initdb.owner, value: migrator }
+      - equal: { path: spec.bootstrap.initdb.secret.name, value: db-migrator }
+      - equal: { path: spec.enableSuperuserAccess, value: false }
+      - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE EXTENSION IF NOT EXISTS vector }
+      - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE ROLE app_api NOLOGIN NOBYPASSRLS NOINHERIT }
+      - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: GRANT CONNECT ON DATABASE app TO app_api }
+      - notContains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE ROLE migrator NOLOGIN NOBYPASSRLS NOINHERIT }
+
+  - it: manages each service role without row-level security bypass
+    template: postgres.yaml
+    documentSelector: { path: kind, value: Cluster }
+    asserts:
+      - lengthEqual: { path: spec.managed.roles, count: 5 }
+      - contains:
+          path: spec.managed.roles
+          content:
+            name: app_worker
+            ensure: present
+            login: true
+            bypassrls: false
+            inherit: false
+            passwordSecret: { name: db-app-worker }
+
+  - it: backs up continuously when asked to, and needs an object store for it
+    template: postgres.yaml
+    set:
+      postgres.backups.enabled: true
+      postgres.backups.objectStore: backups
+    asserts:
+      - hasDocuments: { count: 2 }
+      - equal:
+          path: spec.plugins
+          value: [{ name: barman-cloud.cloudnative-pg.io, isWALArchiver: true, parameters: { barmanObjectName: backups } }]
+        documentSelector: { path: kind, value: Cluster }
+
+  - it: refuses backups without an object store
+    template: postgres.yaml
+    set:
+      postgres.backups.enabled: true
+    asserts:
+      - failedTemplate: { errorMessage: postgres.backups.objectStore is required with backups on }
+
+  - it: generates each role's password once, with the URLs the services read
+    template: credentials.yaml
+    documentSelector: { path: metadata.name, value: db-app-api }
+    asserts:
+      - equal: { path: spec.refreshInterval, value: "0" }
+      - equal: { path: spec.target.template.type, value: kubernetes.io/basic-auth }
+      - equal: { path: spec.target.template.data.username, value: app_api }
+      - equal:
+          path: spec.target.template.data.url
+          value: "postgresql://app_api:{{ .password }}@demo-postgres-rw.apps.svc.cluster.local:5432/app"
+      - equal: { path: spec.target.template.metadata.labels, value: { cnpg.io/reload: "true" } }
+
+  - it: renders a Secret per role and Valkey's
+    template: credentials.yaml
+    asserts:
+      # The password generator, six roles and Valkey.
+      - hasDocuments: { count: 8 }
+
+  - it: copies a managed database's credentials from the secret manager
+    template: credentials.yaml
+    set:
+      postgres.enabled: false
+      valkey.enabled: false
+      credentials.source: extract
+      credentials.keyPrefix: boilerplate/production/
+    asserts:
+      - hasDocuments: { count: 7 }
+      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate/production/app_api } }] }
+        documentSelector: { path: metadata.name, value: db-app-api }
+      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate/production/valkey } }] }
+        documentSelector: { path: metadata.name, value: valkey }
+
+  - it: refuses to generate passwords for a database it doesn't run
+    template: credentials.yaml
+    set:
+      postgres.enabled: false
+    asserts:
+      - failedTemplate: {}
+
+  - it: renders no credentials when they're provided
+    template: credentials.yaml
+    set:
+      credentials.source: provided
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: runs Valkey without eviction, persisted, with its password from the Secret
+    template: valkey.yaml
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].args", content: noeviction }
+      - contains: { path: "spec.template.spec.containers[0].args", content: "$(VALKEY_PASSWORD)" }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef", value: { name: valkey, key: password } }
+
+  - it: owns a preview's namespace, with quotas
+    template: preview.yaml
+    set:
+      preview.enabled: true
+      preview.namespace: pr-42
+    asserts:
+      - hasDocuments: { count: 3 }
+      - equal: { path: 'metadata.labels["pod-security.kubernetes.io/enforce"]', value: restricted }
+        documentSelector: { path: kind, value: Namespace }
+      - equal: { path: 'spec.hard["requests.memory"]', value: 8Gi }
+        documentSelector: { path: kind, value: ResourceQuota }
+
+  - it: needs a namespace for a preview
+    template: preview.yaml
+    set:
+      preview.enabled: true
+    asserts:
+      - failedTemplate: { errorMessage: preview.namespace is required for a preview }
