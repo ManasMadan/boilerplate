@@ -49,6 +49,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
     { href: "/settings/workspace", label: t("workspace.nav.general") },
     { href: "/settings/members", label: t("workspace.nav.members") },
     { href: "/settings/webhooks", label: t("workspace.nav.webhooks"), adminOnly: true },
+    { href: "/settings/api-keys", label: t("workspace.nav.apiKeys"), adminOnly: true },
     { href: "/settings/audit", label: t("workspace.nav.audit"), adminOnly: true },
     ...(system?.features.billing
       ? [{ href: "/settings/billing" as Route, label: t("billing.title"), adminOnly: true }]

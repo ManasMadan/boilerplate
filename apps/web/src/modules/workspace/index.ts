@@ -6,6 +6,7 @@ export {
   useSwitchWorkspace,
   useWorkspaces,
 } from "./hooks/use-workspace";
+export { WorkspaceApiKeysPage } from "./pages/api-keys";
 export { WorkspaceAuditPage } from "./pages/audit";
 export { WorkspaceGeneralPage } from "./pages/general";
 export { WorkspaceMembersPage } from "./pages/members";

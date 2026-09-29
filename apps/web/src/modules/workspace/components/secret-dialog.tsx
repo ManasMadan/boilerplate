@@ -12,9 +12,19 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
-/** Shows a signing secret exactly once, with a copy button. */
-export function SecretDialog({ secret, onClose }: { secret: string | null; onClose: () => void }) {
-  const t = useTranslations("workspace.webhooks.secret");
+/** Shows a secret (a webhook signing secret, an API key) exactly once, with a copy button. */
+export function SecretDialog({
+  secret,
+  onClose,
+  labels = "workspace.webhooks.secret",
+  testId = "webhook-secret",
+}: {
+  secret: string | null;
+  onClose: () => void;
+  labels?: "workspace.webhooks.secret" | "workspace.apiKeys.key";
+  testId?: string;
+}) {
+  const t = useTranslations(labels);
   const [copied, setCopied] = useState(false);
   return (
     <Dialog open={secret !== null} onOpenChange={(open) => !open && onClose()}>
@@ -23,10 +33,7 @@ export function SecretDialog({ secret, onClose }: { secret: string | null; onClo
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("once")}</DialogDescription>
         </DialogHeader>
-        <code
-          className="rounded-md bg-muted p-3 font-mono text-sm break-all"
-          data-testid="webhook-secret"
-        >
+        <code className="rounded-md bg-muted p-3 font-mono text-sm break-all" data-testid={testId}>
           {secret}
         </code>
         <DialogFooter>
