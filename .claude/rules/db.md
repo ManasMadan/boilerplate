@@ -15,9 +15,8 @@ paths:
   `SELECT` on specific tables (sometimes specific columns), granted in the migration.
 - Workflow: edit the schema, `bun run db:migrate` to generate and apply the migration,
   then `bun run gen`. RLS, grants, checks and functions are hand-written into the same
-  migration before it is committed. The edit hook currently refuses every existing
-  `migration.sql`, including one you just generated; if it blocks you, stop and ask
-  rather than working around it.
+  migration before it is committed. The edit hook allows that while the migration isn't
+  on master, and refuses migrations that are.
 - Never edit a migration that is on master. Fix forward with a new one.
 - Every migration starts with `SET lock_timeout = '5s';`.
 - Expand/contract. The previous release runs against the new schema during a rollout,

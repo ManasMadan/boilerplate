@@ -2,9 +2,12 @@
  * PreToolUse (Edit|Write|MultiEdit|NotebookEdit): refuse edits that would be lost or
  * dangerous, and say what to do instead. Runs in well under 100ms.
  */
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { ROOT, readInput, respond, targetPath } from "./lib";
+
+/** Whether the file is in master's tree, i.e. it has shipped. */
+const onMaster = (path: string) =>
+  spawnSync("git", ["cat-file", "-e", `master:${path}`], { cwd: ROOT }).status === 0;
 
 const input = await readInput();
 const file = targetPath(input);
@@ -23,11 +26,12 @@ const rules: { test: (path: string) => boolean; reason: string }[] = [
       "This file is generated. Change its source (Prisma schema, Pydantic models, contracts) and run `bun run gen`.",
   },
   {
-    // Applied migrations are history: editing one desynchronises every database that ran it.
-    test: (path) =>
-      /prisma\/migrations\/[^/]+\/migration\.sql$/.test(path) && existsSync(join(ROOT, path)),
+    // Shipped migrations are history: editing one desynchronises every database that ran
+    // it. One that isn't on master yet (just written by `bun run db:migrate`) still gets
+    // its row-level security and grants added before it's committed.
+    test: (path) => /prisma\/migrations\/[^/]+\/migration\.sql$/.test(path) && onMaster(path),
     reason:
-      "Existing migrations are immutable. Create a new one with `bun run db:migrate` (see the db-change skill).",
+      "This migration is on master, so it's immutable. Create a new one with `bun run db:migrate` (see the db-change skill).",
   },
   {
     test: (path) => path === "bun.lock" || path.endsWith("uv.lock"),
