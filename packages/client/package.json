@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./auth": "./src/auth/client.ts",
-    "./api/*": "./src/api/*.ts"
+    "./api/*": "./src/api/*.ts",
+    "./auth/forms": "./src/auth/forms.ts"
   },
   "scripts": {
     "check-types": "tsc",
@@ -20,7 +21,8 @@
     "@orpc/contract": "catalog:",
     "@orpc/tanstack-query": "catalog:",
     "@repo/contracts": "workspace:*",
-    "better-auth": "catalog:"
+    "better-auth": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@tanstack/react-query": "catalog:",
