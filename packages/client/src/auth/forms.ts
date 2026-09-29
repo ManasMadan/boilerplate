@@ -12,7 +12,7 @@ import {
   PASSWORD_MIN_LENGTH,
   phoneNumberSchema,
 } from "@repo/contracts/auth";
-import { z } from "zod";
+import * as z from "zod";
 
 /** The `validation.*` messages the schemas use. */
 export type ValidationTranslator = (

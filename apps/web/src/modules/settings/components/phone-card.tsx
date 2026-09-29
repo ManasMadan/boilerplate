@@ -23,7 +23,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
+import * as z from "zod";
 import { OtpField, TextField } from "@/components/form-fields";
 import { useApiErrorMessage } from "@/lib/use-api-error";
 import { useAuthSchemas } from "@/modules/auth";

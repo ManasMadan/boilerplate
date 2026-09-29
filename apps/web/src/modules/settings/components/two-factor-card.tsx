@@ -16,7 +16,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import QRCode from "react-qr-code";
 import { toast } from "sonner";
-import { z } from "zod";
+import * as z from "zod";
 import { OtpField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage, useAuthSchemas } from "@/modules/auth";

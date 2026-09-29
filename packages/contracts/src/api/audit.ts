@@ -1,5 +1,5 @@
 /** The organization's audit log (owners and admins only). */
-import { z } from "zod";
+import * as z from "zod";
 import { page, pageInput } from "../pagination";
 import { base } from "./base";
 

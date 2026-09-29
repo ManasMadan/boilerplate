@@ -2,7 +2,7 @@
  * Money is an integer amount in the currency's minor unit (cents for USD, yen for JPY)
  * plus an ISO 4217 code. Never a float: 0.1 + 0.2 !== 0.3.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 export const money = z.object({
   amount: z.number().int(),

@@ -4,7 +4,7 @@
  * Offset pagination is not offered: it gets slower with depth and skips or repeats rows
  * when data changes between pages.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 export const PAGE_SIZE_MAX = 100;
 

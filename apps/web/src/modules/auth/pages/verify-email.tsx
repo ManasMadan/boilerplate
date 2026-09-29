@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
+import * as z from "zod";
 import { useCaptcha } from "@/components/captcha";
 import { OtpField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";

@@ -1,5 +1,5 @@
 /** The example feature. Copy this file's shape for new features. */
-import { z } from "zod";
+import * as z from "zod";
 import { page, pageInput } from "../pagination";
 import { base } from "./base";
 

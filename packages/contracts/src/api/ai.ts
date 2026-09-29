@@ -4,7 +4,7 @@
  * generated AI client's schemas.
  */
 import { eventIterator } from "@orpc/contract";
-import { z } from "zod";
+import * as z from "zod";
 import { base } from "./base";
 
 export const SENTIMENT_TEXT_MAX_LENGTH = 5_000;

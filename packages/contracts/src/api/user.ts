@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import { phoneCodeSchema, phoneNumberSchema } from "../auth";
 import { base } from "./base";
 

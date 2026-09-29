@@ -5,7 +5,7 @@ import { Button } from "@repo/ui/components/button";
 import { FieldGroup } from "@repo/ui/components/field";
 import type { ReactNode } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import * as z from "zod";
 import { TextField } from "@/components/form-fields";
 import { useAuthSchemas } from "@/modules/auth";
 

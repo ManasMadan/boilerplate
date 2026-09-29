@@ -7,7 +7,7 @@
  * Channels: every user has one, every organization has one. A stream carries the user's
  * channel and their active organization's.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 export const realtimeMessage = z.discriminatedUnion("type", [
   /** Todos in the organization changed (created, completed, deleted). */

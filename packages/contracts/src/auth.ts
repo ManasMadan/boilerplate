@@ -2,7 +2,7 @@
  * Auth rules shared by the API (apps/api/src/auth) and every client form, so the
  * browser rejects exactly what the server would.
  */
-import { z } from "zod";
+import * as z from "zod";
 import {
   NAME_MAX_LENGTH,
   OTP_LENGTH,

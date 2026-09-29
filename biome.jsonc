@@ -53,6 +53,29 @@
   },
   "overrides": [
     {
+      // Code that reaches the browser imports zod as `import * as z from "zod"`: the
+      // bundler keeps only the members used. `import { z }` binds zod's prebuilt namespace
+      // object and ships all of zod, every language's messages included (~57 kB gzipped).
+      "includes": ["packages/contracts/src/**", "packages/client/src/**", "apps/web/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "zod": {
+                    "importNames": ["z", "default"],
+                    "message": "Use `import * as z from \"zod\"`, which the bundler can prune (see biome.jsonc)."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       // Theme tokens set each variable once per @variant (light, dark); Biome reads the
       // blocks as one rule and reports the second value as a duplicate.
       "includes": ["packages/ui/src/styles/theme.css"],

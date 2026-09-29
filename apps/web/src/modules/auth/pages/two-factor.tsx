@@ -7,7 +7,7 @@ import { Field, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import * as z from "zod";
 import { OtpField, TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";

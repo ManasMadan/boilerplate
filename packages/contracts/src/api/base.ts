@@ -6,7 +6,7 @@
  * a key call them (see ./scopes.ts).
  */
 import { oc } from "@orpc/contract";
-import { z } from "zod";
+import * as z from "zod";
 import { ERROR_CODES, type ErrorCode } from "../errors";
 import type { ProcedureMeta } from "./scopes";
 

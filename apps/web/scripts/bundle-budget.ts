@@ -14,12 +14,13 @@ import { gzipSync } from "node:zlib";
 
 /**
  * Budgets in kB, gzipped: today's sizes plus a little room. A page with no forms loads
- * about 310 kB (React and Next are two thirds of it); pages with forms add about 120 kB,
- * mostly zod: every schema imports its `z` namespace, which the bundler can't prune, so
- * all of zod ships, locales included. Moving the schemas to `zod/mini` is the next win.
+ * about 310 kB (React and Next are two thirds of it); pages with forms add up to about
+ * 90 kB, mostly zod and react-hook-form. Two things keep it there: our packages declare
+ * no side effects (so barrels only bring what's used), and code that reaches the browser
+ * imports `* as z from "zod"` (biome refuses `import { z }`, which ships all of zod).
  */
 const SHARED_BUDGET = 135;
-const ROUTE_BUDGET = 470;
+const ROUTE_BUDGET = 410;
 
 const NEXT = join(import.meta.dirname, "../.next");
 

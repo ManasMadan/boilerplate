@@ -22,7 +22,7 @@ import { Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
-import type { z } from "zod";
+import type * as z from "zod";
 import { useApiErrorMessage } from "@/lib/use-api-error";
 
 export function TodoList() {

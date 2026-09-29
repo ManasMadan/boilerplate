@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import { base } from "./base";
 
 /** Optional subsystems. A feature is on when its configuration is present (see apps/api/src/features.ts). */

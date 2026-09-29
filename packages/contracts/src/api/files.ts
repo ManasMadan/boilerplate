@@ -4,7 +4,7 @@
  * the stored file before it becomes ready; clients watch its status (a `files.changed`
  * realtime nudge tells them when to look).
  */
-import { z } from "zod";
+import * as z from "zod";
 import { fileRejections, fileStatuses, uploadPurposeNames } from "../files";
 import { base } from "./base";
 

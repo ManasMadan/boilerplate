@@ -30,7 +30,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
+import * as z from "zod";
 import { TextField } from "@/components/form-fields";
 import { useApiErrorMessage } from "@/lib/use-api-error";
 import { UpgradeHint, useHasWebhooks } from "@/modules/billing";

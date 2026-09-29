@@ -26,7 +26,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
+import * as z from "zod";
 import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { setPreferenceCookie } from "@/lib/cookies";

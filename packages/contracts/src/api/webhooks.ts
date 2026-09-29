@@ -2,7 +2,7 @@
  * Customer webhook endpoints and their delivery log (organization owners and admins).
  * Deliveries are signed per Standard Webhooks; see apps/webhooks.
  */
-import { z } from "zod";
+import * as z from "zod";
 import { webhookEvents } from "../events";
 import { page, pageInput } from "../pagination";
 import { base } from "./base";

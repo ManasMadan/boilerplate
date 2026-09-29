@@ -7,7 +7,7 @@
  * its creator leaves the workspace. The key itself is shown once, at creation; only its
  * hash is stored.
  */
-import { z } from "zod";
+import * as z from "zod";
 import { base } from "./base";
 import { API_KEY_PREFIX, API_KEY_SCOPES } from "./scopes";
 

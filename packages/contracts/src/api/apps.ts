@@ -2,7 +2,7 @@
  * Apps connected to the user's workspaces over OAuth (MCP clients such as Claude or an
  * IDE), and disconnecting them. One entry per app and workspace the user approved.
  */
-import { z } from "zod";
+import * as z from "zod";
 import { base } from "./base";
 
 export const connectedAppSchema = z.object({

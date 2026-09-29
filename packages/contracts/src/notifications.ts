@@ -8,7 +8,7 @@
  * it copy in packages/i18n (`notificationSettings.categories.<name>`), and point
  * templates at it.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 export const notificationChannels = ["in_app", "email", "push", "sms"] as const;
 export type NotificationChannel = (typeof notificationChannels)[number];

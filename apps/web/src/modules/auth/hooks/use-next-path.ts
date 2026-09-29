@@ -2,7 +2,7 @@
 
 import type { Route } from "next";
 import { useSearchParams } from "next/navigation";
-import { z } from "zod";
+import * as z from "zod";
 
 /** Where to go after signing in: the page that sent the user here, if it is ours. */
 export function useNextPath(): Route {

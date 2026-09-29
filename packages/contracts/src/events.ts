@@ -11,7 +11,7 @@
  * same transaction as the change, and add it to `webhookEvents` if customers may
  * subscribe to it. The audit log records every event automatically.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 const todoEvent = z.object({ todoId: z.uuid(), title: z.string() });
 const userEvent = z.object({ userId: z.uuid() });

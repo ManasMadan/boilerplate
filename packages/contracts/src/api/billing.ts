@@ -1,5 +1,5 @@
 /** The organization's plan (owners and admins only). */
-import { z } from "zod";
+import * as z from "zod";
 import { billingIntervals, planNames, subscriptionStatuses } from "../billing";
 import { base } from "./base";
 

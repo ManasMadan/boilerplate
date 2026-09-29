@@ -1,5 +1,5 @@
 /** The signed-in user's in-app notifications and what they choose to receive. */
-import { z } from "zod";
+import * as z from "zod";
 import {
   inAppNotifications,
   isWebPushEndpoint,
