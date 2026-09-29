@@ -143,6 +143,11 @@
       groupName: "Expo SDK",
     },
     {
+      description: "OpenTelemetry's SDK, exporters and instrumentations are released in step",
+      matchPackageNames: ["@opentelemetry/*", "opentelemetry-*"],
+      groupName: "opentelemetry",
+    },
+    {
       description: "React Email's CLI and its preview server are released together",
       matchPackageNames: ["react-email", "@react-email/ui"],
       groupName: "react-email",
