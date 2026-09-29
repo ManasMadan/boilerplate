@@ -14,6 +14,7 @@ import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
 import { useAuthErrorMessage } from "../hooks/use-auth-error";
+import { useFinishSignIn } from "../hooks/use-finish-sign-in";
 import { useAuthStepHref, useNextPath } from "../hooks/use-next-path";
 import { useAuthSchemas } from "../hooks/use-schemas";
 
@@ -31,10 +32,7 @@ export function SignInPage() {
     defaultValues: { email: "", password: "" },
   });
 
-  const done = () => {
-    router.replace(next);
-    router.refresh();
-  };
+  const done = useFinishSignIn();
 
   async function onSubmit(values: z.infer<typeof schema>) {
     const { data, error } = await authClient.signIn.email(values);
@@ -48,12 +46,12 @@ export function SignInPage() {
       return;
     }
     // With two-step verification on, the auth client continues on /two-factor instead.
-    if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) done();
+    if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) done(data);
   }
 
   async function signInWithPasskey() {
     const result = await authClient.signIn.passkey();
-    if (!result?.error) done();
+    if (!result?.error) done(result?.data);
     else toast.error(errorMessage(result.error));
   }
 

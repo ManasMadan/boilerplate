@@ -1,3 +1,4 @@
+import { ConnectedAppsCard } from "../components/connected-apps-card";
 import { DeleteAccountCard } from "../components/delete-account-card";
 import { PasskeysCard } from "../components/passkeys-card";
 import { PasswordCard } from "../components/password-card";
@@ -12,6 +13,7 @@ export function SecuritySettingsPage() {
       <TwoFactorCard />
       <PasskeysCard />
       <PhoneCard />
+      <ConnectedAppsCard />
       <PasswordCard />
       <DeleteAccountCard />
     </>

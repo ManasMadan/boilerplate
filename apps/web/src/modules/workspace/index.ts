@@ -1,6 +1,11 @@
 // The workspace module's public surface.
 export { WorkspaceSwitcher } from "./components/workspace-switcher";
-export { useActiveWorkspace, useSwitchWorkspace, useWorkspaces } from "./hooks/use-workspace";
+export {
+  isPersonal,
+  useActiveWorkspace,
+  useSwitchWorkspace,
+  useWorkspaces,
+} from "./hooks/use-workspace";
 export { WorkspaceAuditPage } from "./pages/audit";
 export { WorkspaceGeneralPage } from "./pages/general";
 export { WorkspaceMembersPage } from "./pages/members";

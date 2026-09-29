@@ -18,6 +18,9 @@ const ALIASES: Record<string, string> = {
   ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY: "PASSKEY_CANCELLED",
   ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED: "PREVIOUSLY_REGISTERED",
   ORGANIZATION_MEMBERSHIP_LIMIT_REACHED: "ENTITLEMENT_REQUIRED",
+  // OAuth errors (the `error` field): the signed request an app sent the user with has
+  // expired (it's valid for 10 minutes) or was altered.
+  invalid_signature: "OAUTH_REQUEST_EXPIRED",
 };
 
 /**
@@ -28,16 +31,27 @@ const ALIASES: Record<string, string> = {
  */
 export function useAuthErrorMessage() {
   const t = useTranslations("authErrors");
-  // Accepts anything thrown or returned: only `code` and `status` are read, if present.
+  // Accepts anything thrown or returned: only `code`, `error` (OAuth endpoints) and
+  // `status` are read, if present.
   return (error: unknown) => {
-    const { code: rawCode, status } = (
-      typeof error === "object" && error !== null ? error : {}
-    ) as {
+    const {
+      code: rawCode,
+      error: oauthError,
+      status,
+    } = (typeof error === "object" && error !== null ? error : {}) as {
       code?: unknown;
+      error?: unknown;
       status?: unknown;
     };
     // The rate limiter answers 429 without a code.
-    const raw = status === 429 ? "RATE_LIMITED" : typeof rawCode === "string" ? rawCode : undefined;
+    const raw =
+      status === 429
+        ? "RATE_LIMITED"
+        : typeof rawCode === "string"
+          ? rawCode
+          : typeof oauthError === "string"
+            ? oauthError
+            : undefined;
     const code = raw && (ALIASES[raw] ?? raw);
     return code && t.has(code as "generic") ? t(code as "generic") : t("generic");
   };

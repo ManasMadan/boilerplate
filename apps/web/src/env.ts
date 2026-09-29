@@ -13,6 +13,8 @@ export const env = createEnv({
     WEB_URL: z.url(),
     // Where /rpc and /api are forwarded in local development (the gateway does it when deployed).
     API_URL: z.url().default("http://localhost:3001"),
+    // Where /ai/mcp (the Python service's MCP server) is forwarded in local development.
+    AI_URL: z.url().optional(),
     // The deployed version (image tag); sent to the API as x-app-version.
     RELEASE: z.string().default("dev"),
     // When file uploads are on: the object storage origin browsers upload to and load

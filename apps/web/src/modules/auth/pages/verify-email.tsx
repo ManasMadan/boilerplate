@@ -14,14 +14,15 @@ import { OtpField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
 import { useAuthErrorMessage } from "../hooks/use-auth-error";
-import { useEmailParam, useNextPath } from "../hooks/use-next-path";
+import { useFinishSignIn } from "../hooks/use-finish-sign-in";
+import { useEmailParam } from "../hooks/use-next-path";
 import { useAuthSchemas } from "../hooks/use-schemas";
 
 export function VerifyEmailPage() {
   const t = useTranslations();
   const router = useRouter();
   const email = useEmailParam();
-  const next = useNextPath();
+  const done = useFinishSignIn();
   const errorMessage = useAuthErrorMessage();
   const captcha = useCaptcha();
   const schema = z.object({ otp: useAuthSchemas().otp });
@@ -34,7 +35,7 @@ export function VerifyEmailPage() {
 
   async function onSubmit({ otp }: z.infer<typeof schema>) {
     if (!email) return;
-    const { error } = await authClient.emailOtp.verifyEmail({ email, otp });
+    const { data, error } = await authClient.emailOtp.verifyEmail({ email, otp });
     if (error) {
       // Clear the rejected code so the next one can be typed straight in.
       form.setValue("otp", "");
@@ -43,8 +44,7 @@ export function VerifyEmailPage() {
     }
     // Verification signs the user in (autoSignInAfterVerification).
     toast.success(t("auth.verified"));
-    router.replace(next);
-    router.refresh();
+    done(data);
   }
 
   async function resend() {

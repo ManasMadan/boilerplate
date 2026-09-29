@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@repo/ui/components/button";
 import { Checkbox } from "@repo/ui/components/checkbox";
 import { Field, FieldGroup, FieldLabel } from "@repo/ui/components/field";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -13,13 +12,12 @@ import { OtpField, TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
 import { useAuthErrorMessage } from "../hooks/use-auth-error";
-import { useNextPath } from "../hooks/use-next-path";
+import { useFinishSignIn } from "../hooks/use-finish-sign-in";
 import { useAuthSchemas } from "../hooks/use-schemas";
 
 export function TwoFactorPage() {
   const t = useTranslations();
-  const router = useRouter();
-  const next = useNextPath();
+  const done = useFinishSignIn();
   const errorMessage = useAuthErrorMessage();
   const schemas = useAuthSchemas();
   const [useBackup, setUseBackup] = useState(false);
@@ -30,7 +28,7 @@ export function TwoFactorPage() {
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { code: "" } });
 
   async function onSubmit({ code }: z.infer<typeof schema>) {
-    const { error } = useBackup
+    const { data, error } = useBackup
       ? await authClient.twoFactor.verifyBackupCode({ code, trustDevice })
       : await authClient.twoFactor.verifyTotp({ code, trustDevice });
     if (error) {
@@ -39,8 +37,7 @@ export function TwoFactorPage() {
       form.setError("code", { message: errorMessage(error) });
       return;
     }
-    router.replace(next);
-    router.refresh();
+    done(data);
   }
 
   return (

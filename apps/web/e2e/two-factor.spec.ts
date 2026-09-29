@@ -1,21 +1,4 @@
-import type { Page } from "@playwright/test";
-import { expect, newDevice, signIn, signOut, signUp, test, totp, type User } from "./support";
-
-/** Turns on two-step verification through settings; returns the secret and backup codes. */
-async function enableTwoFactor(page: Page, user: User) {
-  await page.goto("/settings/security");
-  const card = page.locator("[data-slot=card]", { hasText: "Two-step verification" });
-  await card.getByLabel("Confirm with your password").fill(user.password);
-  await card.getByRole("button", { name: "Turn on" }).click();
-  const secret = (await card.getByTestId("totp-secret").textContent()) ?? "";
-  expect(secret).toMatch(/^[A-Z2-7]+=*$/);
-  const backupCodes = await card.locator("ul li").allTextContents();
-  expect(backupCodes).toHaveLength(10);
-  await card.getByLabel("Verification code").fill(totp(secret));
-  await card.getByRole("button", { name: "Turn on" }).click();
-  await expect(card.getByText("Two-step verification is on").first()).toBeVisible();
-  return { secret, backupCodes };
-}
+import { enableTwoFactor, expect, newDevice, signIn, signOut, signUp, test, totp } from "./support";
 
 test("turn on two-step verification, then sign in with an authenticator code", async ({
   page,

@@ -11,7 +11,7 @@
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
-import { APP_PATHS, GUEST_PATHS, matchesPath } from "@/lib/routes";
+import { APP_PATHS, GUEST_PATHS, isOAuthRequest, matchesPath } from "@/lib/routes";
 import { hasSessionCookie } from "@/lib/session-cookie";
 
 export function proxy(request: NextRequest) {
@@ -23,7 +23,11 @@ export function proxy(request: NextRequest) {
     url.searchParams.set("next", pathname + search);
     return NextResponse.redirect(url);
   }
-  if (signedIn && matchesPath(pathname, GUEST_PATHS)) {
+  if (
+    signedIn &&
+    matchesPath(pathname, GUEST_PATHS) &&
+    !isOAuthRequest(request.nextUrl.searchParams)
+  ) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
@@ -60,6 +64,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   // Everything except static assets and the API paths the gateway (or dev rewrites) forwards.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|rpc|api|docs|healthz|.*\\.(?:png|svg|jpg|ico|webmanifest|txt)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|rpc|api|docs|healthz|\\.well-known|ai/mcp|.*\\.(?:png|svg|jpg|ico|webmanifest|txt)$).*)",
   ],
 };

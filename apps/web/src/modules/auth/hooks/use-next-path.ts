@@ -21,13 +21,17 @@ export function safeNextPath(next: string | null): Route {
   return (url.origin === BASE ? url.pathname + url.search + url.hash : "/dashboard") as Route;
 }
 
-/** A link to another auth step that keeps `?next=` (and optionally the email). */
+/**
+ * A link to another auth step that keeps the query: `?next=`, and the signed OAuth
+ * request when an app sent the user here (see use-finish-sign-in), so the step that
+ * finally signs the user in still continues it. Optionally sets the email.
+ */
 export function useAuthStepHref() {
-  const next = useSearchParams().get("next");
+  const current = useSearchParams().toString();
   return (path: "/sign-in" | "/sign-up" | "/verify-email", email?: string): Route => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(current);
+    params.delete("email");
     if (email) params.set("email", email);
-    if (next) params.set("next", next);
     const query = params.toString();
     return (query ? `${path}?${query}` : path) as Route;
   };

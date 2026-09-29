@@ -144,6 +144,22 @@ export async function authApi<T = unknown>(page: Page, path: string, body: unkno
   return (await response.json()) as T;
 }
 
+/** Turns on two-step verification through settings; returns the secret and backup codes. */
+export async function enableTwoFactor(page: Page, user: User) {
+  await page.goto("/settings/security");
+  const card = page.locator("[data-slot=card]", { hasText: "Two-step verification" });
+  await card.getByLabel("Confirm with your password").fill(user.password);
+  await card.getByRole("button", { name: "Turn on" }).click();
+  const secret = (await card.getByTestId("totp-secret").textContent()) ?? "";
+  expect(secret).toMatch(/^[A-Z2-7]+=*$/);
+  const backupCodes = await card.locator("ul li").allTextContents();
+  expect(backupCodes).toHaveLength(10);
+  await card.getByLabel("Verification code").fill(totp(secret));
+  await card.getByRole("button", { name: "Turn on" }).click();
+  await expect(card.getByText("Two-step verification is on").first()).toBeVisible();
+  return { secret, backupCodes };
+}
+
 // ---------------------------------------------------------------------------- TOTP
 
 function base32Decode(input: string) {
