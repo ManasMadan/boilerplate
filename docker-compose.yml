@@ -127,6 +127,16 @@ services:
       retries: 30
 
 
+  # Traces and metrics, locally: Jaeger v2 (built on the OpenTelemetry Collector) receives
+  # OTLP and shows traces at http://localhost:56686. Point the services at it with
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:54318 (see .env.example).
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    profiles: [telemetry, full]
+    ports: ["${JAEGER_OTLP_PORT:-54318}:4318", "${JAEGER_UI_PORT:-56686}:16686"]
+    mem_limit: 256m
+
+
 volumes:
   postgres:
   valkey:

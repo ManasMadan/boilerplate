@@ -1,13 +1,41 @@
-"""Telemetry: off without an endpoint; with one, requests are traced (health probes
-aren't) and log lines carry the trace."""
+"""Telemetry: off without an endpoint; with one, requests and database queries are traced
+(health probes aren't) and log lines carry the trace. The tracer provider is global to
+the process, so it starts once for this module."""
 
+from collections.abc import Iterator
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pytest import MonkeyPatch
+from sqlalchemy import text
 
+from app.db.session import close_engine, open_engine
+from app.settings import get_settings
 from app.telemetry import add_trace_ids, start_telemetry
+
+app = FastAPI()
+logged: dict[str, object] = {}
+
+
+@app.get("/hello")
+def hello() -> dict[str, str]:
+    logged.update(add_trace_ids(None, "info", {"event": "hello"}))
+    return {"ok": "yes"}
+
+
+@app.get("/health/live")
+def live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@pytest.fixture(scope="module")
+def exporter() -> Iterator[InMemorySpanExporter]:
+    spans = InMemorySpanExporter()
+    assert start_telemetry("ai-test", app, processor=SimpleSpanProcessor(spans)) is True
+    yield spans
 
 
 def test_nothing_starts_without_an_endpoint(monkeypatch: MonkeyPatch) -> None:
@@ -15,21 +43,7 @@ def test_nothing_starts_without_an_endpoint(monkeypatch: MonkeyPatch) -> None:
     assert start_telemetry("ai", FastAPI()) is False
 
 
-def test_requests_are_traced_and_logs_carry_the_trace() -> None:
-    exporter = InMemorySpanExporter()
-    app = FastAPI()
-    logged: dict[str, object] = {}
-
-    @app.get("/hello")
-    def hello() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
-        logged.update(add_trace_ids(None, "info", {"event": "hello"}))
-        return {"ok": "yes"}
-
-    @app.get("/health/live")
-    def live() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
-        return {"status": "ok"}
-
-    assert start_telemetry("ai-test", app, processor=SimpleSpanProcessor(exporter)) is True
+def test_requests_are_traced_and_logs_carry_the_trace(exporter: InMemorySpanExporter) -> None:
     client = TestClient(app)
     assert client.get("/hello").status_code == 200
     assert client.get("/health/live").status_code == 200
@@ -42,3 +56,19 @@ def test_requests_are_traced_and_logs_carry_the_trace() -> None:
     context = server[0].get_span_context()
     assert context is not None
     assert logged["trace_id"] == format(context.trace_id, "032x")
+
+
+@pytest.mark.integration
+async def test_queries_of_engines_opened_later_are_traced(exporter: InMemorySpanExporter) -> None:
+    engine = open_engine(get_settings().database_url, 1)
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    finally:
+        await close_engine()
+    queries = [
+        span
+        for span in exporter.get_finished_spans()
+        if span.attributes and span.attributes.get("db.system") == "postgresql"
+    ]
+    assert queries, [span.name for span in exporter.get_finished_spans()]

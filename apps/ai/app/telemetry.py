@@ -1,8 +1,8 @@
-# The SQLAlchemy and Redis instrumentations ship no type stubs and take untyped options.
+# The Postgres and Redis instrumentations ship no type stubs and take untyped options.
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
 """OpenTelemetry for the Python service, like the Node services': traces and metrics,
 off unless OTEL_EXPORTER_OTLP_ENDPOINT is set (any OTLP/HTTP collector; the standard
-OTEL_* variables apply). Instrumented: FastAPI (health probes left out), SQLAlchemy,
+OTEL_* variables apply). Instrumented: FastAPI (health probes left out), Postgres,
 Redis and outgoing httpx calls (model providers, the api). Log lines carry `trace_id`
 and `span_id` whenever a span is active (see `add_trace_ids`).
 
@@ -18,8 +18,8 @@ from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExp
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
@@ -46,7 +46,9 @@ def start_telemetry(
         reader = PeriodicExportingMetricReader(OTLPMetricExporter())
         metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[reader]))
 
-    SQLAlchemyInstrumentor().instrument(tracer_provider=tracer_provider)
+    # Postgres at the driver (psycopg, under SQLAlchemy): it patches connections as they
+    # open, whatever imported them first.
+    PsycopgInstrumentor().instrument(tracer_provider=tracer_provider)
     RedisInstrumentor().instrument(tracer_provider=tracer_provider)
     HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
     if app is not None:
