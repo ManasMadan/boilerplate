@@ -5,6 +5,7 @@ import { EmailModule } from "../channels/email/email.module";
 import { InAppModule } from "../channels/in-app/in-app.module";
 import { PushModule } from "../channels/push/push.module";
 import { SmsModule } from "../channels/sms/sms.module";
+import { DigestService } from "../digest/digest.service";
 import { EventsProcessor } from "../events/events.processor";
 import { DeliveryLog } from "./delivery-log";
 import { Dispatcher } from "./dispatcher";
@@ -33,6 +34,7 @@ import { CodeTemplateSource, TemplateSource } from "./templates";
     BulkNotificationsProcessor,
     EventsProcessor,
     Dispatcher,
+    DigestService,
     DeliveryLog,
     DeliveryPolicy,
     RecipientResolver,

@@ -18,6 +18,8 @@ export const env = createEnv({
     // Jobs one process handles at once, per queue. Scale out with more replicas.
     NOTIFICATIONS_CRITICAL_CONCURRENCY: z.coerce.number().int().positive().default(20),
     NOTIFICATIONS_BULK_CONCURRENCY: z.coerce.number().int().positive().default(5),
+    // Local hour (in each user's time zone) from which their daily digest is sent.
+    DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(8),
 
     // smtp: any SMTP server (Mailpit locally; SES, Postmark or SendGrid in production).
     // resend: Resend's HTTP API.

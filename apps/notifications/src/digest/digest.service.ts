@@ -1,0 +1,142 @@
+/**
+ * Daily digests: users on the digest get their non-urgent email as one summary a day,
+ * once it's DIGEST_HOUR or later in their time zone.
+ *
+ * An hourly job (a BullMQ scheduler, so it runs once whatever the replica count) queues
+ * one `digest` job per user with items waiting. Each digest is claimed in the delivery
+ * log per user and local date, so a user gets at most one a day; a digest missed while
+ * the service was down still goes out later that day. Items that arrive after that
+ * day's digest wait for the next one.
+ */
+import { InjectQueue } from "@nestjs/bullmq";
+import {
+  Injectable,
+  type OnApplicationBootstrap,
+  type OnApplicationShutdown,
+} from "@nestjs/common";
+import { withUser } from "@repo/db";
+import { DigestEmail, digestSubject, renderEmail } from "@repo/email";
+import { bundledMessages, createI18n } from "@repo/i18n";
+import { createProducer } from "@repo/jobs";
+import {
+  type Database,
+  InjectDatabase,
+  InjectPinoLogger,
+  InjectRedis,
+  PinoLogger,
+  type Redis,
+} from "@repo/nest-common";
+import type { Queue } from "bullmq";
+import { EmailChannel } from "../channels/email/email.channel";
+import { DeliveryLog } from "../dispatch/delivery-log";
+import { DeliveryPolicy } from "../dispatch/policy";
+import { RecipientResolver } from "../dispatch/recipients";
+import { env } from "../env";
+import { localClock } from "./local-clock";
+
+// A few minutes past the hour, away from the top-of-the-hour rush.
+const SCHEDULE = "5 * * * *";
+
+@Injectable()
+export class DigestService implements OnApplicationBootstrap, OnApplicationShutdown {
+  private readonly i18n = createI18n(bundledMessages);
+  private readonly producer;
+
+  constructor(
+    @InjectDatabase() private readonly database: Database,
+    @InjectRedis() redis: Redis,
+    @InjectQueue("notifications-bulk") private readonly queue: Queue,
+    private readonly recipients: RecipientResolver,
+    private readonly log: DeliveryLog,
+    private readonly policy: DeliveryPolicy,
+    private readonly email: EmailChannel,
+    @InjectPinoLogger(DigestService.name) private readonly logger: PinoLogger,
+  ) {
+    this.producer = createProducer("notifications-bulk", redis);
+  }
+
+  async onApplicationBootstrap() {
+    await this.queue.upsertJobScheduler(
+      "digests",
+      { pattern: SCHEDULE, tz: "UTC" },
+      { name: "digests", data: { meta: {}, payload: {} } },
+    );
+  }
+
+  async onApplicationShutdown() {
+    await this.producer.close();
+  }
+
+  /** Queues today's digest for every user with items whose digest time has come. */
+  async scheduleDue(now = new Date()) {
+    const rows = await this.database.read.$queryRaw<{ id: string }[]>`
+      SELECT notifications.users_with_digest_items() AS id`;
+    if (rows.length === 0) return 0;
+    const users = await this.database.read.user.findMany({
+      where: { id: { in: rows.map((row) => row.id) } },
+      select: { id: true, timezone: true },
+    });
+    const due = users.flatMap((user) => {
+      const { hour, date } = localClock(user.timezone ?? "UTC", now);
+      return hour >= env.DIGEST_HOUR ? [{ userId: user.id, date }] : [];
+    });
+    if (due.length > 0) {
+      await this.producer.addBulk(
+        due.map((digest) => ({
+          name: "digest" as const,
+          payload: digest,
+          // Queued every hour until sent: the id keeps it to one job per user and day.
+          options: { jobId: `digest-${digest.userId}-${digest.date}` },
+        })),
+      );
+    }
+    return due.length;
+  }
+
+  /** Sends one user's digest for `date` (their local date), at most once. */
+  async send(userId: string, date: string) {
+    const key = `digest:${userId}:${date}`;
+    if (!(await this.log.claim(key, "email", "digest", userId))) return;
+    const [recipient] = await this.recipients.resolve({ userId });
+    const scoped = withUser(this.database.write, userId);
+    const items = await scoped.notificationDigestItem.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, template: true, data: true },
+    });
+    if (!recipient?.email || items.length === 0) {
+      await this.log.finish(key, "skipped", { error: "nothing to send" });
+      return;
+    }
+    const sent = { id: { in: items.map((item) => item.id) } };
+    if (await this.policy.isSuppressed("email", recipient.email)) {
+      await scoped.notificationDigestItem.deleteMany({ where: sent });
+      await this.log.finish(key, "suppressed");
+      return;
+    }
+
+    const t = await this.i18n.getTranslator(recipient.locale, recipient.timeZone);
+    const lines = items.map((item) => {
+      const data = (item.data ?? {}) as Record<string, string>;
+      const base = `notification.${item.template}`;
+      return {
+        title: t(`${base}.title` as Parameters<typeof t>[0], data),
+        body: t(`${base}.body` as Parameters<typeof t>[0], data),
+      };
+    });
+    const providerMessageId = await this.email.send(
+      recipient.email,
+      await renderEmail(DigestEmail, digestSubject, {
+        locale: recipient.locale,
+        t,
+        items: lines,
+        // Turning the digest off (or anything else) happens in notification settings.
+        unsubscribeUrl: new URL("/settings/notifications", env.WEB_URL).toString(),
+      }),
+      key,
+    );
+    await scoped.notificationDigestItem.deleteMany({ where: sent });
+    await this.log.finish(key, "sent", { providerMessageId });
+    this.logger.info({ userId, items: items.length }, "digest sent");
+  }
+}

@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { type NotificationQueue, parseJob, queuePrefix } from "@repo/jobs";
 import { runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
+import { DigestService } from "../digest/digest.service";
 import { env } from "../env";
 import { Dispatcher } from "./dispatcher";
 
@@ -48,10 +49,25 @@ export class CriticalNotificationsProcessor extends WorkerHost {
   prefix: queuePrefix("notifications-bulk"),
 })
 export class BulkNotificationsProcessor extends WorkerHost {
-  constructor(private readonly dispatcher: Dispatcher) {
+  constructor(
+    private readonly dispatcher: Dispatcher,
+    private readonly digests: DigestService,
+  ) {
     super();
   }
-  process(job: Job) {
+  async process(job: Job) {
+    if (job.name === "digests") {
+      parseJob("notifications-bulk", "digests", job.data);
+      await this.digests.scheduleDue();
+      return;
+    }
+    if (job.name === "digest") {
+      const { meta, payload } = parseJob("notifications-bulk", "digest", job.data);
+      await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${job.id}` }, () =>
+        this.digests.send(payload.userId, payload.date),
+      );
+      return;
+    }
     return handle("notifications-bulk", job, this.dispatcher);
   }
 }

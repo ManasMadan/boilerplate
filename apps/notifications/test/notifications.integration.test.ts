@@ -670,4 +670,149 @@ describe("notifications service", () => {
     expect((await smsStatuses(flaky)).map((row) => row.status)).toEqual(["sent"]);
     expect(twilio.to(TWILIO_NUMBERS.flaky)).toHaveLength(1);
   });
+
+  // ---------------------------------------------------------------------------- digest
+
+  /** A time zone where it's past the digest hour now, and one where it isn't yet. */
+  async function digestZones() {
+    const { localClock } = await import("../src/digest/local-clock");
+    const zones = [
+      "Pacific/Pago_Pago",
+      "Pacific/Honolulu",
+      "America/Los_Angeles",
+      "America/New_York",
+      "UTC",
+      "Europe/Berlin",
+      "Asia/Kolkata",
+      "Asia/Tokyo",
+      "Pacific/Kiritimati",
+    ];
+    const due = zones.find((zone) => localClock(zone).hour >= 8);
+    const early = zones.find((zone) => localClock(zone).hour < 8);
+    if (!due || !early) throw new Error("no suitable time zones right now");
+    return { due, early, dateIn: (zone: string) => localClock(zone).date };
+  }
+
+  async function digestUser(timezone: string) {
+    const user = await newUser();
+    await sql(`UPDATE auth."user" SET timezone = $2 WHERE id = $1`, [user.id, timezone]);
+    await sql("INSERT INTO notifications.settings (user_id, daily_digest) VALUES ($1, true)", [
+      user.id,
+    ]);
+    return user;
+  }
+
+  async function digests() {
+    const { DigestService } = await import("../src/digest/digest.service");
+    return app.get(DigestService);
+  }
+
+  it("sends one digest a day with everything that waited, once it's digest time locally", async () => {
+    const { due, dateIn } = await digestZones();
+    const user = await digestUser(due);
+    for (const title of ["Water the plants", "Call the bank"]) {
+      await settle(
+        await bulk
+          .add(
+            "send",
+            {
+              template: "todo.reminder",
+              to: { userId: user.id },
+              data: { todoId: randomUUID(), title },
+            },
+            { jobId: randomUUID() },
+          )
+          .then((job) => job.id as string),
+        2,
+      );
+    }
+    expect(
+      await sql("SELECT 1 FROM notifications.digest_item WHERE user_id = $1", [user.id]),
+    ).toHaveLength(2);
+
+    expect(await (await digests()).scheduleDue()).toBeGreaterThanOrEqual(1);
+    const email = await waitForEmail(user.email);
+    expect(email.Subject).toBe("Your daily summary");
+    const full = (await (await fetch(`${MAILPIT}/api/v1/message/${email.ID}`)).json()) as {
+      Text: string;
+    };
+    expect(full.Text).toContain("2 updates since your last summary");
+    expect(full.Text).toContain("Water the plants");
+    expect(full.Text).toContain("Call the bank");
+    expect(full.Text.indexOf("Water the plants")).toBeLessThan(full.Text.indexOf("Call the bank"));
+
+    // Sent items are gone; the day's digest is recorded.
+    await expect
+      .poll(() => sql("SELECT 1 FROM notifications.digest_item WHERE user_id = $1", [user.id]))
+      .toEqual([]);
+    expect(
+      await sql("SELECT status FROM notifications.delivery WHERE idempotency_key = $1", [
+        `digest:${user.id}:${dateIn(due)}`,
+      ]),
+    ).toEqual([{ status: "sent" }]);
+
+    // Something new later the same day waits for tomorrow's digest.
+    await sql(
+      `INSERT INTO notifications.digest_item (user_id, template, data) VALUES ($1, 'todo.reminder', '{"title": "Later"}')`,
+      [user.id],
+    );
+    await (await digests()).send(user.id, dateIn(due));
+    await (await digests()).scheduleDue();
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const search = (await (
+      await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${user.email}`)}`)
+    ).json()) as { messages: unknown[] };
+    expect(search.messages).toHaveLength(1);
+    expect(
+      await sql("SELECT 1 FROM notifications.digest_item WHERE user_id = $1", [user.id]),
+    ).toHaveLength(1);
+  });
+
+  it("waits for the digest hour in the user's own time zone", async () => {
+    const { early, dateIn } = await digestZones();
+    const user = await digestUser(early);
+    await sql(
+      `INSERT INTO notifications.digest_item (user_id, template, data) VALUES ($1, 'todo.reminder', '{"title": "Not yet"}')`,
+      [user.id],
+    );
+    await (await digests()).scheduleDue();
+    expect(await bulk.queue.getJob(`digest-${user.id}-${dateIn(early)}`)).toBeUndefined();
+  });
+
+  it("drops a suppressed address's digest instead of keeping it forever", async () => {
+    const { due, dateIn } = await digestZones();
+    const user = await digestUser(due);
+    await sql(
+      "INSERT INTO notifications.suppression (channel, address, reason) VALUES ('email', $1, 'bounce')",
+      [user.email.toLowerCase()],
+    );
+    await sql(
+      `INSERT INTO notifications.digest_item (user_id, template, data) VALUES ($1, 'todo.reminder', '{"title": "Bounced"}')`,
+      [user.id],
+    );
+    await (await digests()).send(user.id, dateIn(due));
+    expect(
+      await sql("SELECT 1 FROM notifications.digest_item WHERE user_id = $1", [user.id]),
+    ).toEqual([]);
+    expect(
+      await sql("SELECT status FROM notifications.delivery WHERE idempotency_key = $1", [
+        `digest:${user.id}:${dateIn(due)}`,
+      ]),
+    ).toEqual([{ status: "suppressed" }]);
+  });
+
+  it("registers the hourly digest run once", async () => {
+    const schedulers = await bulk.queue.getJobSchedulers();
+    expect(schedulers.map((scheduler) => scheduler.key)).toEqual(["digests"]);
+    expect(schedulers[0]?.pattern).toBe("5 * * * *");
+  });
+
+  it("only the owner-scoped function sees who has items waiting", async () => {
+    const client = new pg.Client({ connectionString: testDb.urlFor("app_api") });
+    await client.connect();
+    await expect(client.query("SELECT notifications.users_with_digest_items()")).rejects.toThrow(
+      /permission denied/,
+    );
+    await client.end();
+  });
 });

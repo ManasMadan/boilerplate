@@ -164,7 +164,14 @@ export const queues = {
   },
   /** Everything else users are notified about: reminders, digests, product updates. */
   "notifications-bulk": {
-    jobs: { send: notificationPayload, deferred: deferredDelivery },
+    jobs: {
+      send: notificationPayload,
+      deferred: deferredDelivery,
+      /** Hourly: queues a `digest` for each user whose digest time has come today. */
+      digests: z.object({}),
+      /** One user's daily digest email, for one local date (YYYY-MM-DD). */
+      digest: z.object({ userId: z.uuid(), date: z.iso.date() }),
+    },
     options: {
       ...retrying,
       removeOnComplete: { age: DAY, count: 10_000 },
