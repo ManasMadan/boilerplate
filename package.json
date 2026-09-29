@@ -1,6 +1,7 @@
 {
   "name": "boilerplate",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "packageManager": "bun@1.3.6",
   "engines": {

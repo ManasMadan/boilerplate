@@ -1,0 +1,5 @@
+# Every change needs a review from an owner (branch protection: "Require review from
+# Code Owners"). Split this by path as the team grows, e.g.
+#   /apps/mobile/   @org/mobile
+#   /infra/ /deploy/   @org/platform
+* @ManasMadan
