@@ -1,9 +1,9 @@
 /**
  * The webhooks service against a real (cloned) database, a private Redis database and a
  * local HTTP receiver: signed deliveries, retries, auto-disable, SSRF refusal, replay,
- * and Stripe's inbound events.
+ * and Stripe's and Stalwart's inbound events.
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -20,7 +20,9 @@ import type { DeliveryService as Deliveries } from "../src/outbound/delivery.ser
 
 const ENCRYPTION_KEYS = `test:${randomBytes(32).toString("base64")}`;
 const STRIPE_SECRET = `whsec_${randomBytes(24).toString("base64")}`;
-const RESEND_SECRET = `whsec_${randomBytes(24).toString("base64")}`;
+// Two Stalwart keys, as during a rotation: the new one and the one it replaces.
+const STALWART_KEY = randomBytes(32).toString("base64");
+const STALWART_OLD_KEY = randomBytes(32).toString("base64");
 const box = new SecretBox(keysFromEnv(ENCRYPTION_KEYS));
 
 let testDb: TestDatabase;
@@ -165,7 +167,7 @@ beforeAll(async () => {
     REDIS_URL: redisDatabase(11),
     ENCRYPTION_KEYS,
     STRIPE_WEBHOOK_SECRET: STRIPE_SECRET,
-    RESEND_WEBHOOK_SECRET: RESEND_SECRET,
+    STALWART_WEBHOOK_SECRET: `${STALWART_KEY}, ${STALWART_OLD_KEY}`,
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
     WEBHOOK_AUTO_DISABLE_HOURS: "1",
   });
@@ -421,88 +423,137 @@ describe("inbound Stripe events", () => {
   });
 });
 
-describe("inbound Resend feedback", () => {
-  /** Posts a Resend event signed the way Svix signs (Standard Webhooks, svix-* headers). */
+describe("inbound Stalwart feedback", () => {
+  /**
+   * A Stalwart delivery event in the shape v0.16 sends, created now (the captured requests
+   * are in src/inbound/stalwart-events.test.ts; their 64-bit spanId and queueId don't fit
+   * a JavaScript number and aren't read).
+   */
+  const event = (type: string, to: string, details: string, at = new Date()) => ({
+    id: `${Math.floor(at.getTime() / 1000)}${Math.floor(Math.random() * 1000)}87`,
+    createdAt: at.toISOString().replace(/\.\d{3}Z$/, "Z"),
+    type,
+    data: {
+      to,
+      hostname: "mx.example.com",
+      details,
+      total: 0,
+      queueName: "remote",
+      from: "no-reply@example.com",
+      size: 306,
+    },
+  });
+  const unknownUser = (to: string) =>
+    event(
+      "delivery.dsn-perm-fail",
+      to,
+      `Unexpected response for RCPT TO:<${to}>: Code: 550, Enhanced code: 5.1.1, Message: No such user`,
+    );
+  /** Posts a batch signed the way Stalwart signs it (X-Signature: base64 HMAC of the body). */
   async function post(
-    event: unknown,
-    options: { id?: string; secret?: string; at?: Date; body?: string } = {},
+    events: unknown[],
+    options: { key?: string; body?: string; signature?: string | null } = {},
   ) {
-    const id = options.id ?? `msg_${randomUUID()}`;
-    const at = options.at ?? new Date();
-    const payload = JSON.stringify(event);
-    const signature = new Webhook(options.secret ?? RESEND_SECRET).sign(id, at, payload);
-    const response = await fetch(`${baseUrl}/webhooks/resend`, {
+    const payload = JSON.stringify({ events });
+    const signature = createHmac("sha256", options.key ?? STALWART_KEY)
+      .update(payload)
+      .digest("base64");
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (options.signature !== null) headers["x-signature"] = options.signature ?? signature;
+    const response = await fetch(`${baseUrl}/webhooks/stalwart`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "svix-id": id,
-        "svix-timestamp": String(Math.floor(at.getTime() / 1000)),
-        "svix-signature": signature,
-      },
+      headers,
       body: options.body ?? payload,
     });
-    return { id, status: response.status };
+    return response.status;
   }
-  const feedback = (key: string) =>
+  /** email.feedback_received.v1 payloads emitted for these addresses. */
+  const feedback = (...addresses: string[]) =>
     asRole("postgres", async (client) => {
       const { rows } = await client.query(
-        "SELECT payload FROM webhooks.outbox_event WHERE name = 'email.feedback_received.v1' AND key LIKE $1",
-        [`${key}:%`],
+        "SELECT payload FROM webhooks.outbox_event WHERE name = 'email.feedback_received.v1' AND payload->>'address' = ANY($1) ORDER BY id",
+        [addresses],
       );
       return rows.map((row) => row.payload);
     });
-  const bounced = (to: string[], type = "Permanent") => ({
-    type: "email.bounced",
-    data: { email_id: randomUUID(), to, bounce: { type, message: "550 no such user" } },
-  });
+  const stored = (address: string) =>
+    asRole("postgres", async (client) => {
+      const { rows } = await client.query(
+        "SELECT type FROM webhooks.inbound_event WHERE provider = 'stalwart' AND payload->'data'->>'to' = $1",
+        [address],
+      );
+      return rows.map((row) => row.type);
+    });
+  const address = () => `${randomUUID()}@example.com`;
 
-  it("turns a hard bounce into feedback for each address, once however often it's sent", async () => {
-    const event = bounced(["gone@example.com", "also-gone@example.com"]);
-    const first = await post(event);
-    expect(first.status).toBe(200);
-    expect((await post(event, { id: first.id })).status).toBe(200);
-    expect(await feedback(first.id)).toEqual([
-      { provider: "resend", kind: "bounce", address: "gone@example.com" },
-      { provider: "resend", kind: "bounce", address: "also-gone@example.com" },
+  it("turns a hard bounce into feedback, once however often Stalwart sends it", async () => {
+    const [gone, alsoGone] = [address(), address()];
+    const batch = [unknownUser(gone), unknownUser(alsoGone)];
+    expect(await post(batch)).toBe(200);
+    // A retried batch: the same events, which Stalwart numbers again.
+    expect(await post(batch.map((item) => ({ ...item, id: `${item.id}9` })))).toBe(200);
+    expect(await feedback(gone, alsoGone)).toEqual([
+      { provider: "stalwart", kind: "bounce", address: gone },
+      { provider: "stalwart", kind: "bounce", address: alsoGone },
     ]);
+    expect(await stored(gone)).toEqual(["delivery.dsn-perm-fail"]);
   });
 
-  it("turns a spam complaint into feedback", async () => {
-    const { id } = await post({ type: "email.complained", data: { to: ["annoyed@example.com"] } });
-    expect(await feedback(id)).toEqual([
-      { provider: "resend", kind: "complaint", address: "annoyed@example.com" },
-    ]);
+  it("acts once on an event that appears twice in one batch", async () => {
+    const gone = address();
+    const bounce = unknownUser(gone);
+    expect(await post([bounce, bounce])).toBe(200);
+    expect(await feedback(gone)).toHaveLength(1);
   });
 
-  it("records but doesn't act on transient bounces and other events", async () => {
-    const transient = await post(bounced(["busy@example.com"], "Transient"));
-    const delivered = await post({ type: "email.delivered", data: { to: ["ok@example.com"] } });
-    expect([transient.status, delivered.status]).toEqual([200, 200]);
-    expect(await feedback(transient.id)).toEqual([]);
-    expect(await feedback(delivered.id)).toEqual([]);
-    const stored = await asRole("postgres", (client) =>
-      client.query(
-        "SELECT type FROM webhooks.inbound_event WHERE provider = 'resend' AND provider_event_id = $1",
-        [delivered.id],
+  it("accepts a batch signed with the key being rotated out", async () => {
+    const gone = address();
+    expect(await post([unknownUser(gone)], { key: STALWART_OLD_KEY })).toBe(200);
+    expect(await feedback(gone)).toHaveLength(1);
+  });
+
+  it("records but doesn't act on soft bounces, policy rejections and other events", async () => {
+    const [busy, blocked, fine] = [address(), address(), address()];
+    const batch = [
+      event(
+        "delivery.dsn-temp-fail",
+        busy,
+        "Connection failed: I/O error: Connection refused (os error 111)",
       ),
-    );
-    expect(stored.rows).toEqual([{ type: "email.delivered" }]);
+      event(
+        "delivery.dsn-perm-fail",
+        blocked,
+        `Unexpected response for DATA: Code: 550, Enhanced code: 5.7.1, Message: Rejected as spam`,
+      ),
+      event("delivery.delivered", fine, "Ok"),
+    ];
+    expect(await post(batch)).toBe(200);
+    expect(await feedback(busy, blocked, fine)).toEqual([]);
+    expect(await stored(busy)).toEqual(["delivery.dsn-temp-fail"]);
+    expect(await stored(blocked)).toEqual(["delivery.dsn-perm-fail"]);
+    expect(await stored(fine)).toEqual(["delivery.delivered"]);
   });
 
-  it("refuses another secret, a changed body, an old timestamp and missing headers", async () => {
-    const event = bounced(["x@example.com"]);
-    expect(
-      (await post(event, { secret: `whsec_${randomBytes(24).toString("base64")}` })).status,
-    ).toBe(400);
-    expect((await post(event, { body: JSON.stringify(bounced(["y@example.com"])) })).status).toBe(
+  it("refuses another key, a changed body, a missing signature and a stale batch", async () => {
+    const gone = address();
+    const batch = [unknownUser(gone)];
+    expect(await post(batch, { key: randomBytes(32).toString("base64") })).toBe(400);
+    expect(await post(batch, { body: JSON.stringify({ events: [unknownUser(address())] }) })).toBe(
       400,
     );
-    expect((await post(event, { at: new Date(Date.now() - 10 * 60 * 1000) })).status).toBe(400);
-    const bare = await fetch(`${baseUrl}/webhooks/resend`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
-    expect(bare.status).toBe(400);
+    expect(await post(batch, { signature: null })).toBe(400);
+    expect(await post(batch, { signature: "" })).toBe(400);
+    const replay = [{ ...unknownUser(gone), createdAt: "2026-01-01T00:00:00Z" }];
+    expect(await post(replay)).toBe(400);
+    expect(await feedback(gone)).toEqual([]);
+    expect(await stored(gone)).toEqual([]);
+  });
+
+  it("refuses signed bodies that aren't a batch of events", async () => {
+    expect(await post([])).toBe(400);
+    expect(await post([{ type: "delivery.dsn-perm-fail" }])).toBe(400);
+    const notJson = "not json";
+    const signature = createHmac("sha256", STALWART_KEY).update(notJson).digest("base64");
+    expect(await post([], { body: notJson, signature })).toBe(400);
   });
 });

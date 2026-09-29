@@ -109,6 +109,7 @@ that uses it.
 | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT` | 51025, 58025 | Mailpit |
 | `S3_PORT`, `S3_CONSOLE_PORT` | 59000, 59001 | RustFS (`files` profile) |
 | `CLAMAV_PORT` | 53310 | ClamAV (`files` profile) |
+| `STALWART_SMTPS_PORT`, `STALWART_HTTP_PORT` | 51465, 58080 | Stalwart (`mail` profile): submission over implicit TLS, management API |
 
 ## Auth and the API (apps/api)
 
@@ -129,10 +130,8 @@ that uses it.
 
 | Variable | Default / example | What it does |
 |---|---|---|
-| `EMAIL_PROVIDER` | `smtp` | `smtp` (Mailpit locally; SES, Postmark, SendGrid…) or `resend`. |
-| `SMTP_URL` | `smtp://localhost:51025` | `smtp://` or `smtps://`. Required in production. |
-| `RESEND_API_KEY` | empty | `re_…`. Required when `EMAIL_PROVIDER=resend`. |
-| `EMAIL_FROM` | `Boilerplate <no-reply@example.com>` | Sender. Required in production. |
+| `SMTP_URL` | `smtp://localhost:51025` (Mailpit) | Where email is submitted. Required in production, and there it must authenticate and use TLS with the certificate checked: `smtps://no-reply%40example.com:<password>@mail.example.com:465`, or `smtp://…:587?requireTLS=true` for STARTTLS; `tls.servername=<public name>` when connecting by an internal name. Refused in production: no credentials, no TLS, `ignoreTLS=true`, `tls.rejectUnauthorized=false`. |
+| `EMAIL_FROM` | `Boilerplate <no-reply@example.com>` | Sender. Required in production. Stalwart only accepts an address of the account `SMTP_URL` signs in as. |
 | `DIGEST_HOUR` | 8 | Local hour (each user's time zone) from which their daily digest goes out. |
 | `NOTIFICATIONS_CRITICAL_CONCURRENCY` | 20 | Jobs per process on `notifications-critical`. |
 | `NOTIFICATIONS_BULK_CONCURRENCY` | 5 | Jobs per process on `notifications-bulk`. |
@@ -187,7 +186,6 @@ combination fails at boot. See [files-and-billing.md](files-and-billing.md).
 | `STRIPE_TRIAL_DAYS` | api | 14 | Trial on an organization's first subscription; 0 turns trials off. |
 | `STRIPE_API_URL` | api | empty | Points the Stripe client at the fake Stripe (`http://127.0.0.1:12111`). Refused in production. |
 | `STRIPE_WEBHOOK_SECRET` | webhooks, fake Stripe | empty | `whsec_…`. Without it `/webhooks/stripe` answers 404. |
-| `RESEND_WEBHOOK_SECRET` | webhooks | empty | `whsec_…`, Resend's webhook signing secret. On: bounces and spam complaints suppress the address. Without it `/webhooks/resend` answers 404. |
 | `STRIPE_FAKE_PORT` | fake Stripe | 12111 | |
 | `STRIPE_FAKE_WEBHOOK_URL` | fake Stripe | `http://localhost:3004/webhooks/stripe` | Where the fake sends its events. |
 
@@ -195,6 +193,7 @@ combination fails at boot. See [files-and-billing.md](files-and-billing.md).
 
 | Variable | Read by | Default | What it does |
 |---|---|---|---|
+| `STALWART_WEBHOOK_SECRET` | webhooks, local Stalwart (compose) | generated | The key our Stalwart mail server signs its webhook with (its WebHook `signatureKey`), at least 32 characters. On: hard bounces suppress the address. Comma-separated to accept a new and an old key while rotating (Stalwart signs with one). Without it `/webhooks/stalwart` answers 404. |
 | `WEBHOOK_ALLOWED_PRIVATE_ADDRESSES` | api, webhooks | empty (`127.0.0.1` in `.env.example`) | Exact private IPs customer endpoints may use, for local receivers and tests. Must be empty in production. |
 | `WEBHOOK_DELIVERY_CONCURRENCY` | webhooks | 20 | Deliveries in flight per process. |
 | `WEBHOOK_TIMEOUT_MS` | webhooks | 15000 | Per delivery attempt, at most 60000. |
@@ -263,6 +262,9 @@ Not read by any service.
 | `MOBILE_WEB_PORT` | `apps/mobile/scripts/serve-web.ts` | Default 3100. |
 | `E2E_GOOGLE_EMAIL`, `E2E_GOOGLE_PASSWORD` | `apps/web/e2e/google.spec.ts` | A real Google account; the spec is skipped without them. |
 | `E2E_CIMD_CLIENT_ID`, `E2E_CIMD_REDIRECT_URI` | `apps/api/test/oauth.integration.test.ts` | A real Client ID Metadata Document; the test is skipped without them. |
+| `STALWART_URL` | `apps/webhooks/test/stalwart.integration.test.ts` | The local Stalwart's management API (`http://localhost:58080`, `bun run db:up:mail`); the test sends real mail through it and is skipped without it. |
+| `STALWART_SMTP_URL` | `apps/notifications/test/stalwart.integration.test.ts`, and the webhooks one | Submission to the local Stalwart, `smtps://no-reply:no-reply-password@localhost:51465?tls.rejectUnauthorized=false`; the notifications test is skipped without it. |
+| `STALWART_ADMIN_PASSWORD`, `STALWART_SMTP_PASSWORD` | `docker-compose.yml`, the webhooks test | The local Stalwart's admin and `no-reply@boilerplate.test` passwords (default `stalwart-admin`, `no-reply-password`). |
 | `LOAD_USERS` | `apps/api/src/load-users.ts` | Signed-in users for k6 (default 50, at most 1000). |
 | `BASE_URL`, `PROFILE`, `TARGET_RPS`, `DURATION` | `load/api.ts` | k6 target (default `http://host.docker.internal:3001`), `smoke` or `load`, rate (default 200), hold time (default `5m`). |
 | `PG_CONTAINER` | `scripts/restore-drill.ts` | Run the drill against another Postgres container (CI). |

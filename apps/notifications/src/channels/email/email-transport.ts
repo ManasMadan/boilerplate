@@ -1,6 +1,8 @@
 /**
- * Email delivery providers behind one interface. Pick one with EMAIL_PROVIDER; add a
- * provider by implementing `EmailTransport` and registering it in email.module.ts.
+ * Email delivery behind one interface. Production submits to our own Stalwart mail
+ * server over authenticated SMTP with TLS; locally the same transport sends to Mailpit.
+ * Any other server that speaks SMTP needs only a different SMTP_URL. A provider with
+ * its own API would be a class implementing `EmailTransport`, chosen in email.module.ts.
  */
 import type { RenderedEmail } from "@repo/email";
 import nodemailer from "nodemailer";
@@ -38,33 +40,5 @@ export class SmtpTransport implements EmailTransport {
       messageId: `<${email.idempotencyKey}@notifications>`,
     });
     return { providerMessageId: info.messageId };
-  }
-}
-
-export class ResendTransport implements EmailTransport {
-  constructor(private readonly apiKey: string) {}
-
-  async send(email: OutgoingEmail) {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-        // Resend drops a repeat send with the same key, so a retried job never double-sends.
-        "Idempotency-Key": email.idempotencyKey,
-      },
-      body: JSON.stringify({
-        from: email.from,
-        to: email.to,
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-        headers: email.headers,
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) throw new Error(`Resend responded ${res.status}: ${await res.text()}`);
-    const body = (await res.json()) as { id: string };
-    return { providerMessageId: body.id };
   }
 }

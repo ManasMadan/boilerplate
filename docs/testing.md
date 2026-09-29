@@ -3,7 +3,7 @@
 | Layer | Where | Command | Needs |
 |---|---|---|---|
 | Unit | `src/**/*.test.ts(x)` in each package, `apps/mobile/src`, `apps/ai/tests` (not marked `integration`) | `bun run test` | nothing (cached by turbo) |
-| Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/ai` tests marked `integration` | `bun run test:integration` | Postgres, Valkey, Mailpit, RustFS, ClamAV (started for you) |
+| Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/ai` tests marked `integration` | `bun run test:integration` | Postgres, Valkey, Mailpit, RustFS, ClamAV, Stalwart (started for you) |
 | Coverage | unit and integration together, against each package's floor | `bun run test:coverage` | the same services |
 | End to end | `apps/web/e2e`, `apps/mobile/e2e`, then the k6 smoke | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
 | Components | every story in `packages/ui` | `bun run --cwd packages/ui test:stories`, `test:visual` | Chromium; Docker for `test:visual` |
@@ -28,14 +28,23 @@ packages (the `unit` project in services), Jest with React Native Testing Librar
 - Each test file gets its own Postgres database cloned from a migrated template, and
   connects as the service's own role, so a missing grant or row-level security policy
   fails here (see [database.md](database.md#test-databases)).
-- Each suite uses its own Redis database number (the TypeScript suites 7 to 15, Python 6;
-  0 is the dev stack).
+- Each suite uses its own Redis database number (the TypeScript suites 4 and 7 to 15,
+  Python 6; 0 is the dev stack).
 - Services are built in-process (`createApiServer()` and the like); emails are read
   back from Mailpit, push and Twilio go to local fakes (`apps/notifications/test`), and
   Stripe to `packages/fake-stripe`.
 
 A few tests need real third parties and are skipped without them
 (`E2E_CIMD_CLIENT_ID`, see [environment.md](environment.md#tests-and-tooling)).
+
+The real mail path runs against the Stalwart container (`bun run db:up:mail`) and is
+skipped unless its variables are set (see `.env.example`): with `STALWART_SMTP_URL`,
+`apps/notifications/test/stalwart.integration.test.ts` submits through it with the
+service's own transport; with `STALWART_URL`, `apps/webhooks/test/stalwart.integration.test.ts`
+registers a webhook pointing at itself, sends one message that is delivered (to
+Mailpit, DKIM-signed) and one to `bounce.test` that is refused, and checks the signed
+`delivery.dsn-perm-fail` Stalwart posts becomes the feedback event that suppresses the
+address.
 
 ## Coverage floors
 

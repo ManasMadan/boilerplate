@@ -1,7 +1,7 @@
 # Local infrastructure for development and tests.
 #
 # Profiles keep the default fast: with no profile you get the core that every flow
-# needs (Postgres, Valkey, Mailpit). `bun dev:full` / `bun run db:up --full` add the rest.
+# needs (Postgres, Valkey, Mailpit). `bun dev:full` / `bun run db:up:full` add the rest.
 #
 #   core     Postgres  localhost:55432  pgvector; `app` and `app_test` databases
 #            Valkey    localhost:56379  Redis-compatible: sessions, cache, rate limits, queues
@@ -9,6 +9,8 @@
 #   files    RustFS    localhost:59000  S3-compatible object storage (console :59001)
 #            ClamAV    localhost:53310  virus scanning for uploads (clamd; first start
 #                                       downloads signatures, a few minutes)
+#   mail     Stalwart  localhost:51465  the mail server production uses (submission over
+#                                       TLS; admin API :58080), `bun run db:up:mail`
 #
 # Sharing a machine with other projects: host ports are in the 5xxxx range, so the usual
 # 5432/6379 stay free for them, and every container has a memory limit, so one that
@@ -127,6 +129,62 @@ services:
       retries: 30
 
 
+  # Stalwart, the mail server production sends through (SMTP submission, outbound queue,
+  # DKIM signing, bounce webhooks). Mailpit stays the everyday catcher because it needs
+  # no credentials, TLS or DNS and shows every email at once; this is the prod-like path,
+  # opt-in with `bun run db:up:mail`, and the integration tests that prove it
+  # (apps/webhooks, apps/notifications) skip themselves unless STALWART_URL and
+  # STALWART_SMTP_URL are set (.env.example).
+  #
+  # Local shape: domain boilerplate.test, submission user no-reply@boilerplate.test on
+  # 51465 (implicit TLS, self-signed certificate), admin API on 58080. Mail to any other
+  # domain is relayed to Mailpit, so what Stalwart delivers shows up there too, except
+  # bounce.test, which is sent back to this server's own port 25; it refuses to relay for
+  # a domain it doesn't serve (550 5.1.2), the permanent refusal a remote MX gives for an
+  # address that doesn't exist, so bounces work offline. Delivery failures are posted to the webhooks
+  # service on the host (/webhooks/stalwart), signed with STALWART_WEBHOOK_SECRET.
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16.24-alpine
+    profiles: [mail, full]
+    environment:
+      # Signs in to the management API (the init service below and the tests use it).
+      # Stalwart's documented bootstrap/recovery credential; local only, never in production.
+      STALWART_RECOVERY_ADMIN: admin:${STALWART_ADMIN_PASSWORD:-stalwart-admin}
+      # Read by the webhook's signatureKey (EnvironmentVariable) in the plan below.
+      STALWART_WEBHOOK_SECRET: ${STALWART_WEBHOOK_SECRET:-change-me}
+    ports: ["${STALWART_SMTPS_PORT:-51465}:465", "${STALWART_HTTP_PORT:-58080}:8080"]
+    # The webhooks service runs on the host (bun dev); Linux needs the name mapped.
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    mem_limit: 256m
+    configs:
+      - source: stalwart-config
+        target: /etc/stalwart/config.json
+    volumes: [stalwart:/var/lib/stalwart]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Applies the plan below through the management API once Stalwart is up (services.ts
+  # runs it after `up`). Upserts, singleton updates and one reconcile, so every start
+  # converges on the same state instead of failing the second time.
+  stalwart-init:
+    image: stalwartlabs/cli:1.0.13
+    profiles: [mail, full]
+    depends_on:
+      stalwart: { condition: service_healthy }
+    environment:
+      STALWART_URL: http://stalwart:8080
+      STALWART_USER: admin
+      STALWART_PASSWORD: ${STALWART_ADMIN_PASSWORD:-stalwart-admin}
+    configs:
+      - source: stalwart-plan
+        target: /plan.ndjson
+    command: ["apply", "--file", "/plan.ndjson", "--quiet"]
+    mem_limit: 64m
+    restart: "no"
+
   # Traces and metrics, locally: Jaeger v2 (built on the OpenTelemetry Collector) receives
   # OTLP and shows traces at http://localhost:56686. Point the services at it with
   # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:54318 (see .env.example).
@@ -142,3 +200,32 @@ volumes:
   valkey:
   rustfs:
   clamav:
+  stalwart:
+
+configs:
+  # Only the data store lives in Stalwart's config file; everything else is objects in
+  # that store, written by the plan. RocksDB's write buffers and block cache default to
+  # 128 MB each, more than the container's limit, so they're capped at 16 MB.
+  stalwart-config:
+    content: |
+      {"@type": "RocksDb", "path": "/var/lib/stalwart/", "bufferSize": 16777216, "cacheSize": 16777216}
+  # One operation per line (NDJSON; lists are objects keyed "0", "1", ...); "#dom" refers
+  # to the domain created by an earlier line. Compose fills in the password from .env.
+  # In order: logs to stdout (docker logs) instead of files; the domain (DKIM keys are
+  # generated for it) and the host name it greets with; the no-reply account the app
+  # submits as; the two relay routes and the rule choosing between them and local
+  # delivery; the bounce webhook; Pyzor off (a public network service, and reloads fail
+  # while its host can't be resolved); then a reload, since settings written through the
+  # API only apply on one.
+  stalwart-plan:
+    content: |
+      {"@type": "reconcile", "object": "Tracer", "matchOn": "*", "value": {"console": {"@type": "Stdout", "level": "info", "enable": true, "ansi": false, "buffered": false, "multiline": false, "lossy": false, "events": {}, "eventsPolicy": "exclude"}}}
+      {"@type": "upsert", "object": "Domain", "matchOn": ["name"], "value": {"dom": {"name": "boilerplate.test"}}}
+      {"@type": "update", "object": "SystemSettings", "value": {"defaultHostname": "mail.boilerplate.test", "defaultDomainId": "#dom"}}
+      {"@type": "upsert", "object": "Account", "matchOn": ["name", "domainId"], "value": {"no-reply": {"@type": "User", "name": "no-reply", "domainId": "#dom", "credentials": {"0": {"@type": "Password", "secret": "${STALWART_SMTP_PASSWORD:-no-reply-password}"}}}}}
+      {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"mailpit": {"@type": "Relay", "name": "mailpit", "description": "Everything else, to Mailpit", "address": "mailpit", "port": 1025, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}
+      {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"refuse": {"@type": "Relay", "name": "refuse", "description": "bounce.test, refused by our own port 25", "address": "127.0.0.1", "port": 25, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}
+      {"@type": "update", "object": "MtaOutboundStrategy", "value": {"route": {"match": {"0": {"if": "is_local_domain(rcpt_domain)", "then": "'local'"}, "1": {"if": "rcpt_domain == 'bounce.test'", "then": "'refuse'"}}, "else": "'mailpit'"}}}
+      {"@type": "upsert", "object": "WebHook", "matchOn": ["url"], "value": {"feedback": {"url": "http://host.docker.internal:3004/webhooks/stalwart", "events": {"delivery.dsn-perm-fail": true, "delivery.dsn-temp-fail": true}, "eventsPolicy": "include", "signatureKey": {"@type": "EnvironmentVariable", "variableName": "STALWART_WEBHOOK_SECRET"}, "httpAuth": {"@type": "Unauthenticated"}, "httpHeaders": {}}}}
+      {"@type": "update", "object": "SpamPyzor", "value": {"enable": false}}
+      {"@type": "create", "object": "Action", "value": {"reload": {"@type": "ReloadSettings"}}}

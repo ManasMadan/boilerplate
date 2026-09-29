@@ -6,7 +6,7 @@
 import { createServer, DATABASE, type Database } from "@repo/nest-common";
 import { AppModule } from "./app.module";
 import { env } from "./env";
-import { mountResend } from "./inbound/resend.routes";
+import { mountStalwart } from "./inbound/stalwart.routes";
 import { mountStripe } from "./inbound/stripe.routes";
 
 export function createWebhooksServer() {
@@ -20,7 +20,7 @@ export function createWebhooksServer() {
       const fastify = app.getHttpAdapter().getInstance();
       const database = app.get<Database>(DATABASE);
       mountStripe(fastify, database, env.STRIPE_WEBHOOK_SECRET);
-      mountResend(fastify, database, env.RESEND_WEBHOOK_SECRET);
+      mountStalwart(fastify, database, env.STALWART_WEBHOOK_SECRET);
     },
   });
 }

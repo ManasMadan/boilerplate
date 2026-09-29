@@ -6,6 +6,7 @@
 import { coreEnv, databaseEnv, port, redisEnv, requiredInProduction } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
+import { productionSmtpProblem } from "./channels/email/smtp-url";
 
 export const env = createEnv({
   server: {
@@ -21,11 +22,16 @@ export const env = createEnv({
     // Local hour (in each user's time zone) from which their daily digest is sent.
     DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(8),
 
-    // smtp: any SMTP server (Mailpit locally; SES, Postmark or SendGrid in production).
-    // resend: Resend's HTTP API.
-    EMAIL_PROVIDER: z.enum(["smtp", "resend"]).default("smtp"),
-    SMTP_URL: requiredInProduction(z.url({ protocol: /^smtps?$/ }), "smtp://localhost:51025"),
-    RESEND_API_KEY: z.string().startsWith("re_").optional(),
+    // Where email is submitted: our Stalwart mail server in production (authenticated,
+    // over TLS: see channels/email/smtp-url.ts), Mailpit locally.
+    SMTP_URL: requiredInProduction(
+      z.url({ protocol: /^smtps?$/ }).superRefine((value, context) => {
+        const problem =
+          process.env.NODE_ENV === "production" ? productionSmtpProblem(value) : undefined;
+        if (problem) context.addIssue({ code: "custom", message: problem });
+      }),
+      "smtp://localhost:51025",
+    ),
     EMAIL_FROM: requiredInProduction(z.string().min(3), "Boilerplate <no-reply@localhost>"),
 
     // The web app's public URL, for links in messages (settings, unsubscribe).
@@ -77,11 +83,7 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
 });
 
-// A misconfigured provider must fail at boot, not on the first email.
-if (env.EMAIL_PROVIDER === "resend" && !env.RESEND_API_KEY) {
-  throw new Error("EMAIL_PROVIDER=resend requires RESEND_API_KEY");
-}
-
+// A misconfigured provider must fail at boot, not on the first message.
 if (
   env.SMS_PROVIDER === "twilio" &&
   !(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM)

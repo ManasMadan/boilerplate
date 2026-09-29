@@ -1,12 +1,14 @@
 # apps/webhooks
 
-NestJS on Fastify, port 3004. Receives provider webhooks (Stripe today) and delivers
+NestJS on Fastify, port 3004. Receives provider webhooks (Stripe, and Stalwart's bounces) and delivers
 customers' outbound webhooks.
 
 ## Commands (from the repo root)
 
 - Unit tests: `bun run --filter @repo/webhooks test`
 - Integration tests: `bun run db:up`, then `bun run --filter @repo/webhooks test:integration`
+- Real bounces: `bun run db:up:mail`, then the Stalwart tests
+  (`STALWART_URL=http://localhost:58080`, see `test/stalwart.integration.test.ts`).
 - Real Stripe test events: `stripe listen --forward-to localhost:3004/webhooks/stripe`,
   then `bun run env:set STRIPE_WEBHOOK_SECRET=whsec_...`. Without an account:
   `bun run stripe:fake`.
@@ -15,6 +17,10 @@ customers' outbound webhooks.
 
 - `src/inbound/stripe.routes.ts`: raw-body route, signature check, store and emit
   `stripe.event_received.v1`. No processing happens here.
+- `src/inbound/stalwart.routes.ts` and `stalwart-events.ts`: the mail server's delivery
+  failures (HMAC `X-Signature`, `STALWART_WEBHOOK_SECRET`), which hard bounces become
+  `email.feedback_received.v1` for notifications' suppression list. Stalwart reassigns
+  event ids per batch, so duplicates are keyed on the event's content.
 - `src/outbound/fanout.processor.ts`: event to one delivery row per subscribed endpoint.
 - `src/outbound/delivery.processor.ts` and `delivery.service.ts`: send with retries on
   `WEBHOOK_RETRY_DELAYS_MS`, auto-disable after `WEBHOOK_AUTO_DISABLE_HOURS`.

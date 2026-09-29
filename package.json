@@ -101,6 +101,7 @@
     "gen": "turbo run gen",
     "gen:new": "turbo gen",
     "db:up": "bun scripts/services.ts up",
+    "db:up:mail": "bun scripts/services.ts up --mail",
     "db:up:full": "bun scripts/services.ts up --full",
     "db:down": "bun scripts/services.ts down",
     "db:lint": "bun scripts/lint-migrations.ts",

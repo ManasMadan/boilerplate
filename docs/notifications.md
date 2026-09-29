@@ -27,7 +27,7 @@ Everything is rendered in the recipient's language and time zone from `packages/
 
 | Channel | Provider | Configured by |
 |---|---|---|
-| `email` | SMTP (Mailpit locally) or Resend, behind `EmailTransport` (`channels/email/email-transport.ts`) | `EMAIL_PROVIDER`, `SMTP_URL` or `RESEND_API_KEY`, `EMAIL_FROM` |
+| `email` | SMTP submission to our Stalwart mail server (Mailpit locally), behind `EmailTransport` (`channels/email/email-transport.ts`) | `SMTP_URL`, `EMAIL_FROM` |
 | `in_app` | a `notifications.notification` row, plus a realtime nudge to the user's open tabs | always on |
 | `push` | FCM (Android), APNs (iOS), Web Push (browsers), behind `PushTransport` (`channels/push/push-transport.ts`) | each platform when all its variables are set |
 | `sms` | Twilio, or Mailpit as emails to `<digits>@sms.test` locally, behind `SmsTransport` (`channels/sms/sms-transport.ts`) | `SMS_PROVIDER`, `TWILIO_*` |
@@ -104,11 +104,22 @@ Either turns that category's email off for the user.
 `notifications.suppression` holds addresses never to use again on a channel (reasons
 `bounce`, `complaint`, `unsubscribe`, `invalid`). Email and SMS check it before sending.
 Numbers that reply STOP or can't receive texts are added from Twilio's answer. Email
-addresses are added from Resend's webhook (`apps/webhooks/src/inbound/resend.routes.ts`,
-on when `RESEND_WEBHOOK_SECRET` is set): a hard bounce or a spam complaint becomes an
-`email.feedback_received.v1` event, which this service turns into a suppression. In
-Resend's dashboard, point a webhook at `<site>/webhooks/resend` for `email.bounced` and
-`email.complained`. SMTP has no such feedback, so with SMTP only unsubscribes suppress.
+addresses are added from our Stalwart mail server's webhook
+(`apps/webhooks/src/inbound/stalwart.routes.ts`, on when `STALWART_WEBHOOK_SECRET` is
+set): when a remote server refuses a recipient for good, Stalwart posts
+`delivery.dsn-perm-fail`, and a hard bounce (the address or its domain doesn't exist,
+the mailbox is disabled) becomes an `email.feedback_received.v1` event, which this
+service turns into a suppression. Other permanent failures (a spam policy, a message
+too large) and temporary ones are recorded in `webhooks.inbound_event` and not acted on,
+since the recipient's mailbox may be fine. Stalwart's WebHook object: URL
+`<site>/webhooks/stalwart`, events `delivery.dsn-perm-fail` and `delivery.dsn-temp-fail`
+(policy "include"), `signatureKey` the same value as `STALWART_WEBHOOK_SECRET`. Spam
+complaints need a feedback loop parser: Stalwart's report events don't name the
+recipient.
+
+Locally, `bun run db:up:mail` runs Stalwart in docker compose with that webhook pointed
+at the webhooks service on the host, and mail to `anything@bounce.test` bounces
+permanently (see `docker-compose.yml`).
 
 Delivery logs, and in-app notifications read more than `NOTIFICATION_HISTORY_DAYS` ago,
 are purged by the worker's `outbox-retention` task.

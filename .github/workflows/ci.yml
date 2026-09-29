@@ -126,6 +126,11 @@ jobs:
       REDIS_URL: redis://localhost:6379
       SMTP_URL: smtp://localhost:1025
       MAILPIT_URL: http://localhost:8025
+      # The real mail path: submission to Stalwart (compose's `mail` profile), delivery to
+      # compose's Mailpit, and bounces back as signed webhooks.
+      STALWART_URL: http://localhost:58080
+      STALWART_SMTP_URL: smtps://no-reply:no-reply-password@localhost:51465?tls.rejectUnauthorized=false
+      STALWART_MAILPIT_URL: http://localhost:58025
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
@@ -155,6 +160,10 @@ jobs:
         run: |
           docker compose --profile files up -d --wait rustfs clamav
           docker compose --profile files run --rm s3-init
+      - name: Start the mail server
+        run: |
+          docker compose --profile mail up -d --wait stalwart mailpit
+          docker compose --profile mail run --rm stalwart-init
       # Unit and integration tests together, failing below each package's coverage floor
       # (see packages/vitest-config). The Python service's run is in its own job.
       - name: Tests with coverage
@@ -195,7 +204,6 @@ jobs:
       AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
       REDIS_URL: redis://localhost:6379
       WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: 127.0.0.1
-      EMAIL_PROVIDER: smtp
       SMTP_URL: smtp://localhost:1025
       EMAIL_FROM: Boilerplate <no-reply@example.com>
       MAILPIT_URL: http://localhost:8025
@@ -499,7 +507,7 @@ jobs:
         with:
           path: node_modules/.cache/tofu-plugins
           key: tofu-plugins-${{ hashFiles('infra/tofu/**/.terraform.lock.hcl', 'infra/tofu/**/versions.tf') }}
-      # fmt, validate and every module's tests, against mocked cloud APIs (no credentials).
+      # fmt, validate and every module's tests, against mocked providers (no credentials).
       - run: bun run infra:check
 
   # Every image builds, and none ships a known critical or high vulnerability that has a

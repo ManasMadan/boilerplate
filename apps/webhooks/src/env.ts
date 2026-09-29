@@ -22,9 +22,19 @@ export const env = createEnv({
 
     // Optional: Stripe's endpoint signing secret; /webhooks/stripe answers 404 without it.
     STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),
-    // Optional: Resend's webhook signing secret (bounces and spam complaints become
-    // suppressions); /webhooks/resend answers 404 without it.
-    RESEND_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),
+    // Optional: the signature key of our Stalwart mail server's webhook (hard bounces
+    // become suppressions); /webhooks/stalwart answers 404 without it. Comma-separated to
+    // accept a new and an old key at once while rotating: Stalwart signs with one.
+    STALWART_WEBHOOK_SECRET: z
+      .string()
+      .transform((value) =>
+        value
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean),
+      )
+      .pipe(z.array(z.string().min(32)).min(1))
+      .optional(),
 
     WEBHOOK_DELIVERY_CONCURRENCY: positive.default(20),
     WEBHOOK_TIMEOUT_MS: positive.max(60_000).default(15_000),

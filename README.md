@@ -91,7 +91,7 @@ has a `swap-*` skill in `.claude/skills`.
 | Read replicas | reads go to the primary | a replica behind `database.read` | `packages/db/src/client.ts` | `swap-read-replicas` |
 | Object storage | S3 API (RustFS, R2, S3, GCS) | any provider, S3 API or not | `packages/nest-common/src/storage.ts` | `swap-storage` |
 | File scanning | ClamAV | a scanning service | `apps/worker/src/files/file-scanner.ts` | `swap-file-scanner` |
-| Email | SMTP or Resend | SES, Postmark, … | `apps/notifications/src/channels/email/email-transport.ts` | `swap-email-provider` |
+| Email | SMTP to our Stalwart mail server (Mailpit locally) | any SMTP server, or a provider API | `apps/notifications/src/channels/email/email-transport.ts` | `swap-email-provider` |
 | SMS | Twilio | another provider | `apps/notifications/src/channels/sms/sms-transport.ts` | `swap-sms-provider` |
 | Push | FCM, APNs, Web Push | OneSignal and the like | `apps/notifications/src/channels/push/push-transport.ts` | `swap-push-provider` |
 | Notification templates | in code | a database, edited without a deploy | `apps/notifications/src/dispatch/templates.ts` | `swap-notification-templates` |

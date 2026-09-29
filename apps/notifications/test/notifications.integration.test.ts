@@ -305,8 +305,8 @@ describe("notifications service", () => {
           id: eventId,
           name: "email.feedback_received.v1",
           key: `msg:${user.email}`,
-          // As the provider sends it: the address in any case.
-          payload: { provider: "resend", kind, address: user.email.toUpperCase() },
+          // In whatever case the mail server reported the address.
+          payload: { provider: "stalwart", kind, address: user.email.toUpperCase() },
           orgId: null,
           actorId: null,
           requestId: null,

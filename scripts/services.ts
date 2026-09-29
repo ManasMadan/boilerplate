@@ -3,9 +3,10 @@
  * projects' containers on the same Docker:
  *
  *   bun run db:up          Postgres, Valkey, Mailpit
- *   bun run db:up:full     plus object storage and virus scanning (ClamAV, ~1.5 GB)
+ *   bun run db:up:mail     plus the Stalwart mail server (the prod-like email path)
+ *   bun run db:up:full     plus that, object storage and virus scanning (ClamAV, ~1.5 GB)
  *   bun run db:down        stop them (data is kept; `bun run docker:clean` deletes it)
- *   bun scripts/services.ts check [--full]   only report whether they'd fit
+ *   bun scripts/services.ts check [--mail|--full]   only report whether they'd fit
  *
  * Every service has a memory limit. Before starting, this adds up the limits of what's
  * about to start and checks they fit in Docker's memory next to what other containers
@@ -50,7 +51,9 @@ function budget(profileArgs: string[]) {
     process.exit(1);
   }
   const services = (
-    JSON.parse(config.stdout) as { services: Record<string, { mem_limit?: number | string }> }
+    JSON.parse(config.stdout) as {
+      services: Record<string, { mem_limit?: number | string; restart?: string }>;
+    }
   ).services;
   const running = new Set(
     docker(["compose", "ps", "--format", "{{.Service}}", "--status", "running"])
@@ -76,14 +79,32 @@ function budget(profileArgs: string[]) {
       return sum + bytes(usage.split("/")[0] ?? "");
     }, 0);
   const free = total - inUse - HEADROOM;
-  return { needed, free, total, inUse, starting: toStart.map(([name]) => name) };
+  // Setup steps (s3-init, stalwart-init) run once and exit, marked `restart: "no"`.
+  const all = Object.entries(services);
+  const oneShots = all.filter(([, service]) => service.restart === "no").map(([name]) => name);
+  const longRunning = all.filter(([, service]) => service.restart !== "no").map(([name]) => name);
+  return {
+    needed,
+    free,
+    total,
+    inUse,
+    starting: toStart.map(([name]) => name),
+    oneShots,
+    longRunning,
+  };
 }
 
 const [command, flag] = process.argv.slice(2);
-const profileArgs = flag === "--full" ? ["--profile", "full"] : [];
+const PROFILES: Record<string, string> = { "--full": "full", "--mail": "mail" };
+const profile = flag ? PROFILES[flag] : undefined;
+if (flag && !profile) {
+  console.error(`unknown flag ${flag}: use --mail or --full`);
+  process.exit(1);
+}
+const profileArgs = profile ? ["--profile", profile] : [];
 
 if (command === "up" || command === "check") {
-  const { needed, free, total, inUse, starting } = budget(profileArgs);
+  const { needed, free, total, inUse, starting, oneShots, longRunning } = budget(profileArgs);
   const gb = (n: number) => `${(n / 1024 ** 3).toFixed(1)} GB`;
   if (needed > free) {
     fail(
@@ -104,11 +125,18 @@ if (command === "up" || command === "check") {
   if (starting.length > 0)
     ok(`${starting.join(", ")} fit in memory (up to ${gb(needed)} of ${gb(free)} free)`);
   if (command === "check") process.exit(0);
-  const up = spawnSync("docker", ["compose", ...profileArgs, "up", "-d", "--wait"], {
-    cwd: ROOT,
-    stdio: "inherit",
-  });
-  process.exit(up.status ?? 1);
+  // `up --wait` counts a container that exits as a failure, even with status 0, so the
+  // setup steps run on their own once everything they depend on is up.
+  const compose = (args: string[]) =>
+    spawnSync("docker", ["compose", ...profileArgs, ...args], { cwd: ROOT, stdio: "inherit" })
+      .status ?? 1;
+  const up = compose(["up", "-d", "--wait", ...longRunning]);
+  if (up !== 0) process.exit(up);
+  for (const name of oneShots) {
+    const status = compose(["run", "--rm", name]);
+    if (status !== 0) process.exit(status);
+  }
+  process.exit(0);
 } else if (command === "down") {
   const down = spawnSync("docker", ["compose", "--profile", "full", "down"], {
     cwd: ROOT,
@@ -117,7 +145,7 @@ if (command === "up" || command === "check") {
   process.exit(down.status ?? 1);
 } else {
   console.error(
-    `usage: bun scripts/services.ts up [--full] | check [--full] | down   (project "${PROJECT}")`,
+    `usage: bun scripts/services.ts up [--mail|--full] | check [--mail|--full] | down   (project "${PROJECT}")`,
   );
   process.exit(1);
 }

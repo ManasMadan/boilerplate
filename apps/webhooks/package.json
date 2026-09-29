@@ -2,7 +2,7 @@
   "name": "@repo/webhooks",
   "private": true,
   "type": "module",
-  "description": "Webhooks service: verifies and records inbound provider webhooks (Stripe), and delivers signed events to customers' endpoints.",
+  "description": "Webhooks service: verifies and records inbound provider webhooks (Stripe, our Stalwart mail server), and delivers signed events to customers' endpoints.",
   "scripts": {
     "dev": "tsdown --watch --on-success \"node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs\"",
     "build": "tsdown",
@@ -35,7 +35,9 @@
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
+    "nodemailer": "^10.0.12",
     "pg": "^8.23.0",
     "standardwebhooks": "^1.1.1",
     "tsdown": "catalog:",

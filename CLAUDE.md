@@ -23,7 +23,8 @@ Run commands from the repo root. Never `cd` into a package to run tools directly
 package use `bun run --filter @repo/<name> <script>` (or `bun run --cwd <dir> <script>`).
 
 Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025 (SMTP
-51025), RustFS 59000 (console 59001), ClamAV 53310. Web is on 3000, api 3001, worker
+51025), RustFS 59000 (console 59001), ClamAV 53310; opt-in, the Stalwart mail server
+(`bun run db:up:mail`): submission 51465, management 58080. Web is on 3000, api 3001, worker
 3002, notifications 3003, webhooks 3004, ai 8000.
 
 ## Principles (non-negotiable)
