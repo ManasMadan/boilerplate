@@ -3,7 +3,7 @@
 -- Both MCP servers ask on every request, so disconnecting an app or leaving a
 -- workspace takes effect at once, not when the token expires. One definition for
 -- both languages; neither service needs the tables themselves.
-CREATE FUNCTION auth.mcp_grant_active(client_id text, user_id uuid, org_id uuid) RETURNS boolean
+CREATE OR REPLACE FUNCTION auth.mcp_grant_active(client_id text, user_id uuid, org_id uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
   SELECT EXISTS (
     SELECT 1 FROM auth.oauth_consent c
