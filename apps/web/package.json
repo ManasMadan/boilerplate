@@ -9,7 +9,8 @@
     "start": "node --env-file-if-exists=../../.env .next/standalone/apps/web/server.js",
     "check-types": "SKIP_ENV_VALIDATION=1 next typegen && tsc",
     "test": "vitest run --passWithNoTests",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "budget": "bun scripts/bundle-budget.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
