@@ -77,6 +77,16 @@ migrate:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 512Mi }
 
+# Re-encrypting stored secrets after a key rotation: a suspended CronJob that runs the
+# api's image with the api's environment, started by hand (templates/reencrypt-cronjob.yaml).
+reencrypt:
+  enabled: true
+  service: api
+  activeDeadlineSeconds: 1800
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
 # What every service starts from; each entry under `services` overrides any of it.
 defaults:
   replicas: 2

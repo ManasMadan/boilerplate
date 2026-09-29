@@ -3,7 +3,8 @@
  * and images as every other environment:
  *
  *   bun run k8s:up      create the cluster, build and load the images, install data + stack
- *   bun run k8s:smoke   check the routes through the gateway (k8s:up runs it too)
+ *   bun run k8s:smoke   check the routes through the gateway, then run re-encryption as
+ *                       operators do after a key rotation (k8s:up runs it too)
  *   bun run k8s:down    delete the cluster (`bun run docker:clean` also removes the images)
  *
  * Then open http://boilerplate.localhost (email: `kubectl -n boilerplate port-forward
@@ -217,6 +218,52 @@ async function smoke() {
     }
   }
   if (!passed) process.exit(1);
+  await reencrypt();
+}
+
+/**
+ * Re-encryption runs in the cluster the way an operator runs it after a key rotation
+ * (the rotate-secrets skill): a Job created from the stack's suspended CronJob.
+ */
+async function reencrypt() {
+  const job = `reencrypt-${Date.now()}`;
+  const created = kubectl([
+    "-n",
+    NAMESPACE,
+    "create",
+    "job",
+    job,
+    `--from=cronjob/${STACK}-reencrypt`,
+  ]);
+  if (!created.ok) {
+    fail(`re-encryption: ${created.stderr.trim()}`);
+    process.exit(1);
+  }
+  const deadline = Date.now() + 5 * 60_000;
+  let status = "";
+  while (Date.now() < deadline) {
+    status = kubectl([
+      "-n",
+      NAMESPACE,
+      "get",
+      "job",
+      job,
+      "-o",
+      "jsonpath={.status.succeeded},{.status.failed}",
+    ]).stdout;
+    if (status.startsWith("1") || status.endsWith(",1")) break;
+    await Bun.sleep(2000);
+  }
+  const logs = kubectl(["-n", NAMESPACE, "logs", `job/${job}`]).stdout.trim();
+  if (status.startsWith("1")) {
+    ok(
+      `re-encryption: ${logs.split("\n").find((line) => line.startsWith("Re-encrypted")) ?? "done"}`,
+    );
+  } else {
+    fail(`re-encryption: job ${job} ${status.endsWith(",1") ? "failed" : "timed out"}`);
+    console.error(logs);
+    process.exit(1);
+  }
 }
 
 async function up() {

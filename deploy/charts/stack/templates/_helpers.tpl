@@ -84,3 +84,53 @@ A service's settings: `defaults` with the service's own values merged over them
 {{- $root := index . 0 -}}
 {{- printf "%s%s" $root.Values.database.secretPrefix (index . 1 | replace "_" "-") -}}
 {{- end -}}
+
+{{/*
+A service's environment: shared settings, its own, its database and Valkey URLs, and its
+Secret. Deployments and the jobs that run a service's image (re-encryption) share it, so
+a job always sees what the service sees.
+*/}}
+{{- define "stack.containerEnv" -}}
+{{- $root := index . 0 -}}
+{{- $name := index . 1 -}}
+{{- $svc := index . 2 -}}
+{{- $env := mergeOverwrite (deepCopy $root.Values.env) ($svc.env | default dict) -}}
+{{- $secret := include "stack.secretName" (list $root $name $svc) -}}
+env:
+  - name: RELEASE
+    value: {{ $root.Values.image.tag | quote }}
+  {{- range $key := keys $env | sortAlpha }}
+  {{- $value := tpl (toString (index $env $key)) $root }}
+  {{- /* An empty value means "not set", so the service applies its default. */}}
+  {{- if ne $value "" }}
+  - name: {{ $key }}
+    value: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+  {{- with $svc.database }}
+  - name: {{ .envPrefix }}_DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "stack.dbSecret" (list $root .role) }}
+        key: url
+  {{- if .directUrl }}
+  - name: {{ .envPrefix }}_DATABASE_DIRECT_URL
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "stack.dbSecret" (list $root .role) }}
+        key: directUrl
+  {{- end }}
+  {{- end }}
+  {{- if $svc.redis }}
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: {{ $root.Values.redis.secretName }}
+        key: url
+  {{- end }}
+{{- if $secret }}
+envFrom:
+  - secretRef:
+      name: {{ $secret }}
+{{- end }}
+{{- end -}}

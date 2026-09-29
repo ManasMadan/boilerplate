@@ -102,6 +102,16 @@
         "resources": { "$ref": "#/$defs/resources" }
       }
     },
+    "reencrypt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "service": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,20}$" },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 30 },
+        "resources": { "$ref": "#/$defs/resources" }
+      }
+    },
     "defaults": { "$ref": "#/$defs/service" },
     "services": {
       "type": "object",

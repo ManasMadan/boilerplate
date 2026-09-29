@@ -2,8 +2,6 @@
 {{- $svc := include "stack.service" (list $ $name) | fromYaml }}
 {{- if $svc.enabled }}
 {{- $uid := $svc.runAsUser | default 10001 }}
-{{- $env := mergeOverwrite (deepCopy $.Values.env) ($svc.env | default dict) }}
-{{- $secret := include "stack.secretName" (list $ $name $svc) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -91,43 +89,7 @@ spec:
             - name: {{ if $svc.tcpProbe }}tcp{{ else }}http{{ end }}
               containerPort: {{ $svc.port }}
           {{- end }}
-          env:
-            - name: RELEASE
-              value: {{ $.Values.image.tag | quote }}
-            {{- range $key := keys $env | sortAlpha }}
-            {{- $value := tpl (toString (index $env $key)) $ }}
-            {{- /* An empty value means "not set", so the service applies its default. */}}
-            {{- if ne $value "" }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-            {{- end }}
-            {{- with $svc.database }}
-            - name: {{ .envPrefix }}_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "stack.dbSecret" (list $ .role) }}
-                  key: url
-            {{- if .directUrl }}
-            - name: {{ .envPrefix }}_DATABASE_DIRECT_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "stack.dbSecret" (list $ .role) }}
-                  key: directUrl
-            {{- end }}
-            {{- end }}
-            {{- if $svc.redis }}
-            - name: REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $.Values.redis.secretName }}
-                  key: url
-            {{- end }}
-          {{- if $secret }}
-          envFrom:
-            - secretRef:
-                name: {{ $secret }}
-          {{- end }}
+          {{- include "stack.containerEnv" (list $ $name $svc) | nindent 10 }}
           resources:
             {{- toYaml $svc.resources | nindent 12 }}
           securityContext:

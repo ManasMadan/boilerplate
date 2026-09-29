@@ -31,9 +31,12 @@ environment.
    (you can't read the old value); only if local webhook endpoints don't matter, set a
    fresh single key with `bun run env:set`.
 3. Re-encrypt the stored secrets with the new key (safe while the services run, safe
-   to repeat): `bun run secrets:reencrypt` locally; deployed,
-   `kubectl -n boilerplate exec deploy/boilerplate-api -- /nodejs/bin/node dist/reencrypt.mjs`.
-   It prints how many rows moved; a second run prints 0.
+   to repeat): `bun run secrets:reencrypt` locally; deployed, a Job from the stack's
+   suspended CronJob:
+   `kubectl -n boilerplate create job --from=cronjob/boilerplate-reencrypt reencrypt-$(date +%s)`,
+   then `kubectl -n boilerplate logs -f job/<that job>`. Never `kubectl exec` it into a
+   running api pod: the second process shares the pod's memory limit and gets the api
+   OOM-killed. It prints how many rows moved; a second run prints 0.
 4. Only then drop the old key from both services and apply. Dropping it earlier makes
    endpoints still on it undeliverable ("Unknown encryption key").
 
@@ -71,8 +74,8 @@ replace it: everything encrypted becomes unreadable. Rotate with versioned secre
    `bun run env:set BETTER_AUTH_SECRETS=1:<new>`.
 2. Apply and restart the api. Every session cookie is signed with the newest secret
    only, so everyone signs in again once; nothing else breaks.
-3. Re-encrypt: `bun run secrets:reencrypt` (deployed: the `kubectl exec` command in the
-   ENCRYPTION_KEYS section). It moves every stored value to the newest version.
+3. Re-encrypt: `bun run secrets:reencrypt` (deployed: the `kubectl create job` command in
+   the ENCRYPTION_KEYS section). It moves every stored value to the newest version.
 4. Then older versions can go from `BETTER_AUTH_SECRETS`. The legacy
    `BETTER_AUTH_SECRET` is still required by the api's environment; once re-encryption
    has run, its value no longer protects anything and can be replaced with a fresh one.

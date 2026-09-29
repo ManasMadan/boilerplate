@@ -25,6 +25,22 @@ an Argo CD PreSync hook), so the database must already be up. Keeping it in its 
 release is what guarantees that, and it means redeploying the application never touches
 the database.
 
+## Re-encrypting after a key rotation
+
+The stack has a suspended CronJob, `<release>-reencrypt`, that never runs on its own.
+After rotating `BETTER_AUTH_SECRETS` or `ENCRYPTION_KEYS` (the rotate-secrets skill),
+start a Job from it:
+
+```sh
+kubectl -n boilerplate create job --from=cronjob/boilerplate-reencrypt reencrypt-$(date +%s)
+kubectl -n boilerplate logs -f job/<that job>
+```
+
+It runs the api's image with the api's environment in a pod of its own. Don't
+`kubectl exec` it into a running api pod: the second process shares that pod's memory
+limit and gets the container OOM-killed. `bun run k8s:smoke` runs it on kind, so CI
+runs it on every change to the charts.
+
 ## What each environment provides
 
 The charts read everything environment-specific from Secrets, so the same manifests
