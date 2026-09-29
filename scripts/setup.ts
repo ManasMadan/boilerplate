@@ -24,9 +24,17 @@ for (const [key, value] of readEnv(ENV_EXAMPLE_PATH)) {
 }
 for (const [key, value] of readEnv(ENV_PATH)) {
   if (PLACEHOLDER.test(value)) {
-    writeEnvValue(ENV_PATH, key, randomBytes(32).toString("base64url"));
+    writeEnvValue(ENV_PATH, key, generateSecret(key));
     ok(`Generated a random ${key}`);
   }
+}
+
+/** A fresh secret in the format each variable expects. */
+function generateSecret(key: string) {
+  const random = randomBytes(32).toString("base64");
+  // SecretBox keys carry an id so they can be rotated: "<id>:<32-byte base64 key>".
+  if (key === "ENCRYPTION_KEYS") return `${new Date().toISOString().slice(0, 7)}:${random}`;
+  return randomBytes(32).toString("base64url");
 }
 
 console.log("\n2. Dependencies");

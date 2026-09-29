@@ -39,6 +39,14 @@ function schemaFor<Q extends QueueName, J extends JobName<Q>>(
   return schema as z.ZodType<JobPayload<Q, J>>;
 }
 
+/** BullMQ builds Redis keys from job ids with ":" as separator, so ids can't contain one. */
+function checkJobId(jobId: string) {
+  if (!jobId || jobId.includes(":")) {
+    throw new Error(`Invalid job id "${jobId}": use a non-empty id without ":" (e.g. a UUID)`);
+  }
+  return jobId;
+}
+
 export function createProducer<Q extends QueueName>(queue: Q, connection: ConnectionOptions) {
   const bull = new Queue(queue, {
     connection,
@@ -52,6 +60,7 @@ export function createProducer<Q extends QueueName>(queue: Q, connection: Connec
       payload: JobPayload<Q, J>,
       { meta = {}, ...options }: Omit<JobsOptions, "jobId"> & { jobId: string; meta?: JobMeta },
     ) {
+      checkJobId(options.jobId);
       return bull.add(
         job,
         { meta: jobMeta.parse(meta), payload: schemaFor(queue, job).parse(payload) },
@@ -70,7 +79,7 @@ export function createProducer<Q extends QueueName>(queue: Q, connection: Connec
         jobs.map(({ name, payload, options: { meta = {}, ...options } }) => ({
           name,
           data: { meta: jobMeta.parse(meta), payload: schemaFor(queue, name).parse(payload) },
-          opts: options,
+          opts: { ...options, jobId: checkJobId(options.jobId) },
         })),
       );
     },

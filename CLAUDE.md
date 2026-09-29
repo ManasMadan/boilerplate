@@ -9,7 +9,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 |---|---|
 | First-time setup (idempotent) | `bun run setup` |
 | Health check (tools, .env drift, services) | `bun run doctor` |
-| Develop (core profile: web, api, notifications, worker) | `bun dev` |
+| Develop (core profile: web, api, notifications, worker, webhooks) | `bun dev` |
 | Develop with every service (AI, files, billing, …) | `bun dev:full` |
 | Lint, formatting, architecture boundaries | `bun run lint` (`bun run format` to fix) |
 | Types | `bun run check-types` |

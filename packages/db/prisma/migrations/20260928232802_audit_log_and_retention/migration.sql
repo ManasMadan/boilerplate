@@ -2,6 +2,9 @@
 -- its locks within 5s aborts, rather than blocking every query on the table meanwhile.
 SET lock_timeout = '5s';
 
+-- Functions use CREATE OR REPLACE: `prisma migrate dev` replays migrations into the
+-- shadow database more than once per run, and its reset in between keeps functions.
+
 -- ---------------------------------------------------------------------------- audit log
 
 CREATE SCHEMA IF NOT EXISTS "audit";
@@ -26,7 +29,7 @@ CREATE INDEX "audit_log_org_id_occurred_at_idx" ON "audit"."audit_log"("org_id",
 
 -- Monthly partitions audit_log_YYYY_MM from `months_back` months ago to `months_ahead`
 -- months from now. Idempotent; the worker runs it at boot and daily.
-CREATE FUNCTION audit.ensure_partitions(months_back int, months_ahead int) RETURNS int
+CREATE OR REPLACE FUNCTION audit.ensure_partitions(months_back int, months_ahead int) RETURNS int
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   month date;
@@ -48,7 +51,7 @@ BEGIN
 END $$;
 
 -- Drops whole months that ended before `cutoff`: retention without row-by-row deletes.
-CREATE FUNCTION audit.drop_partitions_before(cutoff timestamptz) RETURNS int
+CREATE OR REPLACE FUNCTION audit.drop_partitions_before(cutoff timestamptz) RETURNS int
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   partition record;
@@ -86,7 +89,7 @@ GRANT SELECT ON audit.audit_log TO app_api;
 
 -- Published outbox rows are kept for a while so events can be replayed to a consumer,
 -- then deleted in batches (short transactions; no long lock on a busy table).
-CREATE FUNCTION app.purge_published_outbox(older_than interval) RETURNS bigint
+CREATE OR REPLACE FUNCTION app.purge_published_outbox(older_than interval) RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   total bigint := 0;
@@ -106,7 +109,7 @@ BEGIN
 END $$;
 
 -- Consumers' dedupe records only need to outlive the longest possible redelivery.
-CREATE FUNCTION app.purge_processed_events(older_than interval) RETURNS bigint
+CREATE OR REPLACE FUNCTION app.purge_processed_events(older_than interval) RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   removed bigint;
@@ -118,7 +121,7 @@ END $$;
 
 -- Sessions and verification codes live in Redis with a TTL; these are the database
 -- copies (device list, fallback), which nothing else expires.
-CREATE FUNCTION auth.purge_expired() RETURNS bigint
+CREATE OR REPLACE FUNCTION auth.purge_expired() RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   sessions bigint;

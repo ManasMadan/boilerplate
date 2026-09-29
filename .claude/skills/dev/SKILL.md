@@ -6,10 +6,14 @@ description: Start, stop or troubleshoot the local development stack. Use when t
 # Local development
 
 - `bun dev` runs the core profile: Postgres, Valkey and Mailpit in Docker, plus web
-  (http://localhost:3000), api (http://localhost:3001) and the notifications and
-  worker services, all in turbo's terminal UI.
+  (http://localhost:3000), api (http://localhost:3001) and the worker (:3002),
+  notifications (:3003) and webhooks (:3004) services, all in turbo's terminal UI.
 - `bun dev:full` adds every optional service: the Python AI service (:8000), S3 storage
-  (RustFS, console :9001), stripe-mock, webhooks, and everything else.
+  (RustFS, console :9001), stripe-mock, and everything else.
+- Customer webhooks can point at a local receiver on 127.0.0.1 (allowed by
+  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES in .env; refused in production). For real Stripe
+  test events, run `stripe listen --forward-to localhost:3004/webhooks/stripe` and set
+  the printed secret with `bun run env:set STRIPE_WEBHOOK_SECRET=whsec_...`.
 - Emails never leave the machine: open Mailpit at http://localhost:8025 to read sign-up
   codes and notifications.
 

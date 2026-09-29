@@ -9,5 +9,5 @@
  * (`<schema>.purge_published_outbox`, `<schema>.purge_processed_events`) with EXECUTE
  * for app_worker. See the audit_log_and_retention migration for the pattern.
  */
-export const OUTBOX_SOURCES = ["app"] as const;
+export const OUTBOX_SOURCES = ["app", "webhooks"] as const;
 export type OutboxSource = (typeof OUTBOX_SOURCES)[number];

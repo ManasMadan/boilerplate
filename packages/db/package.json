@@ -13,7 +13,8 @@
     "reset": "bun --env-file=../../.env run prisma migrate reset --force",
     "studio": "bun --env-file=../../.env run prisma studio",
     "check-types": "tsc",
-    "test:integration": "bun --env-file=../../.env run vitest run"
+    "test:integration": "bun --env-file=../../.env run vitest run",
+    "drift": "bun --env-file=../../.env run prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code && bun --env-file=../../.env run prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code"
   },
   "dependencies": {
     "@prisma/adapter-pg": "catalog:",

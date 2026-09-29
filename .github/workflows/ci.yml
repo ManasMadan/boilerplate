@@ -102,6 +102,8 @@ jobs:
       - name: Bootstrap database roles
         env: { PGPASSWORD: postgres }
         run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      - name: Generate throwaway secrets
+        run: echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)" >> "$GITHUB_ENV"
       - name: Apply migrations
         run: bun run db:deploy
       # `migrate diff` exits 0 silently without a datasource, so the URLs above are required.
@@ -138,8 +140,10 @@ jobs:
       NOTIFICATIONS_DATABASE_URL: postgresql://app_notifications:app_notifications@localhost:5432/app
       WORKER_DATABASE_URL: postgresql://app_worker:app_worker@localhost:5432/app
       WORKER_DATABASE_DIRECT_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      WEBHOOKS_DATABASE_URL: postgresql://app_webhooks:app_webhooks@localhost:5432/app
       AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
       REDIS_URL: redis://localhost:6379
+      WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: 127.0.0.1
       EMAIL_PROVIDER: smtp
       SMTP_URL: smtp://localhost:1025
       EMAIL_FROM: Boilerplate <no-reply@example.com>
@@ -160,9 +164,11 @@ jobs:
         run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
       - run: bun run db:deploy
       - name: Generate a throwaway auth secret
-        run: echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+        run: |
+          echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+          echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)" >> "$GITHUB_ENV"
       - name: Build the services under test
-        run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/web
+        run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks --filter=@repo/web
       - name: Install the browser
         working-directory: apps/web
         run: bunx playwright install --with-deps chromium
@@ -172,9 +178,10 @@ jobs:
           (cd apps/api && nohup bun run start > ../../logs/api.log 2>&1 &)
           (cd apps/notifications && nohup bun run start > ../../logs/notifications.log 2>&1 &)
           (cd apps/worker && nohup bun run start > ../../logs/worker.log 2>&1 &)
+          (cd apps/webhooks && nohup bun run start > ../../logs/webhooks.log 2>&1 &)
           (cd apps/ai && nohup bun run start > ../../logs/ai.log 2>&1 &)
           (cd apps/web && nohup bun run start > ../../logs/web.log 2>&1 &)
-          for url in http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
+          for url in http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:3004/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
             if ! timeout 90 bash -c "until curl -sf $url > /dev/null; do sleep 1; done"; then
               echo "::error::$url never became ready"; tail -n 50 logs/*.log; exit 1
             fi

@@ -65,7 +65,7 @@
     "setup": "bun scripts/setup.ts",
     "doctor": "bun scripts/doctor.ts",
     "env:set": "bun scripts/env-set.ts",
-    "dev": "bun run doctor && docker compose up -d --wait && turbo run dev --filter=@repo/web --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker",
+    "dev": "bun run doctor && docker compose up -d --wait && turbo run dev --filter=@repo/web --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks",
     "dev:full": "bun run doctor && docker compose --profile full up -d --wait && turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types",

@@ -10,6 +10,7 @@ export * from "./health";
 export * from "./i18n";
 export * from "./idempotency";
 export * from "./logging";
+export * from "./outbox";
 export * from "./rate-limit";
 export * from "./redis";
 export * from "./safe-fetch";

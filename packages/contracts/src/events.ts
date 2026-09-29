@@ -60,6 +60,29 @@ export const events = {
   "org.member_added.v1": memberEvent,
   "org.member_removed.v1": memberEvent,
   "org.member_role_changed.v1": memberEvent.extend({ previousRole: z.string() }),
+  // Emitted by apps/webhooks.
+  "stripe.event_received.v1": z.object({
+    /** Our row in webhooks.inbound_event. */
+    inboundEventId: z.uuid(),
+    /** Stripe's event id (evt_...) and type (e.g. "customer.subscription.updated"). */
+    stripeEventId: z.string(),
+    type: z.string(),
+    /** The Stripe event's `data.object`, as Stripe sent it. */
+    object: z.record(z.string(), z.unknown()),
+  }),
+  "webhook.endpoint_created.v1": z.object({ endpointId: z.uuid(), url: z.url() }),
+  "webhook.endpoint_updated.v1": z.object({
+    endpointId: z.uuid(),
+    changed: z.array(z.enum(["url", "description", "events", "enabled"])),
+  }),
+  "webhook.endpoint_deleted.v1": z.object({ endpointId: z.uuid(), url: z.url() }),
+  "webhook.secret_rotated.v1": z.object({ endpointId: z.uuid() }),
+  "webhook.endpoint_disabled.v1": z.object({
+    endpointId: z.uuid(),
+    url: z.url(),
+    reason: z.enum(["failing"]),
+  }),
+
   "org.invitation_sent.v1": z.object({
     organizationId: z.uuid(),
     invitationId: z.uuid(),

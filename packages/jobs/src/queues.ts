@@ -104,6 +104,20 @@ export type NotificationTemplate = NotificationPayload["template"];
 
 const DAY = 24 * 60 * 60;
 
+/**
+ * When failed webhook deliveries are retried, after the first attempt (Standard Webhooks'
+ * recommended schedule): 5s, 5m, 30m, 2h, 5h, 10h, 10h.
+ */
+export const WEBHOOK_RETRY_DELAYS_MS = [
+  5_000,
+  5 * 60_000,
+  30 * 60_000,
+  2 * 3_600_000,
+  5 * 3_600_000,
+  10 * 3_600_000,
+  10 * 3_600_000,
+];
+
 /** Retries with exponential backoff; the defaults every queue starts from. */
 const retrying: JobsOptions = { attempts: 5, backoff: { type: "exponential", delay: 2_000 } };
 
@@ -139,6 +153,30 @@ export const queues = {
   "events-webhooks": {
     jobs: { event: eventEnvelope },
     options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+  },
+  "events-billing": {
+    jobs: { event: eventEnvelope },
+    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+  },
+  /**
+   * Outgoing customer webhooks (apps/webhooks). One job per delivery (jobId = delivery
+   * id); retried on the Standard Webhooks schedule (`WEBHOOK_RETRY_DELAYS_MS`) through
+   * the worker's custom backoff, so a failing endpoint is tried for about a day.
+   */
+  "webhook-deliveries": {
+    jobs: {
+      deliver: z.object({ deliveryId: z.uuid(), orgId: z.uuid() }),
+      /** Send an existing delivery again (admin replay from the delivery log). */
+      redeliver: z.object({ deliveryId: z.uuid(), orgId: z.uuid() }),
+      /** A test event to one endpoint, from its settings page. */
+      "send-test": z.object({ endpointId: z.uuid(), orgId: z.uuid() }),
+    },
+    options: {
+      attempts: 8,
+      backoff: { type: "webhook" },
+      removeOnComplete: { age: DAY },
+      removeOnFail: { age: 7 * DAY },
+    },
   },
   /** Scheduled housekeeping in apps/worker (retention, partitions). */
   maintenance: {
@@ -180,5 +218,6 @@ const customerFacing = new Set<EventName>(webhookEvents);
 export const eventSubscribers = {
   "events-audit": () => true,
   "events-webhooks": (name: EventName) => customerFacing.has(name),
+  "events-billing": (name: EventName) => name === "stripe.event_received.v1",
 } as const satisfies Partial<Record<QueueName, (name: EventName) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;
