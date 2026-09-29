@@ -88,6 +88,9 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
           const [history] = await db.$queryRaw<[{ n: bigint }]>`
             SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`;
           result["webhooks.history"] = Number(history.n);
+          const [notifications] = await db.$queryRaw<[{ n: bigint }]>`
+            SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`;
+          result["notifications.history"] = Number(notifications.n);
         }
         break;
       case "session-retention": {

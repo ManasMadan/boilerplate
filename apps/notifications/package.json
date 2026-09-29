@@ -27,6 +27,7 @@
     "nodemailer": "^10.0.12",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
+    "web-push": "^3.6.7",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -36,6 +37,7 @@
     "@types/node": "catalog:",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
+    "@types/web-push": "^3.6.4",
     "pg": "^8.23.0",
     "typescript": "catalog:",
     "vitest": "catalog:"

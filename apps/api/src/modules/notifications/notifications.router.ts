@@ -24,6 +24,12 @@ export const notificationsRouter = (
   updatePreferences: authed.notifications.updatePreferences.handler(({ context, input }) =>
     notifications.updatePreferences(context.user.id, input),
   ),
+  registerDevice: authed.notifications.registerDevice.handler(({ context, input }) =>
+    notifications.registerDevice(context.session, input.device, input.appVersion),
+  ),
+  unregisterDevice: authed.notifications.unregisterDevice.handler(({ context, input }) =>
+    notifications.unregisterDevice(context.user.id, input.device),
+  ),
   unsubscribe: base.notifications.unsubscribe.handler(({ input }) =>
     notifications.unsubscribe(input.token),
   ),

@@ -8,5 +8,6 @@ export const systemRouter = ({ base }: Procedures) => ({
     features,
     minimumClientVersion: env.MINIMUM_CLIENT_VERSION,
     captchaSiteKey: features.captcha ? (env.TURNSTILE_SITE_KEY ?? null) : null,
+    webPushPublicKey: env.VAPID_PUBLIC_KEY ?? null,
   })),
 });

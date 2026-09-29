@@ -40,3 +40,28 @@ export const inAppNotifications = {
   "todo.reminder": z.object({ todoId: z.uuid(), title: z.string() }),
 } as const;
 export type InAppNotificationType = keyof typeof inAppNotifications;
+
+/** Where a device receives push: APNs (ios), FCM (android) or Web Push (web). */
+export const pushPlatforms = ["ios", "android", "web"] as const;
+export type PushPlatform = (typeof pushPlatforms)[number];
+
+/**
+ * The browsers' push services. A Web Push subscription names the URL the notifications
+ * service will POST to, so only these hosts are accepted: anything else would let a
+ * client point the service at an internal address.
+ */
+const webPushHosts = [
+  "fcm.googleapis.com", // Chrome, Edge on Android, Opera, Samsung Internet
+  "updates.push.services.mozilla.com", // Firefox
+  "web.push.apple.com", // Safari
+  ".notify.windows.com", // Edge on Windows (per-region subdomains)
+];
+
+export function isWebPushEndpoint(endpoint: string, extraHosts: readonly string[] = []) {
+  // The host must follow "https://" directly: no credentials, no port.
+  const hostname = /^https:\/\/([a-z0-9.-]+)\//i.exec(endpoint)?.[1]?.toLowerCase();
+  if (!hostname) return false;
+  return [...webPushHosts, ...extraHosts].some((host) =>
+    host.startsWith(".") ? hostname.endsWith(host) : hostname === host,
+  );
+}

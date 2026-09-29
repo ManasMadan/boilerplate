@@ -13,6 +13,7 @@ import { createRedis } from "@repo/nest-common";
 import { redisDatabase } from "@repo/nest-common/testing";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { DEAD_APNS_TOKEN, type FakePush, FLAKY_APNS_TOKEN, startFakePush } from "./fake-push";
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
 
@@ -38,9 +39,12 @@ describe("notifications service", () => {
   let testDb: TestDatabase;
   let producer: Producer<"notifications-critical">;
   let bulk: Producer<"notifications-bulk">;
+  let push: FakePush;
 
   beforeAll(async () => {
     testDb = await createTestDatabase();
+    push = await startFakePush();
+    Object.assign(process.env, push.env);
     // The service connects as its own least-privileged role, exactly as in production.
     process.env.NOTIFICATIONS_DATABASE_URL = testDb.urlFor("app_notifications");
     // A private Redis database, so a notifications service running locally for
@@ -63,6 +67,7 @@ describe("notifications service", () => {
     await producer?.close();
     await bulk?.close();
     await app?.close();
+    await push?.close();
     await testDb?.drop();
   });
 
@@ -352,5 +357,190 @@ describe("notifications service", () => {
     const unscoped = await client.query("SELECT id FROM notifications.notification");
     await client.end();
     expect(unscoped.rowCount).toBe(0);
+  });
+
+  // ------------------------------------------------------------------------------ push
+
+  /** A device registered from a session of the user's, as apps/api does. */
+  async function addDevice(userId: string, platform: "ios" | "android" | "web", token: string) {
+    const [session] = await sql<{ id: string }>(
+      `INSERT INTO auth.session (token, user_id, expires_at, updated_at)
+       VALUES ($1, $2, now() + interval '1 day', now()) RETURNING id`,
+      [randomUUID(), userId],
+    );
+    await sql(
+      "INSERT INTO notifications.device (user_id, session_id, platform, token) VALUES ($1, $2, $3, $4)",
+      [userId, session?.id, platform, token],
+    );
+  }
+
+  async function devices(userId: string) {
+    return (
+      await sql<{ token: string }>("SELECT token FROM notifications.device WHERE user_id = $1", [
+        userId,
+      ])
+    ).map((row) => row.token);
+  }
+
+  async function pushStatuses(jobId: string) {
+    const rows = await sql<{ status: string; error: string | null }>(
+      "SELECT status, error FROM notifications.delivery WHERE idempotency_key LIKE $1 AND channel = 'push' ORDER BY idempotency_key",
+      [`${jobId}:%`],
+    );
+    return rows;
+  }
+
+  function deliveredTo(token: string) {
+    return push.delivered.filter((message) => message.token === token);
+  }
+
+  it("pushes to every device the user has, on Android, iOS and the web", async () => {
+    const user = await newUser();
+    const android = `android-${randomUUID()}`;
+    const ios = randomUUID().replaceAll("-", "").repeat(2);
+    const web = push.webSubscription();
+    await addDevice(user.id, "android", android);
+    await addDevice(user.id, "ios", ios);
+    await addDevice(user.id, "web", web.token);
+
+    const jobId = await reminder(user.id);
+    // in-app, email and one push per device.
+    const rows = await settle(jobId, 5);
+    expect(rows.map((row) => row.status)).toEqual(Array(5).fill("sent"));
+
+    for (const token of [android, ios, web.id]) {
+      const [message] = deliveredTo(token);
+      expect(message, token).toMatchObject({
+        title: "Reminder",
+        body: expect.stringContaining("Water the plants"),
+        link: "/dashboard",
+      });
+    }
+    // APNs groups by collapse id; Web Push replaces by topic and expires by TTL.
+    expect(deliveredTo(ios)[0]?.headers["apns-collapse-id"]).toBe("todo.reminder");
+    expect(deliveredTo(ios)[0]?.headers["apns-push-type"]).toBe("alert");
+    expect(deliveredTo(web.id)[0]?.headers.topic).toBe("todoreminder");
+    expect(deliveredTo(web.id)[0]?.headers.ttl).toBe(String(24 * 3600));
+  });
+
+  it("forgets devices whose tokens the providers report dead", async () => {
+    const user = await newUser();
+    const live = `android-${randomUUID()}`;
+    await addDevice(user.id, "android", `dead-${randomUUID()}`);
+    await addDevice(user.id, "android", live);
+    await addDevice(user.id, "ios", DEAD_APNS_TOKEN);
+    await addDevice(user.id, "web", push.goneSubscription());
+
+    const jobId = await reminder(user.id);
+    await settle(jobId, 6);
+    const statuses = (await pushStatuses(jobId)).map((row) => row.status).sort();
+    expect(statuses).toEqual(["sent", "skipped", "skipped", "skipped"]);
+    expect(await devices(user.id)).toEqual([live]);
+    expect(deliveredTo(live)).toHaveLength(1);
+  });
+
+  it("never sends to a stored subscription outside the browsers' push services", async () => {
+    const user = await newUser();
+    // As if a row got in without the api's validation: an internal address.
+    const internal = push.webSubscription("http://169.254.169.254/latest/meta-data").token;
+    await addDevice(user.id, "web", internal);
+    const jobId = await reminder(user.id);
+    await settle(jobId, 3);
+    expect(await pushStatuses(jobId)).toEqual([
+      { status: "skipped", error: expect.stringContaining("not a browser push service") },
+    ]);
+    expect(await devices(user.id)).toEqual([]);
+  });
+
+  it("retries a push the provider failed, without resending the ones that went out", async () => {
+    const user = await newUser();
+    const good = `android-${randomUUID()}`;
+    const flaky = `flaky-${randomUUID()}`;
+    await addDevice(user.id, "android", good);
+    await addDevice(user.id, "android", flaky);
+    await addDevice(user.id, "ios", FLAKY_APNS_TOKEN);
+    const { Dispatcher } = await import("../src/dispatch/dispatcher");
+    const dispatcher = app.get(Dispatcher);
+    const payload = {
+      template: "todo.reminder" as const,
+      to: { userId: user.id },
+      data: { todoId: randomUUID(), title: "Try again" },
+    };
+    const key = randomUUID();
+
+    await expect(dispatcher.dispatch(payload, key)).rejects.toThrow(/2 deliveries failed/);
+    expect((await pushStatuses(key)).map((row) => row.status).sort()).toEqual([
+      "failed",
+      "failed",
+      "sent",
+    ]);
+    // A transient failure keeps the device.
+    expect(await devices(user.id)).toHaveLength(3);
+
+    push.recover();
+    await dispatcher.dispatch(payload, key);
+    expect((await pushStatuses(key)).map((row) => row.status)).toEqual(["sent", "sent", "sent"]);
+    expect(deliveredTo(good)).toHaveLength(1);
+    expect(deliveredTo(flaky)).toHaveLength(1);
+  });
+
+  it("respects push turned off for a category", async () => {
+    const user = await newUser();
+    const token = `android-${randomUUID()}`;
+    await addDevice(user.id, "android", token);
+    await sql(
+      "INSERT INTO notifications.preference (user_id, category, channel, enabled) VALUES ($1, 'activity', 'push', false)",
+      [user.id],
+    );
+    const jobId = await reminder(user.id);
+    await settle(jobId, 2);
+    // Give a stray push the time it would take.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await pushStatuses(jobId)).toEqual([]);
+    expect(deliveredTo(token)).toEqual([]);
+  });
+
+  it("holds push during quiet hours and sends it once they end", async () => {
+    const user = await newUser();
+    const token = `android-${randomUUID()}`;
+    await addDevice(user.id, "android", token);
+    // Quiet from an hour ago to an hour from now, in the user's time zone (UTC).
+    const now = new Date();
+    const minute = now.getUTCHours() * 60 + now.getUTCMinutes();
+    await sql(
+      "INSERT INTO notifications.settings (user_id, quiet_start, quiet_end) VALUES ($1, $2, $3)",
+      [user.id, (minute - 60 + 1440) % 1440, (minute + 60) % 1440],
+    );
+    const jobId = await reminder(user.id);
+    // In-app and email don't wait.
+    await settle(jobId, 2);
+    expect(await pushStatuses(jobId)).toEqual([]);
+
+    const delayed = (await bulk.queue.getDelayed()).filter(
+      (job) => job.name === "deferred" && job.data.payload.userId === user.id,
+    );
+    expect(delayed).toHaveLength(1);
+    const [job] = delayed;
+    const wait = (job?.opts.delay ?? 0) / 60_000;
+    expect(wait).toBeGreaterThan(58);
+    expect(wait).toBeLessThanOrEqual(60);
+
+    // A redelivered job doesn't queue the push twice.
+    const { Dispatcher } = await import("../src/dispatch/dispatcher");
+    const dispatcher = app.get(Dispatcher);
+    const redelivered = await bulk.queue.getJob(jobId);
+    await dispatcher.dispatch(redelivered?.data.payload, jobId);
+    expect(
+      (await bulk.queue.getDelayed()).filter((j) => j.data.payload.userId === user.id),
+    ).toHaveLength(1);
+
+    // Quiet hours are over.
+    await job?.promote();
+    const deadline = Date.now() + 15_000;
+    while (deliveredTo(token).length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(deliveredTo(token)).toHaveLength(1);
+    expect((await pushStatuses(jobId)).map((row) => row.status)).toEqual(["sent"]);
   });
 });

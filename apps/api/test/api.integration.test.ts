@@ -29,6 +29,7 @@ beforeAll(async () => {
     MINIMUM_CLIENT_VERSION: "2.0.0",
     // The test receiver below runs on loopback.
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
+    VAPID_PUBLIC_KEY: "BPublicVapidKeyForTests",
   });
 });
 afterAll(() => harness?.close());
@@ -610,6 +611,210 @@ describe("notifications", () => {
       }),
       "UNSUBSCRIBE_LINK_INVALID",
     );
+  });
+});
+
+describe("push devices", () => {
+  const webDevice = (id = randomUUID()) => ({
+    platform: "web" as const,
+    subscription: {
+      endpoint: `https://fcm.googleapis.com/fcm/send/${id}`,
+      keys: { p256dh: `p256dh-${id}`, auth: `auth-${id}` },
+    },
+  });
+
+  async function deviceRows(userId?: string) {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client.query<{ user_id: string; platform: string; token: string }>(
+      userId
+        ? "SELECT user_id, platform, token FROM notifications.device WHERE user_id = $1"
+        : "SELECT user_id, platform, token FROM notifications.device",
+      userId ? [userId] : [],
+    );
+    await client.end();
+    return rows;
+  }
+
+  it("tells browsers the VAPID public key to subscribe with", async () => {
+    const info = await createSession(harness).rpc.system.info();
+    expect(info.webPushPublicKey).toBe("BPublicVapidKeyForTests");
+  });
+
+  it("registers native and browser devices once, and removes them", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const ios = { platform: "ios" as const, token: "a1".repeat(32) };
+    const android = { platform: "android" as const, token: `fcm:${randomUUID()}` };
+    const web = webDevice();
+
+    const first = await session.rpc.notifications.registerDevice({
+      device: ios,
+      appVersion: "2.1.0",
+    });
+    // The app registers on every start: same token, same row.
+    expect(await session.rpc.notifications.registerDevice({ device: ios })).toEqual(first);
+    await session.rpc.notifications.registerDevice({ device: android });
+    await session.rpc.notifications.registerDevice({ device: web });
+    const rows = await deviceRows(me.id);
+    expect(rows.map((row) => row.platform).sort()).toEqual(["android", "ios", "web"]);
+    // Browser subscriptions are stored in one canonical form (key order fixed).
+    expect(rows.find((row) => row.platform === "web")?.token).toBe(
+      JSON.stringify({
+        endpoint: web.subscription.endpoint,
+        keys: { p256dh: web.subscription.keys.p256dh, auth: web.subscription.keys.auth },
+      }),
+    );
+
+    await session.rpc.notifications.unregisterDevice({
+      device: {
+        ...web,
+        subscription: { keys: web.subscription.keys, endpoint: web.subscription.endpoint },
+      },
+    });
+    await session.rpc.notifications.unregisterDevice({ device: ios });
+    expect((await deviceRows(me.id)).map((row) => row.platform)).toEqual(["android"]);
+  });
+
+  it("moves a device to whoever signs in on it, and one user can't remove another's", async () => {
+    const device = { platform: "android" as const, token: `fcm:${randomUUID()}` };
+    const first = await signedInUser();
+    const second = await signedInUser();
+    const firstId = (await first.session.rpc.user.me()).id;
+    const secondId = (await second.session.rpc.user.me()).id;
+
+    await first.session.rpc.notifications.registerDevice({ device });
+    // Removing is scoped to the caller's own devices.
+    await second.session.rpc.notifications.unregisterDevice({ device });
+    expect((await deviceRows(firstId)).map((row) => row.token)).toEqual([device.token]);
+
+    // The same phone, now signed in as someone else.
+    await second.session.rpc.notifications.registerDevice({ device });
+    expect(await deviceRows(firstId)).toEqual([]);
+    expect((await deviceRows(secondId)).map((row) => row.token)).toEqual([device.token]);
+  });
+
+  it("keeps the 20 devices seen most recently", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const tokens = Array.from({ length: 22 }, (_, i) => `fcm:${i}-${randomUUID()}`);
+    for (const token of tokens) {
+      await session.rpc.notifications.registerDevice({ device: { platform: "android", token } });
+    }
+    const kept = (await deviceRows(me.id)).map((row) => row.token).sort();
+    expect(kept).toEqual(tokens.slice(2).sort());
+  });
+
+  it("rejects subscriptions that aren't a browser push service, and malformed tokens", async () => {
+    const { session } = await signedInUser();
+    for (const endpoint of [
+      "https://169.254.169.254/latest/meta-data",
+      "http://fcm.googleapis.com/fcm/send/x",
+      "https://fcm.googleapis.com.attacker.dev/x",
+      "https://localhost:3001/api/v1/system",
+    ]) {
+      await expectError(
+        session.rpc.notifications.registerDevice({
+          device: { platform: "web", subscription: { endpoint, keys: { p256dh: "k", auth: "a" } } },
+        }),
+        "VALIDATION_FAILED",
+      );
+    }
+    await expectError(
+      session.rpc.notifications.registerDevice({
+        device: { platform: "ios", token: "../../3/device/evil" },
+      }),
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      session.rpc.notifications.registerDevice({
+        device: { platform: "android", token: "has spaces and / slashes" },
+      }),
+      "VALIDATION_FAILED",
+    );
+    expect(await deviceRows((await session.rpc.user.me()).id)).toEqual([]);
+  });
+
+  it("stops pushing to a device when its session signs out or is revoked", async () => {
+    const { session: laptop, email, password } = await signedInUser();
+    const me = await laptop.rpc.user.me();
+    const phone = createSession(harness);
+    await phone.auth("/sign-in/email", { email, password });
+    const tablet = createSession(harness);
+    await tablet.auth("/sign-in/email", { email, password });
+    const token = (name: string) => `fcm:${name}-${me.id}`;
+    await laptop.rpc.notifications.registerDevice({ device: webDevice() });
+    await phone.rpc.notifications.registerDevice({
+      device: { platform: "android", token: token("phone") },
+    });
+    await tablet.rpc.notifications.registerDevice({
+      device: { platform: "android", token: token("tablet") },
+    });
+    expect(await deviceRows(me.id)).toHaveLength(3);
+
+    await phone.auth("/sign-out");
+    expect((await deviceRows(me.id)).map((row) => row.token)).not.toContain(token("phone"));
+
+    // Revoked from the laptop: the tablet's device goes with its session.
+    await laptop.auth("/revoke-other-sessions");
+    expect((await deviceRows(me.id)).map((row) => row.platform)).toEqual(["web"]);
+  });
+
+  it("an admin impersonating the user can't register their own device", async () => {
+    const { session } = await signedInUser();
+    await editSession(harness, session, (stored) => {
+      (stored as { impersonatedBy?: string }).impersonatedBy = randomUUID();
+    });
+    await expectError(
+      session.rpc.notifications.registerDevice({ device: webDevice() }),
+      "FORBIDDEN",
+    );
+  });
+
+  it("requires a session", async () => {
+    await expectError(
+      createSession(harness).rpc.notifications.registerDevice({ device: webDevice() }),
+      "UNAUTHENTICATED",
+    );
+  });
+
+  it("the database function only registers for the user the transaction is scoped to", async () => {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("app_api") });
+    await client.connect();
+    await expect(
+      client.query(
+        "SELECT notifications.register_device('android', 'fcm:unscoped', null, gen_random_uuid())",
+      ),
+    ).rejects.toThrow(/app.user_id/);
+    // Scoped to one user, with another user's session.
+    const victim = await signedInUser();
+    const attacker = await signedInUser();
+    const [victimSession] = (
+      await client.query<{ id: string }>("SELECT id FROM auth.session WHERE user_id = $1", [
+        (await victim.session.rpc.user.me()).id,
+      ])
+    ).rows;
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.user_id', $1, true)", [
+      (await attacker.session.rpc.user.me()).id,
+    ]);
+    await expect(
+      client.query("SELECT notifications.register_device('android', 'fcm:stolen', null, $1)", [
+        victimSession?.id,
+      ]),
+    ).rejects.toThrow(/is not the user's/);
+    await client.query("ROLLBACK");
+    await client.end();
+    const notifications = new pg.Client({
+      connectionString: harness.testDb.urlFor("app_notifications"),
+    });
+    await notifications.connect();
+    await expect(
+      notifications.query(
+        "SELECT notifications.register_device('android', 'fcm:x', null, gen_random_uuid())",
+      ),
+    ).rejects.toThrow(/permission denied/);
+    await notifications.end();
   });
 });
 

@@ -1,6 +1,11 @@
 /** The signed-in user's in-app notifications and what they choose to receive. */
 import { z } from "zod";
-import { inAppNotifications, notificationCategories, notificationChannels } from "../notifications";
+import {
+  inAppNotifications,
+  isWebPushEndpoint,
+  notificationCategories,
+  notificationChannels,
+} from "../notifications";
 import { page, pageInput } from "../pagination";
 import { base } from "./base";
 
@@ -46,6 +51,28 @@ export const notificationPreferencesSchema = z.object({
 });
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
+/** A browser's PushSubscription (`subscription.toJSON()`). */
+export const webPushSubscriptionSchema = z.object({
+  endpoint: z
+    .url()
+    .max(2048)
+    .refine((endpoint) => isWebPushEndpoint(endpoint), "Not a browser push service"),
+  keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+});
+export type WebPushSubscription = z.infer<typeof webPushSubscriptionSchema>;
+
+/** A device to push to: a native app's APNs/FCM token, or a browser's subscription. */
+export const pushDeviceSchema = z.discriminatedUnion("platform", [
+  // APNs device tokens are hex; FCM registration tokens are URL-safe base64 with ":".
+  z.object({ platform: z.literal("ios"), token: z.string().regex(/^[0-9a-fA-F]{64,200}$/) }),
+  z.object({
+    platform: z.literal("android"),
+    token: z.string().regex(/^[\w:-]{20,4096}$/),
+  }),
+  z.object({ platform: z.literal("web"), subscription: webPushSubscriptionSchema }),
+]);
+export type PushDeviceInput = z.infer<typeof pushDeviceSchema>;
+
 const route = (method: "GET" | "POST" | "PATCH", path: `/${string}`, summary: string) =>
   base.route({ method, path, tags: ["Notifications"], summary });
 
@@ -79,6 +106,27 @@ export const notificationsContract = {
       }),
     )
     .output(notificationPreferencesSchema),
+  /**
+   * Called when the app starts with push allowed, and whenever the token changes. A
+   * token registered by another account before (someone else signed in on this device)
+   * moves to the caller.
+   */
+  registerDevice: route("POST", "/notifications/devices", "Receive push on this device")
+    .input(
+      z.object({
+        device: pushDeviceSchema,
+        appVersion: z.string().max(50).optional(),
+      }),
+    )
+    .output(z.object({ id: z.uuid() })),
+  /** Called on sign-out and when the user turns push off on this device. */
+  unregisterDevice: route(
+    "POST",
+    "/notifications/devices/remove",
+    "Stop receiving push on this device",
+  )
+    .input(z.object({ device: pushDeviceSchema }))
+    .output(z.void()),
   /** From an email's unsubscribe link: no session, the signed token says who and what. */
   unsubscribe: route(
     "POST",

@@ -107,11 +107,15 @@ model NotificationDevice {
   /// APNs/FCM token, or the Web Push subscription JSON (endpoint + keys).
   token      String   @unique
   appVersion String?  @map("app_version")
+  /// The session that registered it: signing out (or a revoked session) stops its pushes.
+  sessionId  String   @map("session_id") @db.Uuid
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([sessionId])
   @@map("device")
   @@schema("notifications")
 }

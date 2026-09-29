@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { queuePrefix } from "@repo/jobs";
 import { EmailModule } from "../channels/email/email.module";
 import { InAppModule } from "../channels/in-app/in-app.module";
+import { PushModule } from "../channels/push/push.module";
 import { EventsProcessor } from "../events/events.processor";
 import { DeliveryLog } from "./delivery-log";
 import { Dispatcher } from "./dispatcher";
@@ -23,6 +24,7 @@ import { CodeTemplateSource, TemplateSource } from "./templates";
     ),
     EmailModule,
     InAppModule,
+    PushModule,
   ],
   providers: [
     CriticalNotificationsProcessor,

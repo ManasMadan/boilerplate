@@ -12,8 +12,15 @@ import { Dispatcher } from "./dispatcher";
  * the failed set for inspection and replay.
  */
 async function handle(queue: NotificationQueue, job: Job, dispatcher: Dispatcher) {
-  if (job.name !== "send") throw new Error(`Unknown job "${job.name}" on ${queue}`);
   if (!job.id) throw new Error(`Job on ${queue} has no id; producers must set jobId`);
+  if (job.name === "deferred") {
+    const { meta, payload } = parseJob(queue, "deferred", job.data);
+    await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${job.id}` }, () =>
+      dispatcher.deliverDeferred(payload.payload, payload.channel, payload.userId, payload.key),
+    );
+    return;
+  }
+  if (job.name !== "send") throw new Error(`Unknown job "${job.name}" on ${queue}`);
   const { meta, payload } = parseJob(queue, "send", job.data);
   const jobId = job.id;
   // Restore the producer's request context so these logs carry its request id.

@@ -21,6 +21,8 @@ export const systemContract = {
         minimumClientVersion: z.string(),
         /** Public Turnstile site key when captcha is on; clients render the widget with it. */
         captchaSiteKey: z.string().nullable(),
+        /** VAPID public key when browser push is on; browsers subscribe with it. */
+        webPushPublicKey: z.string().nullable(),
       }),
     ),
 };

@@ -106,6 +106,17 @@ export const notificationPayload = z.discriminatedUnion("template", [
   }),
 ]);
 export type NotificationPayload = z.infer<typeof notificationPayload>;
+
+/**
+ * One channel of a notification, delayed until the recipient's quiet hours end. Keeps
+ * the original delivery key, so it still can't be sent twice.
+ */
+export const deferredDelivery = z.object({
+  payload: notificationPayload,
+  channel: z.enum(["push", "sms"]),
+  userId: z.uuid(),
+  key: z.string(),
+});
 export type NotificationTemplate = NotificationPayload["template"];
 
 const DAY = 24 * 60 * 60;
@@ -134,12 +145,12 @@ export const queues = {
    * Payloads can hold one-time codes, so they are deleted as soon as they complete.
    */
   "notifications-critical": {
-    jobs: { send: notificationPayload },
+    jobs: { send: notificationPayload, deferred: deferredDelivery },
     options: { ...retrying, removeOnComplete: true, removeOnFail: { age: 60 * 60 } },
   },
   /** Everything else users are notified about: reminders, digests, product updates. */
   "notifications-bulk": {
-    jobs: { send: notificationPayload },
+    jobs: { send: notificationPayload, deferred: deferredDelivery },
     options: {
       ...retrying,
       removeOnComplete: { age: DAY, count: 10_000 },

@@ -40,6 +40,8 @@ export interface RenderContext {
   t: Translator;
   /** Present when the recipient may opt out of this email (mutable category, known user). */
   unsubscribeUrl?: string | undefined;
+  /** The notification being delivered (for deferring a channel to later). */
+  payload: NotificationPayload;
 }
 
 /** An in-app notification: rendered by the app from `notification.<type>` copy. */

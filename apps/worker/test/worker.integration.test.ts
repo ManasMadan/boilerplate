@@ -255,6 +255,51 @@ describe("maintenance", () => {
     expect(remaining).toEqual([recent, pending].sort());
   });
 
+  it("purges old notification history, but keeps unread notifications", async () => {
+    const userId = randomUUID();
+    await asRole("app_api", (client) =>
+      client.query(
+        `INSERT INTO auth."user" (id, name, email, updated_at) VALUES ($1, 'U', $2, now())`,
+        [userId, `${userId}@test.dev`],
+      ),
+    );
+    await asRole("postgres", async (client) => {
+      await client.query(
+        `INSERT INTO notifications.notification (user_id, template, data, read_at, created_at) VALUES
+         ($1, 'old-read', '{}', now() - interval '200 days', now() - interval '200 days'),
+         ($1, 'old-unread', '{}', NULL, now() - interval '200 days'),
+         ($1, 'recent-read', '{}', now() - interval '1 day', now() - interval '2 days')`,
+        [userId],
+      );
+      await client.query(
+        `INSERT INTO notifications.delivery (idempotency_key, channel, template, user_id, status, created_at, updated_at) VALUES
+         ($2, 'email', 't', $1, 'sent', now() - interval '200 days', now()),
+         ($3, 'email', 't', $1, 'sent', now(), now())`,
+        [userId, `old-${userId}`, `new-${userId}`],
+      );
+    });
+    const result = await maintenance.run("outbox-retention");
+    expect(result["notifications.history"]).toBeGreaterThanOrEqual(2);
+    const left = await asRole("postgres", async (client) => ({
+      notifications: (
+        await client.query<{ template: string }>(
+          "SELECT template FROM notifications.notification WHERE user_id = $1 ORDER BY template",
+          [userId],
+        )
+      ).rows.map((row) => row.template),
+      deliveries: (
+        await client.query<{ idempotency_key: string }>(
+          "SELECT idempotency_key FROM notifications.delivery WHERE user_id = $1",
+          [userId],
+        )
+      ).rows.map((row) => row.idempotency_key),
+    }));
+    expect(left).toEqual({
+      notifications: ["old-unread", "recent-read"],
+      deliveries: [`new-${userId}`],
+    });
+  });
+
   it("purges expired database sessions and verifications", async () => {
     const userId = randomUUID();
     await asRole("app_api", async (client) => {

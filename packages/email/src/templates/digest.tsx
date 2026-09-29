@@ -24,7 +24,6 @@ export default function DigestEmail({ locale, t, items, unsubscribeUrl }: Digest
         {t("email.digest.intro", { count: items.length })}
       </Text>
       {items.map((item, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: the list is rendered once, in order.
         <Section key={index} style={{ borderTop: "1px solid #eaeaea", paddingTop: 12 }}>
           <Text style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{item.title}</Text>
           <Text style={{ color: "#444", fontSize: 14, margin: "4px 0 0" }}>{item.body}</Text>

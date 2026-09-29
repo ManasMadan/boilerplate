@@ -29,6 +29,8 @@ export const env = createEnv({
     AUDIT_RETENTION_MONTHS: positive.default(13),
     // Webhook delivery logs and received provider events.
     WEBHOOK_HISTORY_DAYS: positive.default(30),
+    // Delivery log, and in-app notifications read longer ago than this.
+    NOTIFICATION_HISTORY_DAYS: positive.default(90),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

@@ -4,7 +4,11 @@
  * scoped to the user by row-level security (withUser / userTx).
  */
 import { Injectable } from "@nestjs/common";
-import type { AppNotification, NotificationPreferences } from "@repo/contracts/api";
+import type {
+  AppNotification,
+  NotificationPreferences,
+  PushDeviceInput,
+} from "@repo/contracts/api";
 import {
   type InAppNotificationType,
   mutableCategories,
@@ -32,6 +36,19 @@ export interface PreferenceChanges {
     | undefined;
   dailyDigest?: boolean | undefined;
   quietHours?: { start: number; end: number } | null | undefined;
+}
+
+/** Past this, registering a device forgets the one seen longest ago. */
+const MAX_DEVICES_PER_USER = 20;
+
+/**
+ * How a device is stored: the native token, or the browser subscription as canonical JSON
+ * (fixed key order), so registering and removing the same subscription match.
+ */
+function deviceToken(device: PushDeviceInput) {
+  if (device.platform !== "web") return device.token;
+  const { endpoint, keys } = device.subscription;
+  return JSON.stringify({ endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } });
 }
 
 @Injectable()
@@ -140,6 +157,43 @@ export class NotificationsService {
       }
     });
     return this.preferences(userId);
+  }
+
+  /**
+   * The device is tied to this session: signing out or revoking it removes the device.
+   * An admin impersonating the user can't register one (their device would get the
+   * user's notifications).
+   */
+  async registerDevice(
+    session: { userId: string; id: string; impersonatedBy?: string | null | undefined },
+    device: PushDeviceInput,
+    appVersion?: string,
+  ) {
+    if (session.impersonatedBy) throw new AppError("FORBIDDEN");
+    const { userId } = session;
+    return userTx(this.database.write, userId, async (tx) => {
+      const [row] = await tx.$queryRaw<{ id: string }[]>`
+        SELECT notifications.register_device(
+          ${device.platform}, ${deviceToken(device)}, ${appVersion ?? null}, ${session.id}::uuid
+        ) AS id`;
+      const id = row?.id as string;
+      const stale = await tx.notificationDevice.findMany({
+        where: { userId },
+        orderBy: { lastSeenAt: "desc" },
+        skip: MAX_DEVICES_PER_USER,
+        select: { id: true },
+      });
+      if (stale.length > 0) {
+        await tx.notificationDevice.deleteMany({ where: { id: { in: stale.map((d) => d.id) } } });
+      }
+      return { id };
+    });
+  }
+
+  async unregisterDevice(userId: string, device: PushDeviceInput) {
+    await withUser(this.database.write, userId).notificationDevice.deleteMany({
+      where: { userId, token: deviceToken(device) },
+    });
   }
 
   /** Turns off a category's email for the user a signed unsubscribe link names. */

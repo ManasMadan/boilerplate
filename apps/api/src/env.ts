@@ -34,6 +34,8 @@ export const env = createEnv({
     // site key is public (browsers render the widget with it); the secret stays here.
     TURNSTILE_SITE_KEY: z.string().min(1).optional(),
     TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
+    // Browser push: the public half of apps/notifications' VAPID key pair.
+    VAPID_PUBLIC_KEY: z.string().min(1).optional(),
     // Checks one-click unsubscribe links (apps/notifications signs them with the same secret).
     UNSUBSCRIBE_SECRET: z.string().min(32),
     // Encrypts webhook signing secrets at rest (apps/webhooks decrypts them to sign).
