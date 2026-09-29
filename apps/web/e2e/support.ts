@@ -5,7 +5,7 @@
  * the per-IP auth rate limits never make parallel tests fail each other. This works
  * locally because every hop is on loopback, which the API trusts (TRUSTED_PROXIES).
  */
-import { createHmac, randomInt, randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import {
   type Browser,
@@ -14,7 +14,11 @@ import {
   expect,
   type Page,
 } from "@playwright/test";
+import { totp } from "@repo/testing/totp";
 import { Redis } from "ioredis";
+
+// Authenticator codes (RFC 6238), shared with the mobile suite.
+export { totp };
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
 export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
@@ -158,27 +162,6 @@ export async function enableTwoFactor(page: Page, user: User) {
   await card.getByRole("button", { name: "Turn on" }).click();
   await expect(card.getByText("Two-step verification is on").first()).toBeVisible();
   return { secret, backupCodes };
-}
-
-// ---------------------------------------------------------------------------- TOTP
-
-function base32Decode(input: string) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
-  for (const char of input.replace(/=+$/, "").toUpperCase())
-    bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
-  const bytes = bits.match(/.{8}/g) ?? [];
-  return Buffer.from(bytes.map((byte) => Number.parseInt(byte, 2)));
-}
-
-/** RFC 6238 code for a base32 secret (what an authenticator app shows). */
-export function totp(secret: string, at = Date.now()) {
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 1000 / 30)));
-  const hmac = createHmac("sha1", base32Decode(secret)).update(counter).digest();
-  const offset = (hmac.at(-1) ?? 0) & 0xf;
-  const value = (hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
-  return value.toString().padStart(6, "0");
 }
 
 // ---------------------------------------------------------------------------- passkeys
