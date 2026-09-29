@@ -6,13 +6,16 @@
  *     database, queues, stored files and emails)
  *   - the kind cluster "boilerplate" (`bun run k8s:up`)
  *   - the "boilerplate" image builder and its build cache
- *   - the images: ours (boilerplate/*), the services' (docker-compose.yml) and the
- *     tools' the scripts run (Playwright, k6, kubeconform)
+ *   - the images: ours (boilerplate/*), the services' (docker-compose.yml), the
+ *     tools' the scripts run (Playwright, k6, kubeconform), and the devcontainer's (the
+ *     image VS Code builds and what .devcontainer/Dockerfile builds it from)
  *
  * An image another container still uses is left alone, so nothing outside this repo
  * loses what it runs on.
  */
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ok, ROOT, warn } from "./lib";
 
 const CLUSTER = "boilerplate";
@@ -30,6 +33,10 @@ function docker(args: string[]) {
   const result = spawnSync("docker", args, { cwd: ROOT, encoding: "utf8" });
   return { ok: result.status === 0, stdout: result.stdout ?? "" };
 }
+/** The images .devcontainer/Dockerfile builds from (its FROM lines, minus stage names). */
+const devcontainerBases = [
+  ...readFileSync(join(ROOT, ".devcontainer/Dockerfile"), "utf8").matchAll(/^FROM (\S+)/gm),
+].map((match) => match[1] ?? "");
 const lines = (text: string) =>
   text
     .split("\n")
@@ -66,6 +73,17 @@ const images = new Set([
   ),
   ...lines(docker(["compose", "--profile", "full", "config", "--images"]).stdout),
   ...TOOL_IMAGES,
+  ...devcontainerBases,
+  // VS Code names the devcontainer's image after the folder: vsc-boilerplate-<hash>.
+  ...lines(
+    docker([
+      "images",
+      "--format",
+      "{{.Repository}}:{{.Tag}}",
+      "--filter",
+      "reference=vsc-boilerplate-*",
+    ]).stdout,
+  ),
   // kind's node image, once no cluster uses it.
   ...lines(
     docker(["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", "reference=kindest/node"])

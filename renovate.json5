@@ -34,6 +34,7 @@
         "/^\\.github/workflows/.+\\.ya?ml$/",
         "/^infra/tofu/.+\\.tf$/",
         "/^scripts/.+\\.ts$/",
+        "/^\\.devcontainer/devcontainer\\.json$/",
       ],
       matchStrings: [
         "(?:#|//) renovate: datasource=(?<datasource>[\\w-]+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s*\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+(?:\\.\\d+)?(?:-[\\w.]+)?)\\b",
@@ -89,6 +90,17 @@
         executionMode: "branch",
         installTools: { bun: {} },
       },
+    },
+    {
+      description: "The devcontainer's tool options are plain versions of v-prefixed tags",
+      matchFileNames: [".devcontainer/devcontainer.json"],
+      matchDatasources: ["github-releases"],
+      extractVersion: "^v(?<version>.+)$",
+    },
+    {
+      description: "OpenTofu: CI's and the devcontainer's",
+      matchPackageNames: ["opentofu", "opentofu/opentofu", "ghcr.io/opentofu/opentofu"],
+      groupName: "opentofu",
     },
     {
       description: "OpenTofu's required_version is a floor we raise on purpose, not a Terraform release",
