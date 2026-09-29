@@ -10,7 +10,7 @@
  * take another file's jobs), 14 notifications, 15 worker; apps/ai's pytest uses 6.
  */
 export function redisDatabase(index: number): string {
-  const url = new URL(process.env.REDIS_URL ?? "redis://localhost:6379");
+  const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
   url.pathname = `/${index}`;
   return url.toString();
 }

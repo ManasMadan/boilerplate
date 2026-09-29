@@ -1,5 +1,5 @@
 // The newest 6-digit code emailed to TO, from Mailpit (Maestro's GraalJS: http, json).
-const mailpit = MAILPIT_URL || "http://localhost:8025";
+const mailpit = MAILPIT_URL || "http://localhost:58025";
 const search = json(
   http.get(`${mailpit}/api/v1/search?query=${encodeURIComponent(`to:"${TO}"`)}`).body,
 );

@@ -56,7 +56,7 @@ function kubeconform(manifests: string) {
   ];
   return hasKubeconform
     ? run("kubeconform", args, manifests)
-    : run("docker", ["run", "--rm", "-i", KUBECONFORM_IMAGE, ...args], manifests);
+    : run("docker", ["run", "--rm", "-i", "--memory=256m", KUBECONFORM_IMAGE, ...args], manifests);
 }
 
 let failed = false;

@@ -14,4 +14,4 @@ maestro test apps/mobile/maestro         # every flow
 ```
 
 The flows create their own users with a unique address; codes are read from Mailpit
-(MAILPIT_URL, default http://localhost:8025) by `scripts/code.js`.
+(MAILPIT_URL, default http://localhost:58025) by `scripts/code.js`.

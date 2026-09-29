@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEAD_APNS_TOKEN, type FakePush, FLAKY_APNS_TOKEN, startFakePush } from "./fake-push";
 import { type FakeTwilio, startFakeTwilio, TWILIO_NUMBERS } from "./fake-twilio";
 
-const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
+const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:58025";
 
 interface MailpitMessage {
   ID: string;

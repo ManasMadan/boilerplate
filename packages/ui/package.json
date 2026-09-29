@@ -18,8 +18,8 @@
     "test:stories": "vitest run",
     "storybook": "storybook dev -p 6006 --no-open",
     "build-storybook": "storybook build -o storybook-static",
-    "test:visual": "bun run build-storybook && docker run --rm --ipc=host -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts",
-    "test:visual:update": "bun run build-storybook && docker run --rm --ipc=host -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts --update-snapshots"
+    "test:visual": "bun run build-storybook && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts",
+    "test:visual:update": "bun run build-storybook && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts --update-snapshots"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

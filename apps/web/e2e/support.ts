@@ -20,7 +20,7 @@ import { Redis } from "ioredis";
 // Authenticator codes (RFC 6238), shared with the mobile suite.
 export { totp };
 
-const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
+const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:58025";
 export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 const randomIp = () => `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
@@ -219,7 +219,7 @@ export async function expectAccessible(page: Page) {
  */
 let redis: Redis | undefined;
 const authStore = () => {
-  redis ??= new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { lazyConnect: false });
+  redis ??= new Redis(process.env.REDIS_URL ?? "redis://localhost:56379", { lazyConnect: false });
   return redis;
 };
 test.afterAll(async () => {

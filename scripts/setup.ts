@@ -52,7 +52,7 @@ console.log("\n2. Dependencies");
 await $`bun install`;
 
 console.log("\n3. Local services");
-await $`docker compose up -d --wait`;
+await $`bun scripts/services.ts up`;
 
 console.log("\n4. Database");
 await $`bun run db:deploy`;

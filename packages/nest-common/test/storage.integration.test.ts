@@ -6,7 +6,7 @@ import { S3Storage } from "../src/storage";
 const storage = new S3Storage({
   bucket: "uploads",
   region: "us-east-1",
-  endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9000",
+  endpoint: process.env.S3_ENDPOINT ?? "http://localhost:59000",
   accessKeyId: "rustfs",
   secretAccessKey: "rustfs-secret",
   forcePathStyle: true,

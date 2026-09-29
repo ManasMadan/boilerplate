@@ -4,7 +4,7 @@
  *
  *   bun run k8s:up      create the cluster, build and load the images, install data + stack
  *   bun run k8s:smoke   check the routes through the gateway (k8s:up runs it too)
- *   bun run k8s:down    delete the cluster
+ *   bun run k8s:down    delete the cluster (`bun run docker:clean` also removes the images)
  *
  * Then open http://boilerplate.localhost (email: `kubectl -n boilerplate port-forward
  * svc/mailpit 8025`, then http://localhost:8025).
@@ -31,6 +31,8 @@ const ROLES = ["migrator", "app_api", "app_worker", "app_notifications", "app_we
 const MIN_DOCKER_MEMORY_GB = 8;
 const ENVOY_GATEWAY = "v1.9.2";
 const CLOUDNATIVE_PG = "0.29.1";
+const BUILDER = "boilerplate";
+const BUILD_MEMORY = "4g";
 
 function run(command: string, args: string[], options: { input?: string; quiet?: boolean } = {}) {
   const result = spawnSync(command, args, {
@@ -253,13 +255,29 @@ async function up() {
     "deploy/local/mailpit.yaml",
   ]);
 
-  // One image at a time: a parallel build of all seven needs more memory than most
-  // Docker VMs have.
+  // A builder of our own: its memory is capped (a build can't starve other containers)
+  // and its cache goes away with `bun run docker:clean`. One image at a time.
+  if (!run("docker", ["buildx", "inspect", BUILDER], { quiet: true }).ok) {
+    step("image builder", "docker", [
+      "buildx",
+      "create",
+      "--name",
+      BUILDER,
+      "--driver",
+      "docker-container",
+      "--driver-opt",
+      `memory=${BUILD_MEMORY}`,
+      "--driver-opt",
+      "default-load=true",
+    ]);
+  }
   for (const image of IMAGES) {
     step(`image ${image}`, "docker", [
       "buildx",
       "bake",
       image,
+      "--builder",
+      BUILDER,
       "--load",
       "--set",
       "*.args.RELEASE=dev",

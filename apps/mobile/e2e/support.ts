@@ -2,7 +2,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { test as base, expect, type Page } from "@playwright/test";
 
-const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
+const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:58025";
 const randomIp = () => `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
 
 /** Each test comes from its own address, so per-IP auth limits never collide. */

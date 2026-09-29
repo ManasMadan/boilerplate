@@ -15,7 +15,7 @@ description: Start, stop or troubleshoot the local development stack. Use when t
   WEBHOOK_ALLOWED_PRIVATE_ADDRESSES in .env; refused in production). For real Stripe
   test events, run `stripe listen --forward-to localhost:3004/webhooks/stripe` and set
   the printed secret with `bun run env:set STRIPE_WEBHOOK_SECRET=whsec_...`.
-- Emails never leave the machine: open Mailpit at http://localhost:8025 to read sign-up
+- Emails never leave the machine: open Mailpit at http://localhost:58025 to read sign-up
   codes and notifications.
 
 ## Troubleshooting
@@ -25,4 +25,5 @@ description: Start, stop or troubleshoot the local development stack. Use when t
 3. App logs are in the turbo UI. Every request has an `x-request-id`; search logs by it.
 4. After changing the Prisma schema, Pydantic models or the API contract, run `bun run gen`.
 5. Stale state: `bun run db:down` then `bun dev` (keeps data). Wiping data
-   (`docker compose down -v`) needs the user's confirmation.
+   (`bun run docker:clean`, which deletes every container, volume and image this repo
+   created) needs the user's confirmation.

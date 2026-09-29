@@ -24,7 +24,7 @@ export const env = createEnv({
     // smtp: any SMTP server (Mailpit locally; SES, Postmark or SendGrid in production).
     // resend: Resend's HTTP API.
     EMAIL_PROVIDER: z.enum(["smtp", "resend"]).default("smtp"),
-    SMTP_URL: requiredInProduction(z.url({ protocol: /^smtps?$/ }), "smtp://localhost:1025"),
+    SMTP_URL: requiredInProduction(z.url({ protocol: /^smtps?$/ }), "smtp://localhost:51025"),
     RESEND_API_KEY: z.string().startsWith("re_").optional(),
     EMAIL_FROM: requiredInProduction(z.string().min(3), "Boilerplate <no-reply@localhost>"),
 

@@ -12,7 +12,7 @@ from tests.tokens import SECRET, service_token
 
 # Its own Redis database (the TypeScript suites use 7-15; 0 is the dev stack).
 REDIS_URL = urlunsplit(
-    urlsplit(os.environ.get("REDIS_URL", "redis://localhost:6379"))._replace(path="/6")
+    urlsplit(os.environ.get("REDIS_URL", "redis://localhost:56379"))._replace(path="/6")
 )
 ENV = {
     "REDIS_URL": REDIS_URL,

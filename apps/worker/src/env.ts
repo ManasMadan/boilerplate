@@ -44,7 +44,7 @@ export const env = createEnv({
     FILES_CONCURRENCY: positive.default(2),
     // clamd for virus scanning; "none" skips scanning (development only).
     FILE_SCANNER: z.enum(["clamav", "none"]).default("clamav"),
-    CLAMAV_URL: z.url({ protocol: /^tcp$/ }).default("tcp://localhost:3310"),
+    CLAMAV_URL: z.url({ protocol: /^tcp$/ }).default("tcp://localhost:53310"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

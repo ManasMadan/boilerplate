@@ -14,7 +14,7 @@
  * server would answer instead and the run would test stale code. To iterate against a
  * stack you are already running (`bun dev`), use `bun run --cwd apps/web test:e2e`.
  *
- * Postgres, Valkey, Mailpit, RustFS and ClamAV come from `docker compose --profile full`
+ * Postgres, Valkey, Mailpit, RustFS and ClamAV come from `bun run db:up:full`
  * (CI starts its own); the services run as NODE_ENV=test, since production refuses the
  * local stand-ins the suite relies on. What runs is still the production build.
  */

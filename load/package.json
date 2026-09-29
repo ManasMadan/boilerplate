@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "check-types": "tsc",
-    "test:load": "turbo run load:users --filter=@repo/api && docker run --rm --add-host=host.docker.internal:host-gateway -v \"$PWD\":/load -w /load -e BASE_URL -e PROFILE -e TARGET_RPS -e DURATION grafana/k6:2.3.0 run api.ts"
+    "test:load": "turbo run load:users --filter=@repo/api && docker run --rm --memory=512m --add-host=host.docker.internal:host-gateway -v \"$PWD\":/load -w /load -e BASE_URL -e PROFILE -e TARGET_RPS -e DURATION grafana/k6:2.3.0 run api.ts"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
