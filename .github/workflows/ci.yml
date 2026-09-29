@@ -139,7 +139,9 @@ jobs:
       # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
       - name: Start object storage and virus scanning
         run: docker compose --profile files up -d rustfs clamav
+      # With uv: the api's AI client is generated from the Python service's OpenAPI.
       - uses: ./.github/actions/setup
+        with: { python: "true" }
       # The same roles and databases local Docker gets from infra/postgres/init.
       - name: Bootstrap database roles
         env: { PGPASSWORD: postgres }
@@ -512,34 +514,40 @@ jobs:
 
   # Every image builds, and none ships a known critical or high vulnerability that has a
   # fix. Publishing happens in the deploy workflow, from master.
+  # One job per image: loading all seven into one runner's Docker runs it out of disk.
   images:
-    name: Container images
+    name: Container images (${{ matrix.image }})
     runs-on: ubuntu-latest
     permissions: { contents: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, notifications, webhooks, web, ai, migrate]
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Reads the layers deploy.yml caches on master (amd64, like this runner) and writes
+      # none, so pull requests don't crowd the repository's cache.
       - uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           source: .
+          targets: ${{ matrix.image }}
           load: true
           set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
+            *.cache-from=type=gha,scope=amd64
             *.args.RELEASE=${{ github.sha }}
-      - name: Scan the images
+      - name: Scan the image
         env:
           # renovate: datasource=docker depName=aquasec/trivy
           TRIVY: aquasec/trivy:0.74.0
+          IMAGE: boilerplate/${{ matrix.image }}:dev
         run: |
-          for image in api worker notifications webhooks web ai migrate; do
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-              "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed \
-              --severity CRITICAL,HIGH "boilerplate/$image:dev"
-          done
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed \
+            --severity CRITICAL,HIGH "$IMAGE"
 
   ci-ok:
     name: CI passed

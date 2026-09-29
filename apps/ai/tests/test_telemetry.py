@@ -15,6 +15,7 @@ from sqlalchemy import text
 from app.db.session import close_engine, open_engine
 from app.settings import get_settings
 from app.telemetry import add_trace_ids, start_telemetry
+from tests.support import ENV
 
 app = FastAPI()
 logged: dict[str, object] = {}
@@ -59,13 +60,19 @@ def test_requests_are_traced_and_logs_carry_the_trace(exporter: InMemorySpanExpo
 
 
 @pytest.mark.integration
-async def test_queries_of_engines_opened_later_are_traced(exporter: InMemorySpanExporter) -> None:
+async def test_queries_of_engines_opened_later_are_traced(
+    exporter: InMemorySpanExporter, monkeypatch: MonkeyPatch
+) -> None:
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
     engine = open_engine(get_settings().database_url, 1)
     try:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
     finally:
         await close_engine()
+        get_settings.cache_clear()
     queries = [
         span
         for span in exporter.get_finished_spans()
