@@ -436,7 +436,10 @@
     "DOCUMENT_INDEXING_FAILED": "No se pudo preparar este documento para el asistente. Prueba a añadirlo de nuevo.",
     "AI_BUDGET_EXCEEDED": "Este espacio de trabajo ya usó la asignación del asistente de este mes. Se renueva el día 1.",
     "AI_RUN_LIMIT": "Esa pregunta necesitaba más trabajo del que permite una respuesta. Prueba con una pregunta más concreta.",
-    "APP_NOT_FOUND": "Esa aplicación no está conectada a tu cuenta."
+    "APP_NOT_FOUND": "Esa aplicación no está conectada a tu cuenta.",
+    "API_KEY_NOT_FOUND": "Esa clave de API no existe en este espacio de trabajo.",
+    "API_KEY_LIMIT_REACHED": "Este espacio de trabajo ya tiene todas las claves de API que puede tener. Revoca alguna que ya no uses.",
+    "API_KEY_SCOPE_MISSING": "Esta clave de API no tiene el permiso {scope}."
   },
   "workspace": {
     "switcher": {
@@ -455,6 +458,7 @@
       "general": "General",
       "members": "Miembros",
       "webhooks": "Webhooks",
+      "apiKeys": "Claves de API",
       "audit": "Registro de auditoría"
     },
     "general": {
@@ -578,6 +582,12 @@
           },
           "invitation_sent": {
             "v1": "Invitó a {email} como {role}"
+          },
+          "api_key_created": {
+            "v1": "Creó la clave de API «{name}»"
+          },
+          "api_key_revoked": {
+            "v1": "Revocó la clave de API «{name}»"
           }
         },
         "stripe": {
@@ -671,6 +681,47 @@
           }
         }
       }
+    },
+    "apiKeys": {
+      "title": "Claves de API",
+      "description": "Permite que scripts y otros servicios usen este espacio de trabajo a través de la API REST. Una clave actúa como la persona que la creó, solo en este espacio de trabajo y solo dentro de sus permisos.",
+      "empty": "Todavía no hay claves de API.",
+      "reference": "Referencia de la API",
+      "add": "Crear una clave de API",
+      "name": "Nombre",
+      "nameHint": "Dónde se usa, como «CI» o «Zapier», para saber qué deja de funcionar si la revocas.",
+      "scopesLabel": "Permisos",
+      "scopesHint": "Da a cada clave solo lo que necesita.",
+      "scopesRequired": "Elige al menos un permiso.",
+      "scopes": {
+        "todos:read": "Ver tareas",
+        "todos:write": "Crear, cambiar y eliminar tareas",
+        "documents:read": "Ver los documentos del asistente",
+        "documents:write": "Añadir y quitar documentos del asistente",
+        "audit:read": "Ver el registro de auditoría"
+      },
+      "expiry": "Caduca",
+      "expiryDays": "En {days} días",
+      "never": "Nunca",
+      "create": "Crear clave",
+      "created": "Clave de API creada",
+      "key": {
+        "title": "Tu nueva clave de API",
+        "once": "Cópiala ahora: no se volverá a mostrar. Envíala en la cabecera x-api-key.",
+        "copy": "Copiar",
+        "copied": "Copiada",
+        "done": "Ya la he guardado"
+      },
+      "createdBy": "Creada por {name} el {date}",
+      "createdByGone": "Creada el {date} por una cuenta que ya no existe",
+      "lastUsed": "usada por última vez {when}",
+      "neverUsed": "nunca usada",
+      "expires": "caduca el {date}",
+      "noExpiry": "no caduca",
+      "revoke": "Revocar",
+      "revokeTitle": "¿Revocar «{name}»?",
+      "revokeDescription": "Todo lo que use esta clave dejará de funcionar de inmediato. No se puede deshacer.",
+      "revoked": "«{name}» se ha revocado"
     },
     "noOrganization": "Ya no estás en ese espacio; cambiamos a {name}."
   },

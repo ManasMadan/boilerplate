@@ -2,11 +2,13 @@
  * The base every procedure is built from. It declares every catalog error code as a
  * typed oRPC error with one data shape, so clients get the exact union of codes a call
  * can fail with (`isDefinedError(error) && error.code === "TODO_NOT_FOUND"`) and every
- * surface returns the same structure.
+ * surface returns the same structure. Procedures may also say which API key scope lets
+ * a key call them (see ./scopes.ts).
  */
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { ERROR_CODES, type ErrorCode } from "../errors";
+import type { ProcedureMeta } from "./scopes";
 
 export const errorData = z.object({
   /**
@@ -30,4 +32,4 @@ const errorMap = Object.fromEntries(
   ]),
 ) as { [C in ErrorCode]: { status: (typeof ERROR_CODES)[C]; data: typeof errorData } };
 
-export const base = oc.errors(errorMap);
+export const base = oc.$meta<ProcedureMeta>({}).errors(errorMap);

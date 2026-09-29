@@ -64,6 +64,12 @@ export const events = {
   "org.member_added.v1": memberEvent,
   "org.member_removed.v1": memberEvent,
   "org.member_role_changed.v1": memberEvent.extend({ previousRole: z.string() }),
+  "org.api_key_created.v1": z.object({
+    apiKeyId: z.uuid(),
+    name: z.string(),
+    scopes: z.array(z.string()),
+  }),
+  "org.api_key_revoked.v1": z.object({ apiKeyId: z.uuid(), name: z.string() }),
   // Emitted by apps/webhooks.
   "stripe.event_received.v1": z.object({
     /** Our row in webhooks.inbound_event. */

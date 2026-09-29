@@ -8,6 +8,7 @@
  */
 import type { INestApplication } from "@nestjs/common";
 import { AiService, aiRouter } from "../modules/ai";
+import { ApiKeysService, apiKeysRouter } from "../modules/api-keys";
 import { AppsService, appsRouter } from "../modules/apps";
 import { AuditService, auditRouter } from "../modules/audit";
 import { BillingService, billingRouter } from "../modules/billing";
@@ -25,6 +26,7 @@ export function createRouter(procedures: Procedures, app: INestApplication) {
     system: systemRouter(procedures),
     user: userRouter(procedures, app.get(PhoneService), app.get(AvatarService)),
     apps: appsRouter(procedures, app.get(AppsService)),
+    apiKeys: apiKeysRouter(procedures, app.get(ApiKeysService)),
     todo: todoRouter(procedures, app.get(TodoService)),
     ai: aiRouter(procedures, app.get(AiService)),
     audit: auditRouter(procedures, app.get(AuditService)),

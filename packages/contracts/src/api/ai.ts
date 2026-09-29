@@ -56,10 +56,11 @@ export const aiContract = {
       }),
     ),
   /** The workspace's documents the assistant answers from, newest first. */
-  documents: route("GET", "/ai/documents", "The assistant's documents").output(
-    z.array(aiDocumentSchema),
-  ),
+  documents: route("GET", "/ai/documents", "The assistant's documents")
+    .meta({ apiKeyScope: "documents:read" })
+    .output(z.array(aiDocumentSchema)),
   addDocument: route("POST", "/ai/documents", "Add a document for the assistant")
+    .meta({ apiKeyScope: "documents:write" })
     .input(
       z.object({
         title: z.string().trim().min(1).max(DOCUMENT_TITLE_MAX_LENGTH),
@@ -69,6 +70,7 @@ export const aiContract = {
     .output(aiDocumentSchema),
   /** Its creator or a workspace admin (FORBIDDEN otherwise). */
   removeDocument: route("POST", "/ai/documents/{documentId}/remove", "Remove a document")
+    .meta({ apiKeyScope: "documents:write" })
     .input(z.object({ documentId: z.uuid() }))
     .output(z.void()),
   /** Streams an answer from the workspace's documents (AI_BUDGET_EXCEEDED when used up). */

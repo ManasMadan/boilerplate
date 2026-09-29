@@ -19,6 +19,7 @@ export type AuditEntry = z.infer<typeof auditEntrySchema>;
 
 export const auditContract = {
   list: base
+    .meta({ apiKeyScope: "audit:read" })
     .route({
       method: "GET",
       path: "/audit",

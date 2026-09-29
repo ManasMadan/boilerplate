@@ -27,6 +27,7 @@ export const deleteTodoInput = z.object({ id: z.uuid() });
 
 export const todoContract = {
   list: base
+    .meta({ apiKeyScope: "todos:read" })
     .route({
       method: "GET",
       path: "/todos",
@@ -36,6 +37,7 @@ export const todoContract = {
     .input(pageInput)
     .output(page(todoSchema)),
   create: base
+    .meta({ apiKeyScope: "todos:write" })
     .route({
       method: "POST",
       path: "/todos",
@@ -46,6 +48,7 @@ export const todoContract = {
     .input(createTodoInput)
     .output(todoSchema),
   setCompleted: base
+    .meta({ apiKeyScope: "todos:write" })
     .route({
       method: "PATCH",
       path: "/todos/{id}",
@@ -55,6 +58,7 @@ export const todoContract = {
     .input(setTodoCompletedInput)
     .output(todoSchema),
   delete: base
+    .meta({ apiKeyScope: "todos:write" })
     .route({
       method: "DELETE",
       path: "/todos/{id}",

@@ -4,6 +4,6 @@ import type { RealtimeService } from "./realtime.service";
 
 export const realtimeRouter = ({ inOrg }: Procedures, realtime: RealtimeService) => ({
   subscribe: inOrg.realtime.subscribe.handler(({ context, signal }) =>
-    realtime.stream(context.user.id, context.orgId, signal),
+    realtime.stream(context.userId, context.orgId, signal),
   ),
 });

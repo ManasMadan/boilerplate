@@ -436,7 +436,10 @@
     "DOCUMENT_INDEXING_FAILED": "This document couldn't be prepared for the assistant. Try adding it again.",
     "AI_BUDGET_EXCEEDED": "This workspace has used this month's assistant allowance. It resets on the 1st.",
     "AI_RUN_LIMIT": "That question needed more work than one answer allows. Try a narrower question.",
-    "APP_NOT_FOUND": "That app isn't connected to your account."
+    "APP_NOT_FOUND": "That app isn't connected to your account.",
+    "API_KEY_NOT_FOUND": "That API key doesn't exist in this workspace.",
+    "API_KEY_LIMIT_REACHED": "This workspace has as many API keys as it can have. Revoke one you no longer use.",
+    "API_KEY_SCOPE_MISSING": "This API key doesn't have the {scope} scope."
   },
   "workspace": {
     "switcher": {
@@ -455,6 +458,7 @@
       "general": "General",
       "members": "Members",
       "webhooks": "Webhooks",
+      "apiKeys": "API keys",
       "audit": "Audit log"
     },
     "general": {
@@ -578,6 +582,12 @@
           },
           "invitation_sent": {
             "v1": "Invited {email} as {role}"
+          },
+          "api_key_created": {
+            "v1": "Created the API key “{name}”"
+          },
+          "api_key_revoked": {
+            "v1": "Revoked the API key “{name}”"
           }
         },
         "stripe": {
@@ -671,6 +681,47 @@
           }
         }
       }
+    },
+    "apiKeys": {
+      "title": "API keys",
+      "description": "Let scripts and other services use this workspace through the REST API. A key acts as the person who created it, only in this workspace and only within its scopes.",
+      "empty": "No API keys yet.",
+      "reference": "API reference",
+      "add": "Create an API key",
+      "name": "Name",
+      "nameHint": "Where it's used, like “CI” or “Zapier”, so you know what breaks if you revoke it.",
+      "scopesLabel": "Scopes",
+      "scopesHint": "Give each key only what it needs.",
+      "scopesRequired": "Choose at least one scope.",
+      "scopes": {
+        "todos:read": "Read todos",
+        "todos:write": "Create, change and delete todos",
+        "documents:read": "Read the assistant's documents",
+        "documents:write": "Add and remove the assistant's documents",
+        "audit:read": "Read the audit log"
+      },
+      "expiry": "Expires",
+      "expiryDays": "In {days} days",
+      "never": "Never",
+      "create": "Create key",
+      "created": "API key created",
+      "key": {
+        "title": "Your new API key",
+        "once": "Copy it now: it won't be shown again. Send it in the x-api-key header.",
+        "copy": "Copy",
+        "copied": "Copied",
+        "done": "I've saved it"
+      },
+      "createdBy": "Created by {name} on {date}",
+      "createdByGone": "Created on {date} by an account that no longer exists",
+      "lastUsed": "last used {when}",
+      "neverUsed": "never used",
+      "expires": "expires {date}",
+      "noExpiry": "never expires",
+      "revoke": "Revoke",
+      "revokeTitle": "Revoke “{name}”?",
+      "revokeDescription": "Anything using this key stops working immediately. This can't be undone.",
+      "revoked": "“{name}” was revoked"
     },
     "noOrganization": "You're no longer in that workspace; switched to {name}."
   },

@@ -13,6 +13,7 @@ import {
 import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
 import { AiModule } from "./modules/ai";
+import { ApiKeysModule } from "./modules/api-keys";
 import { AppsModule } from "./modules/apps";
 import { AuditModule } from "./modules/audit";
 import { BillingModule } from "./modules/billing";
@@ -51,6 +52,7 @@ import { NotificationsProducerModule } from "./notifications";
     UserModule,
     AiModule,
     AppsModule,
+    ApiKeysModule,
     AuditModule,
     WebhooksModule,
     RealtimeModule,

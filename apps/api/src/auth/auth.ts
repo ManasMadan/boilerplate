@@ -23,6 +23,12 @@ import { mcp } from "@better-auth/mcp";
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
 import {
+  API_KEY_EXPIRY_DAYS,
+  API_KEY_NAME_MAX_LENGTH,
+  API_KEY_PREFIX,
+  API_KEY_REQUESTS_PER_MINUTE,
+} from "@repo/contracts/api";
+import {
   FRESH_SESSION_AGE,
   NAME_MAX_LENGTH,
   OTP_EXPIRES_IN,
@@ -63,6 +69,7 @@ import { features } from "../features";
 import { type EventOrigin, emitAnyEvent, emitEvent } from "../outbox";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import type { Memberships } from "./memberships";
+import { orgAccess, orgRoles } from "./org-access";
 import { securityAlertFor } from "./security-alerts";
 
 export interface AuthDependencies {
@@ -81,6 +88,14 @@ export interface AuthDependencies {
 }
 
 const MINUTE = 60;
+/** The API key plugin's own endpoints, all turned off (see `disabledPaths`). */
+const API_KEY_PLUGIN_PATHS = [
+  "/api-key/create",
+  "/api-key/get",
+  "/api-key/update",
+  "/api-key/delete",
+  "/api-key/list",
+];
 /** The mobile app's URL scheme (apps/mobile app.config.ts). */
 const MOBILE_SCHEME = "boilerplate";
 const DAY = 24 * 60 * MINUTE;
@@ -134,7 +149,9 @@ export function createAuth({
     trustedOrigins: [env.WEB_URL, ...env.APP_ORIGINS, `${MOBILE_SCHEME}://`],
     // The JWT plugin's /token would hand any session a signed JWT; access tokens come
     // only from the OAuth flow below.
-    disabledPaths: ["/token"],
+    // API keys are managed through the API's own procedures (apps/api/src/modules/api-keys:
+    // typed, audited, with scopes), so the plugin's endpoints aren't served.
+    disabledPaths: ["/token", ...API_KEY_PLUGIN_PATHS],
 
     database,
     // Session lookups hit Redis, not Postgres, on every request.
@@ -449,6 +466,8 @@ export function createAuth({
       haveIBeenPwned(),
       organization({
         creatorRole: "owner",
+        ac: orgAccess,
+        roles: orgRoles,
         invitationExpiresIn: INVITATION_DAYS * DAY,
         // The plan's member limit (packages/contracts billing); null means none.
         membershipLimit: async (_user, org) =>
@@ -560,8 +579,21 @@ export function createAuth({
         },
       }),
       admin({ impersonationSessionDuration: 60 * MINUTE }),
-      // API keys for third-party REST access; hashed at rest, rate limited per key.
-      apiKey({ defaultPrefix: "bp_", enableMetadata: true }),
+      // Workspace API keys for the REST API (see modules/api-keys): hashed at rest, owned by
+      // the organization, rate limited per key, and never a session of their own.
+      apiKey({
+        references: "organization",
+        defaultPrefix: API_KEY_PREFIX,
+        requireName: true,
+        maximumNameLength: API_KEY_NAME_MAX_LENGTH,
+        enableMetadata: true,
+        keyExpiration: { maxExpiresIn: Math.max(...API_KEY_EXPIRY_DAYS) },
+        rateLimit: {
+          enabled: true,
+          timeWindow: MINUTE * 1000,
+          maxRequests: API_KEY_REQUESTS_PER_MINUTE,
+        },
+      }),
       // Signing keys for OAuth access tokens, published at /api/auth/jwks so each MCP
       // server verifies tokens itself. Keys rotate; old ones stay published for the
       // grace period so tokens signed just before a rotation still verify.

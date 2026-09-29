@@ -37,6 +37,7 @@
         "@nestjs/common": "catalog:",
         "@nestjs/core": "catalog:",
         "@nestjs/platform-fastify": "catalog:",
+        "@orpc/contract": "catalog:",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",
         "@orpc/zod": "catalog:",

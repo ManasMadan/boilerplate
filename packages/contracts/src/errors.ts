@@ -55,6 +55,11 @@ export const ERROR_CODES = {
   WEBHOOK_ENDPOINT_LIMIT: 409,
   // Connected apps (OAuth / MCP clients)
   APP_NOT_FOUND: 404,
+  // API keys
+  API_KEY_NOT_FOUND: 404,
+  API_KEY_LIMIT_REACHED: 409,
+  /** The key is valid but lacks the scope this call needs (params: scope). */
+  API_KEY_SCOPE_MISSING: 403,
   // AI
   DOCUMENT_NOT_FOUND: 404,
   DOCUMENT_INDEXING_FAILED: 422,

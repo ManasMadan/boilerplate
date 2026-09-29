@@ -200,6 +200,49 @@ describe("AI features", () => {
     expect(await session.rpc.ai.documents()).toEqual([]);
   });
 
+  it("serves documents to API keys with the documents scopes, and the assistant to no key", async () => {
+    const { session, me } = await signedIn();
+    const reader = await session.rpc.apiKeys.create({
+      name: "Reader",
+      scopes: ["documents:read"],
+      expiresInDays: null,
+    });
+    const writer = await session.rpc.apiKeys.create({
+      name: "Writer",
+      scopes: ["documents:read", "documents:write"],
+      expiresInDays: null,
+    });
+    const call = (key: string, method: string, path: string, body?: unknown) =>
+      fetch(`${harness.baseUrl}/api/v1${path}`, {
+        method,
+        headers: {
+          "x-api-key": key,
+          ...(body !== undefined && { "content-type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+
+    const added = await call(writer.key, "POST", "/ai/documents", { title: "FAQ", content: "…" });
+    expect(added.status).toBe(200);
+    const document = (await added.json()) as { id: string };
+    // Acts as the key's creator, in its workspace.
+    expect(calls.at(-1)).toMatchObject({ user: me.id, org: me.activeOrganizationId });
+
+    const listed = await call(reader.key, "GET", "/ai/documents");
+    expect(((await listed.json()) as { id: string }[]).map((d) => d.id)).toEqual([document.id]);
+    expect((await call(reader.key, "POST", `/ai/documents/${document.id}/remove`)).status).toBe(
+      403,
+    );
+    // Asking the assistant spends the workspace's AI budget: people only.
+    expect(
+      (await call(writer.key, "POST", "/ai/answers", { question: "What is in the FAQ?" })).status,
+    ).toBe(403);
+    expect((await call(writer.key, "POST", `/ai/documents/${document.id}/remove`)).status).toBe(
+      200,
+    );
+    expect((await call(reader.key, "GET", "/ai/documents")).status).toBe(200);
+  });
+
   it("members may remove only their own documents; admins any", async () => {
     const owner = await signedIn();
     const org = await owner.session.auth<{ id: string }>("/organization/create", {

@@ -7,7 +7,7 @@ export const webhooksRouter = ({ orgAdmin }: Procedures, webhooks: WebhooksServi
     webhooks.listEndpoints(context.orgId),
   ),
   createEndpoint: orgAdmin.webhooks.createEndpoint.handler(({ context, input }) =>
-    webhooks.createEndpoint(context.orgId, context.user.id, input),
+    webhooks.createEndpoint(context.orgId, context.userId, input),
   ),
   updateEndpoint: orgAdmin.webhooks.updateEndpoint.handler(({ context, input }) =>
     webhooks.updateEndpoint(context.orgId, input),

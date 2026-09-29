@@ -167,6 +167,8 @@ model Organization {
   oauthConsents      OauthConsent[]
   oauthRefreshTokens OauthRefreshToken[]
   oauthAccessTokens  OauthAccessToken[]
+  /// The workspace's API keys (the api-key plugin's reference id).
+  apiKeys            Apikey[]
 
   @@map("organization")
   @@schema("auth")
@@ -208,31 +210,32 @@ model Invitation {
 }
 
 model Apikey {
-  id                  String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  configId            String    @default("default") @map("config_id")
+  id                  String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  configId            String       @default("default") @map("config_id")
   name                String?
   /// First characters of the key, shown in the UI to recognise it.
   start               String?
   prefix              String?
   /// Hash of the key; the plaintext key is only shown once, at creation.
-  key                 String    @unique
-  /// The user (or organization) the key acts as.
-  referenceId         String    @map("reference_id") @db.Uuid
-  refillInterval      Int?      @map("refill_interval")
-  refillAmount        Int?      @map("refill_amount")
-  lastRefillAt        DateTime? @map("last_refill_at") @db.Timestamptz(3)
-  enabled             Boolean   @default(true)
-  rateLimitEnabled    Boolean   @default(true) @map("rate_limit_enabled")
-  rateLimitTimeWindow Int       @default(86400000) @map("rate_limit_time_window")
-  rateLimitMax        Int       @default(10) @map("rate_limit_max")
-  requestCount        Int       @default(0) @map("request_count")
+  key                 String       @unique
+  /// The organization that owns the key (the plugin's `references: "organization"`).
+  referenceId         String       @map("reference_id") @db.Uuid
+  organization        Organization @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+  refillInterval      Int?         @map("refill_interval")
+  refillAmount        Int?         @map("refill_amount")
+  lastRefillAt        DateTime?    @map("last_refill_at") @db.Timestamptz(3)
+  enabled             Boolean      @default(true)
+  rateLimitEnabled    Boolean      @default(true) @map("rate_limit_enabled")
+  rateLimitTimeWindow Int          @default(86400000) @map("rate_limit_time_window")
+  rateLimitMax        Int          @default(10) @map("rate_limit_max")
+  requestCount        Int          @default(0) @map("request_count")
   remaining           Int?
-  lastRequest         DateTime? @map("last_request") @db.Timestamptz(3)
-  expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
+  lastRequest         DateTime?    @map("last_request") @db.Timestamptz(3)
+  expiresAt           DateTime?    @map("expires_at") @db.Timestamptz(3)
   permissions         String?
   metadata            String?
-  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([referenceId])
   @@map("api_key")

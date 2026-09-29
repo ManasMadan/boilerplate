@@ -5,7 +5,9 @@
  *   base    error mapping (AppError → typed contract error) + client version gate
  *   authed  + a valid session (UNAUTHENTICATED otherwise); `context.user`, `context.session`
  *   fresh   + signed in within FRESH_SESSION_AGE ("sudo mode"; FRESH_SESSION_REQUIRED)
- *   inOrg   + an active organization; `context.orgId` (tenant for row-level security)
+ *   inOrg   a signed-in member of the active organization, or an API key with the
+ *           procedure's scope; `context.orgId` (tenant for row-level security),
+ *           `context.userId`, `context.role`, `context.apiKeyId`
  *
  *   export const todoRouter = ({ inOrg }: Procedures, todos: TodoService) => ({
  *     list: inOrg.todo.list.handler(({ context, input }) => todos.list(context.orgId, input)),
@@ -17,16 +19,24 @@
  */
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";
-import { contract, type ErrorData } from "@repo/contracts/api";
+import { API_KEY_HEADER, type ApiKeyScope, contract, type ErrorData } from "@repo/contracts/api";
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { AppError, currentContext, updateContext } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
-import type { Memberships } from "../auth/memberships";
+import type { Memberships, OrgRole } from "../auth/memberships";
 import { env } from "../env";
 
 export interface RpcContext {
   headers: Headers;
+}
+
+/** Who an organization-scoped call acts as. `apiKeyId` is set when an API key made it. */
+export interface OrgCaller {
+  orgId: string;
+  userId: string;
+  role: OrgRole;
+  apiKeyId: string | null;
 }
 
 type ErrorParams = ErrorData["params"];
@@ -80,7 +90,14 @@ export function isOlderVersion(version: string, minimum: string) {
   return false;
 }
 
-export function createProcedures(auth: Auth, memberships: Memberships) {
+/** Checks an API key for a procedure that needs `scope` (modules/api-keys). */
+export type AuthenticateApiKey = (key: string, scope: ApiKeyScope) => Promise<OrgCaller>;
+
+export function createProcedures(
+  auth: Auth,
+  memberships: Memberships,
+  authenticateApiKey: AuthenticateApiKey,
+) {
   const os = implement(contract).$context<RpcContext>();
 
   const base = os.use(async ({ next }) => {
@@ -107,15 +124,33 @@ export function createProcedures(auth: Auth, memberships: Memberships) {
     return next();
   });
 
-  // The session names the active organization; membership is re-checked every time, so
-  // someone removed from it loses access immediately (see auth/memberships.ts).
-  const inOrg = authed.use(async ({ context, next }) => {
-    const orgId = context.session.activeOrganizationId;
+  // Organization-scoped calls act in one organization, as one user, with their role there:
+  //   - a signed-in person: the session's active organization. Membership is re-checked
+  //     every time, so someone removed from it loses access immediately (see
+  //     auth/memberships.ts).
+  //   - an API key (`x-api-key`): its workspace, as its creator, and only for procedures
+  //     whose contract names a scope the key has (see modules/api-keys).
+  async function orgCaller(headers: Headers, scope: ApiKeyScope | undefined): Promise<OrgCaller> {
+    const apiKey = headers.get(API_KEY_HEADER);
+    if (apiKey !== null) {
+      // Everything without a scope is for signed-in people only.
+      if (!scope) throw new AppError("FORBIDDEN");
+      return authenticateApiKey(apiKey, scope);
+    }
+    const result = await auth.api.getSession({ headers });
+    if (!result) throw new AppError("UNAUTHENTICATED");
+    updateContext({ userId: result.user.id, locale: result.user.locale ?? undefined });
+    const orgId = result.session.activeOrganizationId;
     if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
-    const role = await memberships.role(orgId, context.user.id);
+    const role = await memberships.role(orgId, result.user.id);
     if (!role) throw new AppError("NO_ACTIVE_ORGANIZATION");
-    updateContext({ orgId });
-    return next({ context: { orgId, role } });
+    return { orgId, role, userId: result.user.id, apiKeyId: null };
+  }
+
+  const inOrg = base.use(async ({ context, next, procedure }) => {
+    const caller = await orgCaller(context.headers, procedure["~orpc"].meta.apiKeyScope);
+    updateContext({ userId: caller.userId, orgId: caller.orgId });
+    return next({ context: caller });
   });
 
   /** Organization owners and admins only (settings, members, audit log). */

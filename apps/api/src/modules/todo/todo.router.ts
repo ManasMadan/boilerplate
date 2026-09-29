@@ -5,7 +5,7 @@ import type { TodoService } from "./todo.service";
 export const todoRouter = ({ inOrg }: Procedures, todos: TodoService) => ({
   list: inOrg.todo.list.handler(({ context, input }) => todos.list(context.orgId, input)),
   create: inOrg.todo.create.handler(({ context, input }) =>
-    todos.create(context.orgId, context.user.id, input.title),
+    todos.create(context.orgId, context.userId, input.title),
   ),
   setCompleted: inOrg.todo.setCompleted.handler(({ context, input }) =>
     todos.setCompleted(context.orgId, input),

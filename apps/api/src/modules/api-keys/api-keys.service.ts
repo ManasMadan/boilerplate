@@ -1,0 +1,187 @@
+/**
+ * Workspace API keys: creating, listing and revoking them (owners and admins, from the
+ * settings page), and checking the key on a request (the request pipeline, see
+ * rpc/procedures.ts).
+ *
+ * A key is stored as the api-key plugin's permissions (`{ todos: ["read", "write"] }`),
+ * which are our scopes (`todos:read`) split at the colon, and remembers who created it
+ * in its metadata. It acts as that person, with their current role, so it never has
+ * more access than they do, and stops working when they leave the workspace.
+ */
+import { Inject, Injectable } from "@nestjs/common";
+import {
+  API_KEY_LIMIT,
+  API_KEY_SCOPES,
+  type ApiKey,
+  type ApiKeyScope,
+  type createApiKeyInput,
+} from "@repo/contracts/api";
+import { transaction } from "@repo/db";
+import { AppError, type Database, InjectDatabase } from "@repo/nest-common";
+import { z } from "zod";
+import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "../../auth/auth.module";
+import type { OrgRole } from "../../auth/memberships";
+import { emitEvent } from "../../outbox";
+import { type ApiKeyRow, ApiKeysRepository } from "./api-keys.repository";
+
+const DAY_SECONDS = 24 * 60 * 60;
+
+/** Who a verified key acts as, for the procedure it called. */
+export interface ApiKeyCaller {
+  apiKeyId: string;
+  orgId: string;
+  userId: string;
+  role: OrgRole;
+}
+
+const metadataSchema = z.object({ createdBy: z.uuid() });
+const permissionsSchema = z.record(z.string(), z.array(z.string()));
+const rateLimitDetails = z.object({ details: z.object({ tryAgainIn: z.number() }) });
+
+export function toPermissions(scopes: readonly ApiKeyScope[]) {
+  const permissions: Record<string, string[]> = {};
+  for (const scope of scopes) {
+    const [resource, action] = scope.split(":") as [string, string];
+    permissions[resource] = [...(permissions[resource] ?? []), action];
+  }
+  return permissions;
+}
+
+/** Scopes from stored permissions (text or parsed); anything unknown is dropped. */
+export function toScopes(permissions: unknown): ApiKeyScope[] {
+  const parsed = permissionsSchema.safeParse(
+    typeof permissions === "string" ? safeJson(permissions) : permissions,
+  );
+  if (!parsed.success) return [];
+  const granted = new Set(
+    Object.entries(parsed.data).flatMap(([resource, actions]) =>
+      actions.map((action) => `${resource}:${action}`),
+    ),
+  );
+  return API_KEY_SCOPES.filter((scope) => granted.has(scope));
+}
+
+function createdBy(metadata: unknown): string | null {
+  const parsed = metadataSchema.safeParse(
+    typeof metadata === "string" ? safeJson(metadata) : metadata,
+  );
+  return parsed.success ? parsed.data.createdBy : null;
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+@Injectable()
+export class ApiKeysService {
+  constructor(
+    @InjectDatabase() private readonly database: Database,
+    @Inject(AUTH) private readonly auth: Auth,
+    @Inject(MEMBERSHIPS) private readonly memberships: Memberships,
+    private readonly keys: ApiKeysRepository,
+  ) {}
+
+  async list(orgId: string): Promise<ApiKey[]> {
+    const rows = await this.keys.list(orgId);
+    return this.present(rows);
+  }
+
+  async create(orgId: string, userId: string, input: z.infer<typeof createApiKeyInput>) {
+    // ponytail: a count check, not a lock; concurrent creates can pass the limit by a few.
+    if ((await this.keys.count(orgId)) >= API_KEY_LIMIT) {
+      throw new AppError("API_KEY_LIMIT_REACHED", { params: { limit: API_KEY_LIMIT } });
+    }
+    // Server-side call: scopes (permissions) can only be set here, never by a client.
+    const created = await this.auth.api.createApiKey({
+      body: {
+        organizationId: orgId,
+        userId,
+        name: input.name,
+        expiresIn: input.expiresInDays === null ? null : input.expiresInDays * DAY_SECONDS,
+        permissions: toPermissions(input.scopes),
+        metadata: { createdBy: userId },
+      },
+    });
+    // The plugin commits the key itself, so the event is recorded just after, like
+    // better-auth's other writes (see auth.ts).
+    await transaction(this.database.write, (tx) =>
+      emitEvent(
+        tx,
+        "org.api_key_created.v1",
+        created.id,
+        { apiKeyId: created.id, name: input.name, scopes: [...input.scopes] },
+        { actorId: userId, orgId },
+      ),
+    );
+    const row = await this.keys.find(orgId, created.id);
+    if (!row) throw new Error("The API key just created wasn't found");
+    const [apiKey] = await this.present([row]);
+    if (!apiKey) throw new Error("The API key just created couldn't be listed");
+    return { apiKey, key: created.key };
+  }
+
+  revoke(orgId: string, userId: string, id: string) {
+    return transaction(this.database.write, async (tx) => {
+      const key = await this.keys.findForRevoke(tx, orgId, id);
+      if (!key) throw new AppError("API_KEY_NOT_FOUND");
+      await this.keys.remove(tx, key.id);
+      await emitEvent(
+        tx,
+        "org.api_key_revoked.v1",
+        key.id,
+        { apiKeyId: key.id, name: key.name ?? "" },
+        { actorId: userId, orgId },
+      );
+    });
+  }
+
+  /**
+   * Checks the key for a procedure that needs `scope`: valid, not expired, within its
+   * rate limit, granted that scope, and its creator still a member of its workspace.
+   */
+  async authenticate(key: string, scope: ApiKeyScope): Promise<ApiKeyCaller> {
+    const result = await this.auth.api.verifyApiKey({ body: { key } });
+    if (!result.valid || !result.key) {
+      if (result.error?.code === "RATE_LIMITED") {
+        const details = rateLimitDetails.safeParse(result.error);
+        const retryAfterMs = details.success ? details.data.details.tryAgainIn : 60_000;
+        throw new AppError("RATE_LIMITED", {
+          params: { retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)) },
+        });
+      }
+      throw new AppError("UNAUTHENTICATED");
+    }
+    const orgId = result.key.referenceId;
+    const userId = createdBy(result.key.metadata);
+    const role = userId ? await this.memberships.role(orgId, userId) : null;
+    if (!userId || !role) throw new AppError("UNAUTHENTICATED");
+    if (!toScopes(result.key.permissions).includes(scope)) {
+      throw new AppError("API_KEY_SCOPE_MISSING", { params: { scope } });
+    }
+    return { apiKeyId: result.key.id, orgId, userId, role };
+  }
+
+  private async present(rows: ApiKeyRow[]): Promise<ApiKey[]> {
+    const creators = [...new Set(rows.map((row) => createdBy(row.metadata)).filter((id) => id))];
+    const users = new Map(
+      (await this.keys.users(creators as string[])).map((user) => [user.id, user]),
+    );
+    return rows.map((row) => {
+      const creator = createdBy(row.metadata);
+      return {
+        id: row.id,
+        name: row.name ?? "",
+        start: row.start ?? "",
+        scopes: toScopes(row.permissions),
+        createdBy: (creator && users.get(creator)) || null,
+        createdAt: row.createdAt,
+        expiresAt: row.expiresAt,
+        lastUsedAt: row.lastRequest,
+      };
+    });
+  }
+}

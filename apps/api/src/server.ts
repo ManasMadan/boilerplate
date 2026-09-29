@@ -18,6 +18,7 @@ import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.modu
 import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
 import { mountMcp } from "./mcp";
+import { ApiKeysService } from "./modules/api-keys";
 import { FilesService, mountFileContent } from "./modules/files";
 import { mountOneClickUnsubscribe, NotificationsService } from "./modules/notifications";
 import { TodoService } from "./modules/todo";
@@ -42,6 +43,7 @@ export function createApiServer() {
       mountFileContent(fastify, auth, app.get(FilesService));
       const database = app.get<Database>(DATABASE);
       const i18n = app.get<I18n>(I18N);
+      const apiKeys = app.get(ApiKeysService);
       mountMcp(fastify, {
         siteUrl: env.BETTER_AUTH_URL,
         keys: () => auth.api.getJwks(),
@@ -58,12 +60,19 @@ export function createApiServer() {
           return t(`errors.${error.code}`, error.params);
         },
       });
-      await mountRpc(fastify, createRouter(createProcedures(auth, memberships), app), {
-        logError: (error) => logger.error(error, "unhandled error in procedure"),
-        publicUrl: env.BETTER_AUTH_URL,
-        release: env.RELEASE,
-        exposeDocs: env.NODE_ENV !== "production",
-      });
+      await mountRpc(
+        fastify,
+        createRouter(
+          createProcedures(auth, memberships, (key, scope) => apiKeys.authenticate(key, scope)),
+          app,
+        ),
+        {
+          logError: (error) => logger.error(error, "unhandled error in procedure"),
+          publicUrl: env.BETTER_AUTH_URL,
+          release: env.RELEASE,
+          exposeDocs: env.NODE_ENV !== "production",
+        },
+      );
     },
   });
 }
