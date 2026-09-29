@@ -75,8 +75,11 @@ the Standard Webhooks schedule (`WEBHOOK_RETRY_DELAYS_MS`: 5 s, 5 min, 30 min, 2
 A job that fails validation or runs out of attempts stays in BullMQ's failed set for
 its queue's `removeOnFail` age: an hour on `notifications-critical` (its payloads can
 hold one-time codes), 7 days for most queues, 30 days for the event queues. There is no
-separate dead-letter queue; the failed set is it, and a failed job is retried from there
-with BullMQ's own `retry`. The repository ships no dashboard or script for this.
+separate dead-letter queue; the failed set is it. `bun run jobs` shows every queue's
+counts, `bun run jobs failed <queue>` lists failed jobs and why, and `retry` or
+`discard` put them back or drop them (`scripts/jobs.ts`, on `packages/jobs/src/admin.ts`;
+header comment for pointing it at a deployed environment). A retried job starts over
+with its full retry schedule.
 Customer webhook deliveries have their own replay in the settings page.
 
 ## The transactional outbox

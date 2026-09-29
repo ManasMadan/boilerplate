@@ -33,6 +33,9 @@ search covers api → queue → worker → notifications.
    says so.
 4. Types or imports missing after a pull: `bun run gen`. Tables missing:
    `bun run db:deploy`.
+5. Something should have happened but didn't (an email, a webhook, an indexed
+   document): `bun run jobs` for queue counts, `bun run jobs failed <queue>` for the
+   failures and their error. Fix the cause, then `bun run jobs retry <queue> [ids]`.
 
 ## Common failures
 

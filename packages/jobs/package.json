@@ -4,13 +4,15 @@
   "type": "module",
   "description": "Queue names and job payload contracts shared by producers and consumers.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./admin": "./src/admin.ts"
   },
   "scripts": {
     "check-types": "tsc",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
+    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
     "gen": "bun scripts/export-schemas.ts",
-    "coverage": "vitest run --coverage"
+    "coverage": "bun --env-file=../../.env run vitest run --coverage"
   },
   "dependencies": {
     "@repo/contracts": "workspace:*",

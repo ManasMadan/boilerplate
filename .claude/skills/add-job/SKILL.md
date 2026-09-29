@@ -32,8 +32,11 @@ producer and consumer can be different versions during a rollout.
 
 Add a queue with `jobs: { event: eventEnvelope }` and a filter in `eventSubscribers` in
 `queues.ts`; the outbox relay (apps/worker) copies matching events into it with
-`jobId` = event id. Consumers dedupe on the event id (see `AppProcessedEvent`) and must
-not depend on order. New events are declared in `packages/contracts/src/events.ts`.
+`jobId` = event id. Consumers must be idempotent and not depend on order: the current
+ones dedupe on a key of their own (the audit log on the event id, webhook deliveries on
+endpoint and event, notifications on their delivery log key). A consumer without one
+inserts `(event_id, consumer)` into its schema's `processed_event` in the same
+transaction as its effect and skips when the row already exists. New events are declared in `packages/contracts/src/events.ts`.
 
 ## Python producer or consumer (apps/ai)
 
