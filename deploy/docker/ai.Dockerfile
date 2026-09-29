@@ -31,6 +31,9 @@ ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     RELEASE=${RELEASE}
+# The base image's pip is never used (dependencies are in the virtualenv) and vendors
+# its own, older copies of other packages, which scanners rightly flag: it goes.
+RUN python -m pip uninstall --yes --root-user-action=ignore pip
 # The code stays owned by root and read-only to the process.
 COPY --from=build /app /app
 WORKDIR /app
