@@ -59,8 +59,8 @@ serves the same document at `/api/v1/openapi.json` with its release and public U
 On pull requests the **API compatibility** job (`api-compat` in `ci.yml`) compares it
 with the base branch's copy using oasdiff and fails on breaking changes (removed
 operations or fields, new required inputs). A title that declares the break
-(`feat(api)!: …`) turns the failure into a report, and release-please ships it as a new
-major version.
+(`feat(api)!: …`) turns the failure into a report, and the release notes list it first, for
+a new major version.
 
 ### Prisma client
 

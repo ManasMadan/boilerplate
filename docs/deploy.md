@@ -57,12 +57,25 @@ against the new schema during a rollout and after a rollback.
 
 ## Releases → production
 
-`.github/workflows/release.yml`: release-please keeps a release pull request open with
-the next version and changelog, built from the Conventional Commit titles since the last
-release. Merging it tags the version, and the workflow then opens a promotion pull
-request (`release/production-v<version>`) that sets `image.tag` in
+Releases are version tags pushed by hand, on a commit of `master`:
+
+```sh
+git tag v1.4.0 && git push origin v1.4.0
+bun run promote v1.4.0
+```
+
+The tag starts `.github/workflows/release.yml`, which checks it (a version, on master,
+and the same as `version` in `apps/mobile/app.config.ts`, which store builds carry: bump
+that in a pull request first) and publishes the GitHub release with notes grouped from
+the Conventional Commit titles since the previous tag (`scripts/release.ts`). Choose the
+number from them (`bun scripts/release.ts notes HEAD` shows what's unreleased): a
+breaking change (`!`) is a new major version, a `feat` a minor one.
+
+`bun run promote` opens the promotion pull request (`release/production-v<version>`),
+from your own GitHub login so CI runs on it: it sets `image.tag` in
 `deploy/environments/production/stack.yaml` to that commit's images, the ones already
-running on staging. Merging the promotion is the deploy.
+running on staging, and refuses until deploy.yml has passed for the commit. Merging the
+promotion is the deploy.
 
 The mobile app follows the same events on EAS (`mobile.yml`, see
 [web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)).

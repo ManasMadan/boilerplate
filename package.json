@@ -95,6 +95,7 @@
     "test:load": "bun run --cwd load test:load",
     "charts:check": "bun scripts/charts.ts",
     "infra:check": "bun scripts/infra.ts",
+    "promote": "bun scripts/release.ts promote",
     "k8s:up": "bun scripts/k8s.ts up",
     "k8s:smoke": "bun scripts/k8s.ts smoke",
     "k8s:down": "bun scripts/k8s.ts down",

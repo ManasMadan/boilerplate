@@ -70,6 +70,8 @@ jobs:
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - run: bun run test
+      # The repo's own scripts (scripts/*.test.ts), outside the workspaces turbo runs.
+      - run: bun test scripts
 
   components:
     name: Components (stories, a11y, screenshots)
@@ -387,10 +389,10 @@ jobs:
           fi
 
   # Conventional pull-request titles: squash merges make them the commit on master, and
-  # release-please turns those into versions and the changelog.
+  # the release notes are built from them (scripts/release.ts).
   # The public REST API (/api/v1) against the base branch's: removing or narrowing
   # anything third parties call fails, unless the title declares the breaking change
-  # (`feat(api)!: …`), which release-please then ships as a new major version. The
+  # (`feat(api)!: …`), which the release notes then list first, for a new major version. The
   # document itself is kept current by the codegen job (apps/api/openapi.json).
   api-compat:
     name: API compatibility

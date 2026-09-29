@@ -114,8 +114,9 @@ search feature yet (start with Postgres full-text search).
 ## Shipping
 
 Every merge to `master` builds signed, attested images for amd64 and arm64 and deploys
-them to staging. release-please keeps a release pull request open; merging it tags a
-version and opens a promotion pull request that points production at it. Labelled pull
+them to staging. A version tag you push (`git tag v1.4.0`) publishes a release with
+notes from the commits, and `bun run promote v1.4.0` opens the pull request that points
+production at it. Labelled pull
 requests get a preview environment of their own. See [docs/deploy.md](docs/deploy.md),
 [deploy/README.md](deploy/README.md), [infra/tofu/README.md](infra/tofu/README.md) and,
 for the one-time GitHub setup, [docs/repository-settings.md](docs/repository-settings.md).

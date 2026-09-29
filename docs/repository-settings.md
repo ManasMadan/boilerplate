@@ -10,7 +10,7 @@ repository starts shipping.
 
 - Allow **squash merging** only, with the default message set to **pull request title**:
   the title is checked against Conventional Commits (the `pr-title` job), and it becomes
-  the commit release-please reads.
+  the commit the release notes are built from.
 - Enable **Automatically delete head branches**.
 
 **Settings → Rules → Rulesets → New branch ruleset** for `master` (the default branch):
@@ -30,9 +30,10 @@ repository starts shipping.
 ## The GitHub App
 
 Workflows that write to the repository use a GitHub App's token instead of
-`GITHUB_TOKEN`: pull requests opened with `GITHUB_TOKEN` never start CI (so the release,
-promotion and dependency pull requests could never pass **CI passed**), and
-`GITHUB_TOKEN` can't be put on the ruleset's bypass list for the staging bump. The same
+`GITHUB_TOKEN`: pull requests opened with `GITHUB_TOKEN` never start CI (so dependency
+pull requests could never pass **CI passed**), and `GITHUB_TOKEN` can't be put on the
+ruleset's bypass list for the staging bump. Releases don't need it: you push the tag,
+and `bun run promote` opens production's pull request as you. The same
 App runs Renovate (`renovate.yml`, configured in `renovate.json5`).
 
 1. **Settings → Developer settings → GitHub Apps → New GitHub App** (on your account or
@@ -45,7 +46,7 @@ App runs Renovate (`renovate.yml`, configured in `renovate.json5`).
    `BOT_APP_PRIVATE_KEY` (the key file's contents).
 4. Add the App to the `master` ruleset's bypass list.
 
-Without the App the release and deploy workflows fall back to `GITHUB_TOKEN` and say
+Without the App the deploy workflow falls back to `GITHUB_TOKEN` and say
 so in a warning, and Renovate doesn't run.
 
 ## Environments

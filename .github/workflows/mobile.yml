@@ -1,7 +1,7 @@
 # The mobile app on EAS (expo.dev), the same way the other services move:
 #
 #   master   JavaScript changes reach the preview builds (staging) as an over-the-air update
-#   release  store builds of that version, submitted to the App Store and Google Play
+#   v* tag   store builds of that version, submitted to the App Store and Google Play
 #   manual   an over-the-air update to any channel, e.g. a production hotfix
 #
 # Over-the-air updates only reach builds of the same app version (runtimeVersion
@@ -20,8 +20,8 @@ on:
       - "packages/contracts/**"
       - "packages/i18n/**"
       - "packages/ui/**"
-  release:
-    types: [published]
+    # Releases (release.yml). GitHub doesn't apply the path filter to tags.
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       channel:
@@ -30,14 +30,14 @@ on:
         options: [preview, production]
 
 concurrency:
-  group: mobile-${{ github.event_name }}
+  group: mobile-${{ github.event_name }}-${{ github.ref_type }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
   eas:
-    name: ${{ github.event_name == 'release' && 'Store builds' || 'Over-the-air update' }}
+    name: ${{ startsWith(github.ref, 'refs/tags/v') && 'Store builds' || 'Over-the-air update' }}
     if: vars.EAS_PROJECT_ID != ''
     runs-on: ubuntu-latest
     permissions: { contents: read }
@@ -58,10 +58,10 @@ jobs:
           packager: bun
           token: ${{ secrets.EXPO_TOKEN }}
       - name: Store builds, submitted for review
-        if: github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/v')
         run: eas build --platform all --profile production --auto-submit --non-interactive --no-wait
       - name: Over-the-air update
-        if: github.event_name != 'release'
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         env:
           MESSAGE: ${{ github.event.head_commit.message || format('Manual update from {0}', github.sha) }}
         run: eas update --channel "$CHANNEL" --environment "$CHANNEL" --message "$MESSAGE" --non-interactive

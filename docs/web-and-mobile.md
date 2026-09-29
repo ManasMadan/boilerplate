@@ -132,8 +132,9 @@ bundle id, so all three install side by side:
 
 - a push to `master` touching the app or the packages it uses publishes an over-the-air
   update to the `preview` channel;
-- a published release builds both platforms with the `production` profile and submits
-  them to the App Store and Google Play;
+- a release tag (`v1.4.0`, docs/deploy.md) builds both platforms with the `production`
+  profile and submits them to the App Store and Google Play; the release check makes sure
+  `version` in `app.config.ts` is that version;
 - a manual run publishes an update to `preview` or `production` (a hotfix).
 
 Updates reach only builds of the same app version (`runtimeVersion: appVersion`), so

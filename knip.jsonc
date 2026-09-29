@@ -8,7 +8,7 @@
   // Generated clients export more than we call; they're regenerated, not pruned.
   "ignore": ["**/generated/**"],
   // Tools installed on the machine (doctor checks them), not npm packages.
-  "ignoreBinaries": ["uv", "tofu", "kind"],
+  "ignoreBinaries": ["uv", "tofu", "kind", "openssl"],
   "workspaces": {
     ".": {
       // Claude Code hooks (.claude/settings.json), the image build's peer check

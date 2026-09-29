@@ -1,6 +1,6 @@
 /**
  * Commit messages follow Conventional Commits (`feat(api): add todo sharing`), which
- * release-please turns into versions and the changelog. Scopes are the workspace
+ * scripts/release.ts turns into release notes. Scopes are the workspace
  * folder names, so history can be filtered per app or package.
  */
 import type { UserConfig } from "@commitlint/types";

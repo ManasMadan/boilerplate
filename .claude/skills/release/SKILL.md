@@ -5,21 +5,27 @@ description: Cut a release and put it in production. Use when the user asks to r
 
 # Release to production
 
-1. **Release pull request.** release-please (`.github/workflows/release.yml`,
-   `release-please-config.json`) keeps a pull request open on `master` with the next
-   version and the changelog, built from the Conventional Commit titles merged since
-   the last release (`feat` and `fix` bump the version and appear in it).
-   `gh pr list --label "autorelease: pending"` finds it.
-2. **Tag.** Merging it tags the version (`.release-please-manifest.json` records it).
-3. **Promotion pull request.** The same workflow then opens
-   `chore(infra): deploy v<version> to production` from branch
-   `release/production-v<version>`: it sets `image.tag` in
-   `deploy/environments/production/stack.yaml` to that release commit's images
-   (`sha-<commit>`), the ones staging already runs once deploy.yml has finished for it.
-4. **Deploy.** Check the release commit's Deploy run passed
-   (`gh run list --workflow deploy.yml`) and staging is healthy, then merge the
-   promotion pull request. Argo CD syncs `production-data` and `production-stack`;
-   production admits only images deploy.yml signed on `master`.
-5. Watch it as in the deploy skill, with the production cluster's context.
+Releases are version tags the user pushes; production moves through a promotion pull
+request (docs/deploy.md, "Releases → production"; the code is `scripts/release.ts`).
 
-Undoing a release: the rollback skill.
+1. **What's in it.** `bun scripts/release.ts notes HEAD` prints the notes since the last
+   tag, grouped from the Conventional Commit titles. Pick the version from them: any
+   breaking change (`!`, or a `BREAKING CHANGE:` footer) is a new major, a `feat` a
+   minor, otherwise a patch. `git describe --tags --abbrev=0` is the last one.
+2. **The mobile version.** `version` in `apps/mobile/app.config.ts` must equal it (store
+   builds carry it, and over-the-air updates only reach builds of their version). Bump
+   it in a pull request and merge that first; the release check refuses a mismatch.
+3. **Tag** the merged commit on `master`, with the user's go-ahead (it's a push):
+   `git tag v<version> <commit> && git push origin v<version>`. release.yml checks it and
+   publishes the GitHub release; mobile.yml starts the store builds.
+4. **Promote.** Once deploy.yml has passed for that commit
+   (`gh run list --workflow deploy.yml --commit <sha>`) and staging is healthy:
+   `bun run promote v<version>` opens `chore(infra): deploy v<version> to production`,
+   which sets `image.tag` in `deploy/environments/production/stack.yaml` to `sha-<commit>`.
+   It runs as the user, so CI runs on the pull request.
+5. **Deploy** by merging it. Argo CD syncs `production-data` and `production-stack`;
+   production admits only images deploy.yml signed on `master`. Watch it as in the
+   deploy skill, with the production cluster's context.
+
+A tag pushed by mistake: `gh release delete v<version> --cleanup-tag` (before anything
+was promoted). Undoing a release in production: the rollback skill.

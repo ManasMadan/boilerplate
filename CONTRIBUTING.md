@@ -51,9 +51,11 @@ are present, so a new integration stays off until it's configured.
 
 ## Releases
 
-release-please keeps a release pull request open on `master`; merging it tags a version,
-and a promotion pull request then points production at that version's images. Every
-merge to `master` deploys to staging. See `deploy/README.md`.
+Every merge to `master` deploys to staging. A release is a version tag you push
+(`git tag v1.4.0 && git push origin v1.4.0`): the release notes are built from the
+commit titles since the last tag. `bun run promote v1.4.0` then opens the pull request
+that points production at that version's images; merging it deploys. See
+`docs/deploy.md`.
 
 ## Security issues
 

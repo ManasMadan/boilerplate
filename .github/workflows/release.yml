@@ -1,14 +1,14 @@
-# Releases and production. release-please keeps a release pull request open with the
-# next version and changelog (from the conventional commits since the last release);
-# merging it tags the release. A release then opens the production promotion pull
-# request, which points production at that commit's images (built and signed by
-# deploy.yml). Merging the promotion is the deploy: Argo CD rolls it out.
+# Releases are version tags pushed by hand (`git tag v1.4.0 && git push origin v1.4.0`):
+# this checks the tag (a version, on master, matching the mobile app's version) and
+# publishes the GitHub release with notes from the Conventional Commit titles since the
+# previous tag. Production then moves through its promotion pull request, opened with
+# `bun run promote v1.4.0` (scripts/release.ts); merging it is the deploy. The mobile
+# store builds start from the same tag (mobile.yml).
 name: Release
 
 on:
   push:
-    branches: [master]
-  workflow_dispatch:
+    tags: ["v*"]
 
 concurrency:
   group: release
@@ -17,63 +17,29 @@ concurrency:
 permissions: {}
 
 jobs:
-  release-please:
-    name: Release pull request
+  release:
+    name: GitHub release
     runs-on: ubuntu-latest
-    permissions: { contents: write, pull-requests: write }
-    outputs:
-      released: ${{ steps.release.outputs.release_created }}
-      version: ${{ steps.release.outputs.version }}
-      sha: ${{ steps.release.outputs.sha }}
-    steps:
-      # The composite action lives in the repository, so it needs the code first.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/bot
-        id: bot
-        with:
-          client-id: ${{ vars.BOT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-          fallback-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        id: release
-        with:
-          token: ${{ steps.bot.outputs.token }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-  promote:
-    name: Production promotion
-    needs: release-please
-    if: needs.release-please.outputs.released == 'true'
-    runs-on: ubuntu-latest
-    permissions: { contents: write, pull-requests: write }
-    env:
-      VERSION: ${{ needs.release-please.outputs.version }}
-      TAG: sha-${{ needs.release-please.outputs.sha }}
+    permissions: { contents: write }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
+      # Every tag and master: the notes start at the previous tag, and the check needs master.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/bot
-        id: bot
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          client-id: ${{ vars.BOT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-          fallback-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: master, token: "${{ steps.bot.outputs.token }}" }
-      - name: Open the promotion pull request
+          bun-version-file: package.json
+      - name: Check the tag
+        run: bun scripts/release.ts check "$GITHUB_REF_NAME"
+      - name: Publish the release
         env:
-          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          branch="release/production-v$VERSION"
-          file=deploy/environments/production/stack.yaml
-          git switch -c "$branch"
-          sed -i -E '/^image:/,/^[^ ]/ s/^  tag: .*/  tag: "'"$TAG"'"/' "$file"
-          git commit -am "chore(infra): deploy v$VERSION to production"
-          git push origin "$branch"
-          gh pr create --base master --head "$branch" \
-            --title "chore(infra): deploy v$VERSION to production" \
-            --body "Points production at the images of v$VERSION ($TAG), already running on staging. Merging deploys it."
+          bun scripts/release.ts notes "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
+          {
+            echo "Released $GITHUB_REF_NAME. To put it in production once deploy.yml has passed for it:"
+            echo
+            echo "    bun run promote $GITHUB_REF_NAME"
+          } >> "$GITHUB_STEP_SUMMARY"
