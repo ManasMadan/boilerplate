@@ -42,6 +42,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "watchfiles" },
 ]
 
 [package.metadata]
@@ -72,6 +73,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", specifier = ">=7" },
     { name = "ruff", specifier = ">=0.16.9" },
+    { name = "watchfiles", specifier = ">=1.3.0" },
 ]
 
 [[package]]

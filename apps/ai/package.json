@@ -3,7 +3,9 @@
   "private": true,
   "description": "Thin wrapper so turbo can run the Python service's tasks alongside the TypeScript ones.",
   "scripts": {
-    "dev": "bun --env-file=../../.env run uv run fastapi dev app/main.py --port 8000",
+    "dev": "sh -c 'trap \"kill 0\" EXIT INT TERM; bun run dev:api & bun run dev:worker & wait'",
+    "dev:api": "bun --env-file=../../.env run uv run fastapi dev app/main.py --port 8000",
+    "dev:worker": "bun --env-file=../../.env run uv run watchfiles --filter python 'python -m app.worker' app",
     "start": "bun --env-file=../../.env run uv run fastapi run app/main.py --port 8000",
     "gen": "uv run python -m app.export_openapi openapi.json && uv run datamodel-codegen --input ../../packages/jobs/generated/schemas --input-file-type jsonschema --output app/contracts --output-model-type pydantic_v2.BaseModel --target-python-version 3.14 --use-standard-collections --use-union-operator --field-constraints --disable-timestamp --use-double-quotes --use-title-as-name --formatters ruff-format && uv run ruff format app/contracts && uv run ruff check --fix --quiet app/contracts && cp ../../packages/jobs/generated/queue-settings.json app/contracts/queue_settings.json",
     "check-types": "uv run basedpyright",
