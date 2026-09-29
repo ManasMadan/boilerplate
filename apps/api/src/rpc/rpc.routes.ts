@@ -49,6 +49,18 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
     eventIteratorKeepAliveInterval: 20_000,
   });
 
+  // Event streams (realtime) must reach the client as they're written. Any compressing
+  // or buffering hop (Next's dev proxy, nginx-style gateways, CDNs) would hold them
+  // until the stream ends; these headers tell every one of them not to.
+  fastify.addHook("onSend", async (_request, reply, payload) => {
+    const type = reply.getHeader("content-type");
+    if (typeof type === "string" && type.startsWith("text/event-stream")) {
+      reply.header("cache-control", "no-cache, no-transform");
+      reply.header("x-accel-buffering", "no");
+    }
+    return payload;
+  });
+
   // oRPC parses non-JSON bodies (multipart uploads) itself; Nest's adapter keeps JSON.
   fastify.addContentTypeParser("*", (_request, _payload, done) => done(null, undefined));
 

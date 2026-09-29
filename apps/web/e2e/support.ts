@@ -288,3 +288,11 @@ export async function inviteAndAccept(
   await invitee.page.getByRole("button", { name: "Accept invitation" }).click();
   await expect(invitee.page).toHaveURL(/\/dashboard/);
 }
+
+/**
+ * Waits until the page has rendered its data: no loading skeletons left. (Not
+ * "networkidle": the realtime stream keeps a request open for as long as the page is.)
+ */
+export async function settled(page: Page) {
+  await expect(page.locator("[data-slot=skeleton]")).toHaveCount(0);
+}

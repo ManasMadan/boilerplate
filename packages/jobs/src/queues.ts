@@ -154,6 +154,16 @@ export const queues = {
     jobs: { event: eventEnvelope },
     options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
   },
+  /** Live UI updates (apps/worker → Redis pub/sub → the api's SSE streams); short-lived. */
+  "events-realtime": {
+    jobs: { event: eventEnvelope },
+    options: {
+      attempts: 3,
+      backoff: { type: "fixed", delay: 1_000 },
+      removeOnComplete: true,
+      removeOnFail: { age: DAY },
+    },
+  },
   "events-billing": {
     jobs: { event: eventEnvelope },
     options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
@@ -219,5 +229,6 @@ export const eventSubscribers = {
   "events-audit": () => true,
   "events-webhooks": (name: EventName) => customerFacing.has(name),
   "events-billing": (name: EventName) => name === "stripe.event_received.v1",
+  "events-realtime": (name: EventName) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: EventName) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;

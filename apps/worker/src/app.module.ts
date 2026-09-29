@@ -12,6 +12,7 @@ import { AuditModule } from "./audit/audit.module";
 import { env } from "./env";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { OutboxModule } from "./outbox/outbox.module";
+import { RealtimeModule } from "./realtime/realtime.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { OutboxModule } from "./outbox/outbox.module";
     OutboxModule,
     AuditModule,
     MaintenanceModule,
+    RealtimeModule,
   ],
 })
 export class AppModule {}

@@ -54,6 +54,9 @@ test("long lists load page by page", async ({ page }) => {
 });
 
 test("a stale edit is refused and the latest version is shown", async ({ page }) => {
+  // Without live updates (a missed message, or a stream that's reconnecting), this page
+  // keeps showing the old version, so the server has to catch the conflict.
+  await page.route("**/rpc/realtime/**", (route) => route.abort());
   await signUp(page);
   const created = await page.request.post("/api/v1/todos", { data: { title: "Shared task" } });
   const todo = (await created.json()) as { id: string; version: number };

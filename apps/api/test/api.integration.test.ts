@@ -3,10 +3,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
+import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { publishRealtime } from "../src/realtime";
 import {
   createSession,
   editSession,
@@ -464,6 +466,50 @@ describe("webhook endpoints", () => {
       "WEBHOOK_ENDPOINT_LIMIT",
     );
     expect(error.data.params).toEqual({ max: 20 });
+  });
+});
+
+describe("realtime", () => {
+  /** Reads a stream until `count` messages arrive (or 3 s pass). */
+  async function read(stream: AsyncIterable<unknown>, count: number) {
+    const received: unknown[] = [];
+    const reading = (async () => {
+      for await (const message of stream) {
+        received.push(message);
+        if (received.length === count) return;
+      }
+    })();
+    await Promise.race([reading, new Promise((resolve) => setTimeout(resolve, 3_000))]);
+    return received;
+  }
+
+  it("streams messages for the user and their active workspace only", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const controller = new AbortController();
+    const stream = await session.rpc.realtime.subscribe(undefined, { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 200)); // subscribed
+    await publishRealtime(harness.redis, realtimeChannel.org(randomUUID()), {
+      type: "todos.changed",
+    });
+    await publishRealtime(harness.redis, realtimeChannel.org(me.activeOrganizationId as string), {
+      type: "todos.changed",
+    });
+    await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
+      type: "notifications.changed",
+    });
+    const received = await read(stream, 2);
+    controller.abort();
+    expect(received).toEqual([{ type: "todos.changed" }, { type: "notifications.changed" }]);
+  });
+
+  it("needs a session", async () => {
+    const anonymous = createSession(harness);
+    const stream = anonymous.rpc.realtime.subscribe(undefined);
+    await expectError(
+      stream.then((iterator) => iterator[Symbol.asyncIterator]().next()),
+      "UNAUTHENTICATED",
+    );
   });
 });
 
