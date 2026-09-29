@@ -10,7 +10,8 @@
   "workspaces": {
     "packages": [
       "apps/*",
-      "packages/*"
+      "packages/*",
+      "load"
     ],
     "catalog": {
       "@better-auth/api-key": "^1.7.6",
@@ -39,6 +40,7 @@
       "@t3-oss/env-nextjs": "^0.13.11",
       "@tailwindcss/postcss": "^4.3.3",
       "@tanstack/react-query": "^5.104.0",
+      "@types/k6": "^2.3.0",
       "@types/node": "^26.6.3",
       "@types/react": "~19.2.0",
       "@types/react-dom": "~19.2.0",
@@ -79,6 +81,7 @@
     "test": "turbo run test",
     "test:integration": "docker compose --profile full up -d --wait && turbo run test:integration",
     "test:e2e": "bun scripts/e2e.ts",
+    "test:load": "bun run --cwd load test:load",
     "gen": "turbo run gen",
     "db:up": "docker compose up -d --wait",
     "db:up:full": "docker compose --profile full up -d --wait",

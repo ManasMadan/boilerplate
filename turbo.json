@@ -61,6 +61,10 @@
     "seed": {
       "dependsOn": ["build"],
       "cache": false
+    },
+    "load:users": {
+      "dependsOn": ["build"],
+      "cache": false
     }
   }
 }

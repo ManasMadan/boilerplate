@@ -37,3 +37,6 @@ __pycache__
 .claude/.state/
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Session cookies of the load-test users (apps/api/src/load-users.ts).
+load/.sessions.json

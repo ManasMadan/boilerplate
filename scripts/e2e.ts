@@ -2,11 +2,13 @@
  * Runs the end-to-end suite against a stack it builds and starts itself, then stops it.
  * CI and local runs use this same script, so both test exactly what was just built.
  *
- *   bun run test:e2e                         both suites (web, then mobile)
+ *   bun run test:e2e                         every suite (web, mobile, then the load smoke)
  *   bun run test:e2e --app web e2e/assistant.spec.ts   one app; the rest goes to Playwright
+ *   bun run test:e2e --app load              the k6 smoke run (load/api.ts) on its own
  *
  * The mobile suite runs the app's screens rendered for the web (react-native-web),
- * served with the API on their own origin (apps/mobile/scripts/serve-web.ts).
+ * served with the API on their own origin (apps/mobile/scripts/serve-web.ts). The load
+ * smoke runs last, against the same stack, with the worker relaying what it writes.
  *
  * It refuses to start while anything already listens on the stack's ports: an older
  * server would answer instead and the run would test stale code. To iterate against a
@@ -99,11 +101,11 @@ if (busy.length > 0) {
 
 const args = process.argv.slice(2);
 const appFlag = args.indexOf("--app");
-const apps = appFlag === -1 ? ["web", "mobile"] : [args[appFlag + 1]];
+const apps = appFlag === -1 ? ["web", "mobile", "load"] : [args[appFlag + 1]];
 const playwrightArgs =
   appFlag === -1 ? args : args.filter((_, i) => i !== appFlag && i !== appFlag + 1);
-if (!apps.every((app) => app === "web" || app === "mobile")) {
-  fail("--app is web or mobile");
+if (!apps.every((app) => app === "web" || app === "mobile" || app === "load")) {
+  fail("--app is web, mobile or load");
   process.exit(1);
 }
 
@@ -168,11 +170,18 @@ try {
   }
   status = 0;
   for (const app of apps) {
-    const playwright = spawnSync("bunx", ["playwright", "test", ...playwrightArgs], {
-      cwd: join(ROOT, `apps/${app}`),
-      stdio: "inherit",
-    });
-    if (playwright.status !== 0) status = playwright.status ?? 1;
+    const suite =
+      app === "load"
+        ? spawnSync("bun", ["run", "test:load"], {
+            cwd: join(ROOT, "load"),
+            stdio: "inherit",
+            env: { ...process.env, NODE_ENV: "test" },
+          })
+        : spawnSync("bunx", ["playwright", "test", ...playwrightArgs], {
+            cwd: join(ROOT, `apps/${app}`),
+            stdio: "inherit",
+          });
+    if (suite.status !== 0) status = suite.status ?? 1;
   }
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));

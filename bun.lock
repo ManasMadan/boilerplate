@@ -279,6 +279,15 @@
         "vitest": "catalog:",
       },
     },
+    "load": {
+      "name": "@repo/load",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@repo/typescript-config": "workspace:*",
+        "@types/k6": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/ai-client": {
       "name": "@repo/ai-client",
       "dependencies": {
@@ -553,6 +562,7 @@
     "@t3-oss/env-nextjs": "^0.13.11",
     "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-query": "^5.104.0",
+    "@types/k6": "^2.3.0",
     "@types/node": "^26.6.3",
     "@types/react": "~19.2.0",
     "@types/react-dom": "~19.2.0",
@@ -1644,6 +1654,8 @@
 
     "@repo/jobs": ["@repo/jobs@workspace:packages/jobs"],
 
+    "@repo/load": ["@repo/load@workspace:load"],
+
     "@repo/logger": ["@repo/logger@workspace:packages/logger"],
 
     "@repo/mobile": ["@repo/mobile@workspace:apps/mobile"],
@@ -1967,6 +1979,8 @@
     "@types/jsdom": ["@types/jsdom@20.0.1", "", { "dependencies": { "@types/node": "*", "@types/tough-cookie": "*", "parse5": "^7.0.0" } }, "sha512-d0r18sZPmMQr1eG35u12FZfhIXNrnsPU/g5wvRKCUf/tOGilKKwYMYGqh33BNR6ba+2gkHw1EUiHoN3mn7E5IQ=="],
 
     "@types/json-schema": ["@types/json-schema@7.0.15", "", {}, "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA=="],
+
+    "@types/k6": ["@types/k6@2.3.0", "", {}, "sha512-kEiRQx9MRQZ0vAwWgZUyYvuEc1JC++OZbH9uHVLsSOIKFLwHz8UeIV1EuIlB4Fqn03A4ZM+E624zVsvQPAAp6Q=="],
 
     "@types/lodash": ["@types/lodash@4.17.25", "", {}, "sha512-+K1NIO8I+F9/wNulfVvu23QYd0Pe9/OCqRrim4NoYIf1VoEDL90Ve4ClzpyqBLc7NpGGWRvYNCKZ1BE/Jpf8dQ=="],
 

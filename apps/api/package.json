@@ -12,6 +12,7 @@
     "test:integration": "bun --env-file=../../.env run vitest run --project integration",
     "auth:schema": "bun --env-file=../../.env run auth generate --config src/auth/auth.cli.ts --adapter prisma --dialect postgresql --output ../../node_modules/.cache/auth-schema.prisma --yes",
     "seed": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/seed.mjs",
+    "load:users": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/load-users.mjs",
     "coverage": "bun --env-file=../../.env run vitest run --coverage"
   },
   "dependencies": {
