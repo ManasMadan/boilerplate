@@ -56,7 +56,8 @@ export class WebPushTransport implements PushTransport {
       response = await fetch(request.endpoint, {
         method: request.method,
         headers: request.headers as Record<string, string>,
-        body: request.body,
+        // The encrypted payload, as bytes fetch accepts (a Node Buffer isn't typed as one).
+        body: new Uint8Array(request.body),
         redirect: "error",
         signal: AbortSignal.timeout(10_000),
       });
