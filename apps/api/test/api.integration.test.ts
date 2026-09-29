@@ -487,6 +487,41 @@ describe("realtime", () => {
     return received;
   }
 
+  it("refuses an eleventh stream for one user with a typed error, and frees slots on close", async () => {
+    const { session } = await signedInUser();
+    const controllers = Array.from({ length: 10 }, () => new AbortController());
+    const streams = await Promise.all(
+      controllers.map((controller) =>
+        session.rpc.realtime.subscribe(undefined, { signal: controller.signal }),
+      ),
+    );
+    // Iterating is what opens each stream on the server.
+    const readers = streams.map((stream) => read(stream, 1));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await expectError(
+      (async () => {
+        const extra = await session.rpc.realtime.subscribe();
+        for await (const _ of extra) break;
+      })(),
+      "RATE_LIMITED",
+    );
+    for (const controller of controllers) controller.abort();
+    // Aborting ends each reader with an AbortError: expected.
+    await Promise.allSettled(readers);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Closed streams give their slots back.
+    const controller = new AbortController();
+    const again = await session.rpc.realtime.subscribe(undefined, { signal: controller.signal });
+    let refused: unknown;
+    const reading = read(again, 1).catch((error: unknown) => {
+      refused = error;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(refused).toBeUndefined();
+    controller.abort();
+    await reading;
+  });
+
   it("streams messages for the user and their active workspace only", async () => {
     const { session } = await signedInUser();
     const me = await session.rpc.user.me();

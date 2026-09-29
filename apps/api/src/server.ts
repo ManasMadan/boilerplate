@@ -19,6 +19,7 @@ export function createApiServer() {
     service: "api",
     logLevel: env.LOG_LEVEL,
     trustedProxies: env.TRUSTED_PROXIES,
+    loadShedding: env.LOAD_SHEDDING,
     corsOrigins: [env.WEB_URL],
     async configure(app) {
       const fastify = app.getHttpAdapter().getInstance();

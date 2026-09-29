@@ -145,6 +145,7 @@ beforeAll(async () => {
   testDb = await createTestDatabase();
   Object.assign(process.env, {
     WEBHOOKS_DATABASE_URL: testDb.urlFor("app_webhooks"),
+    LOAD_SHEDDING: "off",
     REDIS_URL: redisDatabase(11),
     ENCRYPTION_KEYS,
     STRIPE_WEBHOOK_SECRET: STRIPE_SECRET,

@@ -7,4 +7,5 @@ await bootstrap(AppModule, {
   service: "notifications",
   logLevel: env.LOG_LEVEL,
   trustedProxies: env.TRUSTED_PROXIES,
+  loadShedding: env.LOAD_SHEDDING,
 });

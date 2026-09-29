@@ -33,6 +33,8 @@ const OPTIONAL_FEATURES_OFF = {
   STRIPE_PRICE_PRO_MONTHLY: "",
   STRIPE_PRICE_PRO_YEARLY: "",
   STRIPE_API_URL: "",
+  AI_URL: "",
+  AI_SERVICE_SECRET: "",
 };
 
 /** Local object storage (docker compose --profile files); CI runs the same. */
@@ -58,6 +60,8 @@ export async function startApi(
     // Optional features start off whatever the local .env says; a test turns on what it
     // exercises, so results don't depend on the developer's configuration.
     ...OPTIONAL_FEATURES_OFF,
+    // Several test files each run an API on this machine at once.
+    LOAD_SHEDDING: "off",
     API_DATABASE_URL: testDb.urlFor("app_api"),
     // A private Redis database: queued jobs and sessions never mix with local dev.
     REDIS_URL: redisDatabase(redisDb),

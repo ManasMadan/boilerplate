@@ -13,6 +13,7 @@ export function createWebhooksServer() {
     service: "webhooks",
     logLevel: env.LOG_LEVEL,
     trustedProxies: env.TRUSTED_PROXIES,
+    loadShedding: env.LOAD_SHEDDING,
     corsOrigins: [],
     async configure(app) {
       mountStripe(

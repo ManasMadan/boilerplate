@@ -39,6 +39,15 @@ export const coreEnv = {
         .map((part) => part.trim())
         .filter(Boolean),
     ),
+  /**
+   * Shed load (503) when the process is saturated. Off only where many instances share
+   * one machine on purpose, like the integration tests, whose parallel test files would
+   * otherwise trip each other's pressure checks.
+   */
+  LOAD_SHEDDING: z
+    .enum(["on", "off"])
+    .default("on")
+    .transform((value) => value === "on"),
   /** Git SHA of the running build, stamped by CI into the image. */
   RELEASE: z.string().default("dev"),
 };

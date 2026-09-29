@@ -23,11 +23,17 @@ export class RealtimeService implements OnApplicationShutdown {
     this.hub = new RealtimeHub(redis);
   }
 
-  async *stream(userId: string, orgId: string, signal: AbortSignal | undefined) {
-    const count = this.open.get(userId) ?? 0;
-    if (count >= MAX_STREAMS_PER_USER) throw new AppError("RATE_LIMITED");
-    this.open.set(userId, count + 1);
+  /**
+   * Checks before the stream starts, so a refusal is an ordinary typed error (oRPC maps
+   * errors from the handler, not ones thrown while iterating).
+   */
+  stream(userId: string, orgId: string, signal: AbortSignal | undefined) {
+    if ((this.open.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) throw new AppError("RATE_LIMITED");
+    return this.messages(userId, orgId, signal);
+  }
 
+  private async *messages(userId: string, orgId: string, signal: AbortSignal | undefined) {
+    this.open.set(userId, (this.open.get(userId) ?? 0) + 1);
     const lifetime = AbortSignal.timeout(STREAM_LIFETIME_MS);
     const done = signal ? AbortSignal.any([signal, lifetime]) : lifetime;
     try {
