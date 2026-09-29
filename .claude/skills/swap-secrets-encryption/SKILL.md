@@ -1,6 +1,6 @@
 ---
 name: swap-secrets-encryption
-description: Take the keys that encrypt secrets in the database from a KMS (AWS KMS, GCP KMS, Azure Key Vault) instead of ENCRYPTION_KEYS. Use when compliance requires KMS-held keys, or the user asks about envelope encryption.
+description: Take the keys that encrypt secrets in the database from a KMS (self-hosted OpenBao Transit, or a cloud KMS) instead of ENCRYPTION_KEYS. Use when compliance requires KMS-held keys, or the user asks about envelope encryption.
 ---
 
 # Swap the encryption key source
@@ -23,8 +23,9 @@ description: Take the keys that encrypt secrets in the database from a KMS (AWS 
 2. Build it in one place (a factory next to `keysFromEnv`) and use it in both services
    above; they must resolve the same key ids.
 3. New variables (key ARN or name, the wrapped keys) in both services' `src/env.ts`,
-   `.env.example` and `docs/environment.md`; cluster access to the KMS through the cloud's
-   workload identity (`infra/tofu/modules/<cloud>`).
+   `.env.example` and `docs/environment.md`; cluster access to the KMS: OpenBao's Kubernetes
+   auth in the cluster (the self-hosted default; check with the user before a cloud KMS,
+   which also needs credentials in the services' SOPS Secrets).
 4. Keep `keysFromEnv` for development and tests.
 
 Rotating keys is the rotate-secrets skill.

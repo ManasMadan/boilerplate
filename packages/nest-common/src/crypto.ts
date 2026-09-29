@@ -11,8 +11,8 @@
  * Rotation: prepend a new key, deploy, re-encrypt in the background (decrypt + encrypt
  * with the active key), then drop the old key.
  *
- * Seam: keys come from a `KeyProvider`. Today it reads them from the environment
- * (populated from the cloud secret manager by External Secrets). To use a KMS, implement
+ * Seam: keys come from a `KeyProvider`. Today it reads them from the environment (in a
+ * cluster, the service's Secret, decrypted from SOPS by Argo CD). To use a KMS, implement
  * `KeyProvider` to unwrap data keys with the KMS; ciphertext format and callers stay the same.
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";

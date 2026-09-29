@@ -1,5 +1,5 @@
 -- Local bootstrap, run once when the Postgres volume is first created. It mirrors what
--- production gets from OpenTofu (managed Postgres) or CloudNativePG managed roles:
+-- every cluster gets from the CloudNativePG bootstrap and managed roles (deploy/charts/data):
 --
 --   migrator      owns every schema and table; only migrations connect as it
 --   app_<service> one login per service; can only use the tables granted to it in

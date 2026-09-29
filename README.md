@@ -42,7 +42,7 @@ Postgres, 56379 for Valkey, 5xxxx for the rest), so they sit beside other projec
 | `apps/mobile` | Expo (iOS, Android, web) on the same API client and translations |
 | `packages/*` | Contracts, the API client and hooks, database, jobs, i18n, email templates, UI kit, shared Nest plumbing |
 | `deploy/` | Container images, Helm charts, Argo CD, the local kind cluster |
-| `infra/tofu` | OpenTofu for AWS, GCP and Azure (same outputs everywhere), Cloudflare in front |
+| `infra/tofu` | OpenTofu: k3s on machines you run anywhere, Cloudflare in front, the Argo CD bootstrap |
 
 ```mermaid
 flowchart LR
@@ -89,21 +89,21 @@ has a `swap-*` skill in `.claude/skills`.
 | Event transport | BullMQ on Valkey | Kafka, Redpanda, NATS JetStream | `apps/worker/src/outbox/event-bus.ts` | `swap-event-transport` |
 | Outbox reading | polling with `SKIP LOCKED` and `LISTEN` | change data capture (logical replication) | `apps/worker/src/outbox/relay.service.ts` | `swap-outbox-source` |
 | Read replicas | reads go to the primary | a replica behind `database.read` | `packages/db/src/client.ts` | `swap-read-replicas` |
-| Object storage | S3 API (RustFS, R2, S3, GCS) | any provider, S3 API or not | `packages/nest-common/src/storage.ts` | `swap-storage` |
+| Object storage | S3 API on RustFS, locally and in the cluster | any S3-compatible provider (S3, R2, …), or one without an S3 API | `packages/nest-common/src/storage.ts` | `swap-storage` |
 | File scanning | ClamAV | a scanning service | `apps/worker/src/files/file-scanner.ts` | `swap-file-scanner` |
 | Email | SMTP to our Stalwart mail server (Mailpit locally) | any SMTP server, or a provider API | `apps/notifications/src/channels/email/email-transport.ts` | `swap-email-provider` |
 | SMS | Twilio | another provider | `apps/notifications/src/channels/sms/sms-transport.ts` | `swap-sms-provider` |
 | Push | FCM, APNs, Web Push | OneSignal and the like | `apps/notifications/src/channels/push/push-transport.ts` | `swap-push-provider` |
 | Notification templates | in code | a database, edited without a deploy | `apps/notifications/src/dispatch/templates.ts` | `swap-notification-templates` |
 | Translations | JSON bundled in `packages/i18n` | a database plus Redis cache | `packages/nest-common/src/i18n.ts` | `swap-translations` |
-| Encryption keys | `ENCRYPTION_KEYS` from the secret manager | a KMS unwrapping data keys | `packages/nest-common/src/crypto.ts` | `swap-secrets-encryption` |
+| Encryption keys | `ENCRYPTION_KEYS` from the service's SOPS-encrypted Secret | a KMS unwrapping data keys | `packages/nest-common/src/crypto.ts` | `swap-secrets-encryption` |
 | Realtime fan-out | pub/sub on the shared Valkey | a dedicated Redis or NATS | `packages/nest-common/src/realtime.ts` | `swap-realtime` |
 | LLM access | providers called directly, with a fallback model | a gateway (LiteLLM, a router) | `apps/ai/app/assistant.py` | `swap-llm` |
 | Embeddings | provider models, or hashing locally | any embedding model | `apps/ai/app/embeddings.py` | `swap-embeddings` |
 | Vector search | pgvector | Qdrant or another vector store | `PassageSearch` in `apps/ai/app/assistant.py` | `swap-document-search` |
 
 Some growth steps don't need an interface, because they're configuration or a move:
-Valkey becomes a managed cluster through `REDIS_URL`; auth (better-auth in
+Valkey moves to a bigger instance of its own through `REDIS_URL`; auth (better-auth in
 `apps/api/src/auth`) can move to its own service or an external identity provider, since
 clients only talk to `/api/auth` on the site's origin; a very large tenant can get its
 own database, as every query already runs inside a tenant context; traces and metrics go

@@ -20,5 +20,5 @@ principles).
 | [repository-settings.md](repository-settings.md) | the GitHub settings, App, environments and secrets the workflows need |
 
 Elsewhere: [deploy/README.md](../deploy/README.md) (charts and GitOps),
-[infra/tofu/README.md](../infra/tofu/README.md) (clouds),
+[infra/tofu/README.md](../infra/tofu/README.md) (k3s on your machines, Cloudflare),
 [apps/mobile/maestro/README.md](../apps/mobile/maestro/README.md) (native flows).

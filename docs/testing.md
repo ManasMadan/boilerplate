@@ -134,7 +134,7 @@ The evals run on every change with the local stand-ins; see
 | `bun run db:lint` | Squawk on new migrations |
 | `bun run --cwd apps/web budget` | first-load JavaScript per route, after `next build` |
 | `bun run charts:check` | the Helm charts: lint, unit tests, every environment rendered and validated |
-| `bun run infra:check` | OpenTofu fmt, validate and module tests (mocked clouds) |
+| `bun run infra:check` | OpenTofu fmt, validate and module tests (mocked providers) |
 
 ## What CI runs
 

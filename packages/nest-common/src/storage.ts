@@ -11,8 +11,8 @@
  * so the client cannot swap in a larger or different file; the file-processing worker
  * still verifies size and type from the stored object before accepting it.
  *
- * Seam: `S3Storage` speaks the S3 API, which covers AWS S3, Cloudflare R2, GCS (XML
- * interoperability with HMAC keys), RustFS locally, and Azure through an S3 gateway.
+ * Seam: `S3Storage` speaks the S3 API: RustFS, locally and in every cluster, and any other
+ * S3-compatible provider (AWS S3, Cloudflare R2, GCS with HMAC keys, Azure through a gateway).
  * A provider without an S3 API gets its own `Storage` implementation; callers don't change.
  */
 import {

@@ -22,14 +22,19 @@ a real cluster or cloud account. The checks below are offline.
   helm with the helm-unittest plugin.
 - Image tags in `deploy/environments/` are written by CI: staging on every merge to
   master, production through a promotion PR. Do not edit them by hand.
-- OpenTofu: modules in `infra/tofu/modules/<name>`, roots in `infra/tofu/envs/<cloud>`.
-  Every module has `tests/*.tftest.hcl` with `mock_provider`, so tests need no
-  credentials. `bun run infra:check` runs fmt, validate and every test, and checks that
-  the aws, gcp and azure modules expose the same outputs.
+- OpenTofu: modules in `infra/tofu/modules/<name>` (k3s, cloudflare, bootstrap), one root
+  in `infra/tofu/envs/k3s` used per environment through tfvars. Every module has
+  `tests/*.tftest.hcl` with `mock_provider`, so tests need no credentials.
+  `bun run infra:check` runs fmt, validate and every test.
+- Everything runs in the cluster: no managed databases, caches, storage, secret
+  managers or mail services. Third-party APIs (AI providers, Twilio, push, Stripe,
+  Google, Turnstile) and Cloudflare in front are the exceptions; ask before adding a
+  managed dependency.
 - Pin every version: images by tag, charts and providers by exact version. Anything
   Renovate cannot find on its own gets a comment on the line above:
   `# renovate: datasource=<docker|helm|github-releases|npm> depName=<name>` (see
   `infra/tofu/modules/bootstrap/variables.tf` and `.github/workflows/ci.yml`). A new
   file pattern needs a custom manager in `renovate.json5`.
-- Secrets never go in values files or tfvars. Charts read them through External
-  Secrets; OpenTofu generates them (`infra/tofu/modules/app-secrets`).
+- Secrets never go in values files or tfvars. They're SOPS-encrypted Secrets in
+  `deploy/environments/<env>/secrets/` and `deploy/platform/secrets/<env>/`, or generated
+  in the cluster by the data chart; never decrypt one (rotate-secrets skill).

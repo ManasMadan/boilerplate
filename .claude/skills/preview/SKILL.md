@@ -25,7 +25,7 @@ description: Give a pull request its own running environment, or find out why a 
 - Comment says "set the PREVIEW_DOMAIN repository variable": set it
   (docs/repository-settings.md).
 - Images pushed but nothing deployed: the preview cluster needs the label
-  `boilerplate.dev/previews: "true"` and the `github-token` secret for Argo CD
-  (`TF_VAR_github_token` in infra/tofu; see deploy/README.md), and GHCR packages must be
+  `boilerplate.dev/previews: "true"` and the `github-token` Secret in `argocd`
+  (a SOPS file in `deploy/platform/secrets/<env>/`; see deploy/README.md), and GHCR packages must be
   pullable (docs/repository-settings.md, Packages).
 - Deployed but failing: `kubectl -n pr-<number> get pods`, then the debug skill.

@@ -6,18 +6,21 @@ description: Rotate or replace a secret or key (ENCRYPTION_KEYS, BETTER_AUTH_SEC
 # Rotate secrets
 
 Where secrets live: locally in `.env` (never read it; set values with
-`bun run env:set KEY=value`). Deployed, in the cloud secret manager as one JSON object per
-service (`<prefix><service>`), written by OpenTofu (`infra/tofu/modules/app-secrets`):
-it generates `BETTER_AUTH_SECRET`, `ENCRYPTION_KEYS`, `UNSUBSCRIBE_SECRET` and
-`AI_SERVICE_SECRET` once and keeps them in state, and merges `service_secrets` from the
-environment's tfvars over them. External Secrets copies them into the cluster every
-15 minutes (`deploy/charts/stack/values.yaml`); services read variables at start, so
-restart the affected deployments after it syncs
+`bun run env:set KEY=value`). Deployed, in SOPS-encrypted Kubernetes Secrets committed
+to git: `deploy/environments/<env>/secrets/<service>.sops.yaml`, each a Secret named
+`boilerplate-<service>` whose `stringData` holds that service's variables (platform
+Secrets, such as the Cloudflare token, are in `deploy/platform/secrets/<env>/`). Argo CD
+decrypts them into the cluster when the change reaches master (deploy/README.md,
+"Secrets with SOPS"). Services read variables at start, so restart the affected
+deployments once Argo CD has synced
 (`kubectl -n boilerplate rollout restart deployment/boilerplate-<service>`).
 
-Changes to tfvars go through `.github/workflows/infra.yml`: the environment's tfvars
-live in its `TOFU_TFVARS` secret; run the workflow with apply for that cloud and
-environment.
+Never decrypt a secrets file yourself (`sops -d`, `sops <file>`, `sops decrypt`): that
+puts the values in the conversation. The user edits them with `sops <file>`, which opens
+the decrypted Secret in their editor and encrypts it again on save; give them the exact
+file and key to change. A brand-new value that nobody needs to see can be written
+without showing it: `sops set <file> '["stringData"]["KEY"]' "\"$(openssl rand -base64 32)\""`.
+Commit only encrypted files (`charts:check` and the pre-commit hook refuse plain ones).
 
 ## ENCRYPTION_KEYS (webhook signing secrets at rest)
 
@@ -25,9 +28,9 @@ environment.
 (`packages/nest-common/src/crypto.ts`). api and webhooks must hold the same value.
 
 1. New key: `echo "$(date +%Y-%m):$(openssl rand -base64 32)"`.
-2. Prepend it, keeping the old one: `ENCRYPTION_KEYS = "<new>,<old>"` under both `api`
-   and `webhooks` in `service_secrets` (the old value is in the secret manager). Apply,
-   wait for the sync, restart api and webhooks. Locally the user edits `.env` themselves
+2. Prepend it, keeping the old one: `ENCRYPTION_KEYS: "<new>,<old>"` in both the api's
+   and the webhooks' Secret (the user edits both with `sops`). Commit, wait for Argo CD's
+   sync, restart api and webhooks. Locally the user edits `.env` themselves
    (you can't read the old value); only if local webhook endpoints don't matter, set a
    fresh single key with `bun run env:set`.
 3. Re-encrypt the stored secrets with the new key (safe while the services run, safe
@@ -37,11 +40,10 @@ environment.
    then `kubectl -n boilerplate logs -f job/<that job>`. Never `kubectl exec` it into a
    running api pod: the second process shares the pod's memory limit and gets the api
    OOM-killed. It prints how many rows moved; a second run prints 0.
-4. Only then drop the old key from both services and apply. Dropping it earlier makes
+4. Only then drop the old key from both Secrets, commit and restart. Dropping it earlier makes
    endpoints still on it undeliverable ("Unknown encryption key").
 
-Never `tofu apply -replace` the `random_bytes.encryption_key` resource: it replaces the
-only key and every stored secret becomes unreadable.
+Never replace the only key: every stored secret encrypted with it becomes unreadable.
 
 ## Customer webhook signing secrets
 
@@ -56,8 +58,8 @@ second rotation retires the leaked one at once.
 ## Shared secrets (UNSUBSCRIBE_SECRET, AI_SERVICE_SECRET)
 
 Both sides must change together: UNSUBSCRIBE_SECRET in api and notifications,
-AI_SERVICE_SECRET in api and ai (`apps/ai/app/settings.py`). Set the new value for both
-services in `service_secrets`, apply, restart both. Unsubscribe links in emails already
+AI_SERVICE_SECRET in api and ai (`apps/ai/app/settings.py`). Set the new value in both
+services' Secrets, commit, restart both once synced. Unsubscribe links in emails already
 sent stop working; AI calls fail until both sides run the new value (tokens live 60 s).
 
 ## BETTER_AUTH_SECRET
@@ -70,9 +72,9 @@ replace it: everything encrypted becomes unreadable. Rotate with versioned secre
 1. Generate one: `openssl rand -base64 48`. Set `BETTER_AUTH_SECRETS` for the api,
    newest first: `1:<new>` the first time, then `2:<newer>,1:<new>` and so on. Keep
    `BETTER_AUTH_SECRET` as it is: it still decrypts values written before versions.
-   Deployed, `BETTER_AUTH_SECRETS` goes under `api` in `service_secrets`; locally
+   Deployed, `BETTER_AUTH_SECRETS` goes in the api's Secret; locally
    `bun run env:set BETTER_AUTH_SECRETS=1:<new>`.
-2. Apply and restart the api. Every session cookie is signed with the newest secret
+2. Commit, and restart the api once synced. Every session cookie is signed with the newest secret
    only, so everyone signs in again once; nothing else breaks.
 3. Re-encrypt: `bun run secrets:reencrypt` (deployed: the `kubectl create job` command in
    the ENCRYPTION_KEYS section). It moves every stored value to the newest version.
@@ -80,9 +82,32 @@ replace it: everything encrypted becomes unreadable. Rotate with versioned secre
    `BETTER_AUTH_SECRET` is still required by the api's environment; once re-encryption
    has run, its value no longer protects anything and can be replaced with a fresh one.
 
-## Provider keys (Stripe, Resend, Twilio, FCM, APNs, Google)
+## STALWART_WEBHOOK_SECRET (the mail server's bounce webhook)
 
-Create the new key at the provider, put it in `service_secrets` for the service that
-uses it (`STRIPE_WEBHOOK_SECRET` belongs to webhooks, `STRIPE_SECRET_KEY` to api, the
-push and SMS keys to notifications; see each app's `src/env.ts`), apply, restart that
-service, then revoke the old key.
+Stalwart signs with one key; the webhooks service accepts several, comma-separated.
+
+1. New key: `openssl rand -base64 32`. In the webhooks Secret, set
+   `STALWART_WEBHOOK_SECRET: "<new>,<old>"`; commit, restart webhooks once synced.
+2. Give Stalwart the new one: the same key in the mail server's Secret (`stalwart` in
+   namespace `mail`, under `deploy/platform/secrets/<env>/`), then restart it
+   (`kubectl -n mail rollout restart statefulset/mail`); its settings plan re-applies on
+   start.
+3. Drop the old key from the webhooks Secret, commit, restart webhooks.
+
+Locally: `bun run env:set STALWART_WEBHOOK_SECRET=<new>` and `bun run db:up:mail`.
+
+## Provider keys (Stripe, Twilio, FCM, APNs, Google, Turnstile)
+
+Create the new key at the provider, put it in the Secret of the service that uses it
+(`STRIPE_WEBHOOK_SECRET` belongs to webhooks, `STRIPE_SECRET_KEY` and the Turnstile keys
+to api, the push and SMS keys to notifications; see each app's `src/env.ts`), commit,
+restart that service once synced, then revoke the old key.
+
+## A cluster's age key
+
+It decrypts every Secret of its environment. To replace it: `age-keygen` a new pair, put
+the new public key in `.sops.yaml` next to the old, `sops updatekeys` every file of that
+environment, commit; replace the `sops-age` Secret in `argocd` (the bootstrap's
+`sops_age_key`, `infra/tofu/README.md`) and restart the repo server; then remove the old
+public key from `.sops.yaml` and `updatekeys` again. A leaked key means every secret it
+could decrypt is leaked too: rotate those values as well.

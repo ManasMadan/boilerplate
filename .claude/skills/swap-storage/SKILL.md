@@ -1,6 +1,6 @@
 ---
 name: swap-storage
-description: Point file storage at another provider (AWS S3, Cloudflare R2, GCS, Azure) or add one without an S3 API. Use when the user changes where uploads live, or uploads fail because of the storage configuration.
+description: Point file storage somewhere other than the in-cluster RustFS (another S3-compatible server or service) or add one without an S3 API. Use when the user changes where uploads live, or uploads fail because of the storage configuration.
 ---
 
 # Swap object storage
@@ -8,8 +8,9 @@ description: Point file storage at another provider (AWS S3, Cloudflare R2, GCS,
 - **Interface:** `Storage` (presigned upload and download URLs, `head`, `read`, `write`,
   `move`, `delete`) in `packages/nest-common/src/storage.ts`.
 - **Today:** `S3Storage`, built by `createStorage(env)` in the same file (null when
-  `S3_BUCKET` is unset: uploads are off). It covers AWS S3, R2, GCS (XML API with HMAC
-  keys), RustFS locally and Azure behind an S3 gateway.
+  `S3_BUCKET` is unset: uploads are off). It covers RustFS (locally and in every cluster,
+  from the data chart) and any other S3 API: AWS S3, R2, GCS (XML API with HMAC keys),
+  Azure behind an S3 gateway.
 - **Provided as** `STORAGE` in `apps/api/src/modules/files/files.module.ts` (signs
   uploads) and `apps/worker/src/files/files.module.ts` (checks and moves them).
 - **Env:** `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`,
@@ -18,10 +19,11 @@ description: Point file storage at another provider (AWS S3, Cloudflare R2, GCS,
 
 ## Another S3-compatible provider
 
-No code: set the `S3_*` variables for api and worker, `STORAGE_ORIGIN` for web, and give
-the bucket a CORS rule allowing `PUT` and `GET` from the site's origin (browsers upload
-directly; see `s3-init` in `docker-compose.yml`, and `infra/tofu/modules/cloudflare`
-for R2). On AWS with workload identity, omit the endpoint and keys.
+No code: set the `S3_*` variables for api and worker (their SOPS Secrets, in place of the
+data chart's `storage` Secret), `STORAGE_ORIGIN` for web, and give the bucket a CORS rule
+allowing `PUT` and `GET` from the site's origin (browsers upload directly; see `s3-init`
+in `docker-compose.yml` and the data chart's bucket Job). Everything is self-hosted on
+purpose: check with the user before moving uploads to a managed service.
 
 ## A provider without an S3 API
 

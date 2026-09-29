@@ -31,7 +31,7 @@ imports its client from here; Python mirrors the tables in `apps/ai/app/db/model
 - Roles and extensions are created by `infra/postgres/init/01-roles-and-databases.sql`
   (once, when the volume is new), not by migrations. A change there reaches a local
   database only after `bun run docker:clean` (which deletes local data), and needs the
-  same change in the cloud setup.
+  same change in the CloudNativePG cluster (`deploy/charts/data`).
 - Local passwords equal role names (`app_api:app_api`); that file is for development
   only.
 - Integration tests clone a migrated template database; it is rebuilt when a

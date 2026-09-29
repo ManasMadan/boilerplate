@@ -97,8 +97,8 @@ export function requiredInProduction(schema: z.ZodType<string, string>, devDefau
 
 /**
  * Object storage (S3 API). Files are on when S3_BUCKET is set; the rest describe where.
- * Locally: RustFS from `docker compose --profile files`. AWS: omit the endpoint and
- * keys (workload identity). R2/GCS: their S3 endpoint and HMAC keys.
+ * RustFS locally (`docker compose --profile files`) and in every cluster (the data chart).
+ * Another S3-compatible provider: its S3 endpoint and keys.
  */
 export const storageEnv = {
   S3_BUCKET: z.string().min(3).optional(),

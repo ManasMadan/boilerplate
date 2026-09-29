@@ -20,7 +20,7 @@ description: Change which language model the AI service uses (Anthropic, OpenAI,
 
 1. Any provider Pydantic AI supports: set `AI_MODEL` (e.g. `anthropic:claude-sonnet-5`,
    `openai:gpt-5`) and its key: locally `bun run env:set`, deployed in
-   `service_secrets.ai` (rotate-secrets skill). No code.
+   the ai service's SOPS Secret (rotate-secrets skill). No code.
 2. A gateway with an OpenAI-compatible API (LiteLLM and most routers):
    `AI_MODEL=openai:<model the gateway serves>`, with `OPENAI_BASE_URL` and
    `OPENAI_API_KEY` pointing at the gateway. No code.
