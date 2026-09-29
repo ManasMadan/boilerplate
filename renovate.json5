@@ -41,6 +41,16 @@
       ],
     },
     {
+      description: "The Bun and Node versions EAS builds the mobile app with",
+      customType: "regex",
+      managerFilePatterns: ["/^apps/mobile/eas\\.json$/"],
+      matchStrings: [
+        '"(?<depName>bun)": "(?<currentValue>[^"]+)"',
+        '"(?<depName>node)": "(?<currentValue>[^"]+)"',
+      ],
+      datasourceTemplate: "{{#if (equals depName 'node')}}node-version{{else}}npm{{/if}}",
+    },
+    {
       description: "Images the scripts run with `docker run`",
       customType: "regex",
       managerFilePatterns: ["/^scripts/.+\\.ts$/", "/(^|/)package\\.json$/"],

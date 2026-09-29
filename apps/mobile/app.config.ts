@@ -6,6 +6,9 @@
  *                        URL the web app is on; the gateway routes them to apps/api)
  *   APP_VARIANT          "development" | "preview" | "production": the app's name and
  *                        identifiers, so all three can be installed side by side
+ *   EAS_PROJECT_ID       the project id `eas init` prints. With it, builds take
+ *                        over-the-air updates from their channel (eas.json: development,
+ *                        preview, production); without it there are no updates
  *
  * Native identifiers (bundle id, package) are set here once and never renamed after the
  * first store release.
@@ -15,6 +18,7 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 const variant = process.env.APP_VARIANT ?? "development";
 const suffix = variant === "production" ? "" : `.${variant}`;
 const name = variant === "production" ? "Boilerplate" : `Boilerplate (${variant})`;
+const projectId = process.env.EAS_PROJECT_ID;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -53,4 +57,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
   ],
   experiments: { typedRoutes: true },
+  ...(projectId && {
+    extra: { eas: { projectId } },
+    updates: { url: `https://u.expo.dev/${projectId}` },
+  }),
 });

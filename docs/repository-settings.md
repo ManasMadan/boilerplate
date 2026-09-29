@@ -72,6 +72,7 @@ skipped until its values exist.
 | `EVAL_MODEL` | variable | nightly evals against a real model, e.g. `anthropic:claude-sonnet-5` |
 | `EVAL_EMBEDDINGS`, `EVAL_JUDGE_MODEL`, `EVAL_MIN_PASS_RATE`, `EVAL_MIN_RELEVANCE` | variables | the rest of the nightly evals' settings (`apps/ai/evals`) |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | secrets | the providers those models use |
+| `EAS_PROJECT_ID`, `EXPO_TOKEN` | variable, secret | mobile builds and over-the-air updates on EAS (`mobile.yml`; the project id from `bunx eas-cli init`, a robot token from expo.dev) |
 | `LOAD_TARGET_RPS` | variable | the nightly load test's target (default 50 requests a second) |
 | `TOFU_TARGETS` | variable | which environments get a plan on infrastructure pull requests, e.g. `[{"cloud":"aws","env":"staging"}]` |
 

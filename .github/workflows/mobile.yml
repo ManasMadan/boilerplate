@@ -1,0 +1,67 @@
+# The mobile app on EAS (expo.dev), the same way the other services move:
+#
+#   master   JavaScript changes reach the preview builds (staging) as an over-the-air update
+#   release  store builds of that version, submitted to the App Store and Google Play
+#   manual   an over-the-air update to any channel, e.g. a production hotfix
+#
+# Over-the-air updates only reach builds of the same app version (runtimeVersion
+# "appVersion"), so native changes always ship through a release. Setup: variable
+# EAS_PROJECT_ID (`bunx eas-cli init` in apps/mobile), secret EXPO_TOKEN (an expo.dev
+# robot token), EXPO_PUBLIC_API_URL per EAS environment, and store credentials in EAS
+# (`bunx eas-cli credentials`). Skipped until EAS_PROJECT_ID is set.
+name: Mobile
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/mobile/**"
+      - "packages/client/**"
+      - "packages/contracts/**"
+      - "packages/i18n/**"
+      - "packages/ui/**"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: The channel to publish an over-the-air update to
+        type: choice
+        options: [preview, production]
+
+concurrency:
+  group: mobile-${{ github.event_name }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  eas:
+    name: ${{ github.event_name == 'release' && 'Store builds' || 'Over-the-air update' }}
+    if: vars.EAS_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    env:
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
+      CHANNEL: ${{ inputs.channel || 'preview' }}
+    defaults:
+      run: { working-directory: apps/mobile }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # 9.0.0
+        with:
+          eas-version: 24.8.0
+          packager: bun
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Store builds, submitted for review
+        if: github.event_name == 'release'
+        run: eas build --platform all --profile production --auto-submit --non-interactive --no-wait
+      - name: Over-the-air update
+        if: github.event_name != 'release'
+        env:
+          MESSAGE: ${{ github.event.head_commit.message || format('Manual update from {0}', github.sha) }}
+        run: eas update --channel "$CHANNEL" --environment "$CHANNEL" --message "$MESSAGE" --non-interactive
