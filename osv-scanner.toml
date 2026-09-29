@@ -1,0 +1,10 @@
+# Known vulnerabilities reviewed and addressed some other way than upgrading. Each entry
+# expires, so it's looked at again.
+
+[[IgnoredVulns]]
+id = "GHSA-vcc3-ghjq-m6fr"
+ignoreUntil = 2027-03-31
+reason = """decode-uri-component 0.2.2 is patched with 0.5.0's linear-time decoder \
+(patches/decode-uri-component@0.2.2.patch): 0.5.0 is ESM-only and can't be required by \
+query-string 7, which Expo Router depends on. Remove with the patch once Expo Router \
+moves off query-string 7."""
