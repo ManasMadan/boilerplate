@@ -5,6 +5,7 @@
  *   bun run test:e2e                         every suite (web, mobile, then the load smoke)
  *   bun run test:e2e --app web e2e/assistant.spec.ts   one app; the rest goes to Playwright
  *   bun run test:e2e --app load              the k6 smoke run (load/api.ts) on its own
+ *   bun run test:e2e --shard=2/4             a quarter of the browser tests, as each CI runner does
  *
  * The mobile suite runs the app's screens rendered for the web (react-native-web),
  * served with the API on their own origin (apps/mobile/scripts/serve-web.ts). The load
@@ -101,9 +102,14 @@ if (busy.length > 0) {
 
 const args = process.argv.slice(2);
 const appFlag = args.indexOf("--app");
-const apps = appFlag === -1 ? ["web", "mobile", "load"] : [args[appFlag + 1]];
 const playwrightArgs =
   appFlag === -1 ? args : args.filter((_, i) => i !== appFlag && i !== appFlag + 1);
+// Sharded (`--shard=2/4`, CI runs four), the browser suites split and the load test,
+// which isn't Playwright, runs on the first shard only.
+const shard = playwrightArgs.find((arg) => arg.startsWith("--shard="));
+const everything =
+  !shard || shard.startsWith("--shard=1/") ? ["web", "mobile", "load"] : ["web", "mobile"];
+const apps = appFlag === -1 ? everything : [args[appFlag + 1]];
 if (!apps.every((app) => app === "web" || app === "mobile" || app === "load")) {
   fail("--app is web, mobile or load");
   process.exit(1);
