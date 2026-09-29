@@ -29,7 +29,10 @@ async def main() -> None:
     redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]
     queue = IngestQueue(str(settings.redis_url))
     documents = Documents(
-        create_embedder(settings.embeddings), queue, redis, create_summaries(settings)
+        create_embedder(settings.embeddings, settings.min_relevance),
+        queue,
+        redis,
+        create_summaries(settings),
     )
 
     async def process(job: JobLike) -> None:

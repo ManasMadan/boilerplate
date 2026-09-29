@@ -18,7 +18,7 @@ Seam: an LLM gateway (LiteLLM, a provider router) is just another model name her
 import json
 from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -91,10 +91,17 @@ class AssistantEvent(BaseModel):
     event: Annotated[TextEvent | SourcesEvent | DoneEvent | ErrorEvent, Field(discriminator="type")]
 
 
+class PassageSearch(Protocol):
+    """What the agent needs from the documents: Documents in the service, an in-memory
+    library in the evals (evals/library.py)."""
+
+    async def search(self, org_id: UUID, query: str, limit: int = 5) -> list[Passage]: ...
+
+
 @dataclass
 class Deps:
     org_id: UUID
-    documents: Documents
+    documents: PassageSearch
     sources: dict[UUID, str] = field(default_factory=dict[UUID, str])
 
 

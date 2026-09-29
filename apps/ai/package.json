@@ -10,7 +10,8 @@
     "lint": "uv run ruff check . && uv run ruff format --check .",
     "test": "uv run pytest",
     "test:integration": "bun --env-file=../../.env run uv run pytest -m integration",
-    "worker": "bun --env-file=../../.env run uv run python -m app.worker"
+    "worker": "bun --env-file=../../.env run uv run python -m app.worker",
+    "evals": "bun --env-file=../../.env run uv run python -m evals"
   },
   "devDependencies": {
     "@repo/jobs": "workspace:*"

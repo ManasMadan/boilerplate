@@ -48,7 +48,7 @@ select = ["F", "E", "W", "I", "B", "UP", "SIM", "RUF"]
 # keeps the generated OpenAPI schema (and therefore the TypeScript types) precise.
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
-include = ["app", "tests"]
+include = ["app", "tests", "evals"]
 reportUnusedCallResult = false
 reportAny = false
 reportExplicitAny = false
@@ -57,6 +57,7 @@ reportExplicitAny = false
 executionEnvironments = [
   { root = "tests", extraPaths = ["."], reportUnknownMemberType = false, reportUnknownVariableType = false, reportUnknownArgumentType = false, reportUnknownLambdaType = false, reportAttributeAccessIssue = false, reportIndexIssue = false, reportArgumentType = false, reportPrivateUsage = false },
   { root = "app", extraPaths = ["."] },
+  { root = "evals", extraPaths = ["."] },
 ]
 
 [tool.pytest.ini_options]

@@ -262,6 +262,10 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run basedpyright
       - run: uv run pytest
+      # The assistant and summarizer on a fixed handbook, with the local stand-ins (no
+      # model or key): retrieval, the relevance floor, refusals and summaries must hold.
+      - name: Evals
+        run: uv run python -m evals
       # The same database the TypeScript services use, migrated by Prisma (which owns the DDL).
       - name: Bootstrap database roles and migrate
         working-directory: .

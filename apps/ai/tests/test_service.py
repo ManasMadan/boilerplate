@@ -152,6 +152,20 @@ def test_the_assistant_streams_an_answer_from_the_workspace_s_documents(client: 
     assert rows == [("assistant", "local:extractive", user)]
 
 
+def test_passages_below_the_relevance_floor_are_never_used(client: TestClient) -> None:
+    org, user = new_org()
+    client.post(
+        "/v1/documents",
+        json={"title": "Handbook", "content": "Refunds take five business days to arrive."},
+        headers=headers(org, user),
+    )
+    index_all(client, org)
+    events = _answer(client, org, user, "Who founded the company?")
+    text = "".join(str(e["text"]) for e in events if e["type"] == "text").strip()
+    assert text == "I couldn't find that in the workspace's documents."
+    assert not any(e["type"] == "sources" and e["sources"] for e in events)
+
+
 def test_a_workspace_over_its_monthly_budget_is_refused(client: TestClient) -> None:
     org, user = new_org()
     as_org(

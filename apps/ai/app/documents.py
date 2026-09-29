@@ -190,7 +190,11 @@ class Documents:
             rows = await session.execute(
                 select(DocumentChunk.document_id, Document.title, DocumentChunk.content, distance)
                 .join(Document, Document.id == DocumentChunk.document_id)
-                .where(DocumentChunk.org_id == org_id, Document.status == "ready")
+                .where(
+                    DocumentChunk.org_id == org_id,
+                    Document.status == "ready",
+                    distance <= 1 - self._embedder.min_score,
+                )
                 .order_by(distance)
                 .limit(limit)
             )

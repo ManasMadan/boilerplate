@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # The embedding model, as a Pydantic AI name ("openai:text-embedding-3-small"), or
     # "hashing" (local and lexical: development and tests only). Must give 1536 dimensions.
     embeddings: str = Field(default="hashing", min_length=1, alias="AI_EMBEDDINGS")
+    # Cosine similarity below which a passage isn't relevant to a question (provider
+    # embeddings only; see app/embeddings.py). Calibrate with `bun run evals`.
+    min_relevance: float = Field(default=0.0, ge=0.0, lt=1.0, alias="AI_MIN_RELEVANCE")
 
     # The MCP server (app/mcp_server.py): the site's public origin, where it and apps/api's
     # OAuth issuer live (the same BETTER_AUTH_URL as the api), and the api's internal URL,
