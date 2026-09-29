@@ -38,6 +38,8 @@ env:
   LOG_LEVEL: info
   # Who may set X-Forwarded-For: the gateway, which reaches pods from private addresses.
   TRUSTED_PROXIES: uniquelocal
+  # Traces and metrics: set OTEL_EXPORTER_OTLP_ENDPOINT here (an environment's values, e.g.
+  # http://otel-collector.observability:4318) to turn them on for every service.
 
 # Connection URLs, one Secret per database role with keys `url` (through the pooler,
 # when there is one) and `directUrl` (straight to the primary). The data chart writes

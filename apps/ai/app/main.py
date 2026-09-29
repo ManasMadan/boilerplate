@@ -39,6 +39,7 @@ from app.schemas import (
     SentimentResponse,
 )
 from app.settings import get_settings
+from app.telemetry import start_telemetry
 
 
 @asynccontextmanager
@@ -88,6 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 app = FastAPI(title="ai", version="0.1.0", lifespan=lifespan)
 install_error_handlers(app)
+start_telemetry("ai", app)
 
 
 async def _mcp(scope: Scope, receive: Receive, send: Send) -> None:

@@ -63,6 +63,17 @@ Read by api, worker, notifications and webhooks (`coreEnv`).
 The AI service reads `NODE_ENV`, `LOG_LEVEL` (`debug`, `info`, `warning` or `error`
 there) and `RELEASE` too; it listens on 8000 (its package scripts pass `--port 8000`).
 
+### Telemetry (every service, off by default)
+
+| Variable | Default | What it does |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | An OTLP/HTTP collector, e.g. `http://otel-collector:4318`. Set, every service exports traces and metrics there and log lines carry `trace_id`; unset, nothing starts. |
+| `OTEL_SERVICE_NAME` | the service (`api`, `worker`, …, `ai`, `ai-worker`) | Overrides the name traces are reported under. |
+
+The other standard `OTEL_*` variables work as OpenTelemetry documents them (sampling,
+headers for an authenticated collector, resource attributes). Code:
+`packages/nest-common/src/telemetry.ts`, `apps/ai/app/telemetry.py`.
+
 ## Database
 
 Each service connects as its own Postgres role (see [database.md](database.md)).

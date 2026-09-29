@@ -1,7 +1,7 @@
 /**
  * Build preset for every Node service.
  *
- * Output is one ESM bundle per service (`dist/main.mjs`) that inlines our own
+ * Output is one ESM bundle per service (`dist/main.mjs`, plus `dist/telemetry.mjs`) that inlines our own
  * `@repo/*` workspace packages (they ship TypeScript source) and leaves every npm
  * dependency external, resolved from node_modules at runtime. Keeping npm packages
  * external matters: several load files relative to themselves at runtime (BullMQ's
@@ -14,7 +14,8 @@ import { defineConfig, type UserConfig } from "tsdown";
 
 export function nodeService(overrides: UserConfig = {}): UserConfig {
   return defineConfig({
-    entry: ["src/main.ts"],
+    // The service, and its telemetry bootstrap (loaded first: `node --import dist/telemetry.mjs`).
+    entry: ["src/main.ts", "src/telemetry.ts"],
     platform: "node",
     target: "node24",
     format: "esm",

@@ -20,11 +20,13 @@ from app.embeddings import create_embedder
 from app.log import configure_logging, log
 from app.queues import INGEST, IngestQueue, JobLike, start_worker
 from app.settings import get_settings
+from app.telemetry import start_telemetry
 
 
 async def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json=settings.node_env == "production")
+    start_telemetry("ai-worker")
     open_engine(settings.database_url, settings.database_pool_max)
     redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]
     queue = IngestQueue(str(settings.redis_url))

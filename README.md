@@ -106,8 +106,10 @@ Some growth steps don't need an interface, because they're configuration or a mo
 Valkey becomes a managed cluster through `REDIS_URL`; auth (better-auth in
 `apps/api/src/auth`) can move to its own service or an external identity provider, since
 clients only talk to `/api/auth` on the site's origin; a very large tenant can get its
-own database, as every query already runs inside a tenant context. There is no search
-feature yet (start with Postgres full-text search) and no metrics exporter yet.
+own database, as every query already runs inside a tenant context; traces and metrics go
+to any OpenTelemetry collector once `OTEL_EXPORTER_OTLP_ENDPOINT` is set
+(`packages/nest-common/src/telemetry.ts`, `apps/ai/app/telemetry.py`). There is no
+search feature yet (start with Postgres full-text search).
 
 ## Shipping
 

@@ -4,9 +4,9 @@
   "type": "module",
   "description": "The HTTP API: authentication (better-auth) and the oRPC API defined in packages/contracts.",
   "scripts": {
-    "dev": "tsdown --watch --on-success \"node --env-file-if-exists=../../.env --enable-source-maps dist/main.mjs\"",
+    "dev": "tsdown --watch --on-success \"node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs\"",
     "build": "tsdown",
-    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.mjs",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
     "check-types": "tsc",
     "gen": "bun scripts/openapi.ts openapi.json",
     "test": "vitest run --project unit --passWithNoTests",

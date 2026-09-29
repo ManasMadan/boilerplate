@@ -2,18 +2,21 @@
 
 Every line carries the request id, organization and user of the request or job that
 produced it (bound by app/context.py), the same fields the TypeScript services log,
-so one request can be followed across services.
+so one request can be followed across services; with telemetry on, also the trace.
 """
 
 import logging
 
 import structlog
 
+from app.telemetry import add_trace_ids
+
 
 def configure_logging(level: str, json: bool) -> None:
     logging.basicConfig(format="%(message)s", level=level.upper())
     processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
+        add_trace_ids,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),

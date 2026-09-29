@@ -21,6 +21,11 @@
       // The better-auth CLI's config (the auth:schema script).
       "entry": ["src/auth/auth.cli.ts"]
     },
+    // The telemetry bootstrap, a build entry of the shared tsdown preset (loaded with
+    // `node --import`), which knip doesn't read.
+    "apps/worker": { "entry": ["src/main.ts", "src/telemetry.ts"] },
+    "apps/notifications": { "entry": ["src/main.ts", "src/telemetry.ts"] },
+    "apps/webhooks": { "entry": ["src/main.ts", "src/telemetry.ts"] },
     "apps/ai": {
       // The Python service; its package.json only runs uv. @repo/jobs orders codegen:
       // `gen` reads packages/jobs/generated for the queue contracts.
@@ -50,6 +55,10 @@
     "packages/logger": {
       // Loaded by name as pino's development transport.
       "ignoreDependencies": ["pino-pretty"]
+    },
+    "packages/nest-common": {
+      // Run as a child `node --import …` process by test/telemetry.integration.test.ts.
+      "entry": ["test/fixtures/*.mjs"]
     },
     "packages/typescript-config": {
       // The Next.js TypeScript plugin, named in nextjs.json.

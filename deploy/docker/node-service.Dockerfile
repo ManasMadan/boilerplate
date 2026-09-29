@@ -57,4 +57,4 @@ ENV NODE_ENV=production \
 COPY --from=build /out /app
 WORKDIR /app/apps/${SERVICE}
 USER 10001:10001
-CMD ["--enable-source-maps", "dist/main.mjs"]
+CMD ["--enable-source-maps", "--import", "./dist/telemetry.mjs", "dist/main.mjs"]

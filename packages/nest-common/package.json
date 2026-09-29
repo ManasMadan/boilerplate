@@ -5,7 +5,8 @@
   "description": "Framework plumbing shared by every NestJS service. Never put domain logic here.",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./telemetry": "./src/telemetry.ts"
   },
   "scripts": {
     "check-types": "tsc",
@@ -23,6 +24,16 @@
     "@nestjs/core": "catalog:",
     "@nestjs/platform-fastify": "catalog:",
     "@nestjs/terminus": "^12",
+    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/exporter-metrics-otlp-http": "catalog:",
+    "@opentelemetry/exporter-trace-otlp-http": "catalog:",
+    "@opentelemetry/instrumentation": "catalog:",
+    "@opentelemetry/instrumentation-http": "catalog:",
+    "@opentelemetry/instrumentation-ioredis": "catalog:",
+    "@opentelemetry/instrumentation-pg": "catalog:",
+    "@opentelemetry/instrumentation-pino": "catalog:",
+    "@opentelemetry/sdk-metrics": "catalog:",
+    "@opentelemetry/sdk-node": "catalog:",
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/i18n": "workspace:*",
@@ -43,6 +54,8 @@
     "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/proxy-addr": "^2.0.3",
+    "pg": "^8.23.0",
+    "pino": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
