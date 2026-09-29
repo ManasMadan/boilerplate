@@ -6,8 +6,8 @@
 #
 # Production changes only through a promotion pull request (release.yml).
 #
-# Setup: master's branch protection must let the github-actions bot push the staging
-# bump (or use a GitHub App token), and packages must be writable by this repository.
+# Setup (docs/repository-settings.md): the repository's GitHub App may push the staging
+# bump past master's protection, and packages must be writable by this repository.
 name: Deploy
 
 on:
@@ -137,7 +137,15 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: master }
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/bot
+        id: bot
+        with:
+          client-id: ${{ vars.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          fallback-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: master, token: "${{ steps.bot.outputs.token }}" }
       - name: Point staging at the new images
         run: |
           file=deploy/environments/staging/stack.yaml
@@ -146,7 +154,5 @@ jobs:
             echo "Staging already runs $TAG."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "chore(infra): deploy $TAG to staging [skip ci]"
           git push origin HEAD:master
