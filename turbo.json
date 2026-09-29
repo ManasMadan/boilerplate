@@ -19,7 +19,8 @@
         "src/**/*.gen.ts",
         "openapi.json",
         "app/contracts/**",
-        "generated/**"
+        "generated/**",
+        "uniwind-types.d.ts"
       ]
     },
     "build": {

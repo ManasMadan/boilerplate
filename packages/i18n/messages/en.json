@@ -854,5 +854,30 @@
       "todos:write": "Add, complete and delete the workspace's todos",
       "documents:read": "Search the workspace's documents"
     }
+  },
+  "mobile": {
+    "tabs": {
+      "todos": "Todos",
+      "settings": "Settings"
+    },
+    "settings": {
+      "account": "Account",
+      "signedInAs": "Signed in as {email}",
+      "workspace": "Workspace",
+      "language": "Language",
+      "notifications": "Notifications",
+      "enablePush": "Get notifications on this device",
+      "pushEnabled": "Notifications are on for this device.",
+      "pushDenied": "Notifications are turned off for this app in your device's settings.",
+      "pushUnavailable": "Notifications need a real device, not a simulator or the web.",
+      "version": "Version {version}"
+    },
+    "languages": {
+      "en": "English",
+      "es": "Español"
+    },
+    "invitation": {
+      "accepting": "Joining the workspace…"
+    }
   }
 }

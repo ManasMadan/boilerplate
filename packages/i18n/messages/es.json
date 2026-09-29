@@ -854,5 +854,30 @@
       "todos:write": "Añadir, completar y eliminar las tareas del espacio de trabajo",
       "documents:read": "Buscar en los documentos del espacio de trabajo"
     }
+  },
+  "mobile": {
+    "tabs": {
+      "todos": "Tareas",
+      "settings": "Ajustes"
+    },
+    "settings": {
+      "account": "Cuenta",
+      "signedInAs": "Has iniciado sesión como {email}",
+      "workspace": "Espacio de trabajo",
+      "language": "Idioma",
+      "notifications": "Notificaciones",
+      "enablePush": "Recibir notificaciones en este dispositivo",
+      "pushEnabled": "Las notificaciones están activadas en este dispositivo.",
+      "pushDenied": "Las notificaciones de esta aplicación están desactivadas en los ajustes del dispositivo.",
+      "pushUnavailable": "Las notificaciones necesitan un dispositivo real, no un simulador ni la web.",
+      "version": "Versión {version}"
+    },
+    "languages": {
+      "en": "English",
+      "es": "Español"
+    },
+    "invitation": {
+      "accepting": "Uniéndote al espacio de trabajo…"
+    }
   }
 }

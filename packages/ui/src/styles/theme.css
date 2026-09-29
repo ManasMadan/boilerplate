@@ -88,6 +88,8 @@
     }
 
     @variant dark {
+      /* Uniwind needs every theme to set the same variables, so the radius is repeated. */
+      --radius: 0.625rem;
       --background: oklch(0.145 0 0);
       --foreground: oklch(0.985 0 0);
       --card: oklch(0.205 0 0);
