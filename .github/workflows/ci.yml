@@ -62,6 +62,30 @@ jobs:
         with: { python: "true" }
       - run: bun run test
 
+  components:
+    name: Components (stories, a11y, screenshots)
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - name: Install the browser
+        run: bunx playwright install --with-deps chromium
+      - name: Every story renders, passes its play function and axe, in both themes
+        run: bun run --cwd packages/ui test:stories
+      - name: Screenshots match the baselines
+        run: bun run --cwd packages/ui test:visual
+      - name: Keep the screenshot diffs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-diffs
+          path: packages/ui/test-results
+          retention-days: 7
+
   integration:
     name: Integration tests
     runs-on: ubuntu-latest
@@ -303,7 +327,7 @@ jobs:
   ci-ok:
     name: CI passed
     if: always()
-    needs: [lint, types, unit, integration, e2e, python, codegen]
+    needs: [lint, types, unit, components, integration, e2e, python, codegen]
     runs-on: ubuntu-latest
     permissions: {}
     steps:

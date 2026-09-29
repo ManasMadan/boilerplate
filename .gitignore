@@ -24,6 +24,7 @@ coverage
 .coverage
 .coverage.*
 playwright-report
+storybook-static
 test-results
 logs
 __pycache__

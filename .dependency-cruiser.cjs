@@ -83,7 +83,16 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: "node_modules" },
-    exclude: { path: ["generated/", "\\.gen\\.ts$", "/dist/", "/\\.next/", "/\\.venv/"] },
+    exclude: {
+      path: [
+        "generated/",
+        "\\.gen\\.ts$",
+        "/dist/",
+        "/\\.next/",
+        "/\\.venv/",
+        "/storybook-static/",
+      ],
+    },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.json" },
     enhancedResolveOptions: {
