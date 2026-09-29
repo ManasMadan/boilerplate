@@ -12,7 +12,7 @@ import { runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { Dispatcher } from "../dispatch/dispatcher";
 
-export function notificationFor(event: EventEnvelope): NotificationPayload | undefined {
+function notificationFor(event: EventEnvelope): NotificationPayload | undefined {
   switch (event.name) {
     case "webhook.endpoint_disabled.v1": {
       if (!event.orgId) return undefined;

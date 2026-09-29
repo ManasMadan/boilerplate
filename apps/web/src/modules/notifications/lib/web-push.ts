@@ -6,7 +6,7 @@ import type { PushDeviceInput } from "@repo/contracts/api";
 
 export type BrowserPushState = "unsupported" | "blocked" | "off" | "on";
 
-export function webPushSupported() {
+function webPushSupported() {
   return (
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&

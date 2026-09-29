@@ -143,6 +143,11 @@
       groupName: "Expo SDK",
     },
     {
+      description: "React Email's CLI and its preview server are released together",
+      matchPackageNames: ["react-email", "@react-email/ui"],
+      groupName: "react-email",
+    },
+    {
       description: "kind's download is checked against a pinned checksum",
       matchPackageNames: ["kubernetes-sigs/kind"],
       prBodyNotes: ["Update `SHA256` in `.github/workflows/kind.yml` to the release's `kind-linux-amd64.sha256sum` before merging."],

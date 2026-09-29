@@ -20,7 +20,6 @@
     "@repo/email": "workspace:*",
     "@repo/i18n": "workspace:*",
     "@repo/jobs": "workspace:*",
-    "@repo/logger": "workspace:*",
     "@repo/nest-common": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "bullmq": "catalog:",
@@ -32,7 +31,6 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@nestjs/testing": "catalog:",
     "@repo/tsdown-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
@@ -40,7 +38,9 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/web-push": "^3.6.4",
+    "http_ece": "^1.2.0",
     "pg": "^8.23.0",
+    "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

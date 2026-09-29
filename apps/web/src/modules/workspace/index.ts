@@ -3,7 +3,6 @@ export { WorkspaceSwitcher } from "./components/workspace-switcher";
 export {
   isPersonal,
   useActiveWorkspace,
-  useSwitchWorkspace,
   useWorkspaces,
 } from "./hooks/use-workspace";
 export { WorkspaceApiKeysPage } from "./pages/api-keys";

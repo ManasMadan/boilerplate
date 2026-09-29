@@ -679,7 +679,6 @@ export function createAuth({
 }
 
 export type Auth = ReturnType<typeof createAuth>;
-export type Session = Auth["$Infer"]["Session"];
 
 function isTimeZone(value: unknown): value is string {
   if (typeof value !== "string") return false;

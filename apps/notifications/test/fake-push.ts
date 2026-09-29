@@ -31,7 +31,7 @@ const decrypt = ece.decrypt as (
   options: { version: "aes128gcm"; privateKey: ECDH; authSecret: string },
 ) => Buffer;
 
-export interface Delivered {
+interface Delivered {
   provider: "fcm" | "apns" | "web";
   token: string;
   title: string;

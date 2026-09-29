@@ -38,7 +38,7 @@ const metadataSchema = z.object({ createdBy: z.uuid() });
 const permissionsSchema = z.record(z.string(), z.array(z.string()));
 const rateLimitDetails = z.object({ details: z.object({ tryAgainIn: z.number() }) });
 
-export function toPermissions(scopes: readonly ApiKeyScope[]) {
+function toPermissions(scopes: readonly ApiKeyScope[]) {
   const permissions: Record<string, string[]> = {};
   for (const scope of scopes) {
     const [resource, action] = scope.split(":") as [string, string];
@@ -48,7 +48,7 @@ export function toPermissions(scopes: readonly ApiKeyScope[]) {
 }
 
 /** Scopes from stored permissions (text or parsed); anything unknown is dropped. */
-export function toScopes(permissions: unknown): ApiKeyScope[] {
+function toScopes(permissions: unknown): ApiKeyScope[] {
   const parsed = permissionsSchema.safeParse(
     typeof permissions === "string" ? safeJson(permissions) : permissions,
   );

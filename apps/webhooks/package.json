@@ -19,10 +19,10 @@
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/jobs": "workspace:*",
-    "@repo/logger": "workspace:*",
     "@repo/nest-common": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "bullmq": "catalog:",
+    "fastify": "catalog:",
     "ioredis": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
@@ -30,6 +30,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@nestjs/platform-fastify": "catalog:",
     "@repo/tsdown-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
@@ -37,6 +38,7 @@
     "@types/pg": "^8.23.1",
     "pg": "^8.23.0",
     "standardwebhooks": "^1.1.1",
+    "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

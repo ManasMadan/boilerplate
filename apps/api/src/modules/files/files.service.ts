@@ -32,7 +32,7 @@ const UPLOAD_EXPIRES_IN = 10 * 60;
 const DOWNLOAD_EXPIRES_IN = 5 * 60;
 
 const quarantineKey = (fileId: string) => `quarantine/${fileId}`;
-export const storedKey = (fileId: string) => `files/${fileId}`;
+const storedKey = (fileId: string) => `files/${fileId}`;
 
 interface FileRow {
   id: string;

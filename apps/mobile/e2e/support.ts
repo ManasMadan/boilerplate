@@ -22,7 +22,7 @@ export const newUser = (): User => ({
 });
 
 /** The 6-digit code in the newest email to `to`. */
-export async function nextCode(to: string, after = new Date(0)) {
+async function nextCode(to: string, after = new Date(0)) {
   let code: string | undefined;
   await expect
     .poll(

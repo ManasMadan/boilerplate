@@ -19,7 +19,6 @@
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/jobs": "workspace:*",
-    "@repo/logger": "workspace:*",
     "@repo/nest-common": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "bullmq": "catalog:",
@@ -37,6 +36,7 @@
     "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/pg": "^8.23.1",
+    "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

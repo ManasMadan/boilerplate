@@ -37,7 +37,6 @@
     "@repo/db": "workspace:*",
     "@repo/i18n": "workspace:*",
     "@repo/jobs": "workspace:*",
-    "@repo/logger": "workspace:*",
     "@repo/nest-common": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "better-auth": "catalog:",
@@ -46,14 +45,12 @@
     "ioredis": "catalog:",
     "nestjs-pino": "^5.2.1",
     "pino": "catalog:",
-    "pino-pretty": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
     "stripe": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@nestjs/testing": "catalog:",
     "@orpc/client": "catalog:",
     "@repo/fake-stripe": "workspace:*",
     "@repo/tsdown-config": "workspace:*",

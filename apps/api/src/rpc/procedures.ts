@@ -80,7 +80,7 @@ export function toContractError(
 }
 
 /** Compares dotted versions ("1.12.0" < "1.2.0" is false). Missing parts count as 0. */
-export function isOlderVersion(version: string, minimum: string) {
+function isOlderVersion(version: string, minimum: string) {
   const a = version.split(".").map(Number);
   const b = minimum.split(".").map(Number);
   for (let i = 0; i < Math.max(a.length, b.length); i++) {

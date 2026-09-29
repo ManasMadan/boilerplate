@@ -19,5 +19,3 @@ export const authClient = createAuthClient({
     ...authClientPlugins({ onTwoFactorRequired: () => router.push("/two-factor") }),
   ],
 });
-
-export type Session = typeof authClient.$Infer.Session;

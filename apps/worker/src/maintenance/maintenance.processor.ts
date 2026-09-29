@@ -19,7 +19,7 @@ import { OUTBOX_SOURCES } from "../outbox/sources";
 type Task = JobName<"maintenance">;
 
 /** When each task runs (cron, UTC). */
-export const SCHEDULES: Record<Task, string> = {
+const SCHEDULES: Record<Task, string> = {
   "audit-partitions": "0 2 * * *",
   "outbox-retention": "15 3 * * *",
   "session-retention": "0 * * * *",

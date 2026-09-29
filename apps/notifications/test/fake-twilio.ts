@@ -14,7 +14,7 @@ export const TWILIO_NUMBERS = {
   flaky: "+15005550500", // 500 until recover()
 };
 
-export interface Texted {
+interface Texted {
   to: string;
   from: string;
   body: string;

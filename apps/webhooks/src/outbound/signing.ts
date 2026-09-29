@@ -21,7 +21,7 @@ function keyOf(secret: string) {
   return Buffer.from(secret.slice(PREFIX.length), "base64");
 }
 
-export function sign(secret: string, messageId: string, timestamp: number, body: string) {
+function sign(secret: string, messageId: string, timestamp: number, body: string) {
   const digest = createHmac("sha256", keyOf(secret))
     .update(`${messageId}.${timestamp}.${body}`)
     .digest("base64");

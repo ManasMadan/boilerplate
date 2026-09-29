@@ -56,7 +56,7 @@ export interface InAppMessage {
   orgId?: string;
 }
 
-export interface TemplateDefinition<T extends NotificationTemplate> {
+interface TemplateDefinition<T extends NotificationTemplate> {
   category: NotificationCategory;
   email?: (payload: PayloadOf<T>, context: RenderContext) => Promise<RenderedEmail>;
   inApp?: (payload: PayloadOf<T>, context: RenderContext) => InAppMessage;
@@ -68,7 +68,7 @@ export interface TemplateDefinition<T extends NotificationTemplate> {
   sms?: (payload: PayloadOf<T>, context: RenderContext) => string;
 }
 
-export type TemplateRegistry = { [T in NotificationTemplate]: TemplateDefinition<T> };
+type TemplateRegistry = { [T in NotificationTemplate]: TemplateDefinition<T> };
 
 const url = (path: string) => new URL(path, env.WEB_URL).toString();
 

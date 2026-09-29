@@ -37,15 +37,14 @@
     "@repo/jobs": "workspace:*",
     "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "@tailwindcss/postcss": "catalog:",
     "@tanstack/react-query-devtools": "^5.104.0",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "babel-plugin-react-compiler": "^1.0.0",
     "ioredis": "catalog:",
+    "sharp": "^0.35.5",
     "standardwebhooks": "^1.1.1",
-    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

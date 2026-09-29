@@ -41,6 +41,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bunx biome ci .
       - run: bun run lint:boundaries
+      # Unused files, exports and dependencies, and dependencies used but not declared
+      # (knip.jsonc).
+      - run: bun run lint:unused
 
   types:
     name: Type-check

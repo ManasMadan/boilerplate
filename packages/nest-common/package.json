@@ -27,8 +27,6 @@
     "@repo/db": "workspace:*",
     "@repo/i18n": "workspace:*",
     "@repo/logger": "workspace:*",
-    "@t3-oss/env-core": "catalog:",
-    "fastify": "catalog:",
     "ioredis": "catalog:",
     "ipaddr.js": "^2.5.0",
     "nestjs-pino": "^5.2.1",

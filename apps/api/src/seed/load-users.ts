@@ -8,7 +8,7 @@ import type { Database } from "@repo/nest-common";
 import type { Auth } from "../auth/auth.module";
 
 /** Only for these throwaway accounts; the session cookies are what k6 uses. */
-export const LOAD_PASSWORD = "load-test-password-not-secret";
+const LOAD_PASSWORD = "load-test-password-not-secret";
 export const loadEmail = (n: number) => `load-${n}@load.test`;
 
 export async function signInLoadUsers(
