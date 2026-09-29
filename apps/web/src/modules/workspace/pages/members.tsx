@@ -27,6 +27,7 @@ import { z } from "zod";
 import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage, useAuthSchemas } from "@/modules/auth";
+import { UpgradeHint } from "@/modules/billing";
 import {
   isPersonal,
   type Role,
@@ -173,7 +174,10 @@ export function WorkspaceMembersPage() {
         </CardContent>
       </Card>
       {active.isAdmin && !isPersonal(workspace) ? (
-        <InviteCard organizationId={workspace.id} />
+        <>
+          <UpgradeHint entitlement="members" />
+          <InviteCard organizationId={workspace.id} />
+        </>
       ) : null}
       {active.isAdmin && !isPersonal(workspace) ? (
         <PendingInvitations

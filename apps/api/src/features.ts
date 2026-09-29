@@ -15,6 +15,14 @@ function pair(name: string, a: string | undefined, b: string | undefined) {
   return Boolean(a && b);
 }
 
+function billing() {
+  const set = [env.STRIPE_SECRET_KEY, env.STRIPE_PRICE_PRO_MONTHLY, env.STRIPE_PRICE_PRO_YEARLY];
+  const count = set.filter(Boolean).length;
+  if (count !== 0 && count !== set.length)
+    throw new Error("Billing needs STRIPE_SECRET_KEY and both STRIPE_PRICE_PRO_* set, or none");
+  return count === set.length;
+}
+
 export const features: Record<Feature, boolean> = {
   google: pair(
     "Google sign-in (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET)",
@@ -28,6 +36,5 @@ export const features: Record<Feature, boolean> = {
     env.TURNSTILE_SECRET_KEY,
   ),
   files: Boolean(env.S3_BUCKET),
-  // Wired in a later step; off until its configuration exists.
-  billing: false,
+  billing: billing(),
 };

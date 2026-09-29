@@ -143,7 +143,7 @@ export class Dispatcher implements OnApplicationShutdown {
     }
     const { userId } = recipient;
     if (channel === "in_app" && template.inApp && userId) {
-      const id = await this.inApp.send(userId, template.inApp());
+      const id = await this.inApp.send(userId, template.inApp(context));
       await this.log.finish(key, "sent", { providerMessageId: id });
       return;
     }
@@ -158,7 +158,7 @@ export class Dispatcher implements OnApplicationShutdown {
       }
       // Daily-digest users get opt-out-able email in their next digest instead.
       if (policy?.dailyDigest && context.unsubscribeUrl && template.inApp && userId) {
-        const message = template.inApp();
+        const message = template.inApp(context);
         await withUser(this.database.write, userId).notificationDigestItem.create({
           data: { userId, template: message.type, data: message.data },
         });

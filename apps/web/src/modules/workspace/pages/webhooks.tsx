@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { TextField } from "@/components/form-fields";
 import { useApiErrorMessage } from "@/lib/use-api-error";
+import { UpgradeHint, useHasWebhooks } from "@/modules/billing";
 import { EndpointStatus } from "../components/endpoint-status";
 import { SecretDialog } from "../components/secret-dialog";
 
@@ -41,6 +42,7 @@ export function WorkspaceWebhooksPage() {
   const endpoints = useWebhookEndpointsQuery();
   const errorMessage = useApiErrorMessage();
   const [secret, setSecret] = useState<string | null>(null);
+  const hasWebhooks = useHasWebhooks();
 
   return (
     <>
@@ -75,7 +77,11 @@ export function WorkspaceWebhooksPage() {
           )}
         </CardContent>
       </Card>
-      <AddEndpointCard onCreated={setSecret} />
+      {hasWebhooks ? (
+        <AddEndpointCard onCreated={setSecret} />
+      ) : (
+        <UpgradeHint entitlement="webhooks" />
+      )}
       <SecretDialog secret={secret} onClose={() => setSecret(null)} />
     </>
   );

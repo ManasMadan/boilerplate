@@ -26,7 +26,7 @@ import {
 let harness: Harness;
 
 beforeAll(async () => {
-  harness = await startApi({
+  harness = await startApi(13, {
     MINIMUM_CLIENT_VERSION: "2.0.0",
     // The test receiver below runs on loopback.
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",

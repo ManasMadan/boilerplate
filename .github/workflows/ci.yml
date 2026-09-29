@@ -175,6 +175,12 @@ jobs:
       S3_SECRET_ACCESS_KEY: rustfs-secret
       S3_FORCE_PATH_STYLE: "true"
       STORAGE_ORIGIN: http://localhost:9000
+      # Billing on, against the local fake Stripe started with the stack (test-only keys).
+      STRIPE_SECRET_KEY: sk_test_ci
+      STRIPE_WEBHOOK_SECRET: whsec_ci
+      STRIPE_PRICE_PRO_MONTHLY: price_pro_monthly
+      STRIPE_PRICE_PRO_YEARLY: price_pro_yearly
+      STRIPE_API_URL: http://127.0.0.1:12111
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
@@ -220,7 +226,8 @@ jobs:
           (cd apps/webhooks && nohup bun run start > ../../logs/webhooks.log 2>&1 &)
           (cd apps/ai && nohup bun run start > ../../logs/ai.log 2>&1 &)
           (cd apps/web && nohup bun run start > ../../logs/web.log 2>&1 &)
-          for url in http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:3004/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
+          (cd packages/fake-stripe && nohup bun src/main.ts > ../../logs/fake-stripe.log 2>&1 &)
+          for url in http://127.0.0.1:12111/__fake/state http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:3004/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
             if ! timeout 90 bash -c "until curl -sf $url > /dev/null; do sleep 1; done"; then
               echo "::error::$url never became ready"; tail -n 50 logs/*.log; exit 1
             fi

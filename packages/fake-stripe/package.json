@@ -1,0 +1,23 @@
+{
+  "name": "@repo/fake-stripe",
+  "private": true,
+  "type": "module",
+  "description": "A stateful local stand-in for the parts of Stripe the app uses, for tests and offline development.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun --env-file=../../.env src/main.ts",
+    "check-types": "tsc",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "stripe": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

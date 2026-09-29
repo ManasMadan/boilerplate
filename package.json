@@ -53,6 +53,7 @@
       "react-dom": "19.2.3",
       "reflect-metadata": "^0.2.2",
       "rxjs": "^7.8.2",
+      "stripe": "^22.6.2",
       "tailwindcss": "^4.3.3",
       "tsdown": "^0.23.0",
       "typescript": "^6.0.3",
@@ -83,7 +84,8 @@
     "db:studio": "bun run --filter @repo/db studio",
     "db:reset": "bun run --filter @repo/db reset",
     "lint:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs && bun scripts/check-web-render-only.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "stripe:fake": "bun run --filter @repo/fake-stripe start"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

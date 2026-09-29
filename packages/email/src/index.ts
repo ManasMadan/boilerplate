@@ -40,6 +40,11 @@ export {
   orgInvitationSubject,
 } from "./templates/org-invitation";
 export {
+  default as PaymentFailedEmail,
+  type PaymentFailedEmailProps,
+  paymentFailedSubject,
+} from "./templates/payment-failed";
+export {
   default as SecurityAlertEmail,
   type SecurityAlertEmailProps,
   type SecurityEventName,

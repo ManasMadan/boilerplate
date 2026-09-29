@@ -12,6 +12,7 @@ import type { Producer } from "@repo/jobs";
 import { AppError, type Database, InjectDatabase, keysFromEnv, SecretBox } from "@repo/nest-common";
 import { env } from "../../env";
 import { emitEvent } from "../../outbox";
+import { BillingService } from "../billing";
 import { assertDeliverableUrl } from "./webhook-url";
 import { endpointColumns, WebhooksRepository } from "./webhooks.repository";
 
@@ -42,6 +43,7 @@ export class WebhooksService implements OnApplicationShutdown {
     @InjectDatabase() private readonly database: Database,
     private readonly repository: WebhooksRepository,
     @Inject(WEBHOOK_DELIVERIES) private readonly deliveries: Producer<"webhook-deliveries">,
+    private readonly billing: BillingService,
   ) {}
 
   async listEndpoints(orgId: string) {
@@ -57,6 +59,8 @@ export class WebhooksService implements OnApplicationShutdown {
       events?: WebhookEventName[] | undefined;
     },
   ) {
+    // Existing endpoints keep working after a downgrade; new ones need the plan.
+    await this.billing.require(orgId, "webhooks");
     await assertDeliverableUrl(input.url);
     const secret = newSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {

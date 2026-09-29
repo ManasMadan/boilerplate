@@ -16,6 +16,7 @@
     "@better-auth/api-key": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@better-auth/redis-storage": "catalog:",
+    "@nestjs/bullmq": "catalog:",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "@nestjs/platform-fastify": "catalog:",
@@ -39,11 +40,13 @@
     "pino-pretty": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
+    "stripe": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@nestjs/testing": "catalog:",
     "@orpc/client": "catalog:",
+    "@repo/fake-stripe": "workspace:*",
     "@repo/tsdown-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "catalog:",

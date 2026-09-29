@@ -13,7 +13,7 @@ const SECRET_KEY = "1x0000000000000000000000000000000AA";
 
 let harness: Harness;
 beforeAll(async () => {
-  harness = await startApi({ TURNSTILE_SITE_KEY: SITE_KEY, TURNSTILE_SECRET_KEY: SECRET_KEY });
+  harness = await startApi(9, { TURNSTILE_SITE_KEY: SITE_KEY, TURNSTILE_SECRET_KEY: SECRET_KEY });
 });
 afterAll(() => harness?.close());
 

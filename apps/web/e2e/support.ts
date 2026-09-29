@@ -315,3 +315,17 @@ export async function sendReminder(page: Page, title: string) {
   );
   await producer.close();
 }
+
+// ---------------------------------------------------------------------------- billing
+
+/**
+ * Puts the active workspace on Pro through the (fake) Stripe checkout, as a customer
+ * would: billing settings → checkout → pay → back, until the plan shows.
+ */
+export async function upgrade(page: Page, interval: "monthly" | "yearly" = "monthly") {
+  await page.goto("/settings/billing");
+  await page.getByRole("button", { name: `Upgrade, billed ${interval}` }).click();
+  await page.getByRole("button", { name: "Pay", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/billing\?checkout=done/);
+  await expect(page.getByText("Pro", { exact: true })).toBeVisible({ timeout: 20_000 });
+}

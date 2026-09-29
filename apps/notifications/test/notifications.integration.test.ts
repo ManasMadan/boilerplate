@@ -815,4 +815,66 @@ describe("notifications service", () => {
     );
     await client.end();
   });
+
+  // --------------------------------------------------------------------------- billing
+
+  it("tells a workspace's owners and admins, in their language, when a payment fails", async () => {
+    const owner = await newUser("Owner");
+    const admin = await newUser("Admin");
+    const member = await newUser("Member");
+    await sql(`UPDATE auth."user" SET locale = 'es' WHERE id = $1`, [admin.id]);
+    const orgId = randomUUID();
+    await sql(
+      "INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Acme', $1::text)",
+      [orgId],
+    );
+    for (const [user, role] of [
+      [owner, "owner"],
+      [admin, "admin"],
+      [member, "member"],
+    ] as const) {
+      await sql("INSERT INTO auth.member (organization_id, user_id, role) VALUES ($1, $2, $3)", [
+        orgId,
+        user.id,
+        role,
+      ]);
+    }
+    const jobId = randomUUID();
+    await producer.add(
+      "send",
+      {
+        template: "billing.payment-failed",
+        to: { orgId, roles: ["owner", "admin"] },
+        data: {
+          organizationName: "Acme",
+          amount: 3_600,
+          currency: "USD",
+          billingUrl: "http://localhost:3000/settings/billing",
+        },
+      },
+      { jobId },
+    );
+    await settle(jobId, 4);
+    const inbox = await sql<{ user_id: string; data: { amount: string }; link: string }>(
+      "SELECT user_id, data, link FROM notifications.notification WHERE template = 'billing.payment-failed' AND org_id = $1",
+      [orgId],
+    );
+    expect(inbox.map((row) => row.user_id).sort()).toEqual([owner.id, admin.id].sort());
+    expect(inbox.find((row) => row.user_id === owner.id)?.data.amount).toBe("$36.00");
+    expect(inbox.find((row) => row.user_id === admin.id)?.data.amount).toBe("36,00\u00a0US$");
+    expect(inbox[0]?.link).toBe("/settings/billing");
+
+    const english = await waitForEmail(owner.email);
+    expect(english.Subject).toBe("Payment failed for Acme");
+    const full = (await (await fetch(`${MAILPIT}/api/v1/message/${english.ID}`)).json()) as {
+      Text: string;
+    };
+    expect(full.Text).toContain("The renewal payment of $36.00 for Acme didn't go through.");
+    expect((await waitForEmail(admin.email)).Subject).toBe("Falló el pago de Acme");
+    // Not the plain member, and payment emails can't be turned off.
+    const search = (await (
+      await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${member.email}`)}`)
+    ).json()) as { messages: unknown[] };
+    expect(search.messages).toHaveLength(0);
+  });
 });

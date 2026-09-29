@@ -9,7 +9,6 @@
 #   files    RustFS    localhost:9000   S3-compatible object storage (console :9001)
 #            ClamAV    localhost:3310   virus scanning for uploads (clamd; first start
 #                                       downloads signatures, a few minutes)
-#   billing  stripe-mock localhost:12111 offline Stripe API
 #
 # Images are pinned; Renovate proposes upgrades. Ports can be overridden in .env.
 name: boilerplate
@@ -107,10 +106,6 @@ services:
       timeout: 3s
       retries: 30
 
-  stripe-mock:
-    image: stripe/stripe-mock:v0.205.0
-    profiles: [billing, full]
-    ports: ["${STRIPE_MOCK_PORT:-12111}:12111"]
 
 volumes:
   postgres:

@@ -23,6 +23,18 @@ export interface Harness {
   close(): Promise<void>;
 }
 
+const OPTIONAL_FEATURES_OFF = {
+  GOOGLE_CLIENT_ID: "",
+  GOOGLE_CLIENT_SECRET: "",
+  TURNSTILE_SITE_KEY: "",
+  TURNSTILE_SECRET_KEY: "",
+  S3_BUCKET: "",
+  STRIPE_SECRET_KEY: "",
+  STRIPE_PRICE_PRO_MONTHLY: "",
+  STRIPE_PRICE_PRO_YEARLY: "",
+  STRIPE_API_URL: "",
+};
+
 /** Local object storage (docker compose --profile files); CI runs the same. */
 export const LOCAL_STORAGE = {
   S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
@@ -32,12 +44,23 @@ export const LOCAL_STORAGE = {
   S3_FORCE_PATH_STYLE: "true",
 };
 
-export async function startApi(env: Record<string, string> = {}): Promise<Harness> {
+/**
+ * Starts the API in-process against a fresh database. `redisDb` is the Redis database for
+ * this test file alone (see redisDatabase): files run in parallel, and each API's queue
+ * consumers and Redis flush must not touch another file's.
+ */
+export async function startApi(
+  redisDb: number,
+  env: Record<string, string> = {},
+): Promise<Harness> {
   const testDb = await createTestDatabase();
   Object.assign(process.env, {
+    // Optional features start off whatever the local .env says; a test turns on what it
+    // exercises, so results don't depend on the developer's configuration.
+    ...OPTIONAL_FEATURES_OFF,
     API_DATABASE_URL: testDb.urlFor("app_api"),
     // A private Redis database: queued jobs and sessions never mix with local dev.
-    REDIS_URL: redisDatabase(13),
+    REDIS_URL: redisDatabase(redisDb),
     ...env,
   });
   const redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: null });

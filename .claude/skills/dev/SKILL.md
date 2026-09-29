@@ -9,7 +9,8 @@ description: Start, stop or troubleshoot the local development stack. Use when t
   (http://localhost:3000), api (http://localhost:3001) and the worker (:3002),
   notifications (:3003) and webhooks (:3004) services, all in turbo's terminal UI.
 - `bun dev:full` adds every optional service: the Python AI service (:8000), S3 storage
-  (RustFS, console :9001), stripe-mock, and everything else.
+  (RustFS, console :9001), ClamAV, and everything else. Billing without a Stripe
+  account: `bun run stripe:fake` (see the Billing block in .env.example).
 - Customer webhooks can point at a local receiver on 127.0.0.1 (allowed by
   WEBHOOK_ALLOWED_PRIVATE_ADDRESSES in .env; refused in production). For real Stripe
   test events, run `stripe listen --forward-to localhost:3004/webhooks/stripe` and set

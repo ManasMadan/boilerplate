@@ -9,7 +9,7 @@ import { createSession, type Harness, newEmail, newPassword, startApi, takeOtp }
 let harness: Harness;
 beforeAll(async () => {
   delete process.env.S3_BUCKET;
-  harness = await startApi({ S3_BUCKET: "" });
+  harness = await startApi(7, { S3_BUCKET: "" });
 });
 afterAll(() => harness?.close());
 

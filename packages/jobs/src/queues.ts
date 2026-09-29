@@ -113,6 +113,17 @@ export const notificationPayload = z.discriminatedUnion("template", [
     data: z.object({ endpointId: z.uuid(), url: z.string() }),
   }),
   z.object({
+    template: z.literal("billing.payment-failed"),
+    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
+    data: z.object({
+      organizationName: z.string(),
+      /** Minor units (cents), and an ISO 4217 code. */
+      amount: z.number().int().nonnegative(),
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      billingUrl: z.url(),
+    }),
+  }),
+  z.object({
     template: z.literal("todo.reminder"),
     to: z.object({ userId: z.string() }),
     data: z.object({ todoId: z.string(), title: z.string() }),
@@ -263,6 +274,7 @@ export const notificationQueue = {
   "org.invitation": "notifications-critical",
   "auth.security-alert": "notifications-critical",
   "webhooks.endpoint-disabled": "notifications-critical",
+  "billing.payment-failed": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
 export type NotificationQueue = (typeof notificationQueue)[NotificationTemplate];
@@ -282,7 +294,11 @@ const customerFacing: ReadonlySet<string> = new Set<EventName>(webhookEvents);
 export const eventSubscribers = {
   "events-audit": () => true,
   "events-webhooks": (name: string) => customerFacing.has(name),
-  "events-billing": (name: string) => name === "stripe.event_received.v1",
+  // Stripe's events, and membership changes (paid plans are billed per seat).
+  "events-billing": (name: string) =>
+    name === "stripe.event_received.v1" ||
+    name === "org.member_added.v1" ||
+    name === "org.member_removed.v1",
   "events-notifications": (name: string) => name === "webhook.endpoint_disabled.v1",
   "events-realtime": (name: string) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: string) => boolean>>;

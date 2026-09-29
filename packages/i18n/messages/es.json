@@ -98,7 +98,8 @@
     "RATE_LIMITED": "Demasiados intentos. Espera un minuto y vuelve a intentarlo.",
     "PASSKEY_CANCELLED": "Se cerró la ventana de la llave de acceso antes de terminar. Inténtalo de nuevo o usa tu contraseña.",
     "ORGANIZATION_NEEDS_OWNER": "Eres propietario de un espacio compartido. Haz propietario a otra persona antes de eliminar tu cuenta.",
-    "generic": "Algo salió mal. Inténtalo de nuevo."
+    "generic": "Algo salió mal. Inténtalo de nuevo.",
+    "ENTITLEMENT_REQUIRED": "Se alcanzó el límite de miembros de tu plan. Mejóralo en la configuración de facturación para invitar a más personas."
   },
   "nav": {
     "dashboard": "Panel",
@@ -349,7 +350,13 @@
       "heading": "Esto es lo que pasó",
       "intro": "{count, plural, one {# novedad} other {# novedades}} desde tu último resumen."
     },
-    "unsubscribe": "¿No quieres estos correos? Darse de baja"
+    "unsubscribe": "¿No quieres estos correos? Darse de baja",
+    "paymentFailed": {
+      "subject": "Falló el pago de {organizationName}",
+      "heading": "No pudimos cobrar tu pago",
+      "body": "El pago de renovación de {amount} de {organizationName} no se completó. Lo intentaremos de nuevo en los próximos días; actualiza el método de pago para mantener tu plan.",
+      "cta": "Actualizar el método de pago"
+    }
   },
   "notification": {
     "webhooks": {
@@ -362,6 +369,12 @@
       "reminder": {
         "title": "Recordatorio",
         "body": "{title}"
+      }
+    },
+    "billing": {
+      "payment-failed": {
+        "title": "Falló un pago",
+        "body": "El pago de renovación de {amount} no se completó. Actualiza el método de pago para mantener tu plan."
       }
     }
   },
@@ -399,7 +412,10 @@
     "FILE_INFECTED": "Ese archivo parece dañino, así que se eliminó.",
     "FILE_UNREADABLE": "No se pudo leer ese archivo. Puede estar dañado; prueba con otro.",
     "FILE_NOT_UPLOADED": "El archivo no terminó de subirse. Inténtalo de nuevo.",
-    "FILE_NOT_READY": "Todavía estamos revisando ese archivo. Inténtalo de nuevo en un momento."
+    "FILE_NOT_READY": "Todavía estamos revisando ese archivo. Inténtalo de nuevo en un momento.",
+    "ENTITLEMENT_REQUIRED": "Tu plan no incluye esto. Mejóralo en la configuración de facturación para usarlo.",
+    "ALREADY_SUBSCRIBED": "Este espacio de trabajo ya tiene un plan de pago. Gestiónalo desde la configuración de facturación.",
+    "NO_SUBSCRIPTION": "Este espacio de trabajo aún no tiene un plan de pago."
   },
   "workspace": {
     "switcher": {
@@ -665,6 +681,10 @@
       "invitations": {
         "title": "Invitaciones",
         "description": "Invitaciones para unirte a un espacio de trabajo."
+      },
+      "billing": {
+        "title": "Facturación",
+        "description": "Pagos fallidos y cambios en tu plan."
       }
     },
     "digest": {
@@ -709,5 +729,51 @@
       "phone-added": "Boilerplate: este número se añadió a tu cuenta para los SMS de seguridad.",
       "phone-removed": "Boilerplate: este número se eliminó de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora."
     }
+  },
+  "billing": {
+    "title": "Facturación",
+    "description": "El plan de {name}. Todos en el espacio de trabajo reciben lo que incluye.",
+    "disabled": "La facturación está desactivada en esta instalación: todo está incluido.",
+    "plans": {
+      "free": "Gratis",
+      "pro": "Pro"
+    },
+    "current": "Plan actual",
+    "membersLimit": "{used} de {limit} miembros",
+    "membersUnlimited": "{used, plural, one {# miembro} other {# miembros}}, sin límite",
+    "webhooks": "Webhooks",
+    "included": "Incluido",
+    "notIncluded": "No incluido",
+    "upgrade": {
+      "title": "Mejorar a Pro",
+      "description": "Miembros y webhooks ilimitados, facturado por miembro.",
+      "monthly": "Mejorar, pago mensual",
+      "yearly": "Mejorar, pago anual"
+    },
+    "manage": "Gestionar la facturación",
+    "status": {
+      "trialing": "Prueba gratis hasta el {date}",
+      "active": "Se renueva el {date}",
+      "past_due": "Falló el último pago. Actualiza el método de pago para mantener Pro.",
+      "canceling": "Cancelado: Pro se mantiene hasta el {date}",
+      "unpaid": "Fallaron los pagos, así que el plan caducó.",
+      "canceled": "Cancelado"
+    },
+    "seats": "{seats, plural, one {# puesto} other {# puestos}}",
+    "invoices": {
+      "title": "Facturas",
+      "empty": "Todavía no hay facturas.",
+      "view": "Ver",
+      "status": {
+        "paid": "Pagada",
+        "open": "Pendiente",
+        "void": "Anulada",
+        "draft": "Borrador",
+        "uncollectible": "Incobrable"
+      }
+    },
+    "checkoutDone": "¡Gracias! Tu plan se actualizará en un momento.",
+    "limitReached": "Tu plan permite {limit} miembros. Mejóralo en la configuración de facturación para invitar a más.",
+    "upgradeForWebhooks": "Los webhooks forman parte de Pro. Mejora tu plan en la configuración de facturación para enviar eventos a tus endpoints."
   }
 }

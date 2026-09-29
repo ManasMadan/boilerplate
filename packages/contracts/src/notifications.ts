@@ -16,6 +16,7 @@ export type NotificationChannel = (typeof notificationChannels)[number];
 export const notificationCategories = {
   security: { mutable: false, channels: ["email", "sms"] },
   invitations: { mutable: false, channels: ["email"] },
+  billing: { mutable: false, channels: ["in_app", "email"] },
   workspace: { mutable: true, channels: ["in_app", "email", "push"] },
   activity: { mutable: true, channels: ["in_app", "email", "push"] },
 } as const satisfies Record<string, { mutable: boolean; channels: readonly NotificationChannel[] }>;
@@ -38,6 +39,7 @@ export const mutableCategories = (
 export const inAppNotifications = {
   "webhooks.endpoint-disabled": z.object({ endpointId: z.uuid(), url: z.string() }),
   "todo.reminder": z.object({ todoId: z.uuid(), title: z.string() }),
+  "billing.payment-failed": z.object({ amount: z.string() }),
 } as const;
 export type InAppNotificationType = keyof typeof inAppNotifications;
 

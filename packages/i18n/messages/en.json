@@ -98,7 +98,8 @@
     "RATE_LIMITED": "Too many attempts. Wait a minute and try again.",
     "PASSKEY_CANCELLED": "The passkey prompt was closed before finishing. Try again, or use your password.",
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
-    "generic": "Something went wrong. Please try again."
+    "generic": "Something went wrong. Please try again.",
+    "ENTITLEMENT_REQUIRED": "Your plan's member limit is reached. Upgrade in billing settings to invite more people."
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -349,7 +350,13 @@
       "heading": "Here's what happened",
       "intro": "{count, plural, one {# update} other {# updates}} since your last summary."
     },
-    "unsubscribe": "Don't want these emails? Unsubscribe"
+    "unsubscribe": "Don't want these emails? Unsubscribe",
+    "paymentFailed": {
+      "subject": "Payment failed for {organizationName}",
+      "heading": "We couldn't take your payment",
+      "body": "The renewal payment of {amount} for {organizationName} didn't go through. We'll try again over the next few days; update the payment method to keep your plan.",
+      "cta": "Update payment method"
+    }
   },
   "notification": {
     "webhooks": {
@@ -362,6 +369,12 @@
       "reminder": {
         "title": "Reminder",
         "body": "{title}"
+      }
+    },
+    "billing": {
+      "payment-failed": {
+        "title": "A payment failed",
+        "body": "The renewal payment of {amount} didn't go through. Update the payment method to keep your plan."
       }
     }
   },
@@ -399,7 +412,10 @@
     "FILE_INFECTED": "That file looks harmful, so it was deleted.",
     "FILE_UNREADABLE": "That file couldn't be read. It may be damaged; try another.",
     "FILE_NOT_UPLOADED": "The file didn't finish uploading. Try again.",
-    "FILE_NOT_READY": "That file is still being checked. Try again in a moment."
+    "FILE_NOT_READY": "That file is still being checked. Try again in a moment.",
+    "ENTITLEMENT_REQUIRED": "Your plan doesn't include this. Upgrade in billing settings to use it.",
+    "ALREADY_SUBSCRIBED": "This workspace already has a paid plan. Manage it from billing settings.",
+    "NO_SUBSCRIPTION": "This workspace doesn't have a paid plan yet."
   },
   "workspace": {
     "switcher": {
@@ -665,6 +681,10 @@
       "invitations": {
         "title": "Invitations",
         "description": "Invitations to join a workspace."
+      },
+      "billing": {
+        "title": "Billing",
+        "description": "Failed payments and changes to your plan."
       }
     },
     "digest": {
@@ -709,5 +729,51 @@
       "phone-added": "Boilerplate: this number was added to your account for security texts.",
       "phone-removed": "Boilerplate: this number was removed from your account. Not you? Reset your password now."
     }
+  },
+  "billing": {
+    "title": "Billing",
+    "description": "The plan for {name}. Everyone in the workspace gets what it includes.",
+    "disabled": "Billing is off on this deployment: everything is included.",
+    "plans": {
+      "free": "Free",
+      "pro": "Pro"
+    },
+    "current": "Current plan",
+    "membersLimit": "{used} of {limit} members",
+    "membersUnlimited": "{used, plural, one {# member} other {# members}}, no limit",
+    "webhooks": "Webhooks",
+    "included": "Included",
+    "notIncluded": "Not included",
+    "upgrade": {
+      "title": "Upgrade to Pro",
+      "description": "Unlimited members and webhooks, billed per member.",
+      "monthly": "Upgrade, billed monthly",
+      "yearly": "Upgrade, billed yearly"
+    },
+    "manage": "Manage billing",
+    "status": {
+      "trialing": "Free trial until {date}",
+      "active": "Renews on {date}",
+      "past_due": "The last payment failed. Update the payment method to keep Pro.",
+      "canceling": "Cancelled: Pro stays until {date}",
+      "unpaid": "Payments failed, so the plan has lapsed.",
+      "canceled": "Cancelled"
+    },
+    "seats": "{seats, plural, one {# seat} other {# seats}}",
+    "invoices": {
+      "title": "Invoices",
+      "empty": "No invoices yet.",
+      "view": "View",
+      "status": {
+        "paid": "Paid",
+        "open": "Due",
+        "void": "Void",
+        "draft": "Draft",
+        "uncollectible": "Uncollectible"
+      }
+    },
+    "checkoutDone": "Thanks! Your plan will update in a moment.",
+    "limitReached": "Your plan allows {limit} members. Upgrade in billing settings to invite more.",
+    "upgradeForWebhooks": "Webhooks are part of Pro. Upgrade in billing settings to send events to your endpoints."
   }
 }

@@ -38,6 +38,17 @@ export const env = createEnv({
     TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
     // Browser push: the public half of apps/notifications' VAPID key pair.
     VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+    // Optional: billing (Stripe). On when STRIPE_SECRET_KEY is set, with both prices.
+    STRIPE_SECRET_KEY: z
+      .string()
+      .regex(/^(sk|rk)_(test|live)_/)
+      .optional(),
+    STRIPE_PRICE_PRO_MONTHLY: z.string().startsWith("price_").optional(),
+    STRIPE_PRICE_PRO_YEARLY: z.string().startsWith("price_").optional(),
+    // Free trial for an organization's first subscription; 0 turns trials off.
+    STRIPE_TRIAL_DAYS: z.coerce.number().int().min(0).max(730).default(14),
+    // Test hook: where Stripe's API lives (packages/fake-stripe).
+    STRIPE_API_URL: z.url().optional(),
     // Checks one-click unsubscribe links (apps/notifications signs them with the same secret).
     UNSUBSCRIBE_SECRET: z.string().min(32),
     // Encrypts webhook signing secrets at rest (apps/webhooks decrypts them to sign).
@@ -60,6 +71,10 @@ export const env = createEnv({
 });
 
 export type Env = typeof env;
+
+if (env.NODE_ENV === "production" && env.STRIPE_API_URL) {
+  throw new Error("STRIPE_API_URL is for tests only");
+}
 
 if (env.NODE_ENV === "production" && env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES.length > 0) {
   throw new Error("WEBHOOK_ALLOWED_PRIVATE_ADDRESSES must be empty in production");

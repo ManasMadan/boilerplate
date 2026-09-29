@@ -27,6 +27,7 @@ import {
   PASSWORD_MIN_LENGTH,
   userAdditionalFields,
 } from "@repo/contracts/auth";
+import type { Entitlements } from "@repo/contracts/billing";
 import type { EventName, EventPayload } from "@repo/contracts/events";
 import { type Db, transaction } from "@repo/db";
 import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
@@ -55,6 +56,11 @@ export interface AuthDependencies {
   redis: Redis;
   notifications: Producer<"notifications-critical">;
   memberships: Memberships;
+  /** Plan limits and cancelling a deleted organization's subscription (modules/billing). */
+  billing: {
+    entitlements(orgId: string): Promise<Entitlements>;
+    cancelFor(orgId: string): Promise<void>;
+  };
 }
 
 const MINUTE = 60;
@@ -70,7 +76,14 @@ function jobMeta(): JobMeta {
   };
 }
 
-export function createAuth({ env, db, redis, notifications, memberships }: AuthDependencies) {
+export function createAuth({
+  env,
+  db,
+  redis,
+  notifications,
+  memberships,
+  billing,
+}: AuthDependencies) {
   const webOrigin = new URL(env.WEB_URL);
 
   /** Records an audit event for auth activity (see auth-events.ts for why it's separate). */
@@ -183,6 +196,8 @@ export function createAuth({ env, db, redis, notifications, memberships }: AuthD
               });
             }
           }
+          // Nothing may keep charging for a workspace that's going away.
+          for (const organizationId of soleMember) await billing.cancelFor(organizationId);
           await transaction(db, async (tx) => {
             await tx.organization.deleteMany({ where: { id: { in: soleMember } } });
             for (const organizationId of soleMember) {
@@ -405,6 +420,9 @@ export function createAuth({ env, db, redis, notifications, memberships }: AuthD
       organization({
         creatorRole: "owner",
         invitationExpiresIn: INVITATION_DAYS * DAY,
+        // The plan's member limit (packages/contracts billing); null means none.
+        membershipLimit: async (_user, org) =>
+          (await billing.entitlements(org.id)).members ?? Number.MAX_SAFE_INTEGER,
         // Every membership change is audited (in the organization's own log, so its
         // admins see it) and forgets the cached role, so access follows immediately.
         organizationHooks: {
@@ -418,7 +436,23 @@ export function createAuth({ env, db, redis, notifications, memberships }: AuthD
             );
           },
           beforeDeleteOrganization: async ({ organization: org }) => {
+            await billing.cancelFor(org.id);
             await memberships.forgetOrganization(org.id);
+          },
+          // Invitations count towards the member limit, so a full plan can't over-invite.
+          beforeCreateInvitation: async ({ organization: org }) => {
+            const { members: limit } = await billing.entitlements(org.id);
+            if (limit === null) return;
+            const [members, pending] = await Promise.all([
+              db.member.count({ where: { organizationId: org.id } }),
+              db.invitation.count({ where: { organizationId: org.id, status: "pending" } }),
+            ]);
+            if (members + pending >= limit) {
+              throw new APIError("FORBIDDEN", {
+                code: "ENTITLEMENT_REQUIRED",
+                message: "The plan's member limit is reached.",
+              });
+            }
           },
           afterDeleteOrganization: async ({ organization: org, user }) => {
             await record(

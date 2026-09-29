@@ -9,6 +9,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { AiService, aiRouter } from "../modules/ai";
 import { AuditService, auditRouter } from "../modules/audit";
+import { BillingService, billingRouter } from "../modules/billing";
 import { FilesService, filesRouter } from "../modules/files";
 import { NotificationsService, notificationsRouter } from "../modules/notifications";
 import { RealtimeService, realtimeRouter } from "../modules/realtime";
@@ -29,6 +30,7 @@ export function createRouter(procedures: Procedures, app: INestApplication) {
     realtime: realtimeRouter(procedures, app.get(RealtimeService)),
     notifications: notificationsRouter(procedures, app.get(NotificationsService)),
     files: filesRouter(procedures, app.get(FilesService)),
+    billing: billingRouter(procedures, app.get(BillingService)),
   });
 }
 

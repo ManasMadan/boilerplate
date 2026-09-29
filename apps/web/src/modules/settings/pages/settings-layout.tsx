@@ -1,5 +1,6 @@
 "use client";
 
+import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { cn } from "@repo/ui/lib/utils";
 import type { Route } from "next";
 import Link from "next/link";
@@ -38,6 +39,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
   const t = useTranslations();
   const pathname = usePathname();
   const workspace = useActiveWorkspace();
+  const { data: system } = useSystemInfoQuery();
   const personal: Tab[] = [
     { href: "/settings", label: t("settings.profile.title") },
     { href: "/settings/security", label: t("settings.security.title") },
@@ -48,6 +50,9 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
     { href: "/settings/members", label: t("workspace.nav.members") },
     { href: "/settings/webhooks", label: t("workspace.nav.webhooks"), adminOnly: true },
     { href: "/settings/audit", label: t("workspace.nav.audit"), adminOnly: true },
+    ...(system?.features.billing
+      ? [{ href: "/settings/billing" as Route, label: t("billing.title"), adminOnly: true }]
+      : []),
   ];
 
   return (

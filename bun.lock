@@ -25,6 +25,7 @@
         "@better-auth/api-key": "catalog:",
         "@better-auth/passkey": "catalog:",
         "@better-auth/redis-storage": "catalog:",
+        "@nestjs/bullmq": "catalog:",
         "@nestjs/common": "catalog:",
         "@nestjs/core": "catalog:",
         "@nestjs/platform-fastify": "catalog:",
@@ -48,11 +49,13 @@
         "pino-pretty": "catalog:",
         "reflect-metadata": "catalog:",
         "rxjs": "catalog:",
+        "stripe": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
         "@nestjs/testing": "catalog:",
         "@orpc/client": "catalog:",
+        "@repo/fake-stripe": "workspace:*",
         "@repo/tsdown-config": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@types/node": "catalog:",
@@ -152,7 +155,7 @@
         "ioredis": "catalog:",
         "reflect-metadata": "catalog:",
         "rxjs": "catalog:",
-        "stripe": "^22.6.2",
+        "stripe": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -272,6 +275,18 @@
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "react-email": "^6.11.0",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
+    "packages/fake-stripe": {
+      "name": "@repo/fake-stripe",
+      "dependencies": {
+        "stripe": "catalog:",
+      },
+      "devDependencies": {
+        "@repo/typescript-config": "workspace:*",
+        "@types/node": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:",
       },
@@ -429,6 +444,7 @@
     "react-dom": "19.2.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "stripe": "^22.6.2",
     "tailwindcss": "^4.3.3",
     "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
@@ -1096,6 +1112,8 @@
     "@repo/db": ["@repo/db@workspace:packages/db"],
 
     "@repo/email": ["@repo/email@workspace:packages/email"],
+
+    "@repo/fake-stripe": ["@repo/fake-stripe@workspace:packages/fake-stripe"],
 
     "@repo/i18n": ["@repo/i18n@workspace:packages/i18n"],
 

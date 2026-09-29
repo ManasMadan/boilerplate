@@ -13,12 +13,15 @@
  * entry below. The `satisfies` clause makes a missing template a compile error.
  */
 import { Injectable } from "@nestjs/common";
+import { formatMoney } from "@repo/contracts/money";
 import type { InAppNotificationType, NotificationCategory } from "@repo/contracts/notifications";
 import {
   AuthOtpEmail,
   authOtpSubject,
   OrgInvitationEmail,
   orgInvitationSubject,
+  PaymentFailedEmail,
+  paymentFailedSubject,
   type RenderedEmail,
   renderEmail,
   SecurityAlertEmail,
@@ -56,7 +59,7 @@ export interface InAppMessage {
 export interface TemplateDefinition<T extends NotificationTemplate> {
   category: NotificationCategory;
   email?: (payload: PayloadOf<T>, context: RenderContext) => Promise<RenderedEmail>;
-  inApp?: (payload: PayloadOf<T>) => InAppMessage;
+  inApp?: (payload: PayloadOf<T>, context: RenderContext) => InAppMessage;
   push?: (
     payload: PayloadOf<T>,
     context: RenderContext,
@@ -124,6 +127,23 @@ const templates = {
       link: `/settings/webhooks/${payload.data.endpointId}`,
     }),
   },
+  "billing.payment-failed": {
+    category: "billing",
+    inApp: (payload, { recipient }) => ({
+      type: "billing.payment-failed",
+      data: { amount: formatMoney(payload.data, recipient.locale) },
+      link: "/settings/billing",
+      orgId: payload.to.orgId,
+    }),
+    email: (payload, { recipient, t }) =>
+      renderEmail(PaymentFailedEmail, paymentFailedSubject, {
+        locale: recipient.locale,
+        t,
+        organizationName: payload.data.organizationName,
+        amount: formatMoney(payload.data, recipient.locale),
+        billingUrl: payload.data.billingUrl,
+      }),
+  },
   "todo.reminder": {
     category: "activity",
     inApp: (payload) => ({
@@ -151,7 +171,7 @@ const templates = {
 export interface BoundTemplate {
   category: NotificationCategory;
   email?: (context: RenderContext) => Promise<RenderedEmail>;
-  inApp?: () => InAppMessage;
+  inApp?: (context: RenderContext) => InAppMessage;
   push?: (context: RenderContext) => { title: string; body: string; link?: string };
   sms?: (context: RenderContext) => string;
 }
@@ -171,7 +191,9 @@ function bind<T extends NotificationTemplate>(
       email: (context: RenderContext) =>
         definition.email?.(payload, context) as Promise<RenderedEmail>,
     }),
-    ...(definition.inApp && { inApp: () => definition.inApp?.(payload) as InAppMessage }),
+    ...(definition.inApp && {
+      inApp: (context: RenderContext) => definition.inApp?.(payload, context) as InAppMessage,
+    }),
     ...(definition.push && {
       push: (context: RenderContext) =>
         definition.push?.(payload, context) as ReturnType<NonNullable<BoundTemplate["push"]>>,

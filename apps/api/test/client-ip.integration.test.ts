@@ -9,7 +9,7 @@ import { createSession, type Harness, newEmail, startApi } from "./harness";
 
 let harness: Harness;
 beforeAll(async () => {
-  harness = await startApi({ TRUSTED_PROXIES: "192.0.2.1" });
+  harness = await startApi(8, { TRUSTED_PROXIES: "192.0.2.1" });
 });
 afterAll(() => harness?.close());
 

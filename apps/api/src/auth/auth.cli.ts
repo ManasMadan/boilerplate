@@ -4,6 +4,8 @@
  * nothing connects to Postgres or Redis and nothing is sent.
  * Used by the db-change skill: `bun run auth:schema`.
  */
+
+import { unlimited } from "@repo/contracts/billing";
 import { createDb } from "@repo/db";
 import type { Producer } from "@repo/jobs";
 import { Redis } from "ioredis";
@@ -24,4 +26,8 @@ export const auth = createAuth({
   redis,
   notifications,
   memberships: createMemberships(db, redis),
+  billing: {
+    entitlements: async () => unlimited,
+    cancelFor: () => Promise.reject(new Error("The auth CLI never changes billing")),
+  },
 });

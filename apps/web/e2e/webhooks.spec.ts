@@ -1,7 +1,7 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Webhook } from "standardwebhooks";
-import { createWorkspace, expect, signUp, test } from "./support";
+import { createWorkspace, expect, signUp, test, upgrade } from "./support";
 
 /** A local endpoint that records what it receives (the stack allows 127.0.0.1 in development). */
 async function receiver() {
@@ -29,6 +29,7 @@ test("add an endpoint, receive signed events, replay, test, rotate and delete", 
   const hook = await receiver();
   await signUp(page);
   await createWorkspace(page, "Hooked");
+  await upgrade(page);
 
   await page.goto("/settings/webhooks");
   await expect(page.getByText("No endpoints yet.")).toBeVisible();
@@ -82,6 +83,7 @@ test("add an endpoint, receive signed events, replay, test, rotate and delete", 
 
 test("private addresses are refused with an explanation", async ({ page }) => {
   await signUp(page);
+  await upgrade(page);
   await page.goto("/settings/webhooks");
   await page.getByLabel("Endpoint URL").fill("http://10.0.0.1/hook");
   await page.getByRole("button", { name: "Add endpoint" }).click();
@@ -96,6 +98,7 @@ test("only chosen events are sent", async ({ page }) => {
   const hook = await receiver();
   await signUp(page);
   await createWorkspace(page, "Picky");
+  await upgrade(page);
   await page.goto("/settings/webhooks");
   await page.getByLabel("Endpoint URL").fill(hook.url);
   await page.getByRole("checkbox", { name: /todo\.completed\.v1/ }).check();
