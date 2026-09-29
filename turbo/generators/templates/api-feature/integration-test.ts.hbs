@@ -1,0 +1,10 @@
+
+describe("{{kebabCase name}}", () => {
+  it("starts empty for a new organization", async () => {
+    const { session } = await signedInUser();
+    expect(await session.rpc.{{camelCase name}}.list({ limit: 20 })).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  });
+});

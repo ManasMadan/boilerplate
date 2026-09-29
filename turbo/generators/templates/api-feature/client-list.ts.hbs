@@ -1,0 +1,22 @@
+/**
+ * The organization's {{lowerCase (sentenceCase name)}}, newest first, loaded page by page.
+ *
+ *   const {{camelCase name}} = use{{pascalCase name}}ListInfiniteQuery();
+ *   {{camelCase name}}.data?.pages.flatMap((page) => page.items)
+ *   {{camelCase name}}.fetchNextPage()   // when {{camelCase name}}.hasNextPage
+ */
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useApi } from "../../provider";
+
+export const {{constantCase name}}_PAGE_SIZE = 20;
+
+export function use{{pascalCase name}}ListInfiniteQuery(limit = {{constantCase name}}_PAGE_SIZE) {
+  const { api } = useApi();
+  return useInfiniteQuery(
+    api.{{camelCase name}}.list.infiniteOptions({
+      input: (cursor: string | undefined) => ({ limit, ...(cursor && { cursor }) }),
+      initialPageParam: undefined,
+      getNextPageParam: (last) => last.nextCursor ?? undefined,
+    }),
+  );
+}

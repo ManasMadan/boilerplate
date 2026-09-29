@@ -1,0 +1,22 @@
+/** The {{lowerCase (sentenceCase name)}} procedures. Add writes the way todo.ts does (input schema, scope, errors). */
+import { z } from "zod";
+import { page, pageInput } from "../pagination";
+import { base } from "./base";
+
+export const {{camelCase item}}Schema = z.object({
+  id: z.uuid(),
+  createdAt: z.date(),
+});
+export type {{pascalCase item}} = z.infer<typeof {{camelCase item}}Schema>;
+
+export const {{camelCase name}}Contract = {
+  list: base
+    .route({
+      method: "GET",
+      path: "/{{kebabCase name}}",
+      tags: ["{{titleCase (sentenceCase name)}}"],
+      summary: "List the organization's {{lowerCase (sentenceCase name)}}, newest first",
+    })
+    .input(pageInput)
+    .output(page({{camelCase item}}Schema)),
+};

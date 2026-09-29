@@ -1,0 +1,17 @@
+/**
+ * {{sentenceCase name}} business rules. Write each change and its domain event in one
+ * tenantTx (see todo.service.ts), so the audit log, webhooks and notifications never
+ * miss or invent one.
+ */
+import { Injectable } from "@nestjs/common";
+import { type PageInput, toPage } from "@repo/contracts/pagination";
+import { {{pascalCase name}}Repository } from "./{{kebabCase name}}.repository";
+
+@Injectable()
+export class {{pascalCase name}}Service {
+  constructor(private readonly repository: {{pascalCase name}}Repository) {}
+
+  async list(orgId: string, page: PageInput) {
+    return toPage(await this.repository.list(orgId, page), page.limit);
+  }
+}

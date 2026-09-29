@@ -1,0 +1,7 @@
+import { coverage } from "@repo/vitest-config";
+import { defineConfig } from "vitest/config";
+
+// Raise the floor to what the tests reach as they're added (see packages/vitest-config).
+export default defineConfig({
+  test: { coverage: coverage({ lines: 0, functions: 0, branches: 0, statements: 0 }) },
+});
