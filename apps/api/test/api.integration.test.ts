@@ -7,6 +7,7 @@ import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
 import { createSignedTokens, S3Storage } from "@repo/nest-common";
+import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -145,6 +146,47 @@ describe("session revocation", () => {
 });
 
 describe("account security", () => {
+  it("keeps two-factor backup codes encrypted at rest, and each works once", async () => {
+    const { session, email, password } = await signedInUser();
+    const enabled = await session.auth<{ totpURI: string; backupCodes: string[] }>(
+      "/two-factor/enable",
+      { password },
+    );
+    expect(enabled.status).toBe(200);
+    const secret = new URL(enabled.body.totpURI).searchParams.get("secret") ?? "";
+    expect((await session.auth("/two-factor/verify-totp", { code: totp(secret) })).status).toBe(
+      200,
+    );
+
+    // What's stored reveals none of the codes.
+    const db = new pg.Client({ connectionString: harness.testDb.urlFor("app_api") });
+    await db.connect();
+    const stored = await db
+      .query<{ backup_codes: string }>(
+        `SELECT t.backup_codes FROM auth.two_factor t JOIN auth."user" u ON u.id = t.user_id WHERE u.email = $1`,
+        [email],
+      )
+      .finally(() => db.end());
+    const [code, ...others] = enabled.body.backupCodes;
+    expect(code).toBeDefined();
+    for (const backup of enabled.body.backupCodes)
+      expect(stored.rows[0]?.backup_codes).not.toContain(backup);
+
+    const again = createSession(harness);
+    const signIn = await again.auth<{ twoFactorRedirect?: boolean }>("/sign-in/email", {
+      email,
+      password,
+    });
+    expect(signIn.body.twoFactorRedirect).toBe(true);
+    expect((await again.auth("/two-factor/verify-backup-code", { code })).status).toBe(200);
+    expect(await again.rpc.user.me()).toMatchObject({ email });
+
+    const replay = createSession(harness);
+    await replay.auth("/sign-in/email", { email, password });
+    expect((await replay.auth("/two-factor/verify-backup-code", { code })).status).not.toBe(200);
+    expect(others).toHaveLength(9);
+  });
+
   it("changing the password emails a security alert to the account", async () => {
     const { session, email, password } = await signedInUser();
     const changed = await session.auth("/change-password", {

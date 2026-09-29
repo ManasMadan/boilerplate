@@ -66,6 +66,7 @@
       "devDependencies": {
         "@orpc/client": "catalog:",
         "@repo/fake-stripe": "workspace:*",
+        "@repo/testing": "workspace:*",
         "@repo/tsdown-config": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",

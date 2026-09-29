@@ -30,10 +30,12 @@ environment.
    wait for the sync, restart api and webhooks. Locally the user edits `.env` themselves
    (you can't read the old value); only if local webhook endpoints don't matter, set a
    fresh single key with `bun run env:set`.
-3. Keep the old key listed. Nothing re-encrypts existing rows yet: `SecretBox.needsRotation`
-   exists but no job calls it, and a row moves to the new key only when its endpoint's
-   secret is rotated. Dropping a key while rows still use it makes those endpoints
-   undeliverable ("Unknown encryption key").
+3. Re-encrypt the stored secrets with the new key (safe while the services run, safe
+   to repeat): `bun run secrets:reencrypt` locally; deployed,
+   `kubectl -n boilerplate exec deploy/boilerplate-api -- /nodejs/bin/node dist/reencrypt.mjs`.
+   It prints how many rows moved; a second run prints 0.
+4. Only then drop the old key from both services and apply. Dropping it earlier makes
+   endpoints still on it undeliverable ("Unknown encryption key").
 
 Never `tofu apply -replace` the `random_bytes.encryption_key` resource: it replaces the
 only key and every stored secret becomes unreadable.
@@ -41,9 +43,12 @@ only key and every stored secret becomes unreadable.
 ## Customer webhook signing secrets
 
 Per endpoint: the "Rotate secret" button in workspace settings (the `webhooks.rotateSecret`
-procedure, owners and admins). The new secret replaces the old one at once, with no
-overlap, so the customer must switch their verifier at the same time. It records
-`webhook.secret_rotated.v1` in the audit log.
+procedure, owners and admins). The old secret keeps signing next to the new one for
+`WEBHOOK_SECRET_OVERLAP_HOURS` (24, `packages/contracts/src/api/webhooks.ts`): each
+delivery carries both signatures, so the customer's receiver accepts it with either
+secret while they switch. Rotating again inside the window drops the oldest. It records
+`webhook.secret_rotated.v1` in the audit log. For a leaked secret, rotate twice: the
+second rotation retires the leaked one at once.
 
 ## Shared secrets (UNSUBSCRIBE_SECRET, AI_SERVICE_SECRET)
 
@@ -54,11 +59,23 @@ sent stop working; AI calls fail until both sides run the new value (tokens live
 
 ## BETTER_AUTH_SECRET
 
-There is no safe rotation today. better-auth signs sessions with it and encrypts
-two-factor secrets and the JWT signing keys (OAuth and MCP tokens) with it, and
-`apps/api/src/auth/auth.ts` passes a single `secret`. Replacing it signs everyone out
-and breaks existing two-factor enrolments and issued tokens. better-auth supports
-versioned secrets, but wiring them in is a code change to `auth.ts` and `apps/api/src/env.ts`.
+better-auth signs session cookies with it and encrypts OAuth tokens, two-factor secrets
+and backup codes, and the JWT signing keys (OAuth and MCP tokens) with it. Never just
+replace it: everything encrypted becomes unreadable. Rotate with versioned secrets
+(`apps/api/src/auth/secrets.ts`):
+
+1. Generate one: `openssl rand -base64 48`. Set `BETTER_AUTH_SECRETS` for the api,
+   newest first: `1:<new>` the first time, then `2:<newer>,1:<new>` and so on. Keep
+   `BETTER_AUTH_SECRET` as it is: it still decrypts values written before versions.
+   Deployed, `BETTER_AUTH_SECRETS` goes under `api` in `service_secrets`; locally
+   `bun run env:set BETTER_AUTH_SECRETS=1:<new>`.
+2. Apply and restart the api. Every session cookie is signed with the newest secret
+   only, so everyone signs in again once; nothing else breaks.
+3. Re-encrypt: `bun run secrets:reencrypt` (deployed: the `kubectl exec` command in the
+   ENCRYPTION_KEYS section). It moves every stored value to the newest version.
+4. Then older versions can go from `BETTER_AUTH_SECRETS`. The legacy
+   `BETTER_AUTH_SECRET` is still required by the api's environment; once re-encryption
+   has run, its value no longer protects anything and can be replaced with a fresh one.
 
 ## Provider keys (Stripe, Resend, Twilio, FCM, APNs, Google)
 

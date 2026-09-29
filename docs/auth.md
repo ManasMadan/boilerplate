@@ -127,6 +127,16 @@ origin:
 To add a tool, see the header of `apps/api/src/mcp/mcp.server.ts` or
 [python-services.md](python-services.md).
 
+## Secrets at rest
+
+better-auth encrypts what it stores that would let someone act as a user: OAuth tokens
+from Google, two-factor secrets and backup codes, and the private keys that sign OAuth
+and MCP tokens. The key is `BETTER_AUTH_SECRET`; rotating it means adding versioned
+secrets (`BETTER_AUTH_SECRETS`, `apps/api/src/auth/secrets.ts`) and then running
+`bun run secrets:reencrypt`, which moves every stored value, and the webhook signing
+secrets under `ENCRYPTION_KEYS`, to the newest key (`apps/api/src/secrets/reencrypt.ts`).
+The rotate-secrets skill has the steps.
+
 ## Security alerts
 
 Every sensitive account change emails the account's address and texts its verified

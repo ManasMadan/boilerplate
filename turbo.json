@@ -65,6 +65,10 @@
     "load:users": {
       "dependsOn": ["build"],
       "cache": false
+    },
+    "secrets:reencrypt": {
+      "dependsOn": ["build"],
+      "cache": false
     }
   }
 }

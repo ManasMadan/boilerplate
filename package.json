@@ -104,6 +104,7 @@
     "prepare": "husky",
     "stripe:fake": "bun run --filter @repo/fake-stripe start",
     "db:seed": "turbo run seed --filter=@repo/api",
+    "secrets:reencrypt": "turbo run secrets:reencrypt --filter=@repo/api",
     "test:coverage": "turbo run coverage"
   },
   "devDependencies": {

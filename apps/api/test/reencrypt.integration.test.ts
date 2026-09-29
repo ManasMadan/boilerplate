@@ -1,0 +1,125 @@
+/**
+ * Retiring a key: values written under the old keys are moved to the newest, after
+ * which the old keys can go and everything still decrypts.
+ */
+import { randomBytes } from "node:crypto";
+import { createDatabase, type Database, tenantTx } from "@repo/db";
+import { createTestDatabase, factories, type TestDatabase } from "@repo/db/testing";
+import { keysFromEnv, SecretBox } from "@repo/nest-common";
+import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { authEncryptionKey } from "../src/auth/secrets";
+import { reencryptSecrets } from "../src/secrets/reencrypt";
+
+const OLD_AUTH = "o".repeat(40);
+const NEW_AUTH = "n".repeat(40);
+const oldKey = `old:${randomBytes(32).toString("base64")}`;
+const newKey = `new:${randomBytes(32).toString("base64")}`;
+const BACKUP_CODES = JSON.stringify(["aaaaa-11111", "bbbbb-22222"]);
+
+let testDb: TestDatabase;
+let database: Database;
+const ids = { account: "", twoFactor: "", jwks: "", endpoint: "", org: "" };
+
+beforeAll(async () => {
+  testDb = await createTestDatabase();
+  database = createDatabase({ url: testDb.urlFor("app_api"), poolMax: 2, service: "test" });
+  const db = database.write;
+  const { user, org } = await factories(db).userWithWorkspace();
+  ids.org = org.id;
+  // Written before rotation: better-auth with its single secret, and the old data key.
+  const legacy = (data: string) => symmetricEncrypt({ key: OLD_AUTH, data });
+  ids.account = (
+    await db.account.create({
+      data: {
+        userId: user.id,
+        providerId: "google",
+        accountId: user.id,
+        accessToken: await legacy("access"),
+        refreshToken: await legacy("refresh"),
+      },
+    })
+  ).id;
+  ids.twoFactor = (
+    await db.twoFactor.create({
+      data: { userId: user.id, secret: await legacy("totp-secret"), backupCodes: BACKUP_CODES },
+    })
+  ).id;
+  ids.jwks = (
+    await db.jwks.create({
+      data: { publicKey: "{}", privateKey: JSON.stringify(await legacy('{"d":"private"}')) },
+    })
+  ).id;
+  const oldBox = new SecretBox(keysFromEnv(oldKey));
+  ids.endpoint = await tenantTx(db, org.id, async (tx) => {
+    const endpoint = await tx.webhookEndpoint.create({
+      data: {
+        orgId: org.id,
+        url: "https://example.com/hook",
+        events: [],
+        secret: oldBox.encrypt("whsec_x"),
+      },
+    });
+    return endpoint.id;
+  });
+});
+
+afterAll(async () => {
+  await database?.disconnect();
+  await testDb?.drop();
+});
+
+describe("re-encrypting secrets", () => {
+  const rotated = () => ({
+    authKey: authEncryptionKey(OLD_AUTH, [{ version: 1, value: NEW_AUTH }]),
+    box: new SecretBox(keysFromEnv(`${newKey},${oldKey}`)),
+  });
+
+  it("moves every value to the newest key, and a second run changes nothing", async () => {
+    expect(await reencryptSecrets(database, rotated())).toEqual({
+      accounts: 1,
+      twoFactors: 1,
+      signingKeys: 1,
+      webhookEndpoints: 1,
+    });
+    expect(await reencryptSecrets(database, rotated())).toEqual({
+      accounts: 0,
+      twoFactors: 0,
+      signingKeys: 0,
+      webhookEndpoints: 0,
+    });
+  });
+
+  it("leaves nothing the old keys are needed for", async () => {
+    const db = database.write;
+    // The newest keys alone: no legacy secret, no old data key.
+    const onlyNew = { keys: new Map([[1, NEW_AUTH]]), currentVersion: 1 };
+    const open = (data: string) => symmetricDecrypt({ key: onlyNew, data });
+
+    const account = await db.account.findUniqueOrThrow({ where: { id: ids.account } });
+    expect(await open(account.accessToken ?? "")).toBe("access");
+    expect(await open(account.refreshToken ?? "")).toBe("refresh");
+
+    const twoFactor = await db.twoFactor.findUniqueOrThrow({ where: { id: ids.twoFactor } });
+    expect(await open(twoFactor.secret)).toBe("totp-secret");
+    // Backup codes stored in the clear before are now encrypted too.
+    expect(twoFactor.backupCodes.startsWith("$ba$1$")).toBe(true);
+    expect(await open(twoFactor.backupCodes)).toBe(BACKUP_CODES);
+
+    const jwks = await db.jwks.findUniqueOrThrow({ where: { id: ids.jwks } });
+    expect(await open(JSON.parse(jwks.privateKey))).toBe('{"d":"private"}');
+
+    const secret = await tenantTx(db, ids.org, (tx) =>
+      tx.webhookEndpoint.findUniqueOrThrow({ where: { id: ids.endpoint } }),
+    ).then((endpoint) => endpoint.secret);
+    expect(new SecretBox(keysFromEnv(newKey)).decrypt(secret)).toBe("whsec_x");
+  });
+
+  it("leaves better-auth's values alone while it has a single secret", async () => {
+    const result = await reencryptSecrets(database, {
+      authKey: authEncryptionKey(NEW_AUTH, undefined),
+      box: new SecretBox(keysFromEnv(newKey)),
+    });
+    expect(result).toMatchObject({ accounts: 0, twoFactors: 0, signingKeys: 0 });
+  });
+});

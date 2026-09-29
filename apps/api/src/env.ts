@@ -10,6 +10,7 @@
 import { coreEnv, databaseEnv, port, redisEnv, storageEnv } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
+import { parseAuthSecrets } from "./auth/secrets";
 
 export const env = createEnv({
   server: {
@@ -21,6 +22,19 @@ export const env = createEnv({
     PORT: port(3001),
 
     BETTER_AUTH_SECRET: z.string().min(32, "Generate one with: openssl rand -base64 32"),
+    /** Optional: versioned secrets for rotating BETTER_AUTH_SECRET (src/auth/secrets.ts). */
+    BETTER_AUTH_SECRETS: z
+      .string()
+      .optional()
+      .transform((value, ctx) => {
+        if (!value) return undefined;
+        try {
+          return parseAuthSecrets(value);
+        } catch (error) {
+          ctx.addIssue({ code: "custom", message: (error as Error).message });
+          return z.NEVER;
+        }
+      }),
     /** Public URL of this API; OAuth callbacks and cookies are derived from it. */
     BETTER_AUTH_URL: z.url(),
     /** Public URL of the web app, the browser origin allowed to call the API. */

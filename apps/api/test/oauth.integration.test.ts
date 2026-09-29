@@ -23,7 +23,9 @@ import { oauthClient, REDIRECT_URI } from "./oauth-client";
 let harness: Harness;
 
 beforeAll(async () => {
-  harness = await startApi(4);
+  // Versioned secrets (a rotated BETTER_AUTH_SECRET): the signing keys behind every
+  // token below are encrypted with them.
+  harness = await startApi(4, { BETTER_AUTH_SECRETS: `1:${"r".repeat(40)}` });
 });
 afterAll(() => harness?.close());
 

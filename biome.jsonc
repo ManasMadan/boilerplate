@@ -84,6 +84,7 @@
         "**/*.config.mjs",
         "apps/api/src/seed.ts",
         "apps/api/src/load-users.ts",
+        "apps/api/src/reencrypt.ts",
         "deploy/docker/*.mjs"
       ],
       "linter": {

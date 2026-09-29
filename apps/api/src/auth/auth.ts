@@ -144,6 +144,8 @@ export function createAuth({
     appName: "Boilerplate",
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
+    // When set, the newest signs and encrypts and BETTER_AUTH_SECRET decrypts older values.
+    ...(env.BETTER_AUTH_SECRETS && { secrets: env.BETTER_AUTH_SECRETS }),
     // Browsers may only call auth endpoints from the product's own origins (CSRF
     // protection); the mobile app's scheme is added by the Expo plugin below.
     trustedOrigins: [env.WEB_URL, ...env.APP_ORIGINS, `${MOBILE_SCHEME}://`],
@@ -460,7 +462,12 @@ export function createAuth({
           );
         },
       }),
-      twoFactor({ issuer: "Boilerplate", backupCodeOptions: { amount: 10 } }),
+      // Backup codes are encrypted at rest: stored as-is (the default), anyone reading
+      // the table could get past a user's second factor.
+      twoFactor({
+        issuer: "Boilerplate",
+        backupCodeOptions: { amount: 10, storeBackupCodes: "encrypted" },
+      }),
       passkey({ rpID: webOrigin.hostname, rpName: "Boilerplate", origin: env.WEB_URL }),
       // Rejects passwords found in public breaches (k-anonymity: only a hash prefix is sent).
       haveIBeenPwned(),
