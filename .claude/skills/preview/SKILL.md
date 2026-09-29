@@ -1,0 +1,31 @@
+---
+name: preview
+description: Give a pull request its own running environment, or find out why a preview isn't up. Use when the user wants to try, demo or share a branch before merging, or mentions the preview label or a pr-<number> URL.
+---
+
+# Pull-request previews
+
+1. Add the `preview` label (maintainers only): `gh pr edit <number> --add-label preview`.
+   Only branches of this repository get previews, never forks.
+2. `.github/workflows/preview.yml` builds the head commit's images (amd64) as
+   `sha-<commit>`, pushes them to GHCR, and comments the address on the pull request:
+   `https://pr-<number>.preview.<PREVIEW_DOMAIN>`.
+3. Argo CD's `previews` ApplicationSet (`deploy/argocd/appsets/previews.yaml`) polls
+   labelled pull requests every two minutes and deploys `pr-<number>-data` then
+   `pr-<number>-stack` into namespace `pr-<number>`, with
+   `deploy/environments/preview/*.yaml`: its own Postgres and Valkey, secrets under the
+   `boilerplate-preview-` prefix. Migrations run before the services, as everywhere.
+4. Each push rebuilds and redeploys. Removing the label or closing the pull request
+   deletes the preview and its namespace.
+
+## When it doesn't come up
+
+- No comment on the PR: the workflow didn't run (`gh run list --workflow preview.yml`);
+  check the label and that the branch isn't from a fork.
+- Comment says "set the PREVIEW_DOMAIN repository variable": set it
+  (docs/repository-settings.md).
+- Images pushed but nothing deployed: the preview cluster needs the label
+  `boilerplate.dev/previews: "true"` and the `github-token` secret for Argo CD
+  (`TF_VAR_github_token` in infra/tofu; see deploy/README.md), and GHCR packages must be
+  pullable (docs/repository-settings.md, Packages).
+- Deployed but failing: `kubectl -n pr-<number> get pods`, then the debug skill.

@@ -1,0 +1,47 @@
+---
+name: dependency-update
+description: Review, fix or land dependency updates (Renovate pull requests, the Bun catalog, the Expo SDK, images, actions, Helm charts, OpenTofu providers). Use when a Renovate PR fails CI, the user wants to upgrade a package or tool, or asks how dependencies are kept current.
+---
+
+# Dependency updates
+
+Renovate runs in this repository's Actions (`.github/workflows/renovate.yml`, daily;
+config in `renovate.json5`), as the GitHub App, so its pull requests run CI. It
+schedules updates before 6am UTC on Mondays and waits until a release is 3 days old.
+Everything is pinned: npm and Python packages with their lockfiles, images, actions by
+digest, Helm charts, OpenTofu providers, and versions marked with a `# renovate:` comment.
+
+## Reviewing a Renovate pull request
+
+1. Read the release notes in its description; majors need the changelog's migration
+   steps.
+2. Check out the branch and run what CI runs: `bun install`, `bun run lint`,
+   `bun run check-types`, `bun run test`; `bun run test:integration` for database,
+   queue, auth or HTTP libraries.
+3. Fix breakages at the cause in the same pull request (principle 1): no pinning back,
+   no `@ts-ignore`.
+
+## Special cases
+
+- **Bun catalog.** Versions shared across workspaces live once in the root
+  `package.json` `workspaces.catalog`; packages say `"catalog:"`. Renovate bumps the
+  catalog entry and runs `bun install` to refresh `bun.lock`. By hand: edit the catalog
+  entry, then `bun install`. Never give one workspace its own version of a catalog
+  package.
+- **Expo SDK.** `expo`, `expo-*`, `@expo/*`, `react-native*`, `react`, `react-dom` and
+  their types are one group: the SDK decides the React Native and React versions. On
+  that branch run `bunx expo install --fix` inside `apps/mobile` (the one tool that must
+  run from its project folder), then `bun run --cwd apps/mobile doctor`
+  (expo-doctor). React is in the catalog, so web moves with it: if `expo install`
+  writes a version over a `"catalog:"` entry in `apps/mobile/package.json`, put that
+  version in the root catalog and restore `"catalog:"`.
+- **kind.** Its PR notes say it: update `SHA256` in `.github/workflows/kind.yml` to the
+  release's `kind-linux-amd64.sha256sum` before merging.
+- **Postgres majors** are disabled: a major needs a dump and restore or pg_upgrade,
+  never a tag bump.
+- **Images** in `deploy/` and the charts: `bun run charts:check` renders and validates
+  them. **OpenTofu providers**: `bun run infra:check`.
+- **Python** (`apps/ai/uv.lock`): Renovate updates the lockfile; locally
+  `bun run lint`, `bun run check-types` and `bun run test` cover apps/ai too.
+
+After merging, the deploy skill covers the rollout to staging.
