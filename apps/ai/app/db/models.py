@@ -45,6 +45,7 @@ class Document(Base):
     title: Mapped[str] = mapped_column(Text)
     # The text as added, kept so the document can be re-indexed.
     content: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
     # pending | indexing | ready | failed
     status: Mapped[str] = mapped_column(Text, server_default=text("'pending'::text"))
     error: Mapped[str | None] = mapped_column(Text)

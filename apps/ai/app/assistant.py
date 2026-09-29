@@ -15,7 +15,6 @@ Guardrails:
 Seam: an LLM gateway (LiteLLM, a provider router) is just another model name here.
 """
 
-import datetime
 import json
 from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass, field
@@ -36,13 +35,11 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
 from pydantic_ai.usage import UsageLimits
-from sqlalchemy import func, select
 
-from app.db.models import AiUsage
-from app.db.session import tenant
 from app.documents import Documents, Passage
 from app.errors import AppError
 from app.log import log
+from app.usage import record, used_this_month
 
 INSTRUCTIONS = """You answer questions for the members of one workspace, using only its \
 documents. Always call search_documents first. Answer from what it returns; if the \
@@ -196,20 +193,8 @@ class Assistant:
         self._monthly_tokens = monthly_tokens
         self._tokens_per_run = tokens_per_run
 
-    async def _used_this_month(self, org_id: UUID) -> int:
-        month = datetime.datetime.now(datetime.UTC).replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
-        )
-        async with tenant(org_id) as session:
-            used = await session.scalar(
-                select(
-                    func.coalesce(func.sum(AiUsage.input_tokens + AiUsage.output_tokens), 0)
-                ).where(AiUsage.org_id == org_id, AiUsage.created_at >= month)
-            )
-        return int(used or 0)
-
     async def check_budget(self, org_id: UUID) -> None:
-        if await self._used_this_month(org_id) >= self._monthly_tokens:
+        if await used_this_month(org_id) >= self._monthly_tokens:
             raise AppError("AI_BUDGET_EXCEEDED", 429)
 
     async def answer(
@@ -235,18 +220,9 @@ class Assistant:
             yield AssistantEvent(event=ErrorEvent(code="UPSTREAM_UNAVAILABLE"))
             return
         finally:
-            if input_tokens or output_tokens:
-                async with tenant(org_id) as session:
-                    session.add(
-                        AiUsage(
-                            org_id=org_id,
-                            user_id=user_id,
-                            feature="assistant",
-                            model=self._model_name,
-                            input_tokens=input_tokens,
-                            output_tokens=output_tokens,
-                        )
-                    )
+            await record(
+                org_id, user_id, "assistant", self._model_name, input_tokens, output_tokens
+            )
         yield AssistantEvent(
             event=SourcesEvent(
                 sources=[Source(documentId=doc, title=title) for doc, title in deps.sources.items()]

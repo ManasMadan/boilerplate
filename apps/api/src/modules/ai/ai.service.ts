@@ -132,6 +132,7 @@ function toDocument(row: {
   status: AiDocument["status"];
   error: string | null;
   chunkCount: number;
+  summary: string | null;
   createdBy: string | null;
   createdAt: string;
 }): AiDocument {

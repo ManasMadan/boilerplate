@@ -10,6 +10,8 @@ model Document {
   title        String
   /// The text as added; kept so the document can be re-indexed (e.g. a new embedding model).
   content      String
+  /// A short summary, written after indexing when a model is configured.
+  summary      String?
   /// pending (waiting to be indexed) | indexing | ready | failed
   status       String          @default("pending")
   /// Why indexing failed (an error code).

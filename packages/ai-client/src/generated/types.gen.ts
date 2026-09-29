@@ -79,6 +79,10 @@ export type DocumentOut = {
      */
     status: 'pending' | 'indexing' | 'ready' | 'failed';
     /**
+     * Summary
+     */
+    summary: string | null;
+    /**
      * Title
      */
     title: string;

@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.assistant import Deps, _local_extractive, create_agent
 from app.auth import verify
-from app.documents import Passage
+from app.documents import Passage, create_summaries
 from app.embeddings import HashingEmbedder
 from app.errors import AppError
 from app.settings import Settings
@@ -116,3 +116,10 @@ def test_the_sentiment_model() -> None:
     assert predict("I love this, it is great")[0] == "positive"
     assert predict("this is terrible")[0] == "negative"
     assert predict("the sky is blue") == ("neutral", 0.5)
+
+
+def test_summaries_follow_the_configured_model() -> None:
+    assert create_summaries(_settings()) is None
+    summaries = create_summaries(_settings(AI_MODEL="local:extractive", AI_TOKENS_PER_RUN="5000"))
+    assert summaries is not None
+    assert (summaries.model_name, summaries.monthly_tokens) == ("local:extractive", 2_000_000)

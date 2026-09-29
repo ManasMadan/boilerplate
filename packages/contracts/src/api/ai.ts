@@ -19,6 +19,8 @@ export const aiDocumentSchema = z.object({
   status: z.enum(["pending", "indexing", "ready", "failed"]),
   error: z.string().nullable(),
   chunkCount: z.number().int(),
+  /** A few sentences, written after indexing when a model is configured. */
+  summary: z.string().nullable(),
   createdBy: z.uuid().nullable(),
   createdAt: z.date(),
 });

@@ -8,6 +8,7 @@ limited to the caller's organization by row-level security.
 from dataclasses import dataclass
 from uuid import UUID
 
+from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from redis.asyncio import Redis
 from sqlalchemy import delete, func, select, update
 
@@ -20,6 +21,9 @@ from app.errors import AppError
 from app.log import log
 from app.queues import IngestQueue
 from app.realtime import publish_to_org
+from app.settings import Settings
+from app.summaries import SummaryState, build_summary_graph, local_summarizer, summarize
+from app.usage import record, used_this_month
 
 # Passages sent to the embedding model per request.
 EMBED_BATCH = 64
@@ -33,11 +37,27 @@ class Passage:
     score: float
 
 
+@dataclass(frozen=True)
+class Summaries:
+    """Summaries are written when a model is configured (see app/summaries.py)."""
+
+    graph: CompiledStateGraph[SummaryState]
+    model_name: str
+    monthly_tokens: int
+
+
 class Documents:
-    def __init__(self, embedder: Embedder, queue: IngestQueue, redis: Redis) -> None:
+    def __init__(
+        self,
+        embedder: Embedder,
+        queue: IngestQueue,
+        redis: Redis,
+        summaries: Summaries | None = None,
+    ) -> None:
         self._embedder = embedder
         self._queue = queue
         self._redis = redis
+        self._summaries = summaries
 
     async def create(
         self, org_id: UUID, user_id: UUID, title: str, content: str, request_id: str | None
@@ -79,7 +99,7 @@ class Documents:
                 raise AppError("DOCUMENT_NOT_FOUND", 404)
         await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
 
-    async def index(self, org_id: UUID, document_id: UUID) -> None:
+    async def index(self, org_id: UUID, document_id: UUID, meta: Meta | None = None) -> None:
         """Splits and embeds a document (the ingest job). Safe to run again: it replaces
         the passages it wrote before."""
         async with tenant(org_id) as session:
@@ -127,6 +147,41 @@ class Documents:
                 )
             )
         await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
+        if self._summaries:
+            await self._queue.add(document_id, org_id, meta or Meta(), name="summarize")
+
+    async def summarize(self, org_id: UUID, document_id: UUID, user_id: UUID | None) -> None:
+        """Writes the document's summary (the summarize job). A workspace past its monthly
+        allowance simply gets no summary; answering questions matters more."""
+        if not self._summaries:
+            return
+        if await used_this_month(org_id) >= self._summaries.monthly_tokens:
+            log.info("skipping a summary: monthly budget used", document_id=str(document_id))
+            return
+        async with tenant(org_id) as session:
+            passages = list(
+                await session.scalars(
+                    select(DocumentChunk.content)
+                    .where(DocumentChunk.document_id == document_id)
+                    .order_by(DocumentChunk.ordinal)
+                )
+            )
+        summary, usage = await summarize(self._summaries.graph, passages)
+        await record(
+            org_id,
+            user_id,
+            "summary",
+            self._summaries.model_name,
+            usage.input_tokens,
+            usage.output_tokens,
+        )
+        async with tenant(org_id) as session:
+            await session.execute(
+                update(Document)
+                .where(Document.id == document_id)
+                .values(summary=summary or None, updated_at=func.now())
+            )
+        await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
 
     async def search(self, org_id: UUID, query: str, limit: int = 5) -> list[Passage]:
         [vector] = await self._embedder.embed([query])
@@ -143,3 +198,14 @@ class Documents:
                 Passage(document_id=row[0], title=row[1], content=row[2], score=1 - float(row[3]))
                 for row in rows
             ]
+
+
+def create_summaries(settings: Settings) -> Summaries | None:
+    if not settings.model:
+        return None
+    model = local_summarizer() if settings.model == "local:extractive" else settings.model
+    return Summaries(
+        graph=build_summary_graph(model, settings.tokens_per_run),
+        model_name=settings.model,
+        monthly_tokens=settings.monthly_tokens_per_org,
+    )

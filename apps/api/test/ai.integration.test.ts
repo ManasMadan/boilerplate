@@ -29,6 +29,7 @@ interface Doc {
   status: string;
   error: null;
   chunkCount: number;
+  summary: string | null;
   createdBy: string;
   createdAt: string;
 }
@@ -91,6 +92,7 @@ beforeAll(async () => {
         status: "pending",
         error: null,
         chunkCount: 0,
+        summary: null,
         createdBy: user,
         createdAt: new Date().toISOString(),
       };
@@ -183,6 +185,7 @@ describe("AI features", () => {
     expect(added).toMatchObject({
       title: "Handbook",
       status: "pending",
+      summary: null,
       createdAt: expect.any(Date),
     });
     expect((await session.rpc.ai.documents()).map((d) => d.id)).toEqual([added.id]);

@@ -41,6 +41,10 @@ test("add a document and get an answer from it, with its source", async ({ page 
     "Refunds take five business days to reach your card.\n\nWe ship worldwide from Lisbon.",
   );
   await expect(row.getByText("1 passage")).toBeVisible();
+  // The summary follows indexing (the local summarizer keeps the opening sentence).
+  await expect(row.getByText("Refunds take five business days to reach your card.")).toBeVisible({
+    timeout: 20_000,
+  });
 
   const answer = await ask(page, "How long do refunds take?");
   await expect(answer).toContainText("Refunds take five business days", { timeout: 20_000 });

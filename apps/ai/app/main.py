@@ -23,7 +23,7 @@ from app.assistant import Assistant, AssistantEvent, AssistantRequest, create_ag
 from app.auth import CallerDep
 from app.db.models import Document
 from app.db.session import close_engine, engine, open_engine
-from app.documents import Documents
+from app.documents import Documents, create_summaries
 from app.embeddings import create_embedder
 from app.errors import AppError, install_error_handlers
 from app.log import configure_logging
@@ -45,7 +45,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     open_engine(settings.database_url, settings.database_pool_max)
     redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]
     queue = IngestQueue(str(settings.redis_url))
-    documents = Documents(create_embedder(settings.embeddings), queue, redis)
+    documents = Documents(
+        create_embedder(settings.embeddings), queue, redis, create_summaries(settings)
+    )
     app.state.redis = redis
     app.state.documents = documents
     app.state.assistant = (
@@ -91,6 +93,7 @@ def _out(document: Document) -> DocumentOut:
         status=document.status,  # pyright: ignore[reportArgumentType]  # checked by the database
         error=document.error,
         chunkCount=document.chunk_count,
+        summary=document.summary,
         createdBy=document.created_by,
         createdAt=document.created_at,
     )

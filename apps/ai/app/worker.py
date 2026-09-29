@@ -8,13 +8,14 @@ the queue's backoff (the same settings the TypeScript side uses).
 
 import asyncio
 import signal
+from uuid import UUID
 
 import structlog
 from redis.asyncio import Redis
 
 from app.contracts.ai_ingest_job import AiIngestJob
 from app.db.session import close_engine, open_engine
-from app.documents import Documents
+from app.documents import Documents, create_summaries
 from app.embeddings import create_embedder
 from app.log import configure_logging, log
 from app.queues import INGEST, IngestQueue, JobLike, start_worker
@@ -27,14 +28,24 @@ async def main() -> None:
     open_engine(settings.database_url, settings.database_pool_max)
     redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]
     queue = IngestQueue(str(settings.redis_url))
-    documents = Documents(create_embedder(settings.embeddings), queue, redis)
+    documents = Documents(
+        create_embedder(settings.embeddings), queue, redis, create_summaries(settings)
+    )
 
     async def process(job: JobLike) -> None:
         data = AiIngestJob.model_validate(job.data)
         structlog.contextvars.bind_contextvars(
             request_id=data.meta.requestId or f"job:{job.id}", org_id=str(data.payload.orgId)
         )
-        await documents.index(data.payload.orgId, data.payload.documentId)
+        if job.name == "ingest":
+            await documents.index(data.payload.orgId, data.payload.documentId, data.meta)
+        elif job.name == "summarize":
+            user = data.meta.userId
+            await documents.summarize(
+                data.payload.orgId, data.payload.documentId, UUID(user) if user else None
+            )
+        else:
+            raise ValueError(f"unknown job {job.name!r} on {INGEST}")
         structlog.contextvars.clear_contextvars()
 
     worker = start_worker(INGEST, process, str(settings.redis_url), concurrency=4)

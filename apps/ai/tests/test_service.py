@@ -237,6 +237,26 @@ def test_a_workspace_over_its_monthly_budget_is_refused(client: TestClient) -> N
     assert response.json()["code"] == "AI_BUDGET_EXCEEDED"
 
 
+def test_a_workspace_over_its_monthly_budget_gets_no_summary(client: TestClient) -> None:
+    from app.main import app
+
+    org, user = new_org()
+    doc = client.post(
+        "/v1/documents", json={"title": "T", "content": "Some text."}, headers=headers(org, user)
+    ).json()
+    as_org(
+        org,
+        "INSERT INTO ai.usage (org_id, feature, model, input_tokens, output_tokens)"
+        " VALUES (%s, 'assistant', 'x', 2000000, 0)",
+        (org,),
+    )
+    index_all(client, org)
+    client.portal.call(app.state.documents.summarize, org, UUID(doc["id"]), user)  # pyright: ignore[reportOptionalMemberAccess]
+    [listed] = client.get("/v1/documents", headers=headers(org, user)).json()
+    assert (listed["status"], listed["summary"]) == ("ready", None)
+    assert as_org(org, "SELECT count(*) FROM ai.usage WHERE feature = 'summary'") == [(0,)]
+
+
 def test_the_assistant_is_off_without_a_model(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -258,23 +278,32 @@ def test_the_assistant_is_off_without_a_model(
     }
 
 
-def test_the_worker_indexes_queued_documents(client: TestClient) -> None:
+def test_the_worker_indexes_queued_documents_then_summarizes_them(client: TestClient) -> None:
     org, user = new_org()
     doc = client.post(
         "/v1/documents",
-        json={"title": "Queued", "content": "Indexed by the worker."},
+        json={
+            "title": "Queued",
+            "content": "Indexed by the worker. Then summarized.",
+        },
         headers=headers(org, user),
     ).json()
+    assert doc["summary"] is None
     env = {**os.environ, **ENV}
     worker = subprocess.Popen([sys.executable, "-m", "app.worker"], env=env)
     try:
         deadline = time.monotonic() + 20
-        status = "pending"
-        while time.monotonic() < deadline and status != "ready":
+        listed: dict[str, object] = {"status": "pending", "summary": None}
+        while time.monotonic() < deadline and listed["summary"] is None:
             time.sleep(0.2)
             [listed] = client.get("/v1/documents", headers=headers(org, user)).json()
-            status = listed["status"]
-        assert status == "ready", f"document {doc['id']} is {status}"
+        assert listed["status"] == "ready", f"document {doc['id']} is {listed['status']}"
+        # The local summarizer keeps a passage's opening sentence.
+        assert listed["summary"] == "Indexed by the worker."
+        [(feature, model, by)] = as_org(
+            org, "SELECT feature, model, user_id FROM ai.usage WHERE org_id = %s", (org,)
+        )
+        assert (feature, model, by) == ("summary", "local:extractive", user)
     finally:
         worker.terminate()
         assert worker.wait(timeout=10) == 0

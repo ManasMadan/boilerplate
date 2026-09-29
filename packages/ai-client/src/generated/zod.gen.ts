@@ -32,6 +32,7 @@ export const zDocumentOut = z.object({
         'ready',
         'failed'
     ]),
+    summary: z.string().nullable(),
     title: z.string()
 });
 

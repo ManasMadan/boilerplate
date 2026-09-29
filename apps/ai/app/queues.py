@@ -5,7 +5,7 @@ so both languages agree on where jobs live and how they retry)."""
 import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 # bullmq ships no type stubs: its calls are confined to this module, behind typed wrappers.
@@ -27,13 +27,20 @@ class IngestQueue:
     def __init__(self, redis_url: str) -> None:
         self._queue = Queue(INGEST, queue_options(INGEST, redis_url))  # pyright: ignore[reportArgumentType]
 
-    async def add(self, document_id: UUID, org_id: UUID, meta: Meta) -> None:
+    async def add(
+        self,
+        document_id: UUID,
+        org_id: UUID,
+        meta: Meta,
+        name: Literal["ingest", "summarize"] = "ingest",
+    ) -> None:
         job = AiIngestJob(meta=meta, payload=Payload(documentId=document_id, orgId=org_id))
+        # One job per document and step: queuing the same step twice runs it once.
+        job_id = str(document_id) if name == "ingest" else f"{document_id}-summary"
         await self._queue.add(  # pyright: ignore[reportUnknownMemberType]
-            "ingest",
+            name,
             job.model_dump(mode="json", exclude_none=True),
-            # The document id: adding the same document twice indexes it once.
-            {**SETTINGS[INGEST]["options"], "jobId": str(document_id)},  # pyright: ignore[reportArgumentType]
+            {**SETTINGS[INGEST]["options"], "jobId": job_id},  # pyright: ignore[reportArgumentType]
         )
 
     async def close(self) -> None:
@@ -42,6 +49,7 @@ class IngestQueue:
 
 class JobLike(Protocol):
     id: str | None
+    name: str
     data: Any
 
 

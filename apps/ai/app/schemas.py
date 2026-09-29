@@ -40,5 +40,6 @@ class DocumentOut(BaseModel):
     status: Literal["pending", "indexing", "ready", "failed"]
     error: str | None
     chunkCount: int
+    summary: str | None
     createdBy: UUID | None
     createdAt: datetime

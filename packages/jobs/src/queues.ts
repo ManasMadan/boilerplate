@@ -161,6 +161,8 @@ export const WEBHOOK_RETRY_DELAYS_MS = [
 ];
 
 /** Retries with exponential backoff; the defaults every queue starts from. */
+const aiDocumentJob = z.object({ documentId: z.uuid(), orgId: z.uuid() });
+
 const retrying: JobsOptions = { attempts: 5, backoff: { type: "exponential", delay: 2_000 } };
 
 export const queues = {
@@ -256,7 +258,12 @@ export const queues = {
    * reaches Python as generated Pydantic models, see scripts/export-schemas.ts).
    */
   "ai-ingest": {
-    jobs: { ingest: z.object({ documentId: z.uuid(), orgId: z.uuid() }) },
+    jobs: {
+      /** Split and embed a document. */
+      ingest: aiDocumentJob,
+      /** Summarize an indexed document (queued after indexing when a model is configured). */
+      summarize: aiDocumentJob,
+    },
     options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
   },
   maintenance: {

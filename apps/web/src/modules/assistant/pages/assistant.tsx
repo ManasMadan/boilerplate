@@ -167,6 +167,11 @@ function DocumentsCard() {
                           ? errorMessage({ code: document.error })
                           : null}
                     </span>
+                    {document.summary ? (
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {document.summary}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={document.status === "failed" ? "destructive" : "secondary"}>
