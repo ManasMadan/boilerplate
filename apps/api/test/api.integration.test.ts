@@ -614,6 +614,209 @@ describe("notifications", () => {
   });
 });
 
+describe("phone number", () => {
+  const newPhone = () => `+1415${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
+
+  async function addPhone(session: ReturnType<typeof createSession>, phoneNumber = newPhone()) {
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    const me = await session.rpc.user.verifyPhone({ phoneNumber, code: data.code });
+    return { phoneNumber, me, code: data.code };
+  }
+
+  async function outboxEvents(userId: string) {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client.query<{ payload: { change: string } }>(
+      "SELECT payload FROM app.outbox_event WHERE name = 'auth.phone_changed.v1' AND key = $1 ORDER BY occurred_at",
+      [userId],
+    );
+    await client.end();
+    return rows.map((row) => row.payload.change);
+  }
+
+  it("adds a number once the texted code matches, audits it and alerts the account", async () => {
+    const { session, email } = await signedInUser("es");
+    const me = await session.rpc.user.me();
+    expect(me.phoneNumber).toBeNull();
+
+    const phoneNumber = newPhone();
+    // Spaces, dashes and brackets are fine; the number is stored as E.164.
+    const formatted = `${phoneNumber.slice(0, 2)} (${phoneNumber.slice(2, 5)}) ${phoneNumber.slice(5, 8)}-${phoneNumber.slice(8)}`;
+    expect(await session.rpc.user.sendPhoneCode({ phoneNumber: formatted })).toEqual({
+      expiresInSeconds: 600,
+    });
+    const text = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    expect(text.to.locale).toBe("es");
+    expect(text.data.code).toMatch(/^\d{6}$/);
+
+    const updated = await session.rpc.user.verifyPhone({ phoneNumber, code: text.data.code });
+    expect(updated.phoneNumber).toBe(phoneNumber);
+    expect((await session.rpc.user.me()).phoneNumber).toBe(phoneNumber);
+    expect(await outboxEvents(me.id)).toEqual(["added"]);
+
+    const alert = await takeNotification(harness, "auth.security-alert", email);
+    expect(alert.data.event).toBe("phone-added");
+    expect(alert.to.phone).toBe(phoneNumber);
+  });
+
+  it("rejects wrong codes, and forgets the code after five wrong guesses", async () => {
+    const { session } = await signedInUser();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    const wrong = data.code === "000000" ? "111111" : "000000";
+    for (let i = 0; i < 5; i++) {
+      await expectError(
+        session.rpc.user.verifyPhone({ phoneNumber, code: wrong }),
+        "PHONE_CODE_INVALID",
+      );
+    }
+    // The right code no longer works: guessing can't continue past the limit.
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "PHONE_CODE_INVALID",
+    );
+    expect((await session.rpc.user.me()).phoneNumber).toBeNull();
+  });
+
+  it("a code only verifies the number it was sent to, and only once", async () => {
+    const { session } = await signedInUser();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber: newPhone(), code: data.code }),
+      "PHONE_CODE_INVALID",
+    );
+    await session.rpc.user.verifyPhone({ phoneNumber, code: data.code });
+    await session.rpc.user.removePhone();
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "PHONE_CODE_INVALID",
+    );
+  });
+
+  it("a code sent to one account can't verify another's", async () => {
+    const first = await signedInUser();
+    const second = await signedInUser();
+    const phoneNumber = newPhone();
+    await first.session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    await expectError(
+      second.session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "PHONE_CODE_INVALID",
+    );
+  });
+
+  it("a number can be on one account only", async () => {
+    const owner = await signedInUser();
+    const { phoneNumber } = await addPhone(owner.session);
+    const other = await signedInUser();
+    await expectError(other.session.rpc.user.sendPhoneCode({ phoneNumber }), "PHONE_NUMBER_TAKEN");
+    // Its own number again: nothing to verify.
+    await expectError(owner.session.rpc.user.sendPhoneCode({ phoneNumber }), "PHONE_NUMBER_TAKEN");
+  });
+
+  it("when two accounts verify the same number at once, the second is refused", async () => {
+    const first = await signedInUser();
+    const second = await signedInUser();
+    const phoneNumber = newPhone();
+    await first.session.rpc.user.sendPhoneCode({ phoneNumber });
+    const firstCode = (await takeNotification(harness, "auth.phone-code", phoneNumber)).data.code;
+    await second.session.rpc.user.sendPhoneCode({ phoneNumber });
+    const secondCode = (await takeNotification(harness, "auth.phone-code", phoneNumber)).data.code;
+
+    await first.session.rpc.user.verifyPhone({ phoneNumber, code: firstCode });
+    await expectError(
+      second.session.rpc.user.verifyPhone({ phoneNumber, code: secondCode }),
+      "PHONE_NUMBER_TAKEN",
+    );
+    expect((await second.session.rpc.user.me()).phoneNumber).toBeNull();
+  });
+
+  it("limits texts per account and per number", async () => {
+    const { session } = await signedInUser();
+    for (let i = 0; i < 5; i++) await session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() });
+    const limited = await expectError(
+      session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
+      "RATE_LIMITED",
+    );
+    expect(limited.data?.params).toMatchObject({ retryAfterSeconds: expect.any(Number) });
+
+    // Three accounts texting one number (someone spamming a victim) hit the number's limit.
+    const victim = newPhone();
+    for (let i = 0; i < 3; i++) {
+      await (await signedInUser()).session.rpc.user.sendPhoneCode({ phoneNumber: victim });
+    }
+    await expectError(
+      (await signedInUser()).session.rpc.user.sendPhoneCode({ phoneNumber: victim }),
+      "RATE_LIMITED",
+    );
+  });
+
+  it("removing the number audits it and tells the number that was removed", async () => {
+    const { session, email } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const { phoneNumber } = await addPhone(session);
+    await takeNotification(harness, "auth.security-alert", email);
+
+    expect((await session.rpc.user.removePhone()).phoneNumber).toBeNull();
+    expect(await outboxEvents(me.id)).toEqual(["added", "removed"]);
+    const alert = await takeNotification(harness, "auth.security-alert", email);
+    expect(alert.data.event).toBe("phone-removed");
+    expect(alert.to.phone).toBe(phoneNumber);
+  });
+
+  it("security alerts are texted to the verified number too", async () => {
+    const { session, email, password } = await signedInUser();
+    const { phoneNumber } = await addPhone(session);
+    await takeNotification(harness, "auth.security-alert", email);
+    await session.auth("/change-password", {
+      currentPassword: password,
+      newPassword: newPassword(),
+    });
+    const alert = await takeNotification(harness, "auth.security-alert", email);
+    expect(alert).toMatchObject({
+      data: { event: "password-changed" },
+      to: { phone: phoneNumber },
+    });
+  });
+
+  it("needs a recent sign-in to change the number", async () => {
+    const { session } = await signedInUser();
+    await editSession(harness, session, (stored) => {
+      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    });
+    await expectError(
+      session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
+      "FRESH_SESSION_REQUIRED",
+    );
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber: newPhone(), code: "123456" }),
+      "FRESH_SESSION_REQUIRED",
+    );
+    await expectError(session.rpc.user.removePhone(), "FRESH_SESSION_REQUIRED");
+    // Reading it doesn't.
+    await expect(session.rpc.user.me()).resolves.toMatchObject({ phoneNumber: null });
+  });
+
+  it("rejects numbers that aren't E.164, and requires a session", async () => {
+    const { session } = await signedInUser();
+    for (const phoneNumber of ["4155550123", "+0123456789", "+1", "+1415555012345678", "phone"]) {
+      await expectError(session.rpc.user.sendPhoneCode({ phoneNumber }), "VALIDATION_FAILED");
+    }
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber: newPhone(), code: "12345" }),
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      createSession(harness).rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
+      "UNAUTHENTICATED",
+    );
+  });
+});
+
 describe("push devices", () => {
   const webDevice = (id = randomUUID()) => ({
     platform: "web" as const,

@@ -14,6 +14,7 @@ import { redisDatabase } from "@repo/nest-common/testing";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEAD_APNS_TOKEN, type FakePush, FLAKY_APNS_TOKEN, startFakePush } from "./fake-push";
+import { type FakeTwilio, startFakeTwilio, TWILIO_NUMBERS } from "./fake-twilio";
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
 
@@ -40,11 +41,13 @@ describe("notifications service", () => {
   let producer: Producer<"notifications-critical">;
   let bulk: Producer<"notifications-bulk">;
   let push: FakePush;
+  let twilio: FakeTwilio;
 
   beforeAll(async () => {
     testDb = await createTestDatabase();
     push = await startFakePush();
-    Object.assign(process.env, push.env);
+    twilio = await startFakeTwilio();
+    Object.assign(process.env, push.env, twilio.env);
     // The service connects as its own least-privileged role, exactly as in production.
     process.env.NOTIFICATIONS_DATABASE_URL = testDb.urlFor("app_notifications");
     // A private Redis database, so a notifications service running locally for
@@ -68,6 +71,7 @@ describe("notifications service", () => {
     await bulk?.close();
     await app?.close();
     await push?.close();
+    await twilio?.close();
     await testDb?.drop();
   });
 
@@ -542,5 +546,128 @@ describe("notifications service", () => {
     }
     expect(deliveredTo(token)).toHaveLength(1);
     expect((await pushStatuses(jobId)).map((row) => row.status)).toEqual(["sent"]);
+  });
+  // ------------------------------------------------------------------------------- sms
+
+  async function smsStatuses(jobId: string) {
+    return sql<{ status: string; error: string | null }>(
+      "SELECT status, error FROM notifications.delivery WHERE idempotency_key LIKE $1 AND channel = 'sms'",
+      [`${jobId}:%`],
+    );
+  }
+
+  async function textCode(phone: string, locale: "en" | "es" = "en", jobId = randomUUID()) {
+    await producer.add(
+      "send",
+      {
+        template: "auth.phone-code",
+        to: { phone, locale },
+        data: { code: "482913", expiresInMinutes: 10 },
+      },
+      { jobId },
+    );
+    return jobId;
+  }
+
+  async function settleSms(jobId: string) {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const rows = (await smsStatuses(jobId)).filter((row) => row.status !== "sending");
+      if (rows.length > 0) return rows;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(`the text for ${jobId} didn't settle`);
+  }
+
+  const newPhone = () => `+1415${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
+
+  it("texts a verification code in the recipient's language, through Twilio", async () => {
+    const phone = newPhone();
+    const jobId = await textCode(phone, "es");
+    expect(await settleSms(jobId)).toEqual([{ status: "sent", error: null }]);
+    expect(twilio.to(phone)).toEqual([
+      {
+        to: phone,
+        from: "+15005550006",
+        body: "482913 es tu código de verificación de Boilerplate. Caduca en 10 minutos. No lo compartas con nadie.",
+      },
+    ]);
+    const [row] = await sql<{ provider_message_id: string }>(
+      "SELECT provider_message_id FROM notifications.delivery WHERE idempotency_key LIKE $1",
+      [`${jobId}:%`],
+    );
+    expect(row?.provider_message_id).toMatch(/^SM[0-9a-f]{32}$/);
+  });
+
+  it("texts security alerts to the account's phone as well as emailing them", async () => {
+    const phone = newPhone();
+    const email = `alert-${randomUUID()}@test.dev`;
+    const jobId = randomUUID();
+    await producer.add(
+      "send",
+      {
+        template: "auth.security-alert",
+        to: { email, locale: "en", phone },
+        data: { event: "password-changed", securityUrl: "http://localhost:3000/settings/security" },
+      },
+      { jobId },
+    );
+    expect((await waitForEmail(email)).Subject).toBe("Your password was changed");
+    await settleSms(jobId);
+    expect(twilio.to(phone).map((message) => message.body)).toEqual([
+      "Boilerplate: your password was changed. Not you? Reset your password now.",
+    ]);
+  });
+
+  it("stops texting a number that replied STOP, or can't receive texts", async () => {
+    for (const [phone, reason] of [
+      [TWILIO_NUMBERS.optedOut, "unsubscribe"],
+      [TWILIO_NUMBERS.invalid, "invalid"],
+      [TWILIO_NUMBERS.landline, "invalid"],
+    ] as const) {
+      const first = await textCode(phone);
+      expect((await settleSms(first))[0]?.status, phone).toBe("suppressed");
+      expect(
+        await sql(
+          "SELECT reason FROM notifications.suppression WHERE channel = 'sms' AND address = $1",
+          [phone],
+        ),
+      ).toEqual([{ reason }]);
+      // The next text isn't even attempted.
+      const second = await textCode(phone);
+      expect(await settleSms(second)).toEqual([{ status: "suppressed", error: null }]);
+    }
+  });
+
+  it("records a permanent failure without retrying, and retries a transient one", async () => {
+    const { Dispatcher } = await import("../src/dispatch/dispatcher");
+    const dispatcher = app.get(Dispatcher);
+    const payload = (phone: string) => ({
+      template: "auth.phone-code" as const,
+      to: { phone, locale: "en" as const },
+      data: { code: "111222", expiresInMinutes: 10 },
+    });
+
+    // Region not enabled: a configuration problem, not the number's fault. No retry,
+    // no suppression.
+    const blocked = randomUUID();
+    await dispatcher.dispatch(payload(TWILIO_NUMBERS.regionBlocked), blocked);
+    expect(await smsStatuses(blocked)).toEqual([
+      { status: "failed", error: expect.stringContaining("21408") },
+    ]);
+    expect(
+      await sql("SELECT 1 FROM notifications.suppression WHERE address = $1", [
+        TWILIO_NUMBERS.regionBlocked,
+      ]),
+    ).toEqual([]);
+
+    const flaky = randomUUID();
+    await expect(dispatcher.dispatch(payload(TWILIO_NUMBERS.flaky), flaky)).rejects.toThrow(
+      /1 deliveries failed/,
+    );
+    twilio.recover();
+    await dispatcher.dispatch(payload(TWILIO_NUMBERS.flaky), flaky);
+    expect((await smsStatuses(flaky)).map((row) => row.status)).toEqual(["sent"]);
+    expect(twilio.to(TWILIO_NUMBERS.flaky)).toHaveLength(1);
   });
 });

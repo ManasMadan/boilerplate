@@ -31,6 +31,22 @@ export const env = createEnv({
     // Signs one-click unsubscribe links (apps/api verifies them with the same secret).
     UNSUBSCRIBE_SECRET: z.string().min(32),
 
+    // Texts (security codes and alerts). twilio in production; locally "email" delivers
+    // them to Mailpit as emails to <digits>@sms.test. Unset: nothing is texted.
+    SMS_PROVIDER:
+      process.env.NODE_ENV === "production"
+        ? z.enum(["twilio", "email"]).optional()
+        : z.enum(["twilio", "email"]).default("email"),
+    TWILIO_ACCOUNT_SID: z.string().startsWith("AC").optional(),
+    TWILIO_AUTH_TOKEN: z.string().min(1).optional(),
+    // A sender number (E.164) or a Messaging Service SID (MG...).
+    TWILIO_FROM: z
+      .string()
+      .regex(/^(\+[1-9]\d{6,14}|MG[0-9a-f]{32})$/)
+      .optional(),
+    // Test hook: where Twilio's API lives.
+    TWILIO_API_URL: z.url().optional(),
+
     // Push. Each platform is on when its variables are set (all of them, or none).
     // Android: a Firebase service account (Project settings → Service accounts).
     FCM_PROJECT_ID: z.string().min(1).optional(),
@@ -64,12 +80,28 @@ if (env.EMAIL_PROVIDER === "resend" && !env.RESEND_API_KEY) {
   throw new Error("EMAIL_PROVIDER=resend requires RESEND_API_KEY");
 }
 
-// Test hooks redirect providers to local servers; production must use the real ones.
+if (
+  env.SMS_PROVIDER === "twilio" &&
+  !(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM)
+) {
+  throw new Error(
+    "SMS_PROVIDER=twilio requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM",
+  );
+}
+
+// Test hooks redirect providers to local servers, and the email sink is for local
+// development; production must use the real providers.
 if (
   env.NODE_ENV === "production" &&
-  (env.FCM_TOKEN_URL || env.FCM_API_URL || env.WEB_PUSH_TEST_ORIGIN)
+  (env.FCM_TOKEN_URL ||
+    env.FCM_API_URL ||
+    env.WEB_PUSH_TEST_ORIGIN ||
+    env.TWILIO_API_URL ||
+    env.SMS_PROVIDER === "email")
 ) {
-  throw new Error("FCM_TOKEN_URL, FCM_API_URL and WEB_PUSH_TEST_ORIGIN are for tests only");
+  throw new Error(
+    "FCM_TOKEN_URL, FCM_API_URL, WEB_PUSH_TEST_ORIGIN, TWILIO_API_URL and SMS_PROVIDER=email are for development and tests only",
+  );
 }
 
 /** Push platforms whose configuration is complete; a partial one fails at boot. */

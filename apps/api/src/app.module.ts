@@ -14,6 +14,7 @@ import { AuditModule } from "./modules/audit";
 import { NotificationsModule } from "./modules/notifications";
 import { RealtimeModule } from "./modules/realtime";
 import { TodoModule } from "./modules/todo";
+import { UserModule } from "./modules/user";
 import { WebhooksModule } from "./modules/webhooks";
 import { NotificationsProducerModule } from "./notifications";
 
@@ -36,6 +37,7 @@ import { NotificationsProducerModule } from "./notifications";
     NotificationsProducerModule,
     AuthModule,
     TodoModule,
+    UserModule,
     AiModule,
     AuditModule,
     WebhooksModule,

@@ -75,7 +75,8 @@
     "nameMin": "Introduce tu nombre",
     "code": "Introduce el código de 6 dígitos",
     "required": "Obligatorio",
-    "tooLong": "Demasiado largo (máx. {max})"
+    "tooLong": "Demasiado largo (máx. {max})",
+    "phone": "Escribe el número con el prefijo del país, como +34612345678"
   },
   "authErrors": {
     "INVALID_EMAIL_OR_PASSWORD": "El correo y la contraseña no coinciden.",
@@ -206,6 +207,23 @@
         "title": "Confirma que eres tú",
         "body": "Por seguridad, vuelve a iniciar sesión para ver o cambiar esto.",
         "action": "Volver a iniciar sesión"
+      },
+      "phone": {
+        "title": "Número de teléfono",
+        "description": "Recibe las alertas de seguridad por SMS además de por correo.",
+        "none": "Todavía no hay número de teléfono.",
+        "add": "Añadir un número de teléfono",
+        "change": "Cambiar número",
+        "remove": "Eliminar",
+        "removed": "Número de teléfono eliminado",
+        "number": "Número de teléfono",
+        "sendCode": "Enviarme un código por SMS",
+        "codeSent": "Enviamos un código por SMS al {phoneNumber}.",
+        "code": "Código del SMS",
+        "verify": "Verificar",
+        "verified": "Número de teléfono guardado",
+        "resend": "Enviar un código nuevo",
+        "cancel": "Cancelar"
       }
     },
     "personalTitle": "Tu cuenta"
@@ -299,7 +317,15 @@
         "body": "Se añadió una nueva llave de acceso a tu cuenta. Puede usarse para iniciar sesión sin contraseña."
       },
       "notYou": "Si no fuiste tú, restablece tu contraseña ahora y cierra la sesión en los dispositivos que no reconozcas.",
-      "cta": "Revisar la seguridad"
+      "cta": "Revisar la seguridad",
+      "phone-added": {
+        "subject": "Se añadió un número de teléfono",
+        "body": "Se añadió un número de teléfono a tu cuenta. Las alertas de seguridad y los códigos también se enviarán por SMS a ese número."
+      },
+      "phone-removed": {
+        "subject": "Se eliminó tu número de teléfono",
+        "body": "El número de teléfono de tu cuenta se eliminó o se cambió. Los SMS ya no llegan al número anterior."
+      }
     },
     "webhookDisabled": {
       "subject": "Endpoint de webhook desactivado: {url}",
@@ -353,7 +379,9 @@
     "WEBHOOK_DELIVERY_NOT_FOUND": "Esa entrega no existe.",
     "WEBHOOK_URL_NOT_ALLOWED": "Usa una URL pública https://. Las direcciones privadas o internas no pueden recibir webhooks.",
     "WEBHOOK_ENDPOINT_LIMIT": "Este espacio ya tiene {max} endpoints de webhook. Elimina uno para añadir otro.",
-    "UNSUBSCRIBE_LINK_INVALID": "Este enlace para darse de baja no es válido. Cambia lo que recibes en los ajustes de notificaciones."
+    "UNSUBSCRIBE_LINK_INVALID": "Este enlace para darse de baja no es válido. Cambia lo que recibes en los ajustes de notificaciones.",
+    "PHONE_CODE_INVALID": "Ese código no es correcto o ha caducado. Revisa el SMS o pide un código nuevo.",
+    "PHONE_NUMBER_TAKEN": "Ese número ya está en una cuenta."
   },
   "workspace": {
     "switcher": {
@@ -466,6 +494,9 @@
           },
           "account_deleted": {
             "v1": "Eliminó su cuenta"
+          },
+          "phone_changed": {
+            "v1": "{change, select, added {Añadió un número de teléfono} other {Eliminó su número de teléfono}}"
           }
         },
         "org": {
@@ -647,5 +678,18 @@
     "done": "Listo. Ya no recibirás correos de {category}.",
     "manage": "Gestionar todos los ajustes de notificaciones",
     "missing": "Esta página necesita el enlace de uno de nuestros correos."
+  },
+  "sms": {
+    "phoneCode": "{code} es tu código de verificación de Boilerplate. Caduca en {expiresInMinutes} minutos. No lo compartas con nadie.",
+    "securityAlert": {
+      "email-changed": "Boilerplate: se cambió el correo de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
+      "password-changed": "Boilerplate: se cambió tu contraseña. ¿No fuiste tú? Restablécela ahora.",
+      "password-reset": "Boilerplate: se restableció tu contraseña. ¿No fuiste tú? Contacta con soporte ahora.",
+      "two-factor-enabled": "Boilerplate: se activó la verificación en dos pasos en tu cuenta.",
+      "two-factor-disabled": "Boilerplate: se desactivó la verificación en dos pasos. ¿No fuiste tú? Restablece tu contraseña ahora.",
+      "passkey-added": "Boilerplate: se añadió una llave de acceso a tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
+      "phone-added": "Boilerplate: este número se añadió a tu cuenta para los SMS de seguridad.",
+      "phone-removed": "Boilerplate: este número se eliminó de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora."
+    }
   }
 }

@@ -61,6 +61,8 @@ export interface TemplateDefinition<T extends NotificationTemplate> {
     payload: PayloadOf<T>,
     context: RenderContext,
   ) => { title: string; body: string; link?: string };
+  /** A text message: short, plain, no links a phisher could imitate. */
+  sms?: (payload: PayloadOf<T>, context: RenderContext) => string;
 }
 
 export type TemplateRegistry = { [T in NotificationTemplate]: TemplateDefinition<T> };
@@ -73,6 +75,14 @@ const templates = {
     email: (payload, { recipient, t }) =>
       renderEmail(AuthOtpEmail, authOtpSubject, { locale: recipient.locale, t, ...payload.data }),
   },
+  "auth.phone-code": {
+    category: "security",
+    sms: (payload, { t }) =>
+      t("sms.phoneCode", {
+        code: payload.data.code,
+        expiresInMinutes: payload.data.expiresInMinutes,
+      }),
+  },
   "auth.security-alert": {
     category: "security",
     email: (payload, { recipient, t }) =>
@@ -81,6 +91,7 @@ const templates = {
         t,
         ...payload.data,
       }),
+    sms: (payload, { t }) => t(`sms.securityAlert.${payload.data.event}`),
   },
   "org.invitation": {
     category: "invitations",
@@ -124,7 +135,7 @@ const templates = {
       renderEmail(TodoReminderEmail, todoReminderSubject, {
         locale: recipient.locale,
         t,
-        name: recipient.name ?? recipient.email,
+        name: recipient.name ?? recipient.email ?? "",
         title: payload.data.title,
         unsubscribeUrl,
       }),
@@ -142,6 +153,7 @@ export interface BoundTemplate {
   email?: (context: RenderContext) => Promise<RenderedEmail>;
   inApp?: () => InAppMessage;
   push?: (context: RenderContext) => { title: string; body: string; link?: string };
+  sms?: (context: RenderContext) => string;
 }
 
 /**
@@ -163,6 +175,9 @@ function bind<T extends NotificationTemplate>(
     ...(definition.push && {
       push: (context: RenderContext) =>
         definition.push?.(payload, context) as ReturnType<NonNullable<BoundTemplate["push"]>>,
+    }),
+    ...(definition.sms && {
+      sms: (context: RenderContext) => definition.sms?.(payload, context) as string,
     }),
   };
 }

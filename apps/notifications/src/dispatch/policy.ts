@@ -18,6 +18,8 @@ export interface UserPolicy {
   quietHours: { start: number; end: number } | null;
 }
 
+export type SuppressionReason = "bounce" | "complaint" | "unsubscribe" | "invalid";
+
 @Injectable()
 export class DeliveryPolicy {
   constructor(@InjectDatabase() private readonly database: Database) {}
@@ -46,6 +48,15 @@ export class DeliveryPolicy {
           ? { start: settings.quietStart, end: settings.quietEnd }
           : null,
     };
+  }
+
+  /** Never send to this address on this channel again (opted out, invalid, bouncing). */
+  async suppress(channel: NotificationChannel, address: string, reason: SuppressionReason) {
+    // The first reason recorded stands (this service may insert, never update).
+    await this.database.write.$executeRaw`
+      INSERT INTO notifications.suppression (channel, address, reason)
+      VALUES (${channel}, ${address.toLowerCase()}, ${reason})
+      ON CONFLICT (channel, address) DO NOTHING`;
   }
 
   async isSuppressed(channel: NotificationChannel, address: string) {

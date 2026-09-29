@@ -75,7 +75,8 @@
     "nameMin": "Enter your name",
     "code": "Enter the 6-digit code",
     "required": "Required",
-    "tooLong": "Too long (max {max})"
+    "tooLong": "Too long (max {max})",
+    "phone": "Enter the number with its country code, like +14155550123"
   },
   "authErrors": {
     "INVALID_EMAIL_OR_PASSWORD": "That email and password don't match.",
@@ -206,6 +207,23 @@
         "title": "Confirm it's you",
         "body": "For your security, sign in again to see or change this.",
         "action": "Sign in again"
+      },
+      "phone": {
+        "title": "Phone number",
+        "description": "Get sign-in security alerts by text as well as by email.",
+        "none": "No phone number yet.",
+        "add": "Add a phone number",
+        "change": "Change number",
+        "remove": "Remove",
+        "removed": "Phone number removed",
+        "number": "Phone number",
+        "sendCode": "Text me a code",
+        "codeSent": "We texted a code to {phoneNumber}.",
+        "code": "Code from the text",
+        "verify": "Verify",
+        "verified": "Phone number saved",
+        "resend": "Send a new code",
+        "cancel": "Cancel"
       }
     },
     "personalTitle": "Your account"
@@ -299,7 +317,15 @@
         "body": "A new passkey was added to your account. It can be used to sign in without a password."
       },
       "notYou": "If this wasn't you, reset your password now and sign out of devices you don't recognise.",
-      "cta": "Review security settings"
+      "cta": "Review security settings",
+      "phone-added": {
+        "subject": "A phone number was added",
+        "body": "A phone number was added to your account. Security alerts and codes will also be texted to it."
+      },
+      "phone-removed": {
+        "subject": "Your phone number was removed",
+        "body": "The phone number on your account was removed or changed. Texts no longer go to the previous number."
+      }
     },
     "webhookDisabled": {
       "subject": "Webhook endpoint turned off: {url}",
@@ -353,7 +379,9 @@
     "WEBHOOK_DELIVERY_NOT_FOUND": "That delivery doesn't exist.",
     "WEBHOOK_URL_NOT_ALLOWED": "Use a public https:// URL. Private and internal addresses can't receive webhooks.",
     "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another.",
-    "UNSUBSCRIBE_LINK_INVALID": "This unsubscribe link isn't valid. Change what you receive in notification settings instead."
+    "UNSUBSCRIBE_LINK_INVALID": "This unsubscribe link isn't valid. Change what you receive in notification settings instead.",
+    "PHONE_CODE_INVALID": "That code isn't right, or it expired. Check the text or send a new code.",
+    "PHONE_NUMBER_TAKEN": "That number is already on an account."
   },
   "workspace": {
     "switcher": {
@@ -466,6 +494,9 @@
           },
           "account_deleted": {
             "v1": "Deleted their account"
+          },
+          "phone_changed": {
+            "v1": "{change, select, added {Added a phone number} other {Removed their phone number}}"
           }
         },
         "org": {
@@ -647,5 +678,18 @@
     "done": "Done. You won't get {category} emails anymore.",
     "manage": "Manage all notification settings",
     "missing": "This page needs the link from one of our emails."
+  },
+  "sms": {
+    "phoneCode": "{code} is your Boilerplate verification code. It expires in {expiresInMinutes} minutes. Don't share it with anyone.",
+    "securityAlert": {
+      "email-changed": "Boilerplate: the email address on your account was changed. Not you? Reset your password now.",
+      "password-changed": "Boilerplate: your password was changed. Not you? Reset your password now.",
+      "password-reset": "Boilerplate: your password was reset. Not you? Contact support now.",
+      "two-factor-enabled": "Boilerplate: two-step verification was turned on for your account.",
+      "two-factor-disabled": "Boilerplate: two-step verification was turned off. Not you? Reset your password now.",
+      "passkey-added": "Boilerplate: a passkey was added to your account. Not you? Reset your password now.",
+      "phone-added": "Boilerplate: this number was added to your account for security texts.",
+      "phone-removed": "Boilerplate: this number was removed from your account. Not you? Reset your password now."
+    }
   }
 }

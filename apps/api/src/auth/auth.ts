@@ -19,6 +19,7 @@ import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
 import {
+  FRESH_SESSION_AGE,
   NAME_MAX_LENGTH,
   OTP_EXPIRES_IN,
   OTP_LENGTH,
@@ -57,7 +58,6 @@ export interface AuthDependencies {
 }
 
 const MINUTE = 60;
-const HOUR = 60 * MINUTE;
 const DAY = 24 * 60 * MINUTE;
 const INVITATION_DAYS = 7;
 
@@ -119,7 +119,7 @@ export function createAuth({ env, db, redis, notifications, memberships }: AuthD
       // need a session signed in within this window (better-auth's fresh-session rule);
       // after it, the web app asks the user to sign in again. Password, 2FA and account
       // deletion always ask for the password, and email changes need emailed codes.
-      freshAge: 2 * HOUR,
+      freshAge: FRESH_SESSION_AGE,
       // Deliberately no cookieCache: a cached session would outlive sign-out/revocation.
     },
 
@@ -223,9 +223,11 @@ export function createAuth({ env, db, redis, notifications, memberships }: AuthD
         if (isAPIError(ctx.context.returned)) return;
         const alert = securityAlertFor(ctx);
         if (!alert) return;
-        const userId =
-          ctx.context.session?.user.id ??
-          (await db.user.findUnique({ where: { email: alert.email }, select: { id: true } }))?.id;
+        const account = await db.user.findUnique({
+          where: ctx.context.session ? { id: ctx.context.session.user.id } : { email: alert.email },
+          select: { id: true, phoneNumber: true },
+        });
+        const userId = account?.id;
         if (userId) {
           await transaction(db, (tx) =>
             emitAnyEvent(tx, auditEventForAlert(alert.event, userId), userId, {
@@ -238,7 +240,11 @@ export function createAuth({ env, db, redis, notifications, memberships }: AuthD
           "send",
           {
             template: "auth.security-alert",
-            to: { email: alert.email, locale: await localeFor(alert.email, ctx.headers) },
+            to: {
+              email: alert.email,
+              locale: await localeFor(alert.email, ctx.headers),
+              ...(account?.phoneNumber && { phone: account.phoneNumber }),
+            },
             data: {
               event: alert.event,
               ...(alert.newEmail && { newEmail: alert.newEmail }),

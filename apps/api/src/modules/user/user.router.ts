@@ -1,13 +1,42 @@
 import type { Procedures } from "../../rpc/procedures";
+import type { PhoneService } from "./phone.service";
 
-export const userRouter = ({ authed }: Procedures) => ({
-  me: authed.user.me.handler(({ context: { user, session } }) => ({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    image: user.image ?? null,
-    locale: user.locale ?? "en",
-    timezone: user.timezone ?? "UTC",
-    activeOrganizationId: session.activeOrganizationId ?? null,
-  })),
+interface UserRow {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null | undefined;
+  locale?: string | null | undefined;
+  timezone?: string | null | undefined;
+  phoneNumber?: string | null | undefined;
+}
+
+const toMe = (user: UserRow, activeOrganizationId: string | null | undefined) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  image: user.image ?? null,
+  locale: user.locale ?? "en",
+  timezone: user.timezone ?? "UTC",
+  activeOrganizationId: activeOrganizationId ?? null,
+  phoneNumber: user.phoneNumber ?? null,
+});
+
+export const userRouter = ({ authed, fresh }: Procedures, phone: PhoneService) => ({
+  me: authed.user.me.handler(async ({ context: { user, session } }) =>
+    // The phone number isn't part of better-auth's session user.
+    toMe({ ...user, phoneNumber: await phone.current(user.id) }, session.activeOrganizationId),
+  ),
+  sendPhoneCode: fresh.user.sendPhoneCode.handler(({ context, input }) =>
+    phone.sendCode(context.user.id, context.user.locale, input.phoneNumber),
+  ),
+  verifyPhone: fresh.user.verifyPhone.handler(async ({ context, input }) =>
+    toMe(
+      await phone.verify(context.user.id, input.phoneNumber, input.code),
+      context.session.activeOrganizationId,
+    ),
+  ),
+  removePhone: fresh.user.removePhone.handler(async ({ context }) =>
+    toMe(await phone.remove(context.user.id), context.session.activeOrganizationId),
+  ),
 });

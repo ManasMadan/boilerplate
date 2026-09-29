@@ -65,5 +65,9 @@ export function auditEventForAlert(event: SecurityEvent, userId: string): AnyEve
       return { name: "auth.two_factor_changed.v1", payload: { userId, enabled: false } };
     case "passkey-added":
       return { name: "auth.passkey_added.v1", payload: { userId } };
+    case "phone-added":
+      return { name: "auth.phone_changed.v1", payload: { userId, change: "added" } };
+    case "phone-removed":
+      return { name: "auth.phone_changed.v1", payload: { userId, change: "removed" } };
   }
 }

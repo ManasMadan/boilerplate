@@ -117,7 +117,8 @@ export function createSession(
 export async function takeNotification<T extends NotificationPayload["template"]>(
   harness: Harness,
   template: T,
-  email: string,
+  /** The email address or phone number it's sent to. */
+  address: string,
 ): Promise<Extract<NotificationPayload, { template: T }>> {
   const queue = new Queue("notifications-critical", {
     connection: harness.redis,
@@ -128,14 +129,15 @@ export async function takeNotification<T extends NotificationPayload["template"]
       const jobs = await queue.getJobs(["waiting", "delayed", "prioritized"]);
       for (const job of jobs.reverse()) {
         const { payload } = parseJob("notifications-critical", "send", job.data);
-        if (payload.template === template && "email" in payload.to && payload.to.email === email) {
+        const to = payload.to as { email?: string; phone?: string };
+        if (payload.template === template && (to.email === address || to.phone === address)) {
           await job.remove();
           return payload as Extract<NotificationPayload, { template: T }>;
         }
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    throw new Error(`No ${template} queued for ${email}`);
+    throw new Error(`No ${template} queued for ${address}`);
   } finally {
     await queue.close();
   }

@@ -31,6 +31,9 @@ export const ERROR_CODES = {
   UPSTREAM_UNAVAILABLE: 502,
   // Tenancy
   NO_ACTIVE_ORGANIZATION: 403,
+  // Account
+  PHONE_CODE_INVALID: 400,
+  PHONE_NUMBER_TAKEN: 409,
   // Notifications
   UNSUBSCRIBE_LINK_INVALID: 400,
   // Webhooks

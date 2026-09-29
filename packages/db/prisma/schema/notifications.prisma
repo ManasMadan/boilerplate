@@ -89,7 +89,7 @@ model NotificationDigestItem {
 model NotificationSuppression {
   channel   String
   address   String
-  /// bounce | complaint | unsubscribe
+  /// bounce | complaint | unsubscribe | invalid (a number that can't receive texts)
   reason    String
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 

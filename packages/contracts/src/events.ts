@@ -53,6 +53,7 @@ export const events = {
   "auth.email_changed.v1": userEvent,
   "auth.two_factor_changed.v1": userEvent.extend({ enabled: z.boolean() }),
   "auth.passkey_added.v1": userEvent,
+  "auth.phone_changed.v1": userEvent.extend({ change: z.enum(["added", "removed"]) }),
   "auth.account_deleted.v1": userEvent,
 
   "org.created.v1": z.object({ organizationId: z.uuid(), name: z.string() }),

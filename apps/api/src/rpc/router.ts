@@ -13,14 +13,14 @@ import { NotificationsService, notificationsRouter } from "../modules/notificati
 import { RealtimeService, realtimeRouter } from "../modules/realtime";
 import { systemRouter } from "../modules/system";
 import { TodoService, todoRouter } from "../modules/todo";
-import { userRouter } from "../modules/user";
+import { PhoneService, userRouter } from "../modules/user";
 import { WebhooksService, webhooksRouter } from "../modules/webhooks";
 import type { Procedures } from "./procedures";
 
 export function createRouter(procedures: Procedures, app: INestApplication) {
   return procedures.os.router({
     system: systemRouter(procedures),
-    user: userRouter(procedures),
+    user: userRouter(procedures, app.get(PhoneService)),
     todo: todoRouter(procedures, app.get(TodoService)),
     ai: aiRouter(procedures, app.get(AiService)),
     audit: auditRouter(procedures, app.get(AuditService)),

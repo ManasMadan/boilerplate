@@ -7,7 +7,9 @@
  *   - email: suppressed addresses are skipped; daily-digest users get non-urgent email
  *     in tomorrow's digest instead; opt-out-able email carries a one-click unsubscribe;
  *   - in_app: stored and pushed live to open tabs;
- *   - push: sent to each registered device; inside quiet hours it waits (a delayed job).
+ *   - push: sent to each registered device; inside quiet hours it waits (a delayed job);
+ *   - sms: security texts to a verified number; numbers that opted out (STOP) or can't
+ *     receive texts are suppressed.
  *
  * Each (job, channel, recipient) is claimed in the delivery log first, so retries and
  * redelivered events never double-send. If any send fails, the job throws after trying
@@ -38,6 +40,7 @@ import {
 import { EmailChannel } from "../channels/email/email.channel";
 import { InAppChannel } from "../channels/in-app/in-app.channel";
 import { PushChannel } from "../channels/push/push.channel";
+import { SmsChannel } from "../channels/sms/sms.channel";
 import { env } from "../env";
 import { DeliveryLog } from "./delivery-log";
 import { DeliveryPolicy, type UserPolicy } from "./policy";
@@ -59,6 +62,7 @@ export class Dispatcher implements OnApplicationShutdown {
     private readonly email: EmailChannel,
     private readonly inApp: InAppChannel,
     private readonly push: PushChannel,
+    private readonly sms: SmsChannel,
     @InjectRedis() private readonly redis: Redis,
     @InjectDatabase() private readonly database: Database,
     @InjectPinoLogger(Dispatcher.name) private readonly logger: PinoLogger,
@@ -104,10 +108,8 @@ export class Dispatcher implements OnApplicationShutdown {
     const failures: unknown[] = [];
 
     for (const channel of channels) {
-      if (!renders(template, channel)) continue;
-      // Addresses without an account can only receive email.
-      if (channel !== "email" && !recipient.userId) continue;
-      const key = `${idempotencyKey}:${channel}:${recipient.userId ?? recipient.email}`;
+      if (!renders(template, channel) || !reaches(recipient, channel)) continue;
+      const key = `${idempotencyKey}:${channel}:${recipient.userId ?? recipient.email ?? recipient.phone}`;
       if (channel === "push" && recipient.userId && template.push) {
         failures.push(
           ...(await this.deliverPush(recipient, name, template, context, policy, key, false)),
@@ -145,7 +147,11 @@ export class Dispatcher implements OnApplicationShutdown {
       await this.log.finish(key, "sent", { providerMessageId: id });
       return;
     }
-    if (channel === "email" && template.email) {
+    if (channel === "sms" && template.sms && recipient.phone) {
+      await this.sendSms(key, recipient.phone, template.sms(context));
+      return;
+    }
+    if (channel === "email" && template.email && recipient.email) {
       if (await this.policy.isSuppressed("email", recipient.email)) {
         await this.log.finish(key, "suppressed");
         return;
@@ -171,6 +177,29 @@ export class Dispatcher implements OnApplicationShutdown {
       return;
     }
     await this.log.finish(key, "skipped", { error: `no ${channel} channel configured` });
+  }
+
+  /** A transient failure throws (the job retries it); a permanent one is recorded. */
+  private async sendSms(key: string, phone: string, body: string) {
+    if (!this.sms.enabled) {
+      await this.log.finish(key, "skipped", { error: "no SMS provider configured" });
+      return;
+    }
+    if (await this.policy.isSuppressed("sms", phone)) {
+      await this.log.finish(key, "suppressed");
+      return;
+    }
+    const result = await this.sms.send(phone, body, key);
+    if (result.ok) {
+      await this.log.finish(key, "sent", { providerMessageId: result.providerMessageId });
+    } else if (result.suppress) {
+      await this.policy.suppress("sms", phone, result.suppress);
+      await this.log.finish(key, "suppressed", { error: result.error });
+    } else if (result.permanent) {
+      await this.log.finish(key, "failed", { error: result.error });
+    } else {
+      throw new Error(result.error);
+    }
   }
 
   /**
@@ -223,7 +252,7 @@ export class Dispatcher implements OnApplicationShutdown {
 
   private async defer(
     payload: NotificationPayload,
-    channel: "push" | "sms",
+    channel: "push",
     userId: string,
     key: string,
     delay: number,
@@ -242,7 +271,7 @@ export class Dispatcher implements OnApplicationShutdown {
   /** Runs a deferred channel delivery (quiet hours are over). */
   async deliverDeferred(
     payload: NotificationPayload,
-    channel: "push" | "sms",
+    channel: "push",
     userId: string,
     key: string,
   ) {
@@ -289,7 +318,20 @@ function renders(template: BoundTemplate, channel: NotificationChannel) {
       return template.inApp !== undefined;
     case "push":
       return template.push !== undefined;
-    default:
-      return false;
+    case "sms":
+      return template.sms !== undefined;
+  }
+}
+
+/** Whether the recipient has an address on this channel. */
+function reaches(recipient: Recipient, channel: NotificationChannel) {
+  switch (channel) {
+    case "email":
+      return recipient.email !== null;
+    case "sms":
+      return recipient.phone !== null;
+    case "in_app":
+    case "push":
+      return recipient.userId !== null;
   }
 }

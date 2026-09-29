@@ -4,6 +4,7 @@
  *
  *   base    error mapping (AppError → typed contract error) + client version gate
  *   authed  + a valid session (UNAUTHENTICATED otherwise); `context.user`, `context.session`
+ *   fresh   + signed in within FRESH_SESSION_AGE ("sudo mode"; FRESH_SESSION_REQUIRED)
  *   inOrg   + an active organization; `context.orgId` (tenant for row-level security)
  *
  *   export const todoRouter = ({ inOrg }: Procedures, todos: TodoService) => ({
@@ -17,6 +18,7 @@
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";
 import { contract, type ErrorData } from "@repo/contracts/api";
+import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { AppError, currentContext, updateContext } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
@@ -98,6 +100,13 @@ export function createProcedures(auth: Auth, memberships: Memberships) {
     return next({ context: { user: result.user, session: result.session } });
   });
 
+  // Sensitive account changes, like better-auth's own fresh-session rule.
+  const fresh = authed.use(async ({ context, next }) => {
+    if (Date.now() - new Date(context.session.createdAt).getTime() >= FRESH_SESSION_AGE * 1000)
+      throw new AppError("FRESH_SESSION_REQUIRED");
+    return next();
+  });
+
   // The session names the active organization; membership is re-checked every time, so
   // someone removed from it loses access immediately (see auth/memberships.ts).
   const inOrg = authed.use(async ({ context, next }) => {
@@ -115,7 +124,7 @@ export function createProcedures(auth: Auth, memberships: Memberships) {
     return next();
   });
 
-  return { os, base, authed, inOrg, orgAdmin };
+  return { os, base, authed, fresh, inOrg, orgAdmin };
 }
 
 export type Procedures = ReturnType<typeof createProcedures>;

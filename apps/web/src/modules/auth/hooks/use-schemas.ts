@@ -10,6 +10,7 @@ import {
   otpSchema,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  phoneNumberSchema,
 } from "@repo/contracts/auth";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
@@ -29,5 +30,7 @@ export function useAuthSchemas() {
     password: z.string().min(1, t("required")),
     name: z.string().refine(matches(nameSchema), t("nameMin")),
     otp: z.string().refine(matches(otpSchema), t("code")),
+    /** E.164, typed with or without spaces and dashes. */
+    phone: z.string().refine(matches(phoneNumberSchema), t("phone")),
   };
 }

@@ -43,8 +43,12 @@ export const jobMeta = z.object({
 export type JobMeta = z.infer<typeof jobMeta>;
 
 const email = z.email();
+const phone = z.string().regex(/^\+[1-9]\d{6,14}$/);
 
-/** Account changes the owner is emailed about, so a takeover can't happen silently. */
+/**
+ * Account changes the owner is told about (by email, and by text when they have a
+ * verified phone), so a takeover can't happen silently.
+ */
 export const SECURITY_EVENTS = [
   "email-changed",
   "password-changed",
@@ -52,6 +56,8 @@ export const SECURITY_EVENTS = [
   "two-factor-enabled",
   "two-factor-disabled",
   "passkey-added",
+  "phone-added",
+  "phone-removed",
 ] as const;
 export type SecurityEvent = (typeof SECURITY_EVENTS)[number];
 const locale = z.enum(locales);
@@ -70,6 +76,12 @@ export const notificationPayload = z.discriminatedUnion("template", [
     }),
   }),
   z.object({
+    template: z.literal("auth.phone-code"),
+    // Texted to a number being verified, which isn't on the account yet.
+    to: z.object({ phone, locale }),
+    data: z.object({ code: z.string(), expiresInMinutes: z.number().int().positive() }),
+  }),
+  z.object({
     template: z.literal("org.invitation"),
     // Invitees may not have an account yet, so the address carries its own locale.
     to: z.object({ email, locale }),
@@ -83,8 +95,9 @@ export const notificationPayload = z.discriminatedUnion("template", [
   z.object({
     template: z.literal("auth.security-alert"),
     // Sent to the address that was on the account at the time: after an email change,
-    // that is the old one, which is exactly who needs to hear about it.
-    to: z.object({ email, locale }),
+    // that is the old one, which is exactly who needs to hear about it. Also texted to
+    // the verified phone, if any (after a phone change, the old number).
+    to: z.object({ email, locale, phone: phone.optional() }),
     data: z.object({
       event: z.enum(SECURITY_EVENTS),
       /** For email-changed: the address the account moved to. */
@@ -113,7 +126,8 @@ export type NotificationPayload = z.infer<typeof notificationPayload>;
  */
 export const deferredDelivery = z.object({
   payload: notificationPayload,
-  channel: z.enum(["push", "sms"]),
+  // Only push waits for quiet hours today: texts are security messages, which never wait.
+  channel: z.enum(["push"]),
   userId: z.uuid(),
   key: z.string(),
 });
@@ -229,6 +243,7 @@ export const queues = {
 /** Which notification queue a template goes to. A new template must pick one. */
 export const notificationQueue = {
   "auth.otp": "notifications-critical",
+  "auth.phone-code": "notifications-critical",
   "org.invitation": "notifications-critical",
   "auth.security-alert": "notifications-critical",
   "webhooks.endpoint-disabled": "notifications-critical",
