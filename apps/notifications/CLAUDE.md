@@ -29,5 +29,5 @@ SMS, push (iOS, Android, web) and in-app.
   at boot.
 - Integration tests use local HTTP fakes for Twilio and push (`test/fake-*.ts`) through
   the provider URL overrides in `src/env.ts`. Production refuses those overrides.
-- The dispatcher and digest build their translator with `createI18n(bundledMessages)`
-  directly, not through `I18nModule`; a new `MessageSource` must be wired here too.
+- Copy comes from the injected translator (`@InjectI18n()`, `I18nModule` in
+  `src/app.module.ts`), so a new `MessageSource` is wired in one place.

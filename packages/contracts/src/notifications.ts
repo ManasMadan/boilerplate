@@ -5,7 +5,7 @@
  * Every template belongs to one category. Transactional categories (sign-in codes,
  * security alerts, invitations) always go out; the others can be turned off per
  * channel by each user. Adding a category: add it here with its default channels, give
- * it copy in packages/i18n (`notificationPreferences.categories.<name>`), and point
+ * it copy in packages/i18n (`notificationSettings.categories.<name>`), and point
  * templates at it.
  */
 import { z } from "zod";

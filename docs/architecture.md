@@ -120,22 +120,6 @@ nudges streamed to clients over `/rpc`. See [jobs-and-events.md](jobs-and-events
 
 ## Seams
 
-Integrations that will change at scale sit behind one interface. Callers use the
-interface; each file says how to swap the implementation.
-
-| Seam | Today | File |
-|---|---|---|
-| Event transport (`EventBus`) | BullMQ queues | `apps/worker/src/outbox/event-bus.ts` |
-| Outbox reading | polling with `SKIP LOCKED` plus `LISTEN` | `apps/worker/src/outbox/relay.service.ts` |
-| Read replicas | `read` and `write` are the same primary | `packages/db/src/client.ts` |
-| Object storage (`Storage`) | S3 API | `packages/nest-common/src/storage.ts` |
-| Virus scanning (`FileScanner`) | clamd | `apps/worker/src/files/file-scanner.ts` |
-| Email (`EmailTransport`) | SMTP or Resend | `apps/notifications/src/channels/email/email-transport.ts` |
-| Texts (`SmsTransport`) | Twilio, or Mailpit locally | `apps/notifications/src/channels/sms/sms-transport.ts` |
-| Push (`PushTransport`) | FCM, APNs, Web Push | `apps/notifications/src/channels/push/push-transport.ts` |
-| Notification templates (`TemplateSource`) | defined in code | `apps/notifications/src/dispatch/templates.ts` |
-| Translations (`MessageSource`) | JSON bundled in `packages/i18n` | `packages/i18n/src/index.ts`, `packages/nest-common/src/i18n.ts` |
-| Encryption keys (`KeyProvider`) | `ENCRYPTION_KEYS` | `packages/nest-common/src/crypto.ts` |
-| Realtime fan-out | pub/sub on the shared Redis | `packages/nest-common/src/realtime.ts` |
-| Models | Pydantic AI model names (a gateway is another name) | `apps/ai/app/assistant.py` |
-| Embeddings (`Embedder`) | Pydantic AI embedding models, or hashing locally | `apps/ai/app/embeddings.py` |
+Integrations that will change at scale sit behind one interface that callers already
+use; each interface's file says how to swap it. The full list, with what each becomes
+and the skill that swaps it, is the "Scaling path" table in the [README](../README.md#scaling-path).
