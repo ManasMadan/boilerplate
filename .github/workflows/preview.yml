@@ -1,0 +1,75 @@
+# Pull-request previews. Adding the `preview` label (maintainers only) builds the
+# pull request's images as sha-<head commit> and pushes them; Argo CD's previews
+# ApplicationSet then deploys that commit to its own namespace, at
+# https://pr-<number>.preview.<domain>, and this workflow posts the link. New pushes
+# rebuild; removing the label or closing the pull request deletes the preview.
+#
+# Only branches of this repository get previews: a fork's code never runs with the
+# token that pushes images.
+name: Preview
+
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io/manasmadan/boilerplate
+
+jobs:
+  images:
+    name: Preview images
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'preview')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write, pull-requests: write }
+    env:
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, ref: "${{ env.SHA }}" }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # amd64 only: previews run on the staging cluster's default nodes.
+      - uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          TAG: sha-${{ env.SHA }}
+          RELEASE: ${{ env.SHA }}
+        with:
+          source: .
+          push: true
+          set: |
+            *.platform=linux/amd64
+            *.cache-from=type=gha,scope=amd64
+      - name: Post the preview's address
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
+        with:
+          script: |
+            const number = context.payload.pull_request.number;
+            const marker = "<!-- preview -->";
+            const url = process.env.DOMAIN
+              ? `https://pr-${number}.preview.${process.env.DOMAIN}`
+              : `pr-${number}.preview.<your domain> (set the PREVIEW_DOMAIN repository variable)`;
+            const body = `${marker}\nPreview of \`${process.env.SHA.slice(0, 7)}\`: ${url}\n\nArgo CD deploys it within a couple of minutes; removing the \`preview\` label deletes it.`;
+            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: number });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
+            }

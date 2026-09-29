@@ -1,0 +1,49 @@
+# The whole stack on a Kubernetes cluster (kind), exactly as `bun run k8s:up` does
+# locally: every image built, the data and stack charts installed with the local
+# environment's values, and the routes smoke-tested through the gateway. Runs when the
+# images, charts or local cluster setup change, and nightly.
+name: Kubernetes
+
+on:
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "docker-bake.hcl"
+      - "scripts/k8s.ts"
+      - "packages/db/prisma/**"
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: kind-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  kind:
+    name: kind deploy and smoke test
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    timeout-minutes: 60
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with: { version: v4.3.0 }
+      - name: Install kind
+        run: |
+          curl -fsSLo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+          echo "aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  kind" | sha256sum -c -
+          sudo install -m 0755 kind /usr/local/bin/kind
+      - run: bun run k8s:up
+      - name: Show what went wrong
+        if: failure()
+        run: |
+          kubectl --context kind-boilerplate get pods -A -o wide || true
+          kubectl --context kind-boilerplate -n boilerplate get events --sort-by=.lastTimestamp | tail -50 || true
+          kubectl --context kind-boilerplate -n boilerplate logs -l app.kubernetes.io/part-of=boilerplate --all-containers --tail=100 || true
