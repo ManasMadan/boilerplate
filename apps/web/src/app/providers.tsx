@@ -20,6 +20,8 @@ interface ProvidersProps {
   children: ReactNode;
 }
 
+let switchingWorkspace = false;
+
 /** Every client-side context, mounted once by the root layout. */
 export function Providers({
   locale,
@@ -53,6 +55,17 @@ export function Providers({
             router.replace(`/sign-in?next=${encodeURIComponent(pathname + search)}`);
           }}
           onOutdated={() => window.location.reload()}
+          // Removed from the active workspace (or it was deleted): move to another one.
+          onNoOrganization={async () => {
+            // Several requests can fail together; switch once.
+            if (switchingWorkspace) return;
+            switchingWorkspace = true;
+            const { data: workspaces } = await authClient.organization.list();
+            const next = workspaces?.[0];
+            if (!next) return;
+            await authClient.organization.setActive({ organizationId: next.id });
+            window.location.assign("/dashboard");
+          }}
         >
           {children}
           <Toaster richColors closeButton />

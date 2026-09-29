@@ -42,6 +42,7 @@
     "@types/react-dom": "catalog:",
     "babel-plugin-react-compiler": "^1.0.0",
     "ioredis": "catalog:",
+    "standardwebhooks": "^1.1.1",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -5,6 +5,7 @@ import { Skeleton } from "@repo/ui/components/skeleton";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
+import { WorkspaceSwitcher } from "@/modules/workspace";
 import { LanguageSwitcher } from "./language-switcher";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
@@ -16,9 +17,12 @@ export function SiteHeader() {
   return (
     <header className="border-b">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4">
-        <Link href={session ? "/dashboard" : "/"} className="font-semibold tracking-tight">
-          {t("appName")}
-        </Link>
+        <div className="flex min-w-0 items-center gap-2">
+          <Link href={session ? "/dashboard" : "/"} className="font-semibold tracking-tight">
+            {t("appName")}
+          </Link>
+          {session ? <WorkspaceSwitcher /> : null}
+        </div>
         <nav className="flex items-center gap-2">
           <LanguageSwitcher />
           <ThemeToggle />

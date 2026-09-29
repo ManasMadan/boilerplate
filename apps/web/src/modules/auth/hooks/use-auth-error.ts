@@ -2,11 +2,6 @@
 
 import { useTranslations } from "next-intl";
 
-export interface AuthError {
-  code?: string | undefined;
-  status?: number | undefined;
-}
-
 /**
  * Several codes mean the same thing to a user. Passkey prompts in particular fail in
  * browser-specific ways: dismissing the dialog surfaces as the browser's NotAllowedError
@@ -32,9 +27,16 @@ const ALIASES: Record<string, string> = {
  */
 export function useAuthErrorMessage() {
   const t = useTranslations("authErrors");
-  return (error: AuthError | null | undefined) => {
+  // Accepts anything thrown or returned: only `code` and `status` are read, if present.
+  return (error: unknown) => {
+    const { code: rawCode, status } = (
+      typeof error === "object" && error !== null ? error : {}
+    ) as {
+      code?: unknown;
+      status?: unknown;
+    };
     // The rate limiter answers 429 without a code.
-    const raw = error?.status === 429 ? "RATE_LIMITED" : error?.code;
+    const raw = status === 429 ? "RATE_LIMITED" : typeof rawCode === "string" ? rawCode : undefined;
     const code = raw && (ALIASES[raw] ?? raw);
     return code && t.has(code as "generic") ? t(code as "generic") : t("generic");
   };

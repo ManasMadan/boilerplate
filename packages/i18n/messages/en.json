@@ -207,7 +207,8 @@
         "body": "For your security, sign in again to see or change this.",
         "action": "Sign in again"
       }
-    }
+    },
+    "personalTitle": "Your account"
   },
   "invitations": {
     "title": "You're invited",
@@ -332,5 +333,232 @@
     "WEBHOOK_DELIVERY_NOT_FOUND": "That delivery doesn't exist.",
     "WEBHOOK_URL_NOT_ALLOWED": "Use a public https:// URL. Private and internal addresses can't receive webhooks.",
     "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another."
+  },
+  "workspace": {
+    "switcher": {
+      "label": "Workspace",
+      "create": "New workspace",
+      "personal": "Personal"
+    },
+    "create": {
+      "title": "New workspace",
+      "description": "A shared space for a team: its own todos, members and settings.",
+      "name": "Workspace name",
+      "submit": "Create workspace",
+      "created": "Workspace created"
+    },
+    "nav": {
+      "general": "General",
+      "members": "Members",
+      "webhooks": "Webhooks",
+      "audit": "Audit log"
+    },
+    "general": {
+      "title": "Workspace",
+      "description": "Settings for everyone in {name}.",
+      "name": "Name",
+      "saved": "Workspace saved",
+      "personalNote": "This is your personal workspace. It can't be shared or deleted.",
+      "delete": {
+        "title": "Delete workspace",
+        "description": "Deletes the workspace and everything in it for all members. This can't be undone.",
+        "confirm": "Type the workspace name to confirm",
+        "action": "Delete workspace",
+        "deleted": "Workspace deleted"
+      }
+    },
+    "members": {
+      "title": "Members",
+      "description": "People who can work in {name}.",
+      "you": "You",
+      "role": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "member": "Member"
+      },
+      "roleLabel": "Role for {name}",
+      "remove": "Remove",
+      "removed": "Member removed",
+      "roleChanged": "Role updated",
+      "leave": "Leave workspace",
+      "left": "You left the workspace",
+      "invite": {
+        "title": "Invite someone",
+        "email": "Email",
+        "role": "Role",
+        "submit": "Send invitation",
+        "sent": "Invitation sent to {email}"
+      },
+      "pending": {
+        "title": "Pending invitations",
+        "empty": "No pending invitations.",
+        "cancel": "Cancel",
+        "cancelled": "Invitation cancelled",
+        "invited": "Invited as {role}"
+      }
+    },
+    "audit": {
+      "title": "Audit log",
+      "description": "Everything that changed in this workspace, and who changed it.",
+      "empty": "Nothing has happened here yet.",
+      "system": "System",
+      "loadMore": "Load more",
+      "when": "When",
+      "who": "Who",
+      "what": "What",
+      "events": {
+        "todo": {
+          "created": {
+            "v1": "Created the todo “{title}”"
+          },
+          "completed": {
+            "v1": "Completed the todo “{title}”"
+          },
+          "deleted": {
+            "v1": "Deleted a todo"
+          }
+        },
+        "auth": {
+          "signed_up": {
+            "v1": "Created an account"
+          },
+          "session_started": {
+            "v1": "Signed in"
+          },
+          "session_ended": {
+            "v1": "Signed out"
+          },
+          "password_changed": {
+            "v1": "Changed their password"
+          },
+          "password_reset": {
+            "v1": "Reset their password"
+          },
+          "email_changed": {
+            "v1": "Changed their email address"
+          },
+          "two_factor_changed": {
+            "v1": "{enabled, select, true {Turned on two-step verification} other {Turned off two-step verification}}"
+          },
+          "passkey_added": {
+            "v1": "Added a passkey"
+          },
+          "account_deleted": {
+            "v1": "Deleted their account"
+          }
+        },
+        "org": {
+          "created": {
+            "v1": "Created the workspace “{name}”"
+          },
+          "deleted": {
+            "v1": "Deleted the workspace"
+          },
+          "member_added": {
+            "v1": "Added a member as {role}"
+          },
+          "member_removed": {
+            "v1": "Removed a member"
+          },
+          "member_role_changed": {
+            "v1": "Changed a member's role from {previousRole} to {role}"
+          },
+          "invitation_sent": {
+            "v1": "Invited {email} as {role}"
+          }
+        },
+        "stripe": {
+          "event_received": {
+            "v1": "Received a Stripe event ({type})"
+          }
+        },
+        "webhook": {
+          "endpoint_created": {
+            "v1": "Added the webhook endpoint {url}"
+          },
+          "endpoint_updated": {
+            "v1": "Changed a webhook endpoint"
+          },
+          "endpoint_deleted": {
+            "v1": "Deleted the webhook endpoint {url}"
+          },
+          "secret_rotated": {
+            "v1": "Rotated a webhook signing secret"
+          },
+          "endpoint_disabled": {
+            "v1": "Turned off the webhook endpoint {url} because it kept failing"
+          }
+        }
+      }
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "description": "Send this workspace's events to your own systems. Every request is signed (Standard Webhooks).",
+      "empty": "No endpoints yet.",
+      "add": "Add endpoint",
+      "url": "Endpoint URL",
+      "urlHint": "A public https:// address that accepts POST requests.",
+      "descriptionLabel": "Description",
+      "events": "Events",
+      "allEvents": "All events",
+      "create": "Add endpoint",
+      "created": "Endpoint added",
+      "secret": {
+        "title": "Signing secret",
+        "once": "Copy it now: it won't be shown again. Use it to verify each request's webhook-signature header.",
+        "copy": "Copy",
+        "copied": "Copied",
+        "done": "I've saved it",
+        "rotate": "Rotate secret",
+        "rotated": "New secret created. The old one no longer works."
+      },
+      "status": {
+        "enabled": "Active",
+        "manual": "Turned off",
+        "failing": "Turned off: kept failing"
+      },
+      "enable": "Turn on",
+      "disable": "Turn off",
+      "test": "Send test event",
+      "testSent": "Test event sent",
+      "delete": "Delete",
+      "deleted": "Endpoint deleted",
+      "back": "All endpoints",
+      "deliveries": {
+        "title": "Recent deliveries",
+        "empty": "Nothing sent yet.",
+        "event": "Event",
+        "result": "Result",
+        "attempts": "{count, plural, one {# attempt} other {# attempts}}",
+        "pending": "Sending…",
+        "succeeded": "Delivered",
+        "failed": "Failed",
+        "redeliver": "Send again",
+        "redelivered": "Queued to send again",
+        "loadMore": "Load more"
+      },
+      "eventLabels": {
+        "todo": {
+          "created": {
+            "v1": "A todo is created"
+          },
+          "completed": {
+            "v1": "A todo is completed"
+          },
+          "deleted": {
+            "v1": "A todo is deleted"
+          }
+        },
+        "org": {
+          "member_added": {
+            "v1": "Someone joins the workspace"
+          },
+          "member_removed": {
+            "v1": "Someone leaves or is removed"
+          }
+        }
+      }
+    },
+    "noOrganization": "You're no longer in that workspace; switched to {name}."
   }
 }

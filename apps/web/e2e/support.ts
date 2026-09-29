@@ -253,3 +253,38 @@ export async function expireCodes(email: string) {
   }
   expect(expired, `a pending code for ${email}`).toBeGreaterThan(0);
 }
+
+// ---------------------------------------------------------------------------- workspaces
+
+/** Creates a team workspace through the header switcher and switches to it. */
+export async function createWorkspace(page: Page, name: string) {
+  await page.getByRole("button", { name: "Workspace", exact: true }).click();
+  await page.getByRole("menuitem", { name: "New workspace" }).click();
+  await page.getByLabel("Workspace name").fill(name);
+  await page.getByRole("button", { name: "Create workspace" }).click();
+  await expect(page.getByText("Workspace created")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Workspace", exact: true })).toContainText(name);
+}
+
+/** Invites `invitee` to the active workspace (Members page) and has them accept by email. */
+export async function inviteAndAccept(
+  owner: Page,
+  invitee: { page: Page; user: User },
+  role = "Member",
+) {
+  const inbox = await mailbox(invitee.user.email);
+  await owner.goto("/settings/members");
+  await owner.getByLabel("Email").fill(invitee.user.email);
+  if (role !== "Member") {
+    await owner.getByRole("combobox", { name: "Role" }).click();
+    await owner.getByRole("option", { name: role }).click();
+  }
+  await owner.getByRole("button", { name: "Send invitation" }).click();
+  await expect(owner.getByText(`Invitation sent to ${invitee.user.email}`)).toBeVisible();
+  const { Text } = await inbox.next();
+  const link = /(https?:\/\/\S+\/invitations\/[0-9a-f-]{36})/.exec(Text)?.[1];
+  expect(link, "an invitation link").toBeDefined();
+  await invitee.page.goto(new URL(link as string).pathname);
+  await invitee.page.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(invitee.page).toHaveURL(/\/dashboard/);
+}

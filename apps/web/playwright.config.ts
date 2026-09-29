@@ -10,7 +10,12 @@ export default defineConfig({
   // Each step crosses browser, Next, the API, Postgres, Redis and sometimes the email
   // queue; under parallel load 5s (the default) is too tight for that round trip.
   expect: { timeout: 10_000 },
+  // Multi-device flows (invite by email, accept, switch) take several round trips.
+  timeout: 60_000,
   fullyParallel: true,
+  // Each worker drives up to two browsers against one machine running the whole stack;
+  // more than this starves the services and measures the laptop, not the app.
+  workers: process.env.CI ? 2 : 4,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",

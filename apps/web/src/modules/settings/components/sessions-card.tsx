@@ -84,9 +84,7 @@ export function SessionsCard() {
           needsRecentSignIn(sessions.error) ? (
             <ReauthPrompt />
           ) : (
-            <p className="text-sm text-destructive">
-              {errorMessage(sessions.error as { code?: string })}
-            </p>
+            <p className="text-sm text-destructive">{errorMessage(sessions.error)}</p>
           )
         ) : (
           <ul className="flex flex-col divide-y">

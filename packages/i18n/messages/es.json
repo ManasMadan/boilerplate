@@ -207,7 +207,8 @@
         "body": "Por seguridad, vuelve a iniciar sesión para ver o cambiar esto.",
         "action": "Volver a iniciar sesión"
       }
-    }
+    },
+    "personalTitle": "Tu cuenta"
   },
   "invitations": {
     "title": "Te han invitado",
@@ -332,5 +333,232 @@
     "WEBHOOK_DELIVERY_NOT_FOUND": "Esa entrega no existe.",
     "WEBHOOK_URL_NOT_ALLOWED": "Usa una URL pública https://. Las direcciones privadas o internas no pueden recibir webhooks.",
     "WEBHOOK_ENDPOINT_LIMIT": "Este espacio ya tiene {max} endpoints de webhook. Elimina uno para añadir otro."
+  },
+  "workspace": {
+    "switcher": {
+      "label": "Espacio de trabajo",
+      "create": "Nuevo espacio",
+      "personal": "Personal"
+    },
+    "create": {
+      "title": "Nuevo espacio de trabajo",
+      "description": "Un espacio compartido para un equipo: sus propias tareas, miembros y ajustes.",
+      "name": "Nombre del espacio",
+      "submit": "Crear espacio",
+      "created": "Espacio creado"
+    },
+    "nav": {
+      "general": "General",
+      "members": "Miembros",
+      "webhooks": "Webhooks",
+      "audit": "Registro de auditoría"
+    },
+    "general": {
+      "title": "Espacio de trabajo",
+      "description": "Ajustes para todos en {name}.",
+      "name": "Nombre",
+      "saved": "Espacio guardado",
+      "personalNote": "Este es tu espacio personal. No se puede compartir ni eliminar.",
+      "delete": {
+        "title": "Eliminar espacio",
+        "description": "Elimina el espacio y todo su contenido para todos los miembros. No se puede deshacer.",
+        "confirm": "Escribe el nombre del espacio para confirmar",
+        "action": "Eliminar espacio",
+        "deleted": "Espacio eliminado"
+      }
+    },
+    "members": {
+      "title": "Miembros",
+      "description": "Personas que pueden trabajar en {name}.",
+      "you": "Tú",
+      "role": {
+        "owner": "Propietario",
+        "admin": "Administrador",
+        "member": "Miembro"
+      },
+      "roleLabel": "Rol de {name}",
+      "remove": "Quitar",
+      "removed": "Miembro quitado",
+      "roleChanged": "Rol actualizado",
+      "leave": "Salir del espacio",
+      "left": "Saliste del espacio",
+      "invite": {
+        "title": "Invitar a alguien",
+        "email": "Correo electrónico",
+        "role": "Rol",
+        "submit": "Enviar invitación",
+        "sent": "Invitación enviada a {email}"
+      },
+      "pending": {
+        "title": "Invitaciones pendientes",
+        "empty": "No hay invitaciones pendientes.",
+        "cancel": "Cancelar",
+        "cancelled": "Invitación cancelada",
+        "invited": "Invitado como {role}"
+      }
+    },
+    "audit": {
+      "title": "Registro de auditoría",
+      "description": "Todo lo que cambió en este espacio, y quién lo cambió.",
+      "empty": "Todavía no ha pasado nada aquí.",
+      "system": "Sistema",
+      "loadMore": "Cargar más",
+      "when": "Cuándo",
+      "who": "Quién",
+      "what": "Qué",
+      "events": {
+        "todo": {
+          "created": {
+            "v1": "Creó la tarea «{title}»"
+          },
+          "completed": {
+            "v1": "Completó la tarea «{title}»"
+          },
+          "deleted": {
+            "v1": "Eliminó una tarea"
+          }
+        },
+        "auth": {
+          "signed_up": {
+            "v1": "Creó una cuenta"
+          },
+          "session_started": {
+            "v1": "Inició sesión"
+          },
+          "session_ended": {
+            "v1": "Cerró sesión"
+          },
+          "password_changed": {
+            "v1": "Cambió su contraseña"
+          },
+          "password_reset": {
+            "v1": "Restableció su contraseña"
+          },
+          "email_changed": {
+            "v1": "Cambió su correo electrónico"
+          },
+          "two_factor_changed": {
+            "v1": "{enabled, select, true {Activó la verificación en dos pasos} other {Desactivó la verificación en dos pasos}}"
+          },
+          "passkey_added": {
+            "v1": "Añadió una llave de acceso"
+          },
+          "account_deleted": {
+            "v1": "Eliminó su cuenta"
+          }
+        },
+        "org": {
+          "created": {
+            "v1": "Creó el espacio «{name}»"
+          },
+          "deleted": {
+            "v1": "Eliminó el espacio"
+          },
+          "member_added": {
+            "v1": "Añadió un miembro como {role}"
+          },
+          "member_removed": {
+            "v1": "Quitó a un miembro"
+          },
+          "member_role_changed": {
+            "v1": "Cambió el rol de un miembro de {previousRole} a {role}"
+          },
+          "invitation_sent": {
+            "v1": "Invitó a {email} como {role}"
+          }
+        },
+        "stripe": {
+          "event_received": {
+            "v1": "Recibió un evento de Stripe ({type})"
+          }
+        },
+        "webhook": {
+          "endpoint_created": {
+            "v1": "Añadió el endpoint de webhook {url}"
+          },
+          "endpoint_updated": {
+            "v1": "Cambió un endpoint de webhook"
+          },
+          "endpoint_deleted": {
+            "v1": "Eliminó el endpoint de webhook {url}"
+          },
+          "secret_rotated": {
+            "v1": "Cambió un secreto de firma de webhook"
+          },
+          "endpoint_disabled": {
+            "v1": "Desactivó el endpoint de webhook {url} porque fallaba continuamente"
+          }
+        }
+      }
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "description": "Envía los eventos de este espacio a tus propios sistemas. Cada solicitud va firmada (Standard Webhooks).",
+      "empty": "Todavía no hay endpoints.",
+      "add": "Añadir endpoint",
+      "url": "URL del endpoint",
+      "urlHint": "Una dirección https:// pública que acepte solicitudes POST.",
+      "descriptionLabel": "Descripción",
+      "events": "Eventos",
+      "allEvents": "Todos los eventos",
+      "create": "Añadir endpoint",
+      "created": "Endpoint añadido",
+      "secret": {
+        "title": "Secreto de firma",
+        "once": "Cópialo ahora: no se volverá a mostrar. Úsalo para verificar la cabecera webhook-signature de cada solicitud.",
+        "copy": "Copiar",
+        "copied": "Copiado",
+        "done": "Ya lo guardé",
+        "rotate": "Cambiar secreto",
+        "rotated": "Se creó un secreto nuevo. El anterior ya no funciona."
+      },
+      "status": {
+        "enabled": "Activo",
+        "manual": "Desactivado",
+        "failing": "Desactivado: fallaba continuamente"
+      },
+      "enable": "Activar",
+      "disable": "Desactivar",
+      "test": "Enviar evento de prueba",
+      "testSent": "Evento de prueba enviado",
+      "delete": "Eliminar",
+      "deleted": "Endpoint eliminado",
+      "back": "Todos los endpoints",
+      "deliveries": {
+        "title": "Entregas recientes",
+        "empty": "Todavía no se ha enviado nada.",
+        "event": "Evento",
+        "result": "Resultado",
+        "attempts": "{count, plural, one {# intento} other {# intentos}}",
+        "pending": "Enviando…",
+        "succeeded": "Entregado",
+        "failed": "Falló",
+        "redeliver": "Enviar de nuevo",
+        "redelivered": "Se enviará de nuevo",
+        "loadMore": "Cargar más"
+      },
+      "eventLabels": {
+        "todo": {
+          "created": {
+            "v1": "Se crea una tarea"
+          },
+          "completed": {
+            "v1": "Se completa una tarea"
+          },
+          "deleted": {
+            "v1": "Se elimina una tarea"
+          }
+        },
+        "org": {
+          "member_added": {
+            "v1": "Alguien se une al espacio"
+          },
+          "member_removed": {
+            "v1": "Alguien sale o es quitado"
+          }
+        }
+      }
+    },
+    "noOrganization": "Ya no estás en ese espacio; cambiamos a {name}."
   }
 }

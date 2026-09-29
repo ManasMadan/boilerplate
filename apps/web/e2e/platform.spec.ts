@@ -1,4 +1,4 @@
-import { expect, expectAccessible, signUp, test } from "./support";
+import { createWorkspace, expect, expectAccessible, signUp, test } from "./support";
 
 test("unknown pages show a translated 404", async ({ page }) => {
   const response = await page.goto("/does-not-exist");
@@ -30,7 +30,18 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
   for (const path of ["/", "/sign-in", "/sign-up", "/forgot-password", "/terms", "/privacy"])
     await page.goto(path);
   await signUp(page);
-  for (const path of ["/dashboard", "/settings", "/settings/security"]) await page.goto(path);
+  for (const path of [
+    "/dashboard",
+    "/settings",
+    "/settings/security",
+    "/settings/workspace",
+    "/settings/members",
+    "/settings/webhooks",
+    "/settings/audit",
+  ]) {
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+  }
   expect(problems).toEqual([]);
 });
 
@@ -64,7 +75,16 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
 
   test("signed-in pages", async ({ page }) => {
     await signUp(page);
-    for (const path of ["/dashboard", "/settings", "/settings/security"]) {
+    await createWorkspace(page, "Accessible");
+    for (const path of [
+      "/dashboard",
+      "/settings",
+      "/settings/security",
+      "/settings/workspace",
+      "/settings/members",
+      "/settings/webhooks",
+      "/settings/audit",
+    ]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await expectAccessible(page);

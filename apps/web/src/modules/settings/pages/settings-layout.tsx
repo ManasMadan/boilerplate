@@ -6,35 +6,72 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+import { useActiveWorkspace } from "@/modules/workspace";
 
-const TABS = [
-  { href: "/settings", key: "profile" },
-  { href: "/settings/security", key: "security" },
-] as const satisfies readonly { href: Route; key: string }[];
+interface Tab {
+  href: Route;
+  label: string;
+  /** Webhooks and the audit log are for owners and admins. */
+  adminOnly?: boolean;
+}
 
+function TabLink({ tab, pathname }: { tab: Tab; pathname: string }) {
+  const current = tab.href === "/settings" ? pathname === tab.href : pathname.startsWith(tab.href);
+  return (
+    <Link
+      href={tab.href}
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        "-mb-px border-b-2 pb-2 text-sm whitespace-nowrap",
+        current
+          ? "border-foreground font-medium"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {tab.label}
+    </Link>
+  );
+}
+
+/** Settings for you (profile, security) and for the active workspace, one tab each. */
 export function SettingsLayout({ children }: { children: ReactNode }) {
-  const t = useTranslations("settings");
+  const t = useTranslations();
   const pathname = usePathname();
+  const workspace = useActiveWorkspace();
+  const personal: Tab[] = [
+    { href: "/settings", label: t("settings.profile.title") },
+    { href: "/settings/security", label: t("settings.security.title") },
+  ];
+  const team: Tab[] = [
+    { href: "/settings/workspace", label: t("workspace.nav.general") },
+    { href: "/settings/members", label: t("workspace.nav.members") },
+    { href: "/settings/webhooks", label: t("workspace.nav.webhooks"), adminOnly: true },
+    { href: "/settings/audit", label: t("workspace.nav.audit"), adminOnly: true },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-      <nav className="flex gap-4 border-b" aria-label={t("title")}>
-        {TABS.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            aria-current={pathname === tab.href ? "page" : undefined}
-            className={cn(
-              "-mb-px border-b-2 pb-2 text-sm",
-              pathname === tab.href
-                ? "border-foreground font-medium"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t(`${tab.key}.title`)}
-          </Link>
-        ))}
-      </nav>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("settings.title")}</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-8">
+        <nav
+          className="flex gap-4 overflow-x-auto border-b"
+          aria-label={t("settings.personalTitle")}
+        >
+          {personal.map((tab) => (
+            <TabLink key={tab.href} tab={tab} pathname={pathname} />
+          ))}
+        </nav>
+        <nav
+          className="flex gap-4 overflow-x-auto border-b"
+          aria-label={t("workspace.switcher.label")}
+        >
+          {team
+            .filter((tab) => !tab.adminOnly || workspace.isAdmin)
+            .map((tab) => (
+              <TabLink key={tab.href} tab={tab} pathname={pathname} />
+            ))}
+        </nav>
+      </div>
       <div className="flex max-w-2xl flex-col gap-6">{children}</div>
     </div>
   );

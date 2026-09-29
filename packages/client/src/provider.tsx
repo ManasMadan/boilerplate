@@ -8,6 +8,8 @@
  *   every cached query, so no previous user's data stays on screen, and calls
  *   `onUnauthenticated`;
  * - CLIENT_OUTDATED calls `onOutdated` (show "please update");
+ * - NO_ACTIVE_ORGANIZATION (the active workspace was deleted, or the user was removed
+ *   from it) calls `onNoOrganization`, where the app switches to another workspace;
  * - retries only errors that can succeed on retry (network, 5xx), never 4xx.
  */
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -26,6 +28,7 @@ export interface ApiProviderProps {
   options?: ApiClientOptions;
   onUnauthenticated?: () => void | Promise<void>;
   onOutdated?: () => void;
+  onNoOrganization?: () => void | Promise<void>;
   children: ReactNode;
 }
 
@@ -35,6 +38,7 @@ export function ApiProvider({
   options,
   onUnauthenticated,
   onOutdated,
+  onNoOrganization,
   children,
 }: ApiProviderProps) {
   const [value] = useState<ApiContextValue & { queryClient: QueryClient }>(() => {
@@ -45,6 +49,8 @@ export function ApiProvider({
         void onUnauthenticated?.();
       } else if (code === "CLIENT_OUTDATED") {
         onOutdated?.();
+      } else if (code === "NO_ACTIVE_ORGANIZATION") {
+        void onNoOrganization?.();
       }
     };
     const queryClient: QueryClient = new QueryClient({
