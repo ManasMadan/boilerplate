@@ -16,7 +16,7 @@
 import { apiKeyClient } from "@better-auth/api-key/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { passkeyClient } from "@better-auth/passkey/client";
-import { userAdditionalFields } from "@repo/contracts/auth";
+import { userAdditionalFields } from "@repo/contracts/auth-settings";
 import {
   adminClient,
   emailOTPClient,

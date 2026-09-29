@@ -1,6 +1,6 @@
 "use client";
 
-import { authErrorKey } from "@repo/client/auth/forms";
+import { authErrorKey } from "@repo/client/auth/errors";
 import { useTranslations } from "next-intl";
 
 /**

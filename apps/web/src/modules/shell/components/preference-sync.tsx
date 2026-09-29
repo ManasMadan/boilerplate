@@ -1,6 +1,6 @@
 "use client";
 
-import { isLocale } from "@repo/i18n";
+import { isLocale } from "@repo/i18n/locales";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { useEffect } from "react";

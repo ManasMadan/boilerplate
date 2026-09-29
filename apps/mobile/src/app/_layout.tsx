@@ -6,7 +6,7 @@
  * during sign-up (the email code) stays put while the session is refetched.
  */
 import "../../global.css";
-import { isLocale } from "@repo/i18n";
+import { isLocale } from "@repo/i18n/locales";
 import { PortalHost } from "@rn-primitives/portal";
 import { SplashScreen, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";

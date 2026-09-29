@@ -9,7 +9,7 @@
  * label association are handled here. Ids come from useId, so two forms on one page
  * (e.g. two "confirm your password" fields) never share one.
  */
-import { OTP_LENGTH } from "@repo/contracts/auth";
+import { OTP_LENGTH } from "@repo/contracts/auth-settings";
 import { Field, FieldError, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@repo/ui/components/input-otp";

@@ -1,5 +1,5 @@
 import { useRegisterDeviceMutation } from "@repo/client/api/notifications/devices";
-import { type Locale, locales } from "@repo/i18n";
+import { type Locale, locales } from "@repo/i18n/locales";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";

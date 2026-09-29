@@ -21,37 +21,11 @@ import { createTranslator } from "use-intl/core";
 import en from "../messages/en.json" with { type: "json" };
 import es from "../messages/es.json" with { type: "json" };
 
-export const locales = ["en", "es"] as const;
-export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = "en";
+import type { Locale } from "./locales";
+
+export * from "./locales";
 
 export type Messages = typeof en;
-
-export function isLocale(value: unknown): value is Locale {
-  return typeof value === "string" && (locales as readonly string[]).includes(value);
-}
-
-/**
- * Picks the best supported locale from an `Accept-Language` header or a list of
- * preferences (`["es-MX", "en"]`), falling back to the default.
- */
-export function negotiateLocale(
-  preferences: string | readonly string[] | null | undefined,
-): Locale {
-  const list =
-    typeof preferences === "string"
-      ? preferences
-          .split(",")
-          .map((part) => part.split(";")[0]?.trim() ?? "")
-          .filter(Boolean)
-      : (preferences ?? []);
-  for (const tag of list) {
-    if (isLocale(tag)) return tag;
-    const base = tag.split("-")[0];
-    if (isLocale(base)) return base;
-  }
-  return defaultLocale;
-}
 
 /** Where translations are loaded from. See the module comment for the database variant. */
 export interface MessageSource {

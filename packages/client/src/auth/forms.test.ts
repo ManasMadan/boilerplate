@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { authErrorKey, authFormSchemas } from "./forms";
+import { authErrorKey } from "./errors";
+import { authFormSchemas } from "./forms";
 
 describe("authErrorKey", () => {
   it.each([

@@ -1,6 +1,6 @@
 "use client";
 
-import { locales } from "@repo/i18n";
+import { locales } from "@repo/i18n/locales";
 import { Button } from "@repo/ui/components/button";
 import {
   DropdownMenu,

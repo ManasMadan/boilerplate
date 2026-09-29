@@ -2,9 +2,11 @@
   "name": "@repo/i18n",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "description": "Every user-facing string, for every surface: web, mobile, emails, push, SMS and in-app notifications.",
   "exports": {
     ".": "./src/index.ts",
+    "./locales": "./src/locales.ts",
     "./messages/*.json": "./messages/*.json"
   },
   "scripts": {

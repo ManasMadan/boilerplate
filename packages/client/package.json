@@ -2,12 +2,14 @@
   "name": "@repo/client",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "description": "Everything web and mobile use to talk to the API: the typed client, auth client, and one hook per API operation.",
   "exports": {
     ".": "./src/index.ts",
     "./auth": "./src/auth/client.ts",
     "./api/*": "./src/api/*.ts",
-    "./auth/forms": "./src/auth/forms.ts"
+    "./auth/forms": "./src/auth/forms.ts",
+    "./auth/errors": "./src/auth/errors.ts"
   },
   "scripts": {
     "check-types": "tsc",

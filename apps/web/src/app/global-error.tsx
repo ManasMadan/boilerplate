@@ -1,7 +1,7 @@
 "use client";
 
 import "@repo/ui/globals.css";
-import { negotiateLocale } from "@repo/i18n";
+import { negotiateLocale } from "@repo/i18n/locales";
 import en from "@repo/i18n/messages/en.json" with { type: "json" };
 import es from "@repo/i18n/messages/es.json" with { type: "json" };
 import { useEffect, useState } from "react";

@@ -2,6 +2,9 @@
   "name": "@repo/web",
   "private": true,
   "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "description": "The web app: renders UI only. All data and logic come from apps/api through packages/client.",
   "scripts": {
     "dev": "bun --env-file=../../.env run next dev --port 3000",

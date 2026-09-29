@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMeQuery } from "@repo/client/api/user/me";
 import { nameSchema } from "@repo/contracts/auth";
-import { isLocale, type Locale, locales } from "@repo/i18n";
+import { isLocale, type Locale, locales } from "@repo/i18n/locales";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,

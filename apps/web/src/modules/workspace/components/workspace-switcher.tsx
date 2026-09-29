@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
 import { ChevronsUpDown, Plus } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -23,7 +24,11 @@ import {
   useSwitchWorkspace,
   useWorkspaces,
 } from "../hooks/use-workspace";
-import { CreateWorkspaceDialog } from "./create-workspace-dialog";
+
+// The form (and its validation) loads only when someone opens it: this menu is on every page.
+const CreateWorkspaceDialog = dynamic(() =>
+  import("./create-workspace-dialog").then((module) => module.CreateWorkspaceDialog),
+);
 
 /** Header menu: which workspace you're in, switching between them, creating one. */
 export function WorkspaceSwitcher() {
@@ -33,6 +38,8 @@ export function WorkspaceSwitcher() {
   const active = useActiveWorkspace();
   const switchTo = useSwitchWorkspace();
   const [creating, setCreating] = useState(false);
+  // Mounted from the first open on, so closing still animates.
+  const [opened, setOpened] = useState(false);
   const activeId = active.data?.id;
 
   return (
@@ -66,12 +73,17 @@ export function WorkspaceSwitcher() {
             </DropdownMenuRadioGroup>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setCreating(true)}>
+          <DropdownMenuItem
+            onClick={() => {
+              setOpened(true);
+              setCreating(true);
+            }}
+          >
             <Plus /> {t("create")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <CreateWorkspaceDialog open={creating} onOpenChange={setCreating} />
+      {opened ? <CreateWorkspaceDialog open={creating} onOpenChange={setCreating} /> : null}
     </>
   );
 }

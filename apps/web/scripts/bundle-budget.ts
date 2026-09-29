@@ -13,12 +13,13 @@ import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
 
 /**
- * Budgets in kB, gzipped: today's sizes plus a little room. On top of the shared part,
- * every page loads about 350 kB (gzipped) of the root layout's client code (the header's session, the API and auth
- * clients, live updates, form schemas); that's the place to win back size.
+ * Budgets in kB, gzipped: today's sizes plus a little room. A page with no forms loads
+ * about 310 kB (React and Next are two thirds of it); pages with forms add about 120 kB,
+ * mostly zod: every schema imports its `z` namespace, which the bundler can't prune, so
+ * all of zod ships, locales included. Moving the schemas to `zod/mini` is the next win.
  */
 const SHARED_BUDGET = 135;
-const ROUTE_BUDGET = 520;
+const ROUTE_BUDGET = 470;
 
 const NEXT = join(import.meta.dirname, "../.next");
 
