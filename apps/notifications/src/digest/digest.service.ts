@@ -16,11 +16,12 @@ import {
 } from "@nestjs/common";
 import { withUser } from "@repo/db";
 import { DigestEmail, digestSubject, renderEmail } from "@repo/email";
-import { bundledMessages, createI18n } from "@repo/i18n";
 import { createProducer } from "@repo/jobs";
 import {
   type Database,
+  type I18n,
   InjectDatabase,
+  InjectI18n,
   InjectPinoLogger,
   InjectRedis,
   PinoLogger,
@@ -39,10 +40,10 @@ const SCHEDULE = "5 * * * *";
 
 @Injectable()
 export class DigestService implements OnApplicationBootstrap, OnApplicationShutdown {
-  private readonly i18n = createI18n(bundledMessages);
   private readonly producer;
 
   constructor(
+    @InjectI18n() private readonly i18n: I18n,
     @InjectDatabase() private readonly database: Database,
     @InjectRedis() redis: Redis,
     @InjectQueue("notifications-bulk") private readonly queue: Queue,

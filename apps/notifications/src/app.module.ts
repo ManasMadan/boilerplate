@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import {
   DatabaseModule,
   HealthModule,
+  I18nModule,
   LoggerModule,
   REDIS,
   type Redis,
@@ -24,6 +25,8 @@ import { env } from "./env";
       service: "notifications",
     }),
     RedisModule.forRoot({ url: env.REDIS_URL }),
+    // Copy for every channel, through the MessageSource seam (bundled catalog today).
+    I18nModule.forRoot(),
     // Queues reuse the service's single, lifecycle-managed Redis connection.
     BullModule.forRootAsync({
       inject: [REDIS],

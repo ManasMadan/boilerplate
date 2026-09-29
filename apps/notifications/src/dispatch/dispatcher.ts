@@ -20,7 +20,6 @@ import { createHash } from "node:crypto";
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import { type NotificationChannel, notificationCategories } from "@repo/contracts/notifications";
 import { withUser } from "@repo/db";
-import { bundledMessages, createI18n } from "@repo/i18n";
 import {
   createProducer,
   type NotificationPayload,
@@ -31,7 +30,9 @@ import {
 import {
   createSignedTokens,
   type Database,
+  type I18n,
   InjectDatabase,
+  InjectI18n,
   InjectPinoLogger,
   InjectRedis,
   PinoLogger,
@@ -50,11 +51,11 @@ import { type BoundTemplate, type RenderContext, TemplateSource } from "./templa
 
 @Injectable()
 export class Dispatcher implements OnApplicationShutdown {
-  private readonly i18n = createI18n(bundledMessages);
   private readonly tokens = createSignedTokens(env.UNSUBSCRIBE_SECRET);
   private readonly producers = new Map<NotificationQueue, Producer<NotificationQueue>>();
 
   constructor(
+    @InjectI18n() private readonly i18n: I18n,
     private readonly recipients: RecipientResolver,
     private readonly templates: TemplateSource,
     private readonly log: DeliveryLog,
