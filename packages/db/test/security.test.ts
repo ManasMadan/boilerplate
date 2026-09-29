@@ -88,22 +88,50 @@ describe("row-level security", () => {
     expect(results.every(Boolean)).toBe(true);
   });
 
-  it("keeps the policy forced on every tenant table (drift checks cannot see this)", async () => {
+  // Tables with a user_id that are deliberately not row-level secured, and why.
+  const UNSCOPED_USER_TABLES: Record<string, string> = {
+    "notifications.delivery":
+      "the notifications service's own delivery log; no other role reads it",
+  };
+
+  it("keeps the policy forced on every tenant and per-user table (drift checks cannot see this)", async () => {
+    // Tenant tables (org_id) and per-user tables (user_id) outside auth, which better-auth
+    // owns and guards with grants. Partitioned parents count; their partitions inherit.
     const tables = await asRole("migrator", async (client) => {
       const { rows } = await client.query<{ table: string; forced: boolean; policies: number }>(`
-        SELECT c.relname AS table, c.relforcerowsecurity AS forced,
+        SELECT DISTINCT n.nspname || '.' || c.relname AS table, c.relforcerowsecurity AS forced,
                (SELECT count(*)::int FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname) AS policies
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         JOIN information_schema.columns col ON col.table_schema = n.nspname AND col.table_name = c.relname
-        WHERE col.column_name = 'org_id' AND c.relkind = 'r' AND c.relname <> 'outbox_event'`);
-      return rows;
+        WHERE c.relkind IN ('r', 'p') AND NOT c.relispartition
+          AND (col.column_name = 'org_id' OR (col.column_name = 'user_id' AND n.nspname <> 'auth'))
+          AND c.relname <> 'outbox_event'`);
+      return rows.filter((row) => !(row.table in UNSCOPED_USER_TABLES));
     });
-    expect(tables.length).toBeGreaterThan(0);
+    const names = tables.map((table) => table.table);
+    // The shapes this must keep covering: a partitioned table and per-user tables.
+    expect(names).toEqual(
+      expect.arrayContaining(["audit.audit_log", "files.file", "notifications.device"]),
+    );
     for (const table of tables) {
       expect(table, `${table.table} must FORCE row-level security with a policy`).toMatchObject({
         forced: true,
       });
-      expect(table.policies).toBeGreaterThan(0);
+      expect(table.policies, `${table.table} needs a policy`).toBeGreaterThan(0);
+    }
+  });
+
+  it("scopes per-user tables to the user in app.user_id", async () => {
+    const policies = await asRole("migrator", async (client) => {
+      const { rows } = await client.query<{ table: string; expr: string }>(`
+        SELECT schemaname || '.' || tablename AS table, coalesce(qual, '') || coalesce(with_check, '') AS expr
+        FROM pg_policies WHERE schemaname IN ('files', 'notifications')`);
+      return rows;
+    });
+    for (const table of ["files.file", "notifications.device", "notifications.notification"]) {
+      const rows = policies.filter((policy) => policy.table === table);
+      expect(rows.length, `${table} needs a policy`).toBeGreaterThan(0);
+      expect(rows.some((policy) => policy.expr.includes("app.user_id"))).toBe(true);
     }
   });
 });
