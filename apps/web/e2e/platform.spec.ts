@@ -1,4 +1,12 @@
-import { createWorkspace, expect, expectAccessible, settled, signUp, test } from "./support";
+import {
+  createWorkspace,
+  expect,
+  expectAccessible,
+  settled,
+  signOut,
+  signUp,
+  test,
+} from "./support";
 
 test("unknown pages show a translated 404", async ({ page }) => {
   const response = await page.goto("/does-not-exist");
@@ -147,8 +155,8 @@ test("theme can be switched and is remembered", async ({ page }) => {
 
 test("keyboard users can sign in without a mouse", async ({ page }) => {
   const user = await signUp(page);
-  await page.getByRole("button", { name: user.name }).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  // Signing out reloads the page; wait for it, or the next navigation races it.
+  await signOut(page, user);
   await page.goto("/sign-in");
   await page.getByLabel("Email").focus();
   await page.keyboard.type(user.email);
