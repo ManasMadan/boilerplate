@@ -262,12 +262,12 @@ jobs:
           PROFILE: ${{ github.event_name == 'schedule' && 'load' || 'smoke' }}
           TARGET_RPS: ${{ vars.LOAD_TARGET_RPS || '50' }}
         run: bun run test:e2e
-      # Backs up the database the suite just filled, restores it and requires an identical
-      # copy: rows, row-level security, grants and functions (scripts/restore-drill.ts).
       # The web app's first-load JavaScript per route, from the build the suite just ran
       # (apps/web/scripts/bundle-budget.ts).
       - name: Bundle budget
         run: bun run --cwd apps/web budget
+      # Backs up the database the suite just filled, restores it and requires an identical
+      # copy: rows, row-level security, grants and functions (scripts/restore-drill.ts).
       - name: Restore drill
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}

@@ -32,8 +32,8 @@ RUN --mount=type=cache,id=bun-install,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 COPY --from=prune /pruned/full/ .
 COPY deploy/docker/check-peers.mjs /usr/local/lib/check-peers.mjs
-# The Prisma client is the one generated file not committed (see docs/codegen.md);
-# everything else the build needs is already in the tree, so only this service builds.
+# The Prisma client is the one generated file these services need that isn't committed
+# (see docs/codegen.md); everything else is in the tree, so only this service builds.
 RUN bun run --cwd packages/db gen \
  && bunx turbo@${TURBO_VERSION} run build --filter=@repo/${SERVICE} --only
 # The runtime gets production dependencies only. Workspace links are dropped: our own

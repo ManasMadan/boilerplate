@@ -13,8 +13,8 @@ import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
 
 /**
- * Budgets in kB, gzipped: today's sizes plus a little room. Every page loads about
- * 350 kB of the root layout's client code (the header's session, the API and auth
+ * Budgets in kB, gzipped: today's sizes plus a little room. On top of the shared part,
+ * every page loads about 350 kB (gzipped) of the root layout's client code (the header's session, the API and auth
  * clients, live updates, form schemas); that's the place to win back size.
  */
 const SHARED_BUDGET = 135;

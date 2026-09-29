@@ -9,7 +9,7 @@ refuse it in production).
 Each embedder has a relevance floor (`min_score`, cosine similarity): passages below it
 aren't returned at all, so a question the documents can't answer finds nothing instead
 of the least-bad passage. For a provider model it's AI_MIN_RELEVANCE (default 0: the
-model judges relevance itself); calibrate it with `bun run evals` for your model.
+model judges relevance itself); calibrate it with `bun run --cwd apps/ai evals` for your model.
 
 Changing the dimension means a migration (ai.chunk's vector column) and re-indexing
 every document (documents keep their text for that).
