@@ -37,6 +37,9 @@ services:
       FILE_SCANNER: none
   notifications:
     keda: { enabled: false }
+    env:
+      # deploy/local/mailpit.yaml
+      SMTP_URL: smtp://mailpit:1025
   webhooks:
     keda: { enabled: false }
   ai-worker:

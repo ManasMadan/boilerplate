@@ -1,0 +1,11 @@
+# The local Kubernetes cluster (`bun run k8s:up`). The gateway listens on the node's
+# port 30080, published as port 80 on this machine: http://boilerplate.localhost.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: boilerplate
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 80
+        protocol: TCP
