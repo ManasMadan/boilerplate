@@ -35,6 +35,8 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

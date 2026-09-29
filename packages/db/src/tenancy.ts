@@ -51,6 +51,43 @@ export function withTenant(db: Db, orgId: string) {
 
 export type TenantDb = ReturnType<typeof withTenant>;
 
+const setUser = (client: Db | Prisma.TransactionClient, userId: string) =>
+  client.$executeRaw`SELECT set_config('app.user_id', ${userId}, true)`;
+
+/**
+ * Like withTenant, for rows owned by one user rather than an organization (their
+ * notifications, preferences, devices): row-level security on `app.user_id` scopes
+ * every query to that user.
+ */
+export function withUser(db: Db, userId: string) {
+  return db.$extends({
+    name: "user",
+    client: {
+      $transaction(): never {
+        throw new Error("Use userTx() for multi-statement units on per-user data.");
+      },
+    },
+    query: {
+      $allModels: {
+        async $allOperations({ args, query }) {
+          const [, result] = await db.$transaction([setUser(db, userId), query(args)], {
+            maxWait: 10_000,
+          });
+          return result;
+        },
+      },
+    },
+  });
+}
+
+/** Like tenantTx, for per-user data (see withUser). */
+export function userTx<T>(db: Db, userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return db.$transaction(async (tx) => {
+    await setUser(tx, userId);
+    return fn(tx as Tx);
+  }, TX_OPTIONS);
+}
+
 declare const txBrand: unique symbol;
 
 /**

@@ -103,7 +103,11 @@ jobs:
         env: { PGPASSWORD: postgres }
         run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
       - name: Generate throwaway secrets
-        run: echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+        run: |
+          {
+            echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
+            echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
+          } >> "$GITHUB_ENV"
       - name: Apply migrations
         run: bun run db:deploy
       # `migrate diff` exits 0 silently without a datasource, so the URLs above are required.
@@ -165,8 +169,11 @@ jobs:
       - run: bun run db:deploy
       - name: Generate a throwaway auth secret
         run: |
-          echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
-          echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+          {
+            echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
+            echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
+            echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
+          } >> "$GITHUB_ENV"
       - name: Build the services under test
         run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks --filter=@repo/web
       - name: Install the browser

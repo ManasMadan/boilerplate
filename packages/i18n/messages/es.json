@@ -300,12 +300,32 @@
       },
       "notYou": "Si no fuiste tú, restablece tu contraseña ahora y cierra la sesión en los dispositivos que no reconozcas.",
       "cta": "Revisar la seguridad"
-    }
+    },
+    "webhookDisabled": {
+      "subject": "Endpoint de webhook desactivado: {url}",
+      "heading": "Dejamos de enviar a un endpoint de webhook",
+      "body": "{url} falló en todas las entregas durante varios días, así que se desactivó. Los eventos que ocurran mientras esté desactivado no se envían.",
+      "cta": "Abrir ajustes de webhooks"
+    },
+    "digest": {
+      "subject": "Tu resumen diario",
+      "heading": "Esto es lo que pasó",
+      "intro": "{count, plural, one {# novedad} other {# novedades}} desde tu último resumen."
+    },
+    "unsubscribe": "¿No quieres estos correos? Darse de baja"
   },
   "notification": {
-    "todoReminder": {
-      "title": "Recordatorio",
-      "body": "{title}"
+    "webhooks": {
+      "endpoint-disabled": {
+        "title": "Se desactivó un endpoint de webhook",
+        "body": "{url} fallaba continuamente, así que dejamos de enviarle eventos. Corrígelo y vuelve a activarlo en los ajustes de webhooks."
+      }
+    },
+    "todo": {
+      "reminder": {
+        "title": "Recordatorio",
+        "body": "{title}"
+      }
     }
   },
   "errors": {

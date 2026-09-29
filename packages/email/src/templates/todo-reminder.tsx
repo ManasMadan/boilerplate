@@ -9,9 +9,20 @@ export interface TodoReminderEmailProps extends LocalizedProps {
 export const todoReminderSubject = ({ t, title }: TodoReminderEmailProps) =>
   t("email.todoReminder.subject", { title });
 
-export default function TodoReminderEmail({ locale, t, name, title }: TodoReminderEmailProps) {
+export default function TodoReminderEmail({
+  locale,
+  t,
+  name,
+  title,
+  unsubscribeUrl,
+}: TodoReminderEmailProps) {
   return (
-    <Layout locale={locale} t={t} preview={t("email.todoReminder.subject", { title })}>
+    <Layout
+      locale={locale}
+      t={t}
+      preview={t("email.todoReminder.subject", { title })}
+      unsubscribeUrl={unsubscribeUrl}
+    >
       <Heading as="h1" style={{ fontSize: 22, margin: "0 0 12px" }}>
         {t("email.todoReminder.greeting", { name })}
       </Heading>

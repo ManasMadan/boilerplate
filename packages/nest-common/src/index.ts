@@ -15,4 +15,5 @@ export * from "./rate-limit";
 export * from "./realtime";
 export * from "./redis";
 export * from "./safe-fetch";
+export * from "./signed-token";
 export * from "./storage";

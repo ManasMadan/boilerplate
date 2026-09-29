@@ -300,12 +300,32 @@
       },
       "notYou": "If this wasn't you, reset your password now and sign out of devices you don't recognise.",
       "cta": "Review security settings"
-    }
+    },
+    "webhookDisabled": {
+      "subject": "Webhook endpoint turned off: {url}",
+      "heading": "We stopped sending to a webhook endpoint",
+      "body": "{url} failed every delivery for several days, so it has been turned off. Events that happen while it's off aren't sent.",
+      "cta": "Open webhook settings"
+    },
+    "digest": {
+      "subject": "Your daily summary",
+      "heading": "Here's what happened",
+      "intro": "{count, plural, one {# update} other {# updates}} since your last summary."
+    },
+    "unsubscribe": "Don't want these emails? Unsubscribe"
   },
   "notification": {
-    "todoReminder": {
-      "title": "Reminder",
-      "body": "{title}"
+    "webhooks": {
+      "endpoint-disabled": {
+        "title": "A webhook endpoint was turned off",
+        "body": "{url} kept failing, so we stopped sending to it. Fix it and turn it back on in webhook settings."
+      }
+    },
+    "todo": {
+      "reminder": {
+        "title": "Reminder",
+        "body": "{title}"
+      }
     }
   },
   "errors": {

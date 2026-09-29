@@ -33,6 +33,7 @@ export {
   default as AuthOtpEmail,
   type OtpPurpose,
 } from "./templates/auth-otp";
+export { type DigestEmailProps, default as DigestEmail, digestSubject } from "./templates/digest";
 export {
   default as OrgInvitationEmail,
   type OrgInvitationEmailProps,
@@ -49,3 +50,8 @@ export {
   type TodoReminderEmailProps,
   todoReminderSubject,
 } from "./templates/todo-reminder";
+export {
+  default as WebhookDisabledEmail,
+  type WebhookDisabledEmailProps,
+  webhookDisabledSubject,
+} from "./templates/webhook-disabled";

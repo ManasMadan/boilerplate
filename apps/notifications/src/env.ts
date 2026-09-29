@@ -25,6 +25,11 @@ export const env = createEnv({
     SMTP_URL: requiredInProduction(z.url({ protocol: /^smtps?$/ }), "smtp://localhost:1025"),
     RESEND_API_KEY: z.string().startsWith("re_").optional(),
     EMAIL_FROM: requiredInProduction(z.string().min(3), "Boilerplate <no-reply@localhost>"),
+
+    // The web app's public URL, for links in messages (settings, unsubscribe).
+    WEB_URL: requiredInProduction(z.url(), "http://localhost:3000"),
+    // Signs one-click unsubscribe links (apps/api verifies them with the same secret).
+    UNSUBSCRIBE_SECRET: z.string().min(32),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

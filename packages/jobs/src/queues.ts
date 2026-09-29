@@ -94,6 +94,12 @@ export const notificationPayload = z.discriminatedUnion("template", [
     }),
   }),
   z.object({
+    template: z.literal("webhooks.endpoint-disabled"),
+    // Everyone in the organization with one of these roles.
+    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
+    data: z.object({ endpointId: z.uuid(), url: z.string() }),
+  }),
+  z.object({
     template: z.literal("todo.reminder"),
     to: z.object({ userId: z.string() }),
     data: z.object({ todoId: z.string(), title: z.string() }),
@@ -154,6 +160,11 @@ export const queues = {
     jobs: { event: eventEnvelope },
     options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
   },
+  /** Domain events that notify someone (apps/notifications maps them to templates). */
+  "events-notifications": {
+    jobs: { event: eventEnvelope },
+    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+  },
   /** Live UI updates (apps/worker → Redis pub/sub → the api's SSE streams); short-lived. */
   "events-realtime": {
     jobs: { event: eventEnvelope },
@@ -209,6 +220,7 @@ export const notificationQueue = {
   "auth.otp": "notifications-critical",
   "org.invitation": "notifications-critical",
   "auth.security-alert": "notifications-critical",
+  "webhooks.endpoint-disabled": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
 export type NotificationQueue = (typeof notificationQueue)[NotificationTemplate];
@@ -229,6 +241,7 @@ export const eventSubscribers = {
   "events-audit": () => true,
   "events-webhooks": (name: EventName) => customerFacing.has(name),
   "events-billing": (name: EventName) => name === "stripe.event_received.v1",
+  "events-notifications": (name: EventName) => name === "webhook.endpoint_disabled.v1",
   "events-realtime": (name: EventName) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: EventName) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;

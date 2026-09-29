@@ -8,6 +8,8 @@ import nodemailer from "nodemailer";
 export interface OutgoingEmail extends RenderedEmail {
   to: string;
   from: string;
+  /** Extra headers, e.g. List-Unsubscribe for emails the recipient can opt out of. */
+  headers?: Record<string, string>;
   /** Lets receiving providers and our retries dedupe the same logical message. */
   idempotencyKey: string;
 }
@@ -32,6 +34,7 @@ export class SmtpTransport implements EmailTransport {
       subject: email.subject,
       html: email.html,
       text: email.text,
+      headers: email.headers,
       messageId: `<${email.idempotencyKey}@notifications>`,
     });
     return { providerMessageId: info.messageId };
@@ -56,6 +59,7 @@ export class ResendTransport implements EmailTransport {
         subject: email.subject,
         html: email.html,
         text: email.text,
+        headers: email.headers,
       }),
       signal: AbortSignal.timeout(15_000),
     });
