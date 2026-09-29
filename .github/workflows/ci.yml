@@ -169,12 +169,17 @@ jobs:
         env: { PGPASSWORD: postgres }
         run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
       - run: bun run db:deploy
-      - name: Generate a throwaway auth secret
+      - name: Generate throwaway secrets
         run: |
           {
             echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
             echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
             echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
+            # Browser push (VAPID key pair) and its contact.
+            node -e 'const e = require("node:crypto").createECDH("prime256v1"); e.generateKeys();
+              console.log(`VAPID_PUBLIC_KEY=${e.getPublicKey("base64url")}`);
+              console.log(`VAPID_PRIVATE_KEY=${Buffer.from(e.getPrivateKey("hex").padStart(64, "0"), "hex").toString("base64url")}`);'
+            echo "VAPID_SUBJECT=mailto:ci@example.com"
           } >> "$GITHUB_ENV"
       - name: Build the services under test
         run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks --filter=@repo/web

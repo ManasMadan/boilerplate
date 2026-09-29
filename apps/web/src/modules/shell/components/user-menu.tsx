@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
+import { forgetBrowserPush } from "@/modules/notifications";
 
 interface UserMenuProps {
   user: { name: string; email: string; image?: string | null | undefined };
@@ -25,6 +26,7 @@ export function UserMenu({ user }: UserMenuProps) {
 
   async function signOut() {
     await authClient.signOut();
+    await forgetBrowserPush();
     // A full page load, not a client-side navigation: nothing from this account (cached
     // queries, open streams, in-memory state) survives for the next person at the
     // keyboard, and no mounted component refetches as a signed-out user in between.

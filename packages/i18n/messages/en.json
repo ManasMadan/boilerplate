@@ -629,7 +629,16 @@
       "start": "From",
       "end": "Until"
     },
-    "saved": "Notification settings saved"
+    "saved": "Notification settings saved",
+    "browserPush": {
+      "title": "Push on this browser",
+      "description": "Get notifications from this site even when it isn't open. Each browser is turned on separately.",
+      "enable": "Send push notifications to this browser",
+      "enabled": "Push notifications are on for this browser",
+      "disabled": "Push notifications are off for this browser",
+      "blocked": "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here.",
+      "unsupported": "This browser doesn't support push notifications."
+    }
   },
   "unsubscribe": {
     "title": "Unsubscribe",

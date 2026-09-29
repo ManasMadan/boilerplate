@@ -629,7 +629,16 @@
       "start": "Desde",
       "end": "Hasta"
     },
-    "saved": "Ajustes de notificaciones guardados"
+    "saved": "Ajustes de notificaciones guardados",
+    "browserPush": {
+      "title": "Notificaciones push en este navegador",
+      "description": "Recibe notificaciones de este sitio aunque no esté abierto. Cada navegador se activa por separado.",
+      "enable": "Enviar notificaciones push a este navegador",
+      "enabled": "Las notificaciones push están activadas en este navegador",
+      "disabled": "Las notificaciones push están desactivadas en este navegador",
+      "blocked": "Las notificaciones están bloqueadas para este sitio. Permítelas en la configuración del sitio de tu navegador y vuelve aquí.",
+      "unsupported": "Este navegador no admite notificaciones push."
+    }
   },
   "unsubscribe": {
     "title": "Darse de baja",

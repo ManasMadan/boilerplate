@@ -8,7 +8,7 @@
  * and placeholders are replaced.
  */
 
-import { randomBytes } from "node:crypto";
+import { createECDH, randomBytes } from "node:crypto";
 import { copyFileSync, existsSync } from "node:fs";
 import { $ } from "bun";
 import { ENV_EXAMPLE_PATH, ENV_PATH, ok, PLACEHOLDER, readEnv, writeEnvValue } from "./lib";
@@ -21,6 +21,17 @@ if (!existsSync(ENV_PATH)) {
 const env = readEnv(ENV_PATH);
 for (const [key, value] of readEnv(ENV_EXAMPLE_PATH)) {
   if (!env.has(key)) writeEnvValue(ENV_PATH, key, value);
+}
+// The VAPID keys are a pair (P-256), so they're generated together.
+const current = readEnv(ENV_PATH);
+if (["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"].some((k) => PLACEHOLDER.test(current.get(k) ?? ""))) {
+  const ecdh = createECDH("prime256v1");
+  ecdh.generateKeys();
+  writeEnvValue(ENV_PATH, "VAPID_PUBLIC_KEY", ecdh.getPublicKey().toString("base64url"));
+  // The raw scalar can come back shorter than 32 bytes; VAPID wants exactly 32.
+  const privateKey = Buffer.from(ecdh.getPrivateKey("hex").padStart(64, "0"), "hex");
+  writeEnvValue(ENV_PATH, "VAPID_PRIVATE_KEY", privateKey.toString("base64url"));
+  ok("Generated a VAPID key pair for browser push");
 }
 for (const [key, value] of readEnv(ENV_PATH)) {
   if (PLACEHOLDER.test(value)) {

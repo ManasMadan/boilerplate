@@ -35,6 +35,8 @@ export function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self'",
+    // The push service worker (public/sw.js).
+    "worker-src 'self'",
     // The API is on this origin; Turnstile (captcha) needs its origin when enabled.
     "connect-src 'self' https://challenges.cloudflare.com",
     "frame-src https://challenges.cloudflare.com",
@@ -55,6 +57,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   // Everything except static assets and the API paths the gateway (or dev rewrites) forwards.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|rpc|api|docs|healthz|.*\\.(?:png|svg|jpg|ico|webmanifest|txt)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|rpc|api|docs|healthz|.*\\.(?:png|svg|jpg|ico|webmanifest|txt)$).*)",
   ],
 };

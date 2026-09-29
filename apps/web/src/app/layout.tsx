@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone, getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { env } from "@/env";
+import { PushSync } from "@/modules/notifications";
 import { LiveUpdates, PreferenceSync, SiteHeader } from "@/modules/shell";
 import { Providers } from "./providers";
 
@@ -54,6 +55,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         >
           <PreferenceSync timeZone={timeZone} />
           <LiveUpdates />
+          <PushSync />
           <SiteHeader />
           <main className="mx-auto w-full max-w-5xl px-4 py-10">{children}</main>
         </Providers>

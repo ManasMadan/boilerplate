@@ -19,6 +19,7 @@ import { Skeleton } from "@repo/ui/components/skeleton";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useApiErrorMessage } from "@/lib/use-api-error";
+import { BrowserPushCard } from "../components/browser-push-card";
 
 const toTime = (minutes: number) =>
   `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
@@ -84,6 +85,7 @@ export function NotificationSettingsPage() {
           ))}
         </CardContent>
       </Card>
+      <BrowserPushCard />
       <Card>
         <CardHeader>
           <CardTitle>{t("digest.title")}</CardTitle>
