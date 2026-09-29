@@ -25,7 +25,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
-import type { EventEnvelope, EventName } from "@repo/contracts/events";
+import type { EventEnvelope } from "@repo/contracts/events";
 import { Prisma } from "@repo/db";
 import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import pg from "pg";
@@ -35,7 +35,8 @@ import { OUTBOX_SOURCES, type OutboxSource } from "./sources";
 
 interface OutboxRow {
   id: string;
-  name: EventName;
+  /** Possibly an event this build doesn't know yet (see eventEnvelope). */
+  name: string;
   key: string;
   payload: unknown;
   org_id: string | null;

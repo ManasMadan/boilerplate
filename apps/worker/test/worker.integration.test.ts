@@ -131,6 +131,25 @@ describe("outbox relay", () => {
     expect(unpublished).toBe(0);
   });
 
+  it("passes on an event this build doesn't know, without holding up the rest", async () => {
+    // As during a rolling deploy: a newer api emits an event this worker predates.
+    const [unknown] = await asRole("app_api", async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO app.outbox_event (name, key, payload, org_id)
+         VALUES ('invoice.paid.v1', 'inv_1', '{"amount": 100}', $1) RETURNING id`,
+        [randomUUID()],
+      );
+      return rows.map((row) => row.id);
+    });
+    const later = await emit(3);
+    const ids = [unknown as string, ...later];
+    const rows = await eventually(
+      () => audited(ids),
+      (found) => found.length === ids.length,
+    );
+    expect(rows.sort()).toEqual(ids.sort());
+  });
+
   it("republishing a batch (a crash before commit) doesn't duplicate audit rows", async () => {
     const [id] = await emit(1);
     await eventually(

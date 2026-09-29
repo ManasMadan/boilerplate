@@ -59,7 +59,14 @@ export function WorkspaceAuditPage() {
             <tbody className="divide-y">
               {entries.map((entry) => (
                 <tr key={entry.id}>
-                  <td className="py-2 pe-3">{tEvents(entry.name, paramsOf(entry.payload))}</td>
+                  <td className="py-2 pe-3">
+                    {tEvents.has(entry.name as Parameters<typeof tEvents>[0])
+                      ? tEvents(
+                          entry.name as Parameters<typeof tEvents>[0],
+                          paramsOf(entry.payload),
+                        )
+                      : entry.name}
+                  </td>
                   <td className="py-2 pe-3 text-muted-foreground">
                     {entry.actor?.name ?? t("system")}
                   </td>

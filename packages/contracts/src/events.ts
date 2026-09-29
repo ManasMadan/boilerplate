@@ -112,10 +112,15 @@ export type WebhookEventName = (typeof webhookEvents)[number];
 /**
  * An event as it travels from the outbox to consumers: the committed row, with its
  * payload still untyped (validate it with `events[name]` before use).
+ *
+ * The name is any well-formed event name, not only the ones this build knows: during a
+ * rolling deploy a newer service can emit an event an older worker or consumer hasn't
+ * heard of. The relay must pass it on rather than reject the batch (which would stall
+ * every event behind it), and each consumer ignores names it doesn't handle.
  */
 export const eventEnvelope = z.object({
   id: z.uuid(),
-  name: z.enum(eventNames),
+  name: z.string().regex(/^[a-z][a-z_]*(\.[a-z][a-z_]*)+\.v\d+$/),
   /** Ordering/partition key, usually the aggregate id. */
   key: z.string(),
   payload: z.unknown(),

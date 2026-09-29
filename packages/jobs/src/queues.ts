@@ -247,12 +247,12 @@ export type JobPayload<Q extends QueueName, J extends JobName<Q>> = z.infer<
  * filter accepts it. A new consumer gets a queue above and a line here; it sees events
  * from the moment it's added (older ones can be replayed from the outbox's retention).
  */
-const customerFacing = new Set<EventName>(webhookEvents);
+const customerFacing: ReadonlySet<string> = new Set<EventName>(webhookEvents);
 export const eventSubscribers = {
   "events-audit": () => true,
-  "events-webhooks": (name: EventName) => customerFacing.has(name),
-  "events-billing": (name: EventName) => name === "stripe.event_received.v1",
-  "events-notifications": (name: EventName) => name === "webhook.endpoint_disabled.v1",
-  "events-realtime": (name: EventName) => name.startsWith("todo."),
-} as const satisfies Partial<Record<QueueName, (name: EventName) => boolean>>;
+  "events-webhooks": (name: string) => customerFacing.has(name),
+  "events-billing": (name: string) => name === "stripe.event_received.v1",
+  "events-notifications": (name: string) => name === "webhook.endpoint_disabled.v1",
+  "events-realtime": (name: string) => name.startsWith("todo."),
+} as const satisfies Partial<Record<QueueName, (name: string) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;
