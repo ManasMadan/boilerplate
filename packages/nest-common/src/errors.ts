@@ -7,7 +7,8 @@
  *
  *   throw new AppError("TODO_NOT_FOUND", { params: { id } });
  *
- * The API layer maps it to its protocol (oRPC error, RFC 9457 problem+json, MCP error).
+ * The API layer maps it to its protocol (an oRPC error over /rpc and REST, an MCP tool
+ * error for MCP).
  * Anything that is not an AppError is a bug: it is logged with its stack and the
  * client receives a generic INTERNAL error with the request id.
  */

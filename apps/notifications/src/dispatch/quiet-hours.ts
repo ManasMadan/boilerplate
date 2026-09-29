@@ -1,6 +1,7 @@
 /**
  * Quiet hours: a window in the user's time zone (it may cross midnight, e.g. 22:00 to
- * 07:00) when push and SMS wait. Returns how long to wait, or 0 outside the window.
+ * 07:00) when push waits. SMS carries only security texts, which never wait. Returns how
+ * long to wait, or 0 outside the window.
  */
 export function quietDelayMs(
   window: { start: number; end: number } | null,

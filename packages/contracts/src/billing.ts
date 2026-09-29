@@ -7,7 +7,7 @@
  * configured, e.g. self-hosted), every organization gets everything.
  *
  * Adding an entitlement: add it to both plans here, check it where the feature is used
- * (`requireEntitlement` in apps/api), and hide or badge it in clients from
+ * (`BillingService.require` in apps/api), and hide or badge it in clients from
  * `billing.overview`.
  */
 export const plans = {

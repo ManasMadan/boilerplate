@@ -7,7 +7,7 @@
  *   3. the cloud modules (aws, gcp, azure) declare exactly the same outputs, so each
  *      environment root composes any of them the same way.
  *
- * Needs `tofu` (see .tool-versions / the devcontainer). Providers are downloaded once
+ * Needs `tofu` (the version CI pins in .github/workflows/ci.yml, or the devcontainer). Providers are downloaded once
  * into the plugin cache.
  */
 import { spawnSync } from "node:child_process";

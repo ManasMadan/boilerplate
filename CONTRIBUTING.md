@@ -32,8 +32,9 @@ CI must pass (the **CI passed** check) and a code owner must approve.
 
 ## Database changes
 
-- Change `packages/db/prisma/schema.prisma`, then `bun run db:migrate` to write the
-  migration. Never edit a migration that has shipped; write a new one.
+- Change the schema in `packages/db/prisma/schema/` (one file per area), then
+  `bun run db:migrate` to write the migration. Never edit a migration that has shipped;
+  write a new one.
 - Migrations deploy before the code that uses them, and the previous release keeps
   running during a rollout, so every migration must work with both. Add first, backfill,
   switch the code, and drop in a later release. `bun run db:lint` (squawk) catches the

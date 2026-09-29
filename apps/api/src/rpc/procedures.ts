@@ -14,8 +14,9 @@
  *   });
  *
  * This is the only request pipeline for the API: Nest provides modules and dependency
- * injection, while auth, tenancy, rate limits and errors live here, where they are typed
- * and apply identically to RPC and REST.
+ * injection, while auth, tenancy and error mapping live here, where they are typed and
+ * apply identically to RPC and REST. Rate limits sit with what they protect: better-auth's
+ * for sign-in, and the services' own limiters (AI, MCP).
  */
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";

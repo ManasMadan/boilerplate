@@ -3,8 +3,10 @@
  * keys in packages/i18n, so messages are always in the user's language, and branch on
  * codes (never on message text).
  *
- * The wire shape is the same on every surface (oRPC, REST problem+json, MCP):
- *   { code: "TODO_NOT_FOUND", status: 404, requestId: "…", params: { … } }
+ * The wire shape is oRPC's error JSON, the same over /rpc and REST (/api/v1), with the
+ * HTTP status from this catalog:
+ *   { code: "TODO_NOT_FOUND", status: 404, message: "…", data: { requestId: "…", params: { … } } }
+ * `message` is for logs only; clients translate `code`.
  *
  * Adding a code: add it here with its HTTP status, then add `errors.<CODE>` to every
  * catalog in packages/i18n (the i18n test fails until you do).
