@@ -1,6 +1,0 @@
-# Copy to backend-staging.hcl. The storage account is created once, outside this root.
-resource_group_name  = "tofu-state"
-storage_account_name = "yourtofustate"
-container_name       = "tfstate"
-key                  = "boilerplate/staging.tfstate"
-use_azuread_auth     = true

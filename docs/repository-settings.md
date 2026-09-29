@@ -55,7 +55,7 @@ so in a warning, and Renovate doesn't run.
 | Environment | Used by | Protection |
 |---|---|---|
 | `staging` | `deploy.yml` (the staging bump) | deployment branch `master` |
-| `aws-staging`, `gcp-production`, … (`<cloud>-<env>`) | `infra.yml` (plan and apply) | required reviewers on production; deployment branch `master` for apply |
+| `infra-staging`, `infra-production` | `infra.yml` (plan and apply) | required reviewers on production; deployment branch `master` for apply |
 
 Production itself has no GitHub environment: it changes only by merging the promotion
 pull request, which the ruleset already gates.
@@ -74,14 +74,23 @@ skipped until its values exist.
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | secrets | the providers those models use |
 | `EAS_PROJECT_ID`, `EXPO_TOKEN` | variable, secret | mobile builds and over-the-air updates on EAS (`mobile.yml`; the project id from `bunx eas-cli init`, a robot token from expo.dev) |
 | `LOAD_TARGET_RPS` | variable | the nightly load test's target (default 50 requests a second) |
-| `TOFU_TARGETS` | variable | which environments get a plan on infrastructure pull requests, e.g. `[{"cloud":"aws","env":"staging"}]` |
+| `TOFU_TARGETS` | variable | which environments get a plan on infrastructure pull requests, e.g. `["staging", "production"]` |
 
-Per `<cloud>-<env>` environment, for `infra.yml` (see the header of that workflow and
-`infra/tofu/README.md`): secrets `TOFU_BACKEND`, `TOFU_TFVARS`, `CLOUDFLARE_API_TOKEN`,
-`TF_VAR_state_passphrase` and `TF_VAR_github_token` where they apply, and the cloud's
-OIDC federation as variables: `AWS_ROLE_ARN` and `AWS_REGION`;
-`GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT`; or `AZURE_CLIENT_ID`,
-`AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`. No long-lived cloud keys.
+Per `infra-<env>` environment, for `infra.yml` (see the header of that workflow and
+`infra/tofu/README.md`), all secrets:
+
+| Name | What |
+|---|---|
+| `TOFU_BACKEND` | the contents of `backend-<env>.hcl` (the state bucket and its keys) |
+| `TOFU_TFVARS` | the contents of `<env>.tfvars` (the machines, domain, mail) |
+| `SSH_PRIVATE_KEY` | the key the environment's machines accept |
+| `CLOUDFLARE_API_TOKEN` | the zone's token (permissions in `infra/tofu/modules/cloudflare`) |
+| `SOPS_AGE_KEY` | the environment's age private key, installed for Argo CD |
+| `TF_VAR_state_passphrase` | encrypts the state and plans |
+
+The runner connects to the machines over SSH and to the Kubernetes API (ports 22 and
+6443): allow GitHub's runner addresses in the machines' firewall, or give the
+environment a self-hosted runner inside your network.
 
 ## Security
 

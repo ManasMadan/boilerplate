@@ -37,7 +37,7 @@
         "/^\\.devcontainer/devcontainer\\.json$/",
       ],
       matchStrings: [
-        "(?:#|//) renovate: datasource=(?<datasource>[\\w-]+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s*\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+(?:\\.\\d+)?(?:-[\\w.]+)?)\\b",
+        "(?:#|//) renovate: datasource=(?<datasource>[\\w-]+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s*\\n[^\\n]*?(?<currentValue>v?\\d+\\.\\d+(?:\\.\\d+)?(?:-[\\w.]+)?(?:\\+[\\w.]+)?)\\b",
       ],
     },
     {

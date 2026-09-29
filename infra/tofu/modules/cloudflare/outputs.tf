@@ -2,29 +2,25 @@ output "zone_id" {
   value = local.zone_id
 }
 
-output "storage" {
-  description = "S3-compatible storage for the app-secrets module."
-  sensitive   = true
-  value = {
-    endpoint          = "https://${var.account_id}.r2.cloudflarestorage.com"
-    region            = "auto"
-    bucket            = cloudflare_r2_bucket.uploads.name
-    access_key_id     = cloudflare_api_token.storage.id
-    secret_access_key = sha256(cloudflare_api_token.storage.value)
-    public_origin     = "https://${var.account_id}.r2.cloudflarestorage.com"
-  }
-}
-
 output "dns_api_token" {
-  description = "For external-dns and cert-manager (platform-cloudflare-api-token)."
+  description = "For cert-manager's DNS-01 challenges: encrypt it into the platform's SOPS secrets."
   sensitive   = true
   value       = cloudflare_api_token.dns.value
 }
 
 output "turnstile" {
-  sensitive = true
+  description = "The captcha's keys: the site key is public, the secret goes into the api's SOPS secrets."
+  sensitive   = true
   value = var.turnstile ? {
     site_key   = cloudflare_turnstile_widget.captcha[0].sitekey
     secret_key = cloudflare_turnstile_widget.captcha[0].secret
   } : null
+}
+
+output "records" {
+  description = "Every DNS record this creates, as name, type and content."
+  value = [for record in concat(
+    values(cloudflare_dns_record.site), values(cloudflare_dns_record.previews), values(cloudflare_dns_record.mail_host),
+    cloudflare_dns_record.mx, cloudflare_dns_record.spf, cloudflare_dns_record.dkim, cloudflare_dns_record.dmarc,
+  ) : { name = record.name, type = record.type, content = record.content, proxied = record.proxied }]
 }

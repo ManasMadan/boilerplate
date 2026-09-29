@@ -1,5 +1,5 @@
 variable "cluster_name" {
-  description = "The cluster's name in Argo CD (e.g. aws-production)."
+  description = "The cluster's name in Argo CD (e.g. production)."
   type        = string
 }
 
@@ -18,9 +18,26 @@ variable "previews" {
   default     = false
 }
 
+variable "observability" {
+  description = "Run the observability add-ons (Jaeger, Prometheus, Grafana) on this cluster."
+  type        = bool
+  default     = false
+}
+
 variable "cluster_annotations" {
-  description = "Facts about the cluster for the platform ApplicationSet (boilerplate.dev/<key>): the cloud module's cluster_annotations plus domain, TLS email and the like."
+  description = "Facts about the cluster for the platform ApplicationSet (boilerplate.dev/<key>): domain, TLS email and the like."
   type        = map(string)
+  default     = {}
+}
+
+variable "sops_age_key" {
+  description = "The age private key (a keys.txt) Argo CD decrypts the environment's SOPS secrets with."
+  type        = string
+  sensitive   = true
+  validation {
+    condition     = strcontains(var.sops_age_key, "AGE-SECRET-KEY-1")
+    error_message = "An age identity file: a line starting with AGE-SECRET-KEY-1 (age-keygen's output)."
+  }
 }
 
 variable "repo_url" {

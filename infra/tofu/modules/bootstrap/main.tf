@@ -1,56 +1,81 @@
-# Hands the cluster to GitOps: installs Argo CD, registers the cluster with the facts the
-# ApplicationSets read (the GitOps bridge: labels and annotations on its Argo CD
-# Secret), and creates the root Application (deploy/argocd/root.yaml). Everything else,
-# add-ons included, then comes from the repository.
+# Hands the cluster to GitOps: installs Argo CD (with the age key it decrypts the
+# repository's SOPS secrets with), registers the cluster with the facts the
+# ApplicationSets read (labels and annotations on its Argo CD cluster Secret), and
+# creates the root Application (deploy/argocd/root.yaml). Everything else, add-ons
+# included, then comes from the repository.
 
 locals {
+  labels = merge(
+    {
+      "argocd.argoproj.io/secret-type" = "cluster"
+      "boilerplate.dev/managed"        = "true"
+      "boilerplate.dev/environment"    = var.environment
+    },
+    var.previews ? { "boilerplate.dev/previews" = "true" } : {},
+    var.observability ? { "boilerplate.dev/observability" = "true" } : {},
+  )
   annotations = merge(
     { for key, value in var.cluster_annotations : "boilerplate.dev/${key}" => value },
     {
-      "boilerplate.dev/environment" = var.environment
-      "boilerplate.dev/previews"    = tostring(var.previews)
+      "boilerplate.dev/environment"   = var.environment
+      "boilerplate.dev/previews"      = tostring(var.previews)
+      "boilerplate.dev/observability" = tostring(var.observability)
     },
   )
   root = yamldecode(file("${path.module}/../../../../deploy/argocd/root.yaml"))
 }
 
+resource "kubernetes_namespace_v1" "argocd" {
+  metadata {
+    name = "argocd"
+  }
+}
+
+# Before Argo CD, so its repo server starts with the key mounted.
+resource "kubernetes_secret_v1" "sops_age" {
+  metadata {
+    name      = "sops-age"
+    namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+  }
+  data = {
+    "keys.txt" = var.sops_age_key
+  }
+}
+
 resource "helm_release" "argocd" {
-  name             = "argocd"
-  namespace        = "argocd"
-  create_namespace = true
-  repository       = "https://argoproj.github.io/argo-helm"
-  chart            = "argo-cd"
-  version          = var.argocd_version
-  wait             = true
-  values = [yamlencode({
-    configs = {
-      params = {
-        # The envs and previews ApplicationSets roll out data before stack.
-        "applicationsetcontroller.enable.progressive.syncs" = true
+  name       = "argocd"
+  namespace  = kubernetes_namespace_v1.argocd.metadata[0].name
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-cd"
+  version    = var.argocd_version
+  wait       = true
+  values = [
+    yamlencode({
+      configs = {
+        params = {
+          # The envs and previews ApplicationSets roll out data before stack.
+          "applicationsetcontroller.enable.progressive.syncs" = true
+        }
+        cm = {
+          # Sign-in through your identity provider is set up per organization (dex/OIDC).
+          "admin.enabled" = true
+        }
       }
-      cm = {
-        # Sign-in through your identity provider is set up per organization (dex/OIDC).
-        "admin.enabled" = true
-      }
-    }
-    dex = { enabled = false }
-  })]
+      dex = { enabled = false }
+    }),
+    # The repository's own values (SOPS decryption in the repo server), applied last.
+    file("${path.module}/../../../../deploy/argocd/argo-cd-values.yaml"),
+  ]
+  depends_on = [kubernetes_secret_v1.sops_age]
 }
 
 # In-cluster registration: Argo CD deploys to the cluster it runs in, and the
 # ApplicationSets select it by these labels and read its annotations.
 resource "kubernetes_secret_v1" "cluster" {
   metadata {
-    name      = "cluster-${var.cluster_name}"
-    namespace = helm_release.argocd.namespace
-    labels = merge(
-      {
-        "argocd.argoproj.io/secret-type" = "cluster"
-        "boilerplate.dev/managed"        = "true"
-        "boilerplate.dev/environment"    = var.environment
-      },
-      var.previews ? { "boilerplate.dev/previews" = "true" } : {},
-    )
+    name        = "cluster-${var.cluster_name}"
+    namespace   = kubernetes_namespace_v1.argocd.metadata[0].name
+    labels      = local.labels
     annotations = local.annotations
   }
   data = {

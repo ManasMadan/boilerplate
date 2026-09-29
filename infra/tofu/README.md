@@ -1,57 +1,160 @@
 # Infrastructure (OpenTofu)
 
-One root per cloud in `envs/`, one state per environment. Each creates everything an
-environment needs and hands the cluster to Argo CD, which deploys the rest from this
-repository (see `deploy/README.md`).
+Everything runs on k3s on machines you rent or own, anywhere: one root, `envs/k3s`,
+used once per environment (staging, production) with its own variables and state. It
+installs k3s on the machines, puts Cloudflare in front, and hands the cluster to Argo
+CD, which deploys the rest from this repository (see `deploy/README.md`): Postgres
+(CloudNativePG), Valkey, object storage (RustFS), the mail server (Stalwart) and the
+services all run in the cluster.
 
 ```
 modules/
-  aws, gcp, azure   network, Kubernetes (standard node pools), managed Postgres 18 and
-                    Valkey/Redis; the same outputs on every cloud
-  <cloud>/secrets   writes secrets to that cloud's secret manager
-  cloudflare        zone TLS settings, optional WAF, the R2 uploads bucket, scoped API
-                    tokens (DNS, storage) and the Turnstile widget
-  app-secrets       every secret the charts read, generated once (passwords, keys) or
-                    built from the other modules' outputs (URLs, storage credentials)
-  bootstrap         Argo CD, the cluster's registration (labels and annotations the
-                    ApplicationSets read) and the root Application
-envs/aws, envs/gcp, envs/azure
+  k3s          a list of machines → a k3s cluster, over SSH (or as cloud-init user data)
+  cloudflare   zone TLS settings, optional WAF, the site's and the mail server's DNS
+               records, an API token for the zone's DNS (cert-manager) and the
+               Turnstile widget
+  bootstrap    Argo CD with the SOPS age key, the cluster's registration (labels and
+               annotations the ApplicationSets read) and the root Application
+envs/k3s
 ```
 
 `bun run infra:check` runs `tofu fmt`, `validate` and every module's and root's tests.
-The tests run against mocked cloud APIs, so they create nothing and need no
-credentials.
+The tests run against mocked providers, so they create nothing, connect to nothing
+and need no credentials.
+
+## The machines
+
+Any Linux machines with systemd and curl (Ubuntu, Debian, Rocky, …, x86_64 or arm64),
+a public IPv4 address each, and SSH with a key for root or a user with passwordless
+sudo. Create them wherever you like (Hetzner, OVH, DigitalOcean, your own hardware);
+OpenTofu doesn't create them, it takes their addresses. If the provider offers a
+private network between them, use it (`private_address`).
+
+- **One machine** is a whole environment: the server runs the control plane and every
+  workload. Good for staging and small production.
+- **Three servers** keep the cluster up when one fails (embedded etcd needs a
+  majority, so two is no better than one). Add **agents** for more capacity.
+
+Open these ports in the provider's firewall:
+
+| Port | From | For |
+|---|---|---|
+| 80, 443 | anywhere (Cloudflare, and previews directly) | the gateway |
+| 25, 465, 587, 993 | anywhere, on the mail node | the mail server |
+| 22, 6443 | where OpenTofu runs (your machine, the CI runner) | installing k3s, the Kubernetes API |
+| 6443, 10250, 8472/udp (vxlan) or 51820/udp (wireguard-native) | the other nodes | k3s |
+| 2379–2380 | the other servers | etcd |
+
+Every node answers on the gateway's and the mail server's ports: k3s's ServiceLB
+listens on each node for LoadBalancer Services. Many providers block outgoing port 25
+on new accounts; ask them to lift it for the mail node.
 
 ## Setting up an environment
 
-Once per cloud account, outside these roots: a state bucket (or storage account) and a
-key to encrypt state with (KMS on AWS and GCP; a passphrase on Azure). Then:
+Once, outside this root: an S3-compatible bucket for state that isn't in the cluster it
+describes (R2, B2, Hetzner Object Storage, …), a passphrase to encrypt state with, and
+the environment's age key for SOPS (`age-keygen -o <env>.agekey`: the environment's
+secrets are encrypted to its public key, see `deploy/README.md`). Then:
 
 ```sh
-cd infra/tofu/envs/aws                        # or gcp, azure
+cd infra/tofu/envs/k3s
 cp backend-staging.hcl.example backend-staging.hcl
-cp staging.tfvars.example staging.tfvars      # fill in your values
-export CLOUDFLARE_API_TOKEN=…                 # see modules/cloudflare for its permissions
+cp staging.tfvars.example staging.tfvars          # your machines, domain, …
+export CLOUDFLARE_API_TOKEN=…                     # see modules/cloudflare for its permissions
+export TF_VAR_ssh_private_key="$(cat ~/.ssh/boilerplate)"
+export TF_VAR_sops_age_key="$(cat staging.agekey)"
+export TF_VAR_state_passphrase=…
 tofu init -backend-config=backend-staging.hcl
+tofu apply -var-file=staging.tfvars
+tofu output -raw kubeconfig > ~/.kube/boilerplate-staging
+```
+
+State holds the cluster's certificate authorities, join tokens and admin key; it's
+encrypted with the passphrase before it leaves your machine, and without the passphrase
+the environment can't be managed any more, so keep it safe.
+
+Then put what OpenTofu made into the environment's SOPS secrets (see
+`deploy/README.md`): `tofu output -raw cloudflare_dns_api_token` for cert-manager and
+`tofu output -json turnstile` for the api. Point `site.host` in
+`deploy/environments/<env>/stack.yaml` at `site_host`, and Argo CD takes it from there.
+Set `previews = true` on the environment whose cluster also runs pull-request previews
+(normally staging), and `observability = true` where Jaeger, Prometheus and Grafana
+should run.
+
+### Machines made with cloud-init
+
+If you create the machines with user data instead of letting OpenTofu in over SSH, set
+`install_over_ssh = false`, render it, create the machines with it, and then apply the
+rest:
+
+```sh
+tofu apply -var-file=staging.tfvars -target=module.k3s
+tofu output -json cloud_init                      # { "<node>": "#cloud-config …" }
+# create each machine with its user data, at the address in tfvars; once k3s is up:
 tofu apply -var-file=staging.tfvars
 ```
 
-Provider keys (Stripe, Resend, Twilio, Google sign-in, …) go in `service_secrets`,
-per service; everything else is generated. Set `previews = true` on the environment
-whose cluster should also run pull-request previews (normally staging), with
-`TF_VAR_github_token` for Argo CD to list pull requests.
+The user data holds the node's secrets (join token, and the CAs on the first server), so
+treat it like them. It's the same configuration and installer as over SSH.
 
-Afterwards, point `site.host` in `deploy/environments/<env>/stack.yaml` at the same host
-as `site_host`, and Argo CD takes it from there.
+## Changing the cluster
 
-## Where the clouds differ
+- **Adding a node**: add it to `nodes` and apply. Nothing changes on the other nodes,
+  except when a single server gets its first companions: the first server then turns
+  on embedded etcd (k3s moves its SQLite datastore over on the restart). Go from one
+  server to three, not two.
+- **Replacing a machine** (rebuilt, or moved to another one): keep its name, change its
+  address if it has a new one, and apply; if the address stays the same, say so with
+  `tofu apply -replace='module.k3s.terraform_data.agent["<name>"]'` (`.server[…]` for a
+  server). It rejoins as the same node, with the same node password; whatever was on
+  its local volumes is gone, so CloudNativePG rebuilds its replica there.
+- **Removing a node**: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`,
+  `kubectl delete node <node>`, remove it from `nodes`, apply, and delete the machine.
+- **The first server** (the first by name) created the cluster. With one server,
+  replacing it is a new, empty cluster. With three, if it's lost for good:
+  `kubectl delete node <name>` (k3s takes it out of etcd), remove it from `nodes` and
+  apply; the next server by name becomes the first. Add the replacement under a new
+  name that sorts after the others (server-4).
+- **Upgrading k3s**: Renovate raises `k3s_version` in `modules/k3s`; applying upgrades
+  the first server, then the other servers, then the agents, in place (pods keep
+  running while k3s restarts). `tofu apply -parallelism=1` takes one node at a time.
+- **Labels and taints** are set when a node registers; to change them on a running
+  node, also run `kubectl label` / `kubectl taint`.
 
-- **Cluster access**: `aws eks get-token`, gcloud's access token, and Entra ID through
-  kubelogin on Azure (no static admin credentials on any of them).
-- **Secret access**: External Secrets may read only the environment's own prefix on AWS
-  and GCP; on Azure each environment has its own Key Vault, which it may read.
-- **Redis on GCP** runs without TLS (AUTH only, on a private address): Memorystore's
-  certificates come from a private Google CA that the services' Redis clients don't
-  trust yet. AWS and Azure use TLS with publicly trusted certificates.
-- **Load balancing on AWS** needs the AWS Load Balancer Controller, which the aws
-  module installs; GKE and AKS provision load balancers themselves.
+OpenTofu's admin certificate lasts a year and renews on any apply in its last 60 days.
+If it has expired, renew it first: `tofu apply -target=module.k3s.tls_locally_signed_cert.admin`.
+
+## DNS
+
+The cloudflare module sets up, in the environment's zone:
+
+| Record | Proxied | What |
+|---|---|---|
+| `site_host` A (AAAA) → every node, or `origin_ips` | yes | the site, behind Cloudflare's WAF and CDN |
+| `*.preview.<domain>` A → the same | no | pull-request previews (staging): the free edge certificate covers only one level of subdomain, so the gateway serves these with its own |
+| `mail.<domain>` A (AAAA) → the mail node | no | the mail server (SMTP and IMAP can't go through the proxy) |
+| `<domain>` MX → `mail.<domain>` | – | incoming mail |
+| `<domain>` TXT `v=spf1 ip4:… -all` | – | only the mail node sends for the domain |
+| `<selector>._domainkey.<domain>` TXT | – | DKIM: the public key from `mail.dkim_public_key` |
+| `_dmarc.<domain>` TXT | – | DMARC, with reports to `mail.dmarc_report_email` |
+
+`tofu output dns_records` lists them. The mail node is the one named in `mail.node`; it
+gets the label `boilerplate.dev/mail=true`, which the mail server is scheduled by, so
+its mail leaves from the address SPF names.
+
+Two things for mail aren't in Cloudflare:
+
+- **Reverse DNS**: set the mail node's PTR record to `mail.<domain>` at the provider
+  the address belongs to (usually in the server's network settings). Receivers reject
+  or spam-folder mail from an address whose reverse DNS doesn't match.
+- **The DKIM key pair** is generated once, outside OpenTofu; the private key goes into
+  the mail server's SOPS secret, the public key into tfvars:
+
+  ```sh
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out dkim.pem
+  openssl pkey -in dkim.pem -pubout -outform DER | base64 | tr -d '\n'   # dkim_public_key
+  ```
+
+Anything that bypasses Cloudflare (previews, the mail host) shows the nodes' real
+addresses; the proxy hides the site's origin only if the site runs on nodes that serve
+nothing else publicly.

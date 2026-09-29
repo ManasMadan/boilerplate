@@ -1,5 +1,0 @@
-# Copy to backend-staging.hcl. The bucket is created once, outside this root.
-bucket       = "your-tofu-state-bucket"
-key          = "boilerplate/staging.tfstate"
-region       = "eu-west-1"
-use_lockfile = true
