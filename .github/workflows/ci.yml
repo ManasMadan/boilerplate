@@ -209,9 +209,6 @@ jobs:
               console.log(`VAPID_PRIVATE_KEY=${Buffer.from(e.getPrivateKey("hex").padStart(64, "0"), "hex").toString("base64url")}`);'
             echo "VAPID_SUBJECT=mailto:ci@example.com"
           } >> "$GITHUB_ENV"
-      - name: Build the services under test
-        env: { NODE_ENV: production }
-        run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks --filter=@repo/web
       - name: Install the browser
         working-directory: apps/web
         run: bunx playwright install --with-deps chromium
@@ -219,24 +216,9 @@ jobs:
         run: |
           docker compose --profile files up -d --wait rustfs clamav
           docker compose --profile files run --rm s3-init
-      - name: Start the stack
-        run: |
-          mkdir -p logs
-          (cd apps/api && nohup bun run start > ../../logs/api.log 2>&1 &)
-          (cd apps/notifications && nohup bun run start > ../../logs/notifications.log 2>&1 &)
-          (cd apps/worker && nohup bun run start > ../../logs/worker.log 2>&1 &)
-          (cd apps/webhooks && nohup bun run start > ../../logs/webhooks.log 2>&1 &)
-          (cd apps/ai && nohup bun run start > ../../logs/ai.log 2>&1 &)
-          (cd apps/ai && nohup bun run worker > ../../logs/ai-worker.log 2>&1 &)
-          (cd apps/web && nohup bun run start > ../../logs/web.log 2>&1 &)
-          (cd packages/fake-stripe && nohup bun src/main.ts > ../../logs/fake-stripe.log 2>&1 &)
-          for url in http://127.0.0.1:12111/__fake/state http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:3004/health/ready http://localhost:8000/health/ready http://localhost:3000/healthz; do
-            if ! timeout 90 bash -c "until curl -sf $url > /dev/null; do sleep 1; done"; then
-              echo "::error::$url never became ready"; tail -n 50 logs/*.log; exit 1
-            fi
-          done
-      - name: Run Playwright
-        working-directory: apps/web
+      # Builds the services, starts them fresh, runs Playwright and stops them
+      # (scripts/e2e.ts), the same way as locally.
+      - name: Run the end-to-end suite
         run: bun run test:e2e
       - name: Keep the report and service logs
         if: failure()

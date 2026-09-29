@@ -13,7 +13,8 @@ covers what it cannot:
 3. `bun run test`.
 4. `bun run test:integration` for changes to the database, queues, auth, emails or any
    service code. It starts the full Docker profile first.
-5. `bun run test:e2e` for user-facing flows (web or mobile).
+5. `bun run test:e2e` for user-facing flows (web or mobile). It builds the services and
+   starts them fresh (Docker's full profile must be up), so stop any running stack first.
 6. If you changed a contract or schema: `bun run gen`, then confirm `git status` shows
    the regenerated files and they are part of the change.
 

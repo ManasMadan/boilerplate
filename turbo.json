@@ -40,10 +40,6 @@
       "dependsOn": ["gen", "^gen"],
       "cache": false
     },
-    "test:e2e": {
-      "dependsOn": ["build"],
-      "cache": false
-    },
     "dev": {
       "dependsOn": ["gen", "^gen"],
       "cache": false,

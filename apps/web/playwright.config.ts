@@ -1,7 +1,9 @@
 /**
- * End-to-end tests: a real browser against the running stack (web + api + notifications,
- * with Mailpit catching email). Locally, start it with `bun dev` and run
- * `bun run test:e2e`; CI starts the built services first.
+ * End-to-end tests: a real browser against the whole stack (web, api, worker,
+ * notifications, webhooks, the AI service, with Mailpit catching email).
+ * `bun run test:e2e` at the root builds the stack, starts it fresh, runs this suite and
+ * stops it (scripts/e2e.ts), locally and in CI. `bun run test:e2e` in apps/web runs the
+ * suite against a stack that is already running, such as `bun dev`.
  */
 import { defineConfig, devices } from "@playwright/test";
 

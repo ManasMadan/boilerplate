@@ -74,7 +74,7 @@
     "format": "biome check --write .",
     "test": "turbo run test",
     "test:integration": "docker compose --profile full up -d --wait && turbo run test:integration",
-    "test:e2e": "turbo run test:e2e",
+    "test:e2e": "bun scripts/e2e.ts",
     "gen": "turbo run gen",
     "db:up": "docker compose up -d --wait",
     "db:up:full": "docker compose --profile full up -d --wait",
