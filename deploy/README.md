@@ -55,17 +55,21 @@ everything comes from this repo. Three ApplicationSets do the work:
   first. A merge to master deploys staging (CI commits the new image tag); production
   changes only through a promotion pull request.
 - **previews**: a preview per pull request labelled `preview`, in its own namespace,
-  at `https://pr-<number>.preview.<domain>`, deleted with the label or the PR.
+  at `https://pr-<number>.preview.<domain>`, deleted with the label or the PR. They
+  run on the clusters that host previews (normally staging's): each brings its own
+  database and Valkey, so they need no managed ones.
 
 Clusters describe themselves in their Argo CD cluster Secret, which OpenTofu writes:
 
 | On the cluster Secret | Meaning |
 |---|---|
 | label `boilerplate.dev/managed: "true"` | gets the platform add-ons |
-| label `boilerplate.dev/environment` | `staging`, `production` or `preview` |
+| label `boilerplate.dev/environment` | `staging` or `production` |
+| label `boilerplate.dev/previews: "true"` | hosts pull-request previews |
 | annotation `boilerplate.dev/cloud` | `aws`, `gcp`, `azure` or `other` (per-cloud values) |
 | annotation `boilerplate.dev/domain` | the DNS zone its hosts are in |
-| annotations `boilerplate.dev/environment`, `tls-email`, `dns01`, `secret-store`, `aws-region`, `gcp-project`, `azure-vault-url`, `azure-eso-client-id`, `image-policy` | the platform config's values |
+| annotations `boilerplate.dev/environment`, `tls-email`, `dns01`, `secret-store`, `aws-region`, `gcp-project`, `azure-vault-url`, `azure-eso-client-id`, `image-policy`, `previews`, `secret-prefix` | the platform config's values |
 
-Platform credentials live in the secret manager too: `platform-cloudflare-api-token`
-(`{"token": …}`, Zone DNS edit) and, for previews, `platform-github-token`.
+Platform credentials live in the secret manager too, under the environment's prefix:
+`<prefix>cloudflare-api-token` (`{"token": …}`, Zone DNS edit) and, on the cluster
+hosting previews, `<prefix>github-token`. OpenTofu writes both.

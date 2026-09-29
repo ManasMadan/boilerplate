@@ -7,6 +7,8 @@ wave: "0"
 clusterParameters:
   cloud: cloud
   environment: environment
+  previews: previews
+  secretPrefix: secret-prefix
   domain: domain
   tls.email: tls-email
   tls.dns01: dns01

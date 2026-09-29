@@ -1,10 +1,12 @@
 # aws | gcp | azure | other
 cloud: other
-# staging | production | preview
+# staging | production
 environment: staging
 # The DNS zone the cluster serves: hosts are <domain> and *.<domain> (and
-# *.preview.<domain> on the preview cluster).
+# *.preview.<domain> when the cluster hosts previews).
 domain: ""
+# Pull-request previews run here (normally on staging).
+previews: false
 
 gateway:
   # Annotations for the gateway's load balancer Service (per cloud, from OpenTofu).
@@ -38,12 +40,15 @@ secretStore:
   azure: { vaultUrl: "" }
   vault: { server: "", path: secret, role: external-secrets }
 
-# Platform credentials copied from the secret manager (remote keys), for the add-ons
-# that need them: the Cloudflare API token (DNS records and DNS-01), and on the preview
-# cluster the GitHub token Argo CD lists pull requests with.
+# The environment's prefix in the secret manager (e.g. boilerplate-production-).
+secretPrefix: ""
+
+# Platform credentials copied from the secret manager (remote key <secretPrefix><name>),
+# for the add-ons that need them: the Cloudflare API token (DNS records and DNS-01), and
+# on the cluster hosting previews the GitHub token Argo CD lists pull requests with.
 platformSecrets:
-  cloudflareToken: platform-cloudflare-api-token
-  githubToken: platform-github-token
+  cloudflareToken: cloudflare-api-token
+  githubToken: github-token
 
 # Only images built and signed by this repo's CI (keyless, GitHub OIDC) may run in the
 # application namespaces. On for production.

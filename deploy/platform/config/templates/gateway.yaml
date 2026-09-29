@@ -1,6 +1,6 @@
 {{- $domain := required "domain is required" .Values.domain }}
 {{- $hosts := list $domain (printf "*.%s" $domain) }}
-{{- if eq .Values.environment "preview" }}
+{{- if .Values.previews }}
 {{- $hosts = append $hosts (printf "*.preview.%s" $domain) }}
 {{- end }}
 ---

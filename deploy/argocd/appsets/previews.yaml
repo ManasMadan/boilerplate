@@ -1,5 +1,6 @@
 # A preview per pull request labelled `preview` (only maintainers can add labels), on
-# the cluster labelled boilerplate.dev/environment=preview, at
+# the clusters that host previews (label boilerplate.dev/previews=true, normally
+# staging's: each preview brings its own database, so it needs no managed one), at
 # https://pr-<number>.preview.<the cluster's domain>. It runs the PR's head commit:
 # the chart and values from it, and the images CI built from it (sha-<commit>). Removing
 # the label or closing the PR deletes the preview and its namespace.
@@ -17,7 +18,7 @@ spec:
           - clusters:
               selector:
                 matchLabels:
-                  boilerplate.dev/environment: preview
+                  boilerplate.dev/previews: "true"
           - matrix:
               generators:
                 - pullRequest:
