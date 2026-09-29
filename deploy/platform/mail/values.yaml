@@ -8,8 +8,10 @@ emailDomain: ""
 # the MX, SPF, DKIM and DMARC records, pointing at the mail node.
 hostname: ""
 
-# The node the server runs on: the one OpenTofu labels and taints for mail, whose
-# address the DNS records and SPF name (mail must leave from it).
+# The node the server runs on: the one OpenTofu labels for mail, whose address the DNS
+# records and SPF name (mail must leave from it). OpenTofu doesn't taint it (on a
+# one-node cluster that would keep everything else off); the toleration lets you taint
+# a node you dedicate to mail with `dedicated=mail:NoSchedule`.
 nodeSelector:
   boilerplate.dev/mail: "true"
 tolerations:

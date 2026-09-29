@@ -80,6 +80,7 @@ module "bootstrap" {
       "image-policy" = tostring(var.environment == "production")
     },
     local.mail_host == null ? {} : { "mail-host" = local.mail_host },
+    try(var.mail.domain, null) == null ? {} : { "mail-domain" = var.mail.domain },
   )
   # Argo CD goes on once every node is installed.
   depends_on = [module.k3s]

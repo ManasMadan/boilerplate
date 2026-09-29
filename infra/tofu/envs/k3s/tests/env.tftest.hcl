@@ -58,8 +58,8 @@ run "one_node_staging" {
     error_message = "staging admits unsigned images; the platform config gets the domain and DNS-01 provider"
   }
   assert {
-    condition     = !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-host")
-    error_message = "no mail host until mail is set up"
+    condition     = !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-host") && !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-domain")
+    error_message = "no mail host or domain until mail is set up"
   }
   assert {
     condition = toset([for record in output.dns_records : "${record.name} ${record.type} ${record.content} ${record.proxied}"]) == toset([
@@ -89,6 +89,7 @@ run "production_with_ha_and_mail" {
     }
     mail = {
       node               = "agent-1"
+      domain             = "example.com"
       dkim_public_key    = "MCowBQYDK2VwAyEA"
       dmarc_report_email = "dmarc@example.com"
     }
@@ -98,8 +99,8 @@ run "production_with_ha_and_mail" {
     error_message = "production opts into observability and hosts no previews"
   }
   assert {
-    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "true" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-host"] == "mail.example.com"
-    error_message = "production only runs signed images; the mail server learns its host name"
+    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "true" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-host"] == "mail.example.com" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-domain"] == "example.com"
+    error_message = "production only runs signed images; the mail server learns its host name and email domain"
   }
   assert {
     condition     = length([for record in output.dns_records : record if record.name == "app.example.com" && record.proxied]) == 4
