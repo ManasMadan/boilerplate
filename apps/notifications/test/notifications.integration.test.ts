@@ -8,9 +8,10 @@ import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { createDb } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
-import { createProducer, type Producer } from "@repo/jobs";
+import { createProducer, type Producer, queuePrefix } from "@repo/jobs";
 import { createRedis } from "@repo/nest-common";
 import { redisDatabase } from "@repo/nest-common/testing";
+import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEAD_APNS_TOKEN, type FakePush, FLAKY_APNS_TOKEN, startFakePush } from "./fake-push";
@@ -282,6 +283,60 @@ describe("notifications service", () => {
     );
     const jobId = await reminder(user.id);
     const rows = await settle(jobId, 2);
+    expect(rows.map((row) => row.status).sort()).toEqual(["sent", "suppressed"]);
+  });
+
+  it("stops emailing an address the provider reports bounced, whatever it says later", async () => {
+    const user = await newUser();
+    const events = createProducer(
+      "events-notifications",
+      createRedis(process.env.REDIS_URL as string),
+    );
+    const queue = new Queue("events-notifications", {
+      connection: createRedis(process.env.REDIS_URL as string),
+      prefix: queuePrefix("events-notifications"),
+    });
+    /** Queues the event and waits until the service has handled it. */
+    const feedback = async (kind: "bounce" | "complaint") => {
+      const eventId = randomUUID();
+      await events.add(
+        "event",
+        {
+          id: eventId,
+          name: "email.feedback_received.v1",
+          key: `msg:${user.email}`,
+          // As the provider sends it: the address in any case.
+          payload: { provider: "resend", kind, address: user.email.toUpperCase() },
+          orgId: null,
+          actorId: null,
+          requestId: null,
+          occurredAt: new Date().toISOString(),
+          source: "webhooks",
+        },
+        { jobId: eventId },
+      );
+      const deadline = Date.now() + 10_000;
+      while ((await queue.getJobState(eventId)) !== "completed" && Date.now() < deadline)
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(await queue.getJobState(eventId)).toBe("completed");
+    };
+    const reasons = async () =>
+      (
+        await sql<{ reason: string }>(
+          "SELECT reason FROM notifications.suppression WHERE channel = 'email' AND address = $1",
+          [user.email.toLowerCase()],
+        )
+      ).map((row) => row.reason);
+
+    await feedback("bounce");
+    expect(await reasons()).toEqual(["bounce"]);
+    // A later report doesn't change it: the first reason stands.
+    await feedback("complaint");
+    expect(await reasons()).toEqual(["bounce"]);
+    await events.close();
+    await queue.close();
+
+    const rows = await settle(await reminder(user.id), 2);
     expect(rows.map((row) => row.status).sort()).toEqual(["sent", "suppressed"]);
   });
 

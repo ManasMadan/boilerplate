@@ -54,7 +54,7 @@ hash tag, so moving to a cluster needs no key migration. KEDA scales workers on
 | `notifications-bulk` | `send`, `deferred`, `digests`, `digest` | notifications (hourly digest scheduler) | notifications |
 | `events-audit` | `event` | the outbox relay | worker (audit log) |
 | `events-webhooks` | `event` | the outbox relay | webhooks (fan-out to endpoints) |
-| `events-notifications` | `event` | the outbox relay | notifications |
+| `events-notifications` | `event` | the outbox relay | notifications (notify someone, or suppress an address that bounced or complained) |
 | `events-realtime` | `event` | the outbox relay | worker (live UI nudges) |
 | `events-billing` | `event` | the outbox relay | api (billing) |
 | `webhook-deliveries` | `deliver`, `redeliver`, `send-test` | webhooks (fan-out, retries), api (replay and test from settings) | webhooks |

@@ -71,6 +71,15 @@ export const events = {
   }),
   "org.api_key_revoked.v1": z.object({ apiKeyId: z.uuid(), name: z.string() }),
   // Emitted by apps/webhooks.
+  /**
+   * The email provider says an address hard-bounced or its owner marked our mail as spam:
+   * apps/notifications never emails it again.
+   */
+  "email.feedback_received.v1": z.object({
+    provider: z.enum(["resend"]),
+    kind: z.enum(["bounce", "complaint"]),
+    address: z.email(),
+  }),
   "stripe.event_received.v1": z.object({
     /** Our row in webhooks.inbound_event. */
     inboundEventId: z.uuid(),

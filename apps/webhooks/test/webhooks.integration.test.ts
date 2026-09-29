@@ -20,6 +20,7 @@ import type { DeliveryService as Deliveries } from "../src/outbound/delivery.ser
 
 const ENCRYPTION_KEYS = `test:${randomBytes(32).toString("base64")}`;
 const STRIPE_SECRET = `whsec_${randomBytes(24).toString("base64")}`;
+const RESEND_SECRET = `whsec_${randomBytes(24).toString("base64")}`;
 const box = new SecretBox(keysFromEnv(ENCRYPTION_KEYS));
 
 let testDb: TestDatabase;
@@ -164,6 +165,7 @@ beforeAll(async () => {
     REDIS_URL: redisDatabase(11),
     ENCRYPTION_KEYS,
     STRIPE_WEBHOOK_SECRET: STRIPE_SECRET,
+    RESEND_WEBHOOK_SECRET: RESEND_SECRET,
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
     WEBHOOK_AUTO_DISABLE_HOURS: "1",
   });
@@ -416,5 +418,91 @@ describe("inbound Stripe events", () => {
     });
     expect((await post(body.replace("active", "canceled"), signature)).status).toBe(400);
     expect((await post(body, "")).status).toBe(400);
+  });
+});
+
+describe("inbound Resend feedback", () => {
+  /** Posts a Resend event signed the way Svix signs (Standard Webhooks, svix-* headers). */
+  async function post(
+    event: unknown,
+    options: { id?: string; secret?: string; at?: Date; body?: string } = {},
+  ) {
+    const id = options.id ?? `msg_${randomUUID()}`;
+    const at = options.at ?? new Date();
+    const payload = JSON.stringify(event);
+    const signature = new Webhook(options.secret ?? RESEND_SECRET).sign(id, at, payload);
+    const response = await fetch(`${baseUrl}/webhooks/resend`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "svix-id": id,
+        "svix-timestamp": String(Math.floor(at.getTime() / 1000)),
+        "svix-signature": signature,
+      },
+      body: options.body ?? payload,
+    });
+    return { id, status: response.status };
+  }
+  const feedback = (key: string) =>
+    asRole("postgres", async (client) => {
+      const { rows } = await client.query(
+        "SELECT payload FROM webhooks.outbox_event WHERE name = 'email.feedback_received.v1' AND key LIKE $1",
+        [`${key}:%`],
+      );
+      return rows.map((row) => row.payload);
+    });
+  const bounced = (to: string[], type = "Permanent") => ({
+    type: "email.bounced",
+    data: { email_id: randomUUID(), to, bounce: { type, message: "550 no such user" } },
+  });
+
+  it("turns a hard bounce into feedback for each address, once however often it's sent", async () => {
+    const event = bounced(["gone@example.com", "also-gone@example.com"]);
+    const first = await post(event);
+    expect(first.status).toBe(200);
+    expect((await post(event, { id: first.id })).status).toBe(200);
+    expect(await feedback(first.id)).toEqual([
+      { provider: "resend", kind: "bounce", address: "gone@example.com" },
+      { provider: "resend", kind: "bounce", address: "also-gone@example.com" },
+    ]);
+  });
+
+  it("turns a spam complaint into feedback", async () => {
+    const { id } = await post({ type: "email.complained", data: { to: ["annoyed@example.com"] } });
+    expect(await feedback(id)).toEqual([
+      { provider: "resend", kind: "complaint", address: "annoyed@example.com" },
+    ]);
+  });
+
+  it("records but doesn't act on transient bounces and other events", async () => {
+    const transient = await post(bounced(["busy@example.com"], "Transient"));
+    const delivered = await post({ type: "email.delivered", data: { to: ["ok@example.com"] } });
+    expect([transient.status, delivered.status]).toEqual([200, 200]);
+    expect(await feedback(transient.id)).toEqual([]);
+    expect(await feedback(delivered.id)).toEqual([]);
+    const stored = await asRole("postgres", (client) =>
+      client.query(
+        "SELECT type FROM webhooks.inbound_event WHERE provider = 'resend' AND provider_event_id = $1",
+        [delivered.id],
+      ),
+    );
+    expect(stored.rows).toEqual([{ type: "email.delivered" }]);
+  });
+
+  it("refuses another secret, a changed body, an old timestamp and missing headers", async () => {
+    const event = bounced(["x@example.com"]);
+    expect(
+      (await post(event, { secret: `whsec_${randomBytes(24).toString("base64")}` })).status,
+    ).toBe(400);
+    expect((await post(event, { body: JSON.stringify(bounced(["y@example.com"])) })).status).toBe(
+      400,
+    );
+    expect((await post(event, { at: new Date(Date.now() - 10 * 60 * 1000) })).status).toBe(400);
+    const bare = await fetch(`${baseUrl}/webhooks/resend`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(bare.status).toBe(400);
   });
 });

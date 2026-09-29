@@ -4,6 +4,9 @@
  *
  * To notify on another event: route it here (`eventSubscribers["events-notifications"]`
  * in packages/jobs), add a template, and map it below.
+ *
+ * Email feedback (a provider's bounce or spam complaint, from apps/webhooks) goes to the
+ * suppression list instead, so the address is never emailed again.
  */
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { type EventEnvelope, events } from "@repo/contracts/events";
@@ -11,6 +14,7 @@ import { type NotificationPayload, parseJob, queuePrefix } from "@repo/jobs";
 import { runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { Dispatcher } from "../dispatch/dispatcher";
+import { DeliveryPolicy } from "../dispatch/policy";
 
 function notificationFor(event: EventEnvelope): NotificationPayload | undefined {
   switch (event.name) {
@@ -30,12 +34,20 @@ function notificationFor(event: EventEnvelope): NotificationPayload | undefined 
 
 @Processor("events-notifications", { concurrency: 10, prefix: queuePrefix("events-notifications") })
 export class EventsProcessor extends WorkerHost {
-  constructor(private readonly dispatcher: Dispatcher) {
+  constructor(
+    private readonly dispatcher: Dispatcher,
+    private readonly policy: DeliveryPolicy,
+  ) {
     super();
   }
 
   async process(job: Job) {
     const { meta, payload: event } = parseJob("events-notifications", "event", job.data);
+    if (event.name === "email.feedback_received.v1") {
+      const { address, kind } = events[event.name].parse(event.payload);
+      await this.policy.suppress("email", address, kind);
+      return;
+    }
     const notification = notificationFor(event);
     if (!notification) return;
     await runWithContext({ ...meta, requestId: meta.requestId ?? `event:${event.id}` }, () =>

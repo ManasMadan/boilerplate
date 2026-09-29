@@ -103,8 +103,12 @@ Either turns that category's email off for the user.
 
 `notifications.suppression` holds addresses never to use again on a channel (reasons
 `bounce`, `complaint`, `unsubscribe`, `invalid`). Email and SMS check it before sending.
-Numbers that reply STOP or can't receive texts are added from Twilio's answer. Nothing
-records email bounces or complaints yet: that needs the provider's webhook.
+Numbers that reply STOP or can't receive texts are added from Twilio's answer. Email
+addresses are added from Resend's webhook (`apps/webhooks/src/inbound/resend.routes.ts`,
+on when `RESEND_WEBHOOK_SECRET` is set): a hard bounce or a spam complaint becomes an
+`email.feedback_received.v1` event, which this service turns into a suppression. In
+Resend's dashboard, point a webhook at `<site>/webhooks/resend` for `email.bounced` and
+`email.complained`. SMTP has no such feedback, so with SMTP only unsubscribes suppress.
 
 Delivery logs, and in-app notifications read more than `NOTIFICATION_HISTORY_DAYS` ago,
 are purged by the worker's `outbox-retention` task.

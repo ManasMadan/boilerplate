@@ -611,6 +611,11 @@
           "endpoint_disabled": {
             "v1": "Desactivó el endpoint de webhook {url} porque fallaba continuamente"
           }
+        },
+        "email": {
+          "feedback_received": {
+            "v1": "El proveedor de correo informó {kind, select, bounce {un rebote permanente} complaint {una queja por spam} other {un aviso}} de {address}"
+          }
         }
       }
     },

@@ -315,7 +315,9 @@ export const eventSubscribers = {
     name === "stripe.event_received.v1" ||
     name === "org.member_added.v1" ||
     name === "org.member_removed.v1",
-  "events-notifications": (name: string) => name === "webhook.endpoint_disabled.v1",
+  // Events that notify someone, and email feedback (bounces, complaints) to suppress.
+  "events-notifications": (name: string) =>
+    name === "webhook.endpoint_disabled.v1" || name === "email.feedback_received.v1",
   "events-realtime": (name: string) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: string) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;

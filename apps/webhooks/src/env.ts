@@ -22,6 +22,9 @@ export const env = createEnv({
 
     // Optional: Stripe's endpoint signing secret; /webhooks/stripe answers 404 without it.
     STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),
+    // Optional: Resend's webhook signing secret (bounces and spam complaints become
+    // suppressions); /webhooks/resend answers 404 without it.
+    RESEND_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),
 
     WEBHOOK_DELIVERY_CONCURRENCY: positive.default(20),
     WEBHOOK_TIMEOUT_MS: positive.max(60_000).default(15_000),

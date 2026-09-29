@@ -176,6 +176,7 @@ combination fails at boot. See [files-and-billing.md](files-and-billing.md).
 | `STRIPE_TRIAL_DAYS` | api | 14 | Trial on an organization's first subscription; 0 turns trials off. |
 | `STRIPE_API_URL` | api | empty | Points the Stripe client at the fake Stripe (`http://127.0.0.1:12111`). Refused in production. |
 | `STRIPE_WEBHOOK_SECRET` | webhooks, fake Stripe | empty | `whsec_…`. Without it `/webhooks/stripe` answers 404. |
+| `RESEND_WEBHOOK_SECRET` | webhooks | empty | `whsec_…`, Resend's webhook signing secret. On: bounces and spam complaints suppress the address. Without it `/webhooks/resend` answers 404. |
 | `STRIPE_FAKE_PORT` | fake Stripe | 12111 | |
 | `STRIPE_FAKE_WEBHOOK_URL` | fake Stripe | `http://localhost:3004/webhooks/stripe` | Where the fake sends its events. |
 

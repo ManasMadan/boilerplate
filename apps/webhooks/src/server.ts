@@ -6,6 +6,7 @@
 import { createServer, DATABASE, type Database } from "@repo/nest-common";
 import { AppModule } from "./app.module";
 import { env } from "./env";
+import { mountResend } from "./inbound/resend.routes";
 import { mountStripe } from "./inbound/stripe.routes";
 
 export function createWebhooksServer() {
@@ -16,11 +17,10 @@ export function createWebhooksServer() {
     loadShedding: env.LOAD_SHEDDING,
     corsOrigins: [],
     async configure(app) {
-      mountStripe(
-        app.getHttpAdapter().getInstance(),
-        app.get<Database>(DATABASE),
-        env.STRIPE_WEBHOOK_SECRET,
-      );
+      const fastify = app.getHttpAdapter().getInstance();
+      const database = app.get<Database>(DATABASE);
+      mountStripe(fastify, database, env.STRIPE_WEBHOOK_SECRET);
+      mountResend(fastify, database, env.RESEND_WEBHOOK_SECRET);
     },
   });
 }
