@@ -19,7 +19,12 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | New database migration | `bun run db:migrate` |
 | Set a secret in .env (you cannot read .env) | `bun run env:set KEY=value` |
 
-Run commands from the repo root. Never `cd` into a package to run tools directly.
+Run commands from the repo root. Never `cd` into a package to run tools directly; for one
+package use `bun run --filter @repo/<name> <script>` (or `bun run --cwd <dir> <script>`).
+
+Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025 (SMTP
+51025), RustFS 59000 (console 59001), ClamAV 53310. Web is on 3000, api 3001, worker
+3002, notifications 3003, webhooks 3004, ai 8000.
 
 ## Principles (non-negotiable)
 
@@ -49,7 +54,8 @@ Run commands from the repo root. Never `cd` into a package to run tools directly
 - `packages/contracts` API contract, input schemas, limits, error codes
 - `packages/client` data hooks for web and mobile (the only way apps call the API)
 - `packages/db` Prisma schema, migrations, client factory
-- `packages/nest-common` shared Nest plumbing (env fragments, db, redis, logging, health)
+- `packages/nest-common` shared Nest plumbing (env fragments, db, redis, logging, health,
+  outbox, `safeFetch`, rate limits, encryption, storage)
 - `packages/jobs` queue contracts and producer
 - `packages/i18n` every translation; `packages/email` email templates; `packages/ui` components
 
@@ -58,10 +64,29 @@ Run commands from the repo root. Never `cd` into a package to run tools directly
 - Libraries change faster than your training data. For Next.js, Turborepo and other tools
   that bundle docs, read the installed version's docs first:
   `node_modules/next/dist/docs/`, `node_modules/turbo/docs/`.
-- Generated files (`**/generated/**`, `*.gen.ts`, `openapi.json`), applied migrations,
-  lockfiles and `.env` are protected by hooks. Change the source and regenerate.
-- When you finish a change, the Stop hook runs lint, types and unit tests for affected
-  packages. For anything touching the database, queues or HTTP, also run the `verify` skill.
+- Generated files (`**/generated/**`, `*.gen.ts`, `openapi.json`, `apps/ai/app/contracts/`),
+  applied migrations, lockfiles and `.env` are never edited by hand; hooks block most of
+  them. Change the source and regenerate.
+- When you finish a change, the Stop hook runs types and unit tests for affected
+  packages (plus ruff for `apps/ai`). It does not run Biome or the boundary checks: run
+  `bun run lint` yourself. For anything touching the database, queues or HTTP, also run
+  the `verify` skill.
 - Commits: Conventional Commits with a workspace scope, e.g. `feat(api): add todo sharing`.
 - New environment variables go in the service's `src/env.ts`, `.env.example`, and
   docs/environment.md, in the same change.
+
+## Claude Code setup
+
+- `.claude/rules/`: per-area rules that load when you open matching files (api,
+  contracts, client, web, db, jobs and events, notifications, python, infra, tests,
+  i18n, security). Each app and `packages/db` also has its own `CLAUDE.md`.
+- `.claude/agents/`: `reviewer`, `security-reviewer`, `migration-reviewer` and
+  `verifier`. Use them before calling a change done.
+- `.claude/skills/`: step-by-step procedures (setup, dev, verify, ...).
+- `.mcp.json`: Playwright for driving the local web app, and read-only Postgres on the
+  local `app` database. The Postgres server connects as `app_api` (a local-only
+  password equal to the role name, from `infra/postgres/init`) in restricted mode, so
+  it runs read-only transactions and sees only what RLS allows: tenant and per-user
+  tables show no rows unless `app.org_id` / `app.user_id` is set in the same
+  transaction. Use it for schemas, indexes and query plans. It needs `bun run db:up` and
+  `uv`.

@@ -115,6 +115,13 @@
       }
     ]
   },
-  "attribution": { "commit": "", "pr": "" },
-  "cleanupPeriodDays": 30
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "cleanupPeriodDays": 30,
+  "statusLine": {
+    "type": "command",
+    "command": "bun \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/statusline.ts\""
+  }
 }
