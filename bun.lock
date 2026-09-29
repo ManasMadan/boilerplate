@@ -392,6 +392,7 @@
     "packages/i18n": {
       "name": "@repo/i18n",
       "dependencies": {
+        "react": "catalog:",
         "use-intl": "catalog:",
       },
       "devDependencies": {

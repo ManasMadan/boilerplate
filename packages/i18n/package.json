@@ -13,6 +13,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "react": "catalog:",
     "use-intl": "catalog:"
   },
   "devDependencies": {
