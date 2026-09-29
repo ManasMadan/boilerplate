@@ -17,6 +17,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { request } from "node:http";
 import { join } from "node:path";
 import { fail, ok, ROOT } from "./lib";
@@ -29,10 +30,27 @@ const DATA = "boilerplate-data";
 const IMAGES = ["api", "worker", "notifications", "webhooks", "web", "ai", "migrate"];
 const ROLES = ["migrator", "app_api", "app_worker", "app_notifications", "app_webhooks", "app_ai"];
 const MIN_DOCKER_MEMORY_GB = 8;
-const ENVOY_GATEWAY = "v1.9.2";
-const CLOUDNATIVE_PG = "0.29.1";
 const BUILDER = "boilerplate";
 const BUILD_MEMORY = "4g";
+
+/**
+ * Where to install an add-on from, as the clusters install it (deploy/platform/addons),
+ * so kind runs the same chart at the same version.
+ */
+function addon(name: string) {
+  const file = `deploy/platform/addons/${name}.yaml`;
+  const spec = Bun.YAML.parse(readFileSync(join(ROOT, file), "utf8")) as Partial<
+    Record<"repoURL" | "chart" | "version" | "namespace", string>
+  >;
+  const { repoURL, chart, version, namespace } = spec;
+  if (!repoURL || !chart || !version || !namespace) {
+    throw new Error(`${file} needs repoURL, chart, version and namespace`);
+  }
+  const source = repoURL.startsWith("https://")
+    ? [chart, "--repo", repoURL]
+    : [`oci://${repoURL}/${chart}`];
+  return [...source, "--version", version, "--namespace", namespace];
+}
 
 function run(command: string, args: string[], options: { input?: string; quiet?: boolean } = {}) {
   const result = spawnSync(command, args, {
@@ -212,11 +230,7 @@ async function up() {
     "upgrade",
     "--install",
     "eg",
-    "oci://docker.io/envoyproxy/gateway-helm",
-    "--version",
-    ENVOY_GATEWAY,
-    "--namespace",
-    "envoy-gateway-system",
+    ...addon("envoy-gateway"),
     "--create-namespace",
     "--kube-context",
     `kind-${CLUSTER}`,
@@ -226,13 +240,7 @@ async function up() {
     "upgrade",
     "--install",
     "cnpg",
-    "cloudnative-pg",
-    "--repo",
-    "https://cloudnative-pg.github.io/charts",
-    "--version",
-    CLOUDNATIVE_PG,
-    "--namespace",
-    "cnpg-system",
+    ...addon("cloudnative-pg"),
     "--create-namespace",
     "--kube-context",
     `kind-${CLUSTER}`,
