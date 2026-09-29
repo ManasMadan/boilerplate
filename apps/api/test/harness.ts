@@ -18,6 +18,8 @@ import { Redis } from "ioredis";
 
 export interface Harness {
   baseUrl: string;
+  /** The application itself, for tests that call its services directly. */
+  app: NestFastifyApplication;
   redis: Redis;
   testDb: TestDatabase;
   close(): Promise<void>;
@@ -75,6 +77,7 @@ export async function startApi(
   const { port } = app.getHttpServer().address() as AddressInfo;
   return {
     baseUrl: `http://127.0.0.1:${port}`,
+    app,
     redis,
     testDb,
     async close() {

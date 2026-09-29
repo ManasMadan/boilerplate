@@ -18,6 +18,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 
+export { factories } from "./factories";
+
 const DB_PACKAGE = join(import.meta.dirname, "../..");
 const TEMPLATE = "app_test";
 

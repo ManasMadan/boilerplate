@@ -88,7 +88,8 @@
     "db:reset": "bun run --filter @repo/db reset",
     "lint:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs && bun scripts/check-web-render-only.ts",
     "prepare": "husky",
-    "stripe:fake": "bun run --filter @repo/fake-stripe start"
+    "stripe:fake": "bun run --filter @repo/fake-stripe start",
+    "db:seed": "turbo run seed --filter=@repo/api"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

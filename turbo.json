@@ -50,6 +50,11 @@
       "dependsOn": ["build"],
       "cache": false,
       "persistent": true
+    },
+    // Demo data (apps/api src/seed.ts): runs the built service's own modules.
+    "seed": {
+      "dependsOn": ["build"],
+      "cache": false
     }
   }
 }

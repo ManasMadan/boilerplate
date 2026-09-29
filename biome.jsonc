@@ -78,7 +78,7 @@
       }
     },
     {
-      "includes": ["**/scripts/**", "**/*.config.ts", "**/*.config.mjs"],
+      "includes": ["**/scripts/**", "**/*.config.ts", "**/*.config.mjs", "apps/api/src/seed.ts"],
       "linter": {
         "rules": {
           "suspicious": {
