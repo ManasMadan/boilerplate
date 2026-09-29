@@ -62,7 +62,11 @@ export async function createServer(
   // 503 immediately (the load balancer retries elsewhere) rather than letting every
   // request time out. Readiness fails too, so Kubernetes stops routing here.
   await app.register(underPressure, {
-    maxEventLoopDelay: 1_000,
+    // Shed load (503 + Retry-After) only when the process is really saturated: event
+    // loop utilisation is sustained busyness; a single slow tick (GC, the OS briefly
+    // scheduling other work) isn't. Delay is the backstop for a truly stuck loop.
+    maxEventLoopUtilization: 0.98,
+    maxEventLoopDelay: 3_000,
     maxHeapUsedBytes: 0.9 * (process.constrainedMemory?.() || 1024 * 1024 * 1024 * 2),
     retryAfter: 5,
     exposeStatusRoute: false,
