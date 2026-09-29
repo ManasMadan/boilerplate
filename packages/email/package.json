@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "email dev --dir src/previews --port 3030",
     "check-types": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@react-email/components": "^1.0.12",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

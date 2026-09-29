@@ -20,6 +20,9 @@ packages/db/src/generated
 # tooling
 .turbo
 coverage
+# Python coverage data (pytest --cov).
+.coverage
+.coverage.*
 playwright-report
 test-results
 logs

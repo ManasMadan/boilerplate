@@ -41,6 +41,12 @@
       "dependsOn": ["gen", "^gen"],
       "cache": false
     },
+    // Unit and integration tests with coverage thresholds (needs the services, like
+    // test:integration).
+    "coverage": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false
+    },
     "dev": {
       "dependsOn": ["gen", "^gen"],
       "cache": false,

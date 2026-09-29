@@ -15,7 +15,8 @@
     "check-types": "tsc",
     "test": "jest",
     "doctor": "expo-doctor",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "coverage": "jest --coverage"
   },
   "dependencies": {
     "@better-auth/expo": "catalog:",

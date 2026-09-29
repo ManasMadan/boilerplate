@@ -122,7 +122,10 @@ jobs:
         run: |
           docker compose --profile files up -d --wait rustfs clamav
           docker compose --profile files run --rm s3-init
-      - run: bunx turbo run test:integration
+      # Unit and integration tests together, failing below each package's coverage floor
+      # (see packages/vitest-config). The Python service's run is in its own job.
+      - name: Tests with coverage
+        run: bunx turbo run coverage --filter=!@repo/ai
 
   e2e:
     name: End-to-end tests
@@ -273,8 +276,10 @@ jobs:
         run: |
           psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
           bun run db:deploy
-      # Routes, tenancy, indexing, the assistant, the worker, and models vs database.
-      - run: uv run pytest -m integration
+      # Routes, tenancy, indexing, the assistant, the worker, and models vs database, with
+      # every test counted toward the coverage floor (pyproject.toml, tool.coverage).
+      - name: All tests with coverage
+        run: uv run pytest -m "integration or not integration" --cov --cov-report=term
 
   codegen:
     name: Generated code is committed

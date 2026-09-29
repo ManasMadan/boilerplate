@@ -10,7 +10,8 @@
   "scripts": {
     "check-types": "tsc",
     "test": "vitest run --project unit --passWithNoTests",
-    "test:integration": "bun --env-file=../../.env run vitest run --project integration"
+    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
+    "coverage": "bun --env-file=../../.env run vitest run --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1142.0",
@@ -41,6 +42,7 @@
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/proxy-addr": "^2.0.3",
     "typescript": "catalog:",

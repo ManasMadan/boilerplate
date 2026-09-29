@@ -29,6 +29,7 @@ dev = [
   "httpx2>=2.13.1",
   "pytest>=9.1.1",
   "ruff>=0.16.9",
+  "pytest-cov>=7",
 ]
 
 [tool.uv]
@@ -69,3 +70,20 @@ asyncio_default_test_loop_scope = "session"
 # run (bun run test) is pure.
 markers = ["integration: needs Postgres and Redis"]
 addopts = "-m 'not integration'"
+
+[tool.coverage.run]
+source = ["app"]
+# The worker runs as a subprocess in the integration tests; measure it there too.
+patch = ["subprocess"]
+omit = [
+  # Generated from the JSON Schemas (bun run gen).
+  "app/contracts/*",
+  # Writes openapi.json for codegen.
+  "app/export_openapi.py",
+]
+
+[tool.coverage.report]
+# The floor the suite currently meets (unit + integration), rounded down, less a point
+# for paths that only run sometimes. Raise it as tests are added.
+fail_under = 95
+show_missing = true

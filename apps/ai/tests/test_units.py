@@ -1,6 +1,8 @@
 """Pure tests: no database, Redis or model provider."""
 
 import math
+import os
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -42,12 +44,15 @@ def test_bad_tokens_are_refused(token: str) -> None:
 
 
 def _settings(**env: str) -> Settings:
+    """Settings from exactly these values: the process environment (a loaded .env when
+    tests run alongside the integration suite) must not leak in."""
     base = {
         "AI_DATABASE_URL": "postgresql://u:p@localhost/db",
         "REDIS_URL": "redis://localhost:6379",
         "AI_SERVICE_SECRET": SECRET,
     }
-    return Settings.model_validate({**base, **env})
+    with patch.dict(os.environ, {}, clear=True):
+        return Settings.model_validate({**base, **env})
 
 
 def test_production_refuses_development_stand_ins() -> None:

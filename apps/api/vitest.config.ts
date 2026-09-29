@@ -2,12 +2,14 @@
  * Two projects: `unit` (src/, no services needed; runs in CI's unit job) and
  * `integration` (test/, against real Postgres/Redis/Mailpit from docker compose).
  */
+import { coverage } from "@repo/vitest-config";
 import { defineConfig } from "vitest/config";
 
 const env = { NODE_ENV: "test", LOG_LEVEL: "silent" };
 
 export default defineConfig({
   test: {
+    coverage: coverage({ lines: 93, functions: 94, branches: 79, statements: 90 }),
     projects: [
       { test: { name: "unit", include: ["src/**/*.test.ts"], env } },
       {

@@ -11,7 +11,8 @@
     "test": "uv run pytest",
     "test:integration": "bun --env-file=../../.env run uv run pytest -m integration",
     "worker": "bun --env-file=../../.env run uv run python -m app.worker",
-    "evals": "bun --env-file=../../.env run uv run python -m evals"
+    "evals": "bun --env-file=../../.env run uv run python -m evals",
+    "coverage": "bun --env-file=../../.env run uv run pytest -m 'integration or not integration' --cov --cov-report=term"
   },
   "devDependencies": {
     "@repo/jobs": "workspace:*"

@@ -11,7 +11,8 @@
     "test": "vitest run --project unit --passWithNoTests",
     "test:integration": "bun --env-file=../../.env run vitest run --project integration",
     "auth:schema": "bun --env-file=../../.env run auth generate --config src/auth/auth.cli.ts --adapter prisma --dialect postgresql --output ../../node_modules/.cache/auth-schema.prisma --yes",
-    "seed": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/seed.mjs"
+    "seed": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/seed.mjs",
+    "coverage": "bun --env-file=../../.env run vitest run --coverage"
   },
   "dependencies": {
     "@better-auth/api-key": "catalog:",
@@ -55,6 +56,7 @@
     "@repo/fake-stripe": "workspace:*",
     "@repo/tsdown-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
     "auth": "1.7.6",
     "jose": "^6.2.12",

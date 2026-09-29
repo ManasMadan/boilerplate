@@ -9,7 +9,8 @@
     "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.mjs",
     "check-types": "tsc",
     "test": "vitest run --project unit --passWithNoTests",
-    "test:integration": "bun --env-file=../../.env run vitest run --project integration"
+    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
+    "coverage": "bun --env-file=../../.env run vitest run --coverage"
   },
   "dependencies": {
     "@nestjs/bullmq": "catalog:",
@@ -31,9 +32,10 @@
   "devDependencies": {
     "@repo/tsdown-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
-    "pg": "^8.23.0",
     "@types/pg": "^8.23.1",
+    "pg": "^8.23.0",
     "standardwebhooks": "^1.1.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
