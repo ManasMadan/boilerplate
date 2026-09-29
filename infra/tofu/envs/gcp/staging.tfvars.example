@@ -1,0 +1,10 @@
+# Copy to staging.tfvars (kept out of git: it may hold provider keys).
+environment           = "staging"
+project_id            = "your-project"
+region                = "europe-west1"
+domain                = "example.com"
+site_host             = "staging.example.com"
+cloudflare_account_id = "0123456789abcdef0123456789abcdef"
+tls_email             = "ops@example.com"
+state_kms_key         = "projects/your-project/locations/europe-west1/keyRings/tofu/cryptoKeys/state"
+previews              = true

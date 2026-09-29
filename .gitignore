@@ -40,3 +40,14 @@ CLAUDE.local.md
 
 # Session cookies of the load-test users (apps/api/src/load-users.ts).
 load/.sessions.json
+
+# OpenTofu: providers, state and plans stay local (state lives in each env's backend).
+# Lock files are committed for the env roots only.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/tofu/modules/**/.terraform.lock.hcl
+# Environment inputs can hold provider keys; only the examples are committed.
+infra/tofu/envs/*/*.tfvars
+infra/tofu/envs/*/backend-*.hcl

@@ -1,0 +1,3 @@
+# Copy to backend-staging.hcl. The bucket is created once, outside this root.
+bucket = "your-tofu-state-bucket"
+prefix = "boilerplate/staging"
