@@ -145,12 +145,21 @@ test.describe("time zone", () => {
 });
 
 test("theme can be switched and is remembered", async ({ page }) => {
+  // The shared tokens (packages/ui theme.css) drive the colors in both themes: the page's
+  // lightness (the browser reports colors as lab()) is white, then near black.
+  const lightness = () =>
+    page.evaluate(() =>
+      Number(/lab\(([\d.]+)/.exec(getComputedStyle(document.body).backgroundColor)?.[1]),
+    );
   await page.goto("/");
+  await expect.poll(lightness).toBe(100);
   await page.getByRole("button", { name: "Toggle theme" }).click();
   await page.getByRole("menuitem", { name: "Dark" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect.poll(lightness).toBeLessThan(15);
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect.poll(lightness).toBeLessThan(15);
 });
 
 test("keyboard users can sign in without a mouse", async ({ page }) => {

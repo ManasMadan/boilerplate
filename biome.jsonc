@@ -53,6 +53,12 @@
   },
   "overrides": [
     {
+      // Theme tokens set each variable once per @variant (light, dark); Biome reads the
+      // blocks as one rule and reports the second value as a duplicate.
+      "includes": ["packages/ui/src/styles/theme.css"],
+      "linter": { "rules": { "suspicious": { "noDuplicateCustomProperties": "off" } } }
+    },
+    {
       "includes": [
         "apps/api/**",
         "apps/webhooks/**",
