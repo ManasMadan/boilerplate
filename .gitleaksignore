@@ -1,0 +1,7 @@
+# Findings reviewed and known to be safe (not secrets), by fingerprint
+# (commit:file:rule:line). Anything else gitleaks finds fails the Security workflow.
+
+# The RFC 6238 appendix B test secret (the standard's published TOTP test vector).
+52b33cb87fc5981ee6acea1826de3ddcbb4407db:packages/testing/src/totp.test.ts:generic-api-key:6
+# A made-up browser push subscription (keys a real push service never issued).
+3c701b3dfa83cb203a0c69810758d9d341b831fb:apps/web/e2e/push.spec.ts:generic-api-key:24
