@@ -13,7 +13,8 @@
  * and row-level-security mistakes fail in tests, not in production.
  */
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 
@@ -46,12 +47,51 @@ function urlFor(database: string, role: string) {
   return url.toString();
 }
 
-/** Applies all migrations to the template database. Call once per test run. */
+/**
+ * Applies all migrations to the template database. Call once per test run; concurrent
+ * runs (several packages under turbo) take turns on an advisory lock.
+ *
+ * If a migration recorded in the template no longer matches its file (it was edited
+ * before shipping, or removed), the template's schemas are rebuilt from scratch: deploy
+ * alone would keep the old version. Extensions (created by a superuser at bootstrap)
+ * live in `public` and stay.
+ */
 export async function prepareTemplate() {
-  execFileSync("bunx", ["prisma", "migrate", "deploy"], {
-    cwd: DB_PACKAGE,
-    env: { ...process.env, MIGRATOR_DATABASE_URL: urlFor(TEMPLATE, "migrator") },
-    stdio: "pipe",
+  const client = new pg.Client({ connectionString: urlFor(TEMPLATE, "migrator") });
+  await client.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock(hashtext('prepare-test-template'))");
+    if (await isStale(client)) {
+      const { rows } = await client.query<{ nspname: string }>(
+        "SELECT nspname FROM pg_namespace WHERE nspowner = 'migrator'::regrole",
+      );
+      for (const { nspname } of rows) {
+        await client.query(`DROP SCHEMA ${pg.escapeIdentifier(nspname)} CASCADE`);
+      }
+      await client.query("DROP TABLE IF EXISTS public._prisma_migrations");
+    }
+    execFileSync("bunx", ["prisma", "migrate", "deploy"], {
+      cwd: DB_PACKAGE,
+      env: { ...process.env, MIGRATOR_DATABASE_URL: urlFor(TEMPLATE, "migrator") },
+      stdio: "pipe",
+    });
+  } finally {
+    await client.end();
+  }
+}
+
+async function isStale(client: pg.Client) {
+  const table = await client.query("SELECT to_regclass('public._prisma_migrations') AS t");
+  if (!table.rows[0]?.t) return false;
+  const { rows } = await client.query<{ migration_name: string; checksum: string }>(
+    "SELECT migration_name, checksum FROM public._prisma_migrations WHERE finished_at IS NOT NULL",
+  );
+  return rows.some(({ migration_name, checksum }) => {
+    const file = join(DB_PACKAGE, "prisma/migrations", migration_name, "migration.sql");
+    return (
+      !existsSync(file) ||
+      createHash("sha256").update(readFileSync(file)).digest("hex") !== checksum
+    );
   });
 }
 
