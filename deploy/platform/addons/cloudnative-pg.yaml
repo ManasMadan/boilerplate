@@ -1,4 +1,4 @@
-# The Postgres operator (previews, BYO clusters; managed databases don't need it).
+# The Postgres operator: every environment's database (deploy/charts/data).
 addon: cloudnative-pg
 namespace: cnpg-system
 repoURL: https://cloudnative-pg.github.io/charts

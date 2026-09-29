@@ -1,5 +1,7 @@
 # The one Application created by hand (OpenTofu's bootstrap applies it): everything
 # else in this directory, which in turn creates every other Application.
+# argo-cd-values.yaml isn't a manifest: it's the Argo CD chart's values, which the
+# bootstrap installs Argo CD with.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -13,7 +15,7 @@ spec:
     path: deploy/argocd
     directory:
       recurse: true
-      exclude: root.yaml
+      exclude: "{root.yaml,argo-cd-values.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

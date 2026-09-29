@@ -138,9 +138,21 @@ spec:
             - name: writable-{{ $i }}
               mountPath: {{ $path }}
             {{- end }}
+            {{- with $svc.caBundle }}
+            - name: ca-bundle
+              mountPath: /etc/ssl/extra
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- with $svc.caBundle }}
+        - name: ca-bundle
+          secret:
+            secretName: {{ . }}
+            items:
+              - { key: ca.crt, path: ca.crt }
+        {{- end }}
         {{- range $i, $path := $svc.writablePaths }}
         - name: writable-{{ $i }}
           emptyDir: {}

@@ -1,21 +1,29 @@
 # Deploying
 
-Everything here runs on any conformant Kubernetes cluster (EKS, GKE, AKS, kind, your
-own). Cloud differences live in `infra/tofu` and in each environment's values, never in
-the charts.
+Everything runs on k3s on machines you run (one node or several; `infra/tofu` sets
+them up), and on kind locally, from the same charts. Nothing is a managed service:
+Postgres, Valkey, object storage, mail and observability all run in the cluster.
+Cloudflare stays in front (DNS, proxy, WAF), and third-party APIs (AI models, Twilio,
+APNs/FCM, Stripe, Google, Turnstile) stay external.
 
 ```
 deploy/
   docker/          one Dockerfile per kind of image (docker-bake.hcl builds them all)
   charts/stack     the application: every service from one values file
-  charts/data      Postgres (CloudNativePG or a managed database), Valkey, their Secrets
-  environments/    values per environment: local (kind), preview, staging, production
-  platform/        cluster add-ons (addons/, values/) and each cluster's own settings (config/)
-  argocd/          the root Application, projects and ApplicationSets (GitOps)
+  charts/data      Postgres (CloudNativePG), Valkey, RustFS, and their credentials
+  environments/    values per environment (local, preview, staging, production) and
+                   each one's encrypted Secrets (secrets/)
+  platform/        cluster add-ons (addons/, values/), our own platform charts
+                   (config/, mail/, jaeger/) and the add-ons' encrypted Secrets (secrets/)
+  argocd/          the root Application, projects, ApplicationSets, and the values
+                   Argo CD itself is installed with (argo-cd-values.yaml)
+  local/           what kind needs besides the charts (bun run k8s:up)
 ```
 
-`bun run charts:check` lints both charts, runs their unit tests, renders them for every
-environment and validates the result against Kubernetes and the CRDs they use.
+`bun run charts:check` lints every chart of ours and runs its unit tests, renders the
+application for every environment and the platform, validates all of it against
+Kubernetes and the CRDs it uses, renders every add-on at its pinned version with our
+values, and refuses any file in a `secrets/` directory that isn't SOPS-encrypted.
 
 ## Two releases per environment
 
@@ -24,6 +32,107 @@ stack's migration Job runs before its services (a Helm pre-install/pre-upgrade h
 an Argo CD PreSync hook), so the database must already be up. Keeping it in its own
 release is what guarantees that, and it means redeploying the application never touches
 the database.
+
+## Credentials: generated, or in git encrypted
+
+There are two kinds of secret, and each has one home:
+
+- **Only the cluster needs them**: the database roles' passwords, Valkey's, the object
+  storage keys. The data chart generates them in the cluster the first time it's
+  installed: a Job, before anything else of the release, creates each Secret with
+  random values unless it already exists. Its role may only create Secrets, so it can't
+  read or change one, and no password ever changes under a running database. They're
+  never in git and nobody needs to know them. After a restore into a new cluster, the
+  new ones are set on the restored roles (see Backups).
+- **Everything else** (auth and encryption keys, API keys, the mail server's and
+  Cloudflare's credentials): committed to this repository encrypted with SOPS and age,
+  and decrypted by Argo CD into the cluster. They must survive the cluster (losing
+  `ENCRYPTION_KEYS` makes stored data unreadable), come from outside it, or both.
+
+| Secret | Keys | From |
+|---|---|---|
+| `db-<role>` for `migrator`, `app_api`, `app_worker`, `app_notifications`, `app_webhooks`, `app_ai` | `username`, `password`, `url`, `directUrl` | generated (data chart) |
+| `valkey` | `host`, `port`, `password`, `url` | generated (data chart) |
+| `storage` | `bucket`, `region`, `endpoint`, `publicEndpoint`, `accessKeyId`, `secretAccessKey` | generated (data chart) |
+| `<release>-backups-storage` | `accessKeyId`, `secretAccessKey` (the backups server's) | generated (data chart) |
+| `<release>-<service>` for `api`, `notifications`, `webhooks`, `ai` (the AI worker shares `ai`'s; `web` and `worker` have none) | any of the service's variables (each app's `src/env.ts`, `app/settings.py` for ai) | `environments/<env>/secrets/<service>.sops.yaml` |
+| `cloudflare-api-token` in `cert-manager` and in `external-dns` | `token` (Zone:DNS:Edit on the zone) | `platform/secrets/<env>/` |
+| `github-token` in `argocd`, on the cluster hosting previews | `token` (reads pull requests) | `platform/secrets/<env>/` |
+| `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
+| `grafana-admin` in `observability`, only on clusters with observability (its namespace exists nowhere else) | `admin-user`, `admin-password` | `platform/secrets/<env>/` |
+
+What each service's Secret holds, at least:
+
+- `api`: `BETTER_AUTH_SECRET`, `ENCRYPTION_KEYS`, `UNSUBSCRIBE_SECRET`,
+  `AI_SERVICE_SECRET`; and whatever it uses of `GOOGLE_CLIENT_*`, `TURNSTILE_*`,
+  `STRIPE_*`, `VAPID_PUBLIC_KEY`.
+- `notifications`: `UNSUBSCRIBE_SECRET` (the api's), `SMTP_URL` =
+  `smtps://no-reply%40<email domain>:<SMTP_PASSWORD>@<mail host>:465` (the mail
+  server's submission account); and `TWILIO_*`, `FCM_*`, `APNS_*`, `VAPID_*` as used.
+- `webhooks`: `ENCRYPTION_KEYS` (the api's), `STALWART_WEBHOOK_SECRET` (the mail
+  server's), `STRIPE_WEBHOOK_SECRET` with billing.
+- `ai`: `AI_SERVICE_SECRET` (the api's), the model provider's key and `AI_MODEL`,
+  `AI_EMBEDDINGS`.
+
+Plain settings shared by every environment (URLs between services, the site's origin,
+ports) are in the stack chart's values; per-environment ones go in
+`environments/<env>/stack.yaml`. The hosts in `environments/staging` and
+`environments/production` (`site.host`, `storage.uploads.host`, `EMAIL_FROM`) are
+placeholders: set yours.
+
+## Secrets with SOPS
+
+Each cluster has an age key pair. The private key is the Secret `sops-age` in the
+`argocd` namespace (key `keys.txt`, which OpenTofu's bootstrap creates); Argo CD's repo
+server decrypts with it in a sidecar that runs `sops`, the `sops` config management
+plugin (`argocd/argo-cd-values.yaml`). Applications whose source says
+`plugin: { name: sops }` get every `*.sops.yaml` file of their path, decrypted:
+`environments/<env>/secrets/` with the stack, `platform/secrets/<env>/` with the
+platform. Staging's cluster also decrypts `environments/preview/secrets/`, the Secrets
+every preview shares (test-mode keys only).
+
+`.sops.yaml` at the repository's root says who can decrypt what: per environment, the
+cluster's public key and those of the people who edit its secrets. Its keys are
+placeholders until you put yours in, and `sops` refuses to encrypt with them.
+
+Setting up an environment, once (`age` and `sops` from your package manager):
+
+```sh
+age-keygen -o staging.agekey             # the cluster's key pair; prints its public key
+age-keygen -o ~/.config/sops/age/keys.txt   # yours, if you don't have one yet
+```
+
+Put both public keys in `.sops.yaml`'s staging rule, give `staging.agekey` to the
+bootstrap (`infra/tofu/README.md`) and keep it somewhere safe outside the repository:
+it's the only way to decrypt that environment's secrets. Then delete the local copy.
+
+Creating or changing a Secret is a file edit:
+
+```sh
+# A new one: write the plain manifest, then encrypt it in place.
+cat > deploy/environments/staging/secrets/api.sops.yaml <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: boilerplate-api
+stringData:
+  BETTER_AUTH_SECRET: "…"
+YAML
+sops --encrypt --in-place deploy/environments/staging/secrets/api.sops.yaml
+
+# Change one: opens it decrypted in $EDITOR and encrypts it again on save.
+sops deploy/environments/staging/secrets/api.sops.yaml
+
+# After changing .sops.yaml's keys (someone joins or leaves, a cluster's key rotates):
+sops updatekeys deploy/environments/staging/secrets/*.sops.yaml
+```
+
+Only the values are encrypted (`data`, `stringData`), so a diff shows which Secret and
+key changed without showing them. Application Secrets name no namespace (they go to
+their Application's, which for previews is each preview's own); platform Secrets name
+theirs. `charts:check` fails on any file there that isn't an encrypted Secret, or a
+namespace where there shouldn't be one. The plain manifest must never be committed:
+encrypt it before `git add`.
 
 ## Re-encrypting after a key rotation
 
@@ -41,51 +150,141 @@ It runs the api's image with the api's environment in a pod of its own. Don't
 limit and gets the container OOM-killed. `bun run k8s:smoke` runs it on kind, so CI
 runs it on every change to the charts.
 
-## What each environment provides
+## Object storage
 
-The charts read everything environment-specific from Secrets, so the same manifests
-run everywhere.
+Two RustFS servers per environment (data chart), each with its own root keys:
 
-| Secret | Keys | Written by |
-|---|---|---|
-| `db-<role>` for `migrator`, `app_api`, `app_worker`, `app_notifications`, `app_webhooks`, `app_ai` | `username`, `password`, `url`, `directUrl` | the data chart: generated (in-cluster Postgres), extracted from the secret manager (managed Postgres, written there by OpenTofu), or created by `bun run k8s:up` on kind |
-| `valkey` | `host`, `port`, `password`, `url` | the same |
-| `<release>-<service>` for `web`, `api`, `worker`, `notifications`, `webhooks`, `ai` | any of the service's variables (see each app's `src/env.ts`, or `app/settings.py` for ai) | External Secrets, from the secret manager key `<keyPrefix><service>`: one JSON object, e.g. `{"BETTER_AUTH_SECRET": "…", "S3_BUCKET": "…"}` |
+- **uploads**: the application's files. Browsers upload and download directly with
+  presigned URLs at `storage.uploads.host`, a host of its own (not a path of the site,
+  so uploaded files never run in the site's origin), routed through the gateway; the
+  bucket's CORS rule lets the site's origins PUT and GET. The api signs for that public
+  endpoint, the worker reads and writes in-cluster, and the web app allows it in its
+  Content-Security-Policy (`storage: presign | internal | origin` in the stack values).
+  Files are off where there's no ClamAV (kind, previews: `storage: none`).
+- **backups**: Postgres's backups only. No route, a network policy that lets only
+  Postgres in, and keys the application never gets.
 
-Plain settings shared by every environment (URLs between services, the site's origin,
-ports) are in the stack chart's values; per-environment ones go in
-`environments/<env>/stack.yaml` or, when they're secret, in the secret manager.
+A Job after every sync creates the buckets and sets the CORS rule, so both are
+declared here rather than done by hand.
 
-The site's hosts (`site.host`) in `environments/staging` and `environments/production`
-are placeholders: set yours.
+## Backups and restore
+
+With `postgres.backups.enabled` (staging and production), the Barman Cloud plugin
+archives every WAL segment as it's written and takes a base backup daily, to the
+backups server's `backups` bucket, kept for `postgres.backups.retention`. Any moment
+since the oldest base backup kept can be restored. Put the backups server on another
+node than Postgres's primary (`storage.backups.nodeSelector`) so one lost disk can't
+take both; for a copy outside the cluster, mirror the bucket (`aws s3 sync`, RustFS
+replication) to storage somewhere else.
+
+Restoring (a mistake in the data, or a new cluster): CloudNativePG only bootstraps a
+cluster when it creates it, so restoring means a new cluster from the backups.
+
+1. Find the folder the backups are in: the old cluster's `postgres.backups.serverName`,
+   which defaults to its name (`boilerplate-postgres`).
+2. In `environments/<env>/data.yaml` set:
+
+   ```yaml
+   postgres:
+     backups:
+       enabled: true
+       serverName: boilerplate-postgres-2   # somewhere new: never over the old archive
+     restore:
+       enabled: true
+       serverName: boilerplate-postgres     # step 1's
+       targetTime: "2026-09-30T08:15:00Z"   # or leave empty for the latest
+   ```
+
+3. Commit it, and once Argo CD has synced, replace the running cluster:
+   `kubectl -n boilerplate delete cluster boilerplate-postgres`. Its volumes go with it
+   (the backups stay in RustFS); Argo CD creates it again from the new values, and
+   CloudNativePG recovers the new instances from the last base backup before the
+   target, then replays WAL up to it. The services fail their readiness checks until
+   it's up, then reconnect. On a new cluster, the first sync does all of it.
+4. The restored database has its roles and grants; CloudNativePG sets their passwords
+   from this namespace's Secrets, so the services connect as before.
+5. Set `restore.enabled` back to `false` (an existing cluster ignores its bootstrap
+   either way) and keep the new `backups.serverName`: it's where backups go now.
+
+`bun run db:restore-drill` proves locally that a backup restores to the same data,
+grants and policies (docs/database.md).
+
+## Mail
+
+Stalwart runs on every cluster (`platform/mail`, namespace `mail`), on the node
+OpenTofu labels `boilerplate.dev/mail=true`: SPF and reverse DNS name that node's
+address, so mail must leave from it. Its ports (25, 465, 587, 993) are a LoadBalancer
+Service that k3s's ServiceLB answers only on that node, with a certificate for its
+host name from cert-manager. OpenTofu publishes the DNS records (the host, MX, SPF,
+DKIM, DMARC), from the same DKIM key as `dkim.key` in the `stalwart` Secret.
+
+Stalwart keeps its settings in its database and only takes them through its management
+API. The chart applies them (`plan.ndjson`: logs to stdout, the domain with our DKIM key
+and certificate, the host name, the `no-reply` account the notifications service submits
+as, the webhook) on every start, with the recovery administrator of a short-lived
+recovery-mode server, before the real one starts; the administrator never works on the
+server's open ports. Stalwart posts delivery failures to the webhooks service in the
+cluster, signed with `STALWART_WEBHOOK_SECRET`; a changed setting restarts the pod.
+
+## Observability
+
+Off unless a cluster opts in with the label `boilerplate.dev/observability: "true"` on
+its Argo CD Secret. Then the observability ApplicationSet installs Jaeger
+(`platform/jaeger`: traces, kept in memory) and kube-prometheus-stack (Prometheus,
+Grafana, Alertmanager) in `observability`, and the envs and previews ApplicationSets
+set `observability.enabled` in the stack, which points every service's OTLP export at
+them: traces to Jaeger, metrics to Prometheus's OTLP receiver. Neither is public:
+
+```sh
+kubectl -n observability port-forward svc/jaeger 16686                        # traces
+kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80   # dashboards
+```
+
+## DNS
+
+OpenTofu's Cloudflare module owns the zone's records for the site, the previews
+wildcard and mail, since it knows the nodes' addresses before anything runs. The one
+host it doesn't know is the files host, so external-dns only publishes HTTPRoutes
+annotated `boilerplate.dev/external-dns: "true"` (the data chart's uploads route),
+proxied, and leaves every record it doesn't own alone. cert-manager validates the
+gateway's and the mail server's certificates through Cloudflare DNS.
 
 ## GitOps
 
-OpenTofu installs Argo CD on each cluster and applies `argocd/root.yaml`; from then on
-everything comes from this repo. Three ApplicationSets do the work:
+OpenTofu installs Argo CD on each cluster with `argocd/argo-cd-values.yaml` and applies
+`argocd/root.yaml`; from then on everything comes from this repo. The ApplicationSets:
 
-- **platform**: every add-on in `platform/addons` on every managed cluster, plus
-  `platform/config` (the public Gateway and its certificates, the secret store, the
-  image policy).
+- **platform**: every add-on in `platform/addons` on every cluster with an environment:
+  operators, the gateway and its certificates (`platform/config`), the mail server, the
+  add-ons' Secrets.
+- **observability**: `platform/addons/observability` on clusters that opt in.
 - **envs**: the data and stack releases on the staging and production clusters, data
-  first. A merge to master deploys staging (CI commits the new image tag); production
-  changes only through a promotion pull request.
+  first, and each environment's Secrets with the stack. A merge to master deploys
+  staging (CI commits the new image tag); production changes only through a promotion
+  pull request.
 - **previews**: a preview per pull request labelled `preview`, in its own namespace,
-  at `https://pr-<number>.preview.<domain>`, deleted with the label or the PR. They
-  run on the clusters that host previews (normally staging's): each brings its own
-  database and Valkey, so they need no managed ones.
+  at `https://pr-<number>.preview.<domain>`, deleted with the label or the PR, on the
+  cluster that hosts previews (staging's). Each brings its own database and Valkey.
 
 Clusters describe themselves in their Argo CD cluster Secret, which OpenTofu writes:
 
 | On the cluster Secret | Meaning |
 |---|---|
-| label `boilerplate.dev/managed: "true"` | gets the platform add-ons |
-| label `boilerplate.dev/environment` | `staging` or `production` |
+| label `boilerplate.dev/environment` | `staging` or `production`: gets the platform, and that environment's releases and Secrets |
 | label `boilerplate.dev/previews: "true"` | hosts pull-request previews |
-| annotation `boilerplate.dev/cloud` | `aws`, `gcp`, `azure` or `other` (per-cloud values) |
+| label `boilerplate.dev/observability: "true"` | gets Jaeger and Prometheus, and the services export to them |
 | annotation `boilerplate.dev/domain` | the DNS zone its hosts are in |
-| annotations `boilerplate.dev/environment`, `tls-email`, `dns01`, `secret-store`, `aws-region`, `gcp-project`, `azure-vault-url`, `azure-eso-client-id`, `image-policy`, `previews`, `secret-prefix` | the platform config's values |
+| annotation `boilerplate.dev/tls-email` | Let's Encrypt's account email |
+| annotation `boilerplate.dev/image-policy` | `"true"`: only images CI signed run (production) |
+| annotations `boilerplate.dev/mail-host`, `mail-domain` | the mail server's name and email domain, when not `mail.<domain>` and `<domain>` |
 
-Platform credentials live in the secret manager too, under the environment's prefix:
-`<prefix>cloudflare-api-token` (`{"token": …}`, Zone DNS edit) and, on the cluster
-hosting previews, `<prefix>github-token`. OpenTofu writes both.
+## Locally (kind)
+
+`bun run k8s:up` runs the same charts on kind: Envoy Gateway and CloudNativePG from
+their pinned add-on versions, a plain-HTTP gateway (`local/gateway.yaml`), Mailpit
+instead of the mail server (`local/mailpit.yaml`), then data and stack. The data chart
+generates its credentials as everywhere; the services' Secrets are generated by the
+script straight into the cluster (never written to disk or git), and Mailpit gets a
+certificate from an authority made for the cluster, since production settings only
+submit mail over verified TLS. No Argo CD, cert-manager, KEDA or backups. The smoke
+test checks the routes (the site and the files host) and runs re-encryption.

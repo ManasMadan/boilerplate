@@ -1,11 +1,7 @@
 # A pull request's preview (deploy/argocd/appsets/previews.yaml sets image.tag to the
 # PR's commit and site.host to pr-<number>.preview.<domain>). Small, one replica, and
-# queue workers idle at zero.
-secrets:
-  externalSecrets:
-    enabled: true
-    # Shared, non-production credentials for every preview (test-mode Stripe, …).
-    keyPrefix: boilerplate-preview-
+# queue workers idle at zero. Its Secrets are shared by every preview, non-production
+# credentials (test-mode Stripe, …): deploy/environments/preview/secrets/.
 defaults:
   replicas: 1
   topologySpread: false
@@ -20,8 +16,17 @@ defaults:
 services:
   web:
     autoscaling: { enabled: false }
+    storage: none
   api:
     autoscaling: { enabled: false }
+    # No file uploads (no ClamAV, no uploads bucket: see data.yaml).
+    storage: none
   worker:
+    storage: none
     env:
       FILE_SCANNER: none
+  notifications:
+    env:
+      # Mail goes through the hosting cluster's mail server (SMTP_URL is in the
+      # Secrets). Your sender, on the hosting cluster's email domain.
+      EMAIL_FROM: Boilerplate Preview <no-reply@example.com>

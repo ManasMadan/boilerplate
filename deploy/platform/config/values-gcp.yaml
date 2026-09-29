@@ -1,6 +1,0 @@
-# GKE: a regional external passthrough load balancer (backend-service based).
-gateway:
-  serviceAnnotations:
-    cloud.google.com/l4-rbs: enabled
-secretStore:
-  provider: gcp

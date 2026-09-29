@@ -1,5 +1,8 @@
 # Catches the cluster's email, as docker compose does locally:
 #   kubectl -n boilerplate port-forward svc/mailpit 8025   →   http://localhost:8025
+# SMTP is implicit TLS with a login, what production settings require of SMTP_URL; the
+# certificate (Secret mailpit-tls) and the authority the services trust (local-ca) are
+# made by `bun run k8s:up`. Mailpit takes any login.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +24,11 @@ spec:
       containers:
         - name: mailpit
           image: docker.io/axllent/mailpit:v1.31.3
+          env:
+            - { name: MP_SMTP_TLS_CERT, value: /tls/tls.crt }
+            - { name: MP_SMTP_TLS_KEY, value: /tls/tls.key }
+            - { name: MP_SMTP_REQUIRE_TLS, value: "true" }
+            - { name: MP_SMTP_AUTH_ACCEPT_ANY, value: "true" }
           ports:
             - { name: smtp, containerPort: 1025 }
             - { name: http, containerPort: 8025 }
@@ -31,6 +39,12 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tls, mountPath: /tls, readOnly: true }
+      volumes:
+        - name: tls
+          secret:
+            secretName: mailpit-tls
 ---
 apiVersion: v1
 kind: Service

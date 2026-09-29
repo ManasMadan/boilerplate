@@ -10,69 +10,114 @@ database:
   secretPrefix: db-
   roles: [migrator, app_api, app_worker, app_notifications, app_webhooks, app_ai]
 
-# Where those Secrets come from:
-#   generate  External Secrets makes a random password per role, once (in-cluster
-#             Postgres with the External Secrets operator: previews, BYO clusters)
-#   extract   External Secrets copies them from the secret manager, where OpenTofu
-#             wrote them (managed Postgres)
-#   provided  they already exist (kind: `bun run k8s:up` creates them)
+# Every password and key of the data services (the database roles, Valkey, object
+# storage) is generated in the cluster the first time the release is installed, by a
+# Job that creates each Secret only if it doesn't exist yet. They never leave the
+# cluster, so they never need to be in git; everything else secret is (SOPS, see
+# deploy/README.md).
 credentials:
-  source: generate
-  storeRef:
-    kind: ClusterSecretStore
-    name: platform
-  # extract: the remote secret for a role is `<keyPrefix><role>` with dashes (app_api →
-  # boilerplate-production-app-api: every cloud's secret manager accepts those names),
-  # a JSON object with the four keys above.
-  keyPrefix: ""
+  image: docker.io/curlimages/curl:8.22.0
 
-# In-cluster Postgres with CloudNativePG. Off when the database is managed (RDS,
-# Cloud SQL, Azure Flexible Server): then only the credentials above are rendered.
+# Postgres with CloudNativePG.
 postgres:
-  enabled: true
   instances: 2
   # PostgreSQL 18 with pgvector.
   imageName: ghcr.io/cloudnative-pg/postgresql:18-standard-trixie
   storage:
     size: 20Gi
-    storageClass: ""
+    # k3s's default: a directory on the node. Replicas on other nodes are what keeps
+    # the data when one is lost, so run at least two instances on a multi-node cluster.
+    storageClass: local-path
   resources:
     requests: { cpu: 250m, memory: 512Mi }
     limits: { memory: 1Gi }
   parameters:
     max_connections: "200"
-  # Continuous backups (WAL archiving + base backups, point-in-time recovery) through
-  # the Barman Cloud plugin to object storage.
+  # Continuous backups with the Barman Cloud plugin: WAL archived as it's written and a
+  # base backup every day, to the backups object store below. Any point in time since
+  # the oldest backup kept can be restored (see restore).
   backups:
     enabled: false
-    # An ObjectStore resource (barmancloud.cnpg.io) the platform set up for this cluster;
-    # retention is configured there.
-    objectStore: ""
+    # Six fields, seconds first (CloudNativePG's cron format): 03:00 every day.
     schedule: "0 0 3 * * *"
+    # How long base backups and the WAL between them are kept.
+    retention: 30d
+    # The folder in the bucket this cluster archives to. Empty: the cluster's name. A
+    # cluster restored from a backup must archive somewhere new (CloudNativePG refuses to
+    # write over another cluster's WAL), so set it when you restore.
+    serverName: ""
+  # Bootstrap the cluster from the backups instead of an empty database: set enabled,
+  # serverName to the folder the backup is in (the old cluster's serverName) and a new
+  # backups.serverName, and optionally a point in time. Only for a new cluster: an
+  # existing one ignores its bootstrap. deploy/README.md has the whole procedure.
+  restore:
+    enabled: false
+    serverName: ""
+    # RFC 3339 (2026-09-30T08:15:00Z); empty restores to the end of the archived WAL.
+    targetTime: ""
 
-# Managed Postgres (postgres.enabled=false): after every install and upgrade a Job
-# creates the roles above, sets their passwords from their Secrets and grants them what
-# local development gets (infra/postgres/init). It connects with the database's admin
-# credentials, the `<secretPrefix>admin` Secret (key `url`), extracted from the secret
-# manager like the others. Safe to run any number of times.
-managedRoles:
-  image: docker.io/library/postgres:18-alpine
-
-# In-cluster Valkey (a single node: queues, sessions, rate limits, caches). Off for a
-# managed Valkey/Redis (ElastiCache, Memorystore, Azure Cache): then the `valkey`
-# Secret must hold its connection details (host, port, password, url).
+# Valkey (a single node: queues, sessions, rate limits, caches). Its connection details
+# are in the `secretName` Secret (host, port, password, url).
 valkey:
-  enabled: true
   image: docker.io/valkey/valkey:9.1.2-alpine
   secretName: valkey
   storage:
     size: 5Gi
-    storageClass: ""
+    storageClass: local-path
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 512Mi }
   # BullMQ needs every key kept: never evict, and persist to disk.
   maxmemory: 400mb
+
+# Object storage with RustFS (S3 API). Two separate servers: `uploads`, which the
+# browser reaches at `host` through the gateway (presigned URLs), and `backups`, which
+# only Postgres reaches. Separate servers with their own root keys, so the application's
+# keys can't touch the backups.
+storage:
+  image: docker.io/rustfs/rustfs:1.0.0
+  # Creates the buckets and sets their CORS rules after every install and upgrade.
+  buckets:
+    image: docker.io/amazon/aws-cli:2.37.5
+  region: us-east-1
+  uploads:
+    enabled: true
+    bucket: uploads
+    # The public host browsers upload to and download from (the stack's STORAGE_ORIGIN
+    # and presigned URLs), e.g. files.example.com: it must be one of the gateway's hosts.
+    host: ""
+    scheme: https
+    # Origins allowed to PUT and GET with presigned URLs (the site's).
+    corsOrigins: []
+    # The Secret the stack reads: bucket, region, endpoint (in-cluster), publicEndpoint,
+    # accessKeyId, secretAccessKey.
+    secretName: storage
+    storage:
+      size: 20Gi
+      storageClass: local-path
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { memory: 1Gi }
+  # On with postgres.backups. Pin it to another node with nodeSelector where there is
+  # one, so losing a node's disk doesn't take the database and its backups together.
+  backups:
+    bucket: backups
+    nodeSelector: {}
+    storage:
+      size: 50Gi
+      storageClass: local-path
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { memory: 1Gi }
+
+# The gateway the uploads host is routed through (as in the stack chart), and where its
+# proxies run, allowed through RustFS's network policy.
+gateway:
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+  namespaceSelector:
+    kubernetes.io/metadata.name: envoy-gateway-system
 
 # A pull-request preview: this release owns its namespace (so deleting the preview
 # deletes everything in it) with quotas that keep one preview from starving others.

@@ -1,7 +1,8 @@
 {{- /*
-Each service accepts connections only from the gateway (if it has routes) and from
-the services of this release listed in its `allowFrom`. Outbound traffic is open:
-services call providers (email, SMS, Stripe, customers' webhooks) on the internet.
+Each service accepts connections only from the gateway (if it has routes), from the
+services of this release listed in its `allowFrom`, and from the namespaces in its
+`allowFromNamespaces`. Outbound traffic is open: services call providers (SMS, push,
+Stripe, customers' webhooks) on the internet, and the mail server.
 */}}
 {{- range $name := keys .Values.services | sortAlpha }}
 {{- $svc := include "stack.service" (list $ $name) | fromYaml }}
@@ -24,6 +25,14 @@ spec:
         - namespaceSelector:
             matchLabels:
               {{- toYaml $.Values.gateway.namespaceSelector | nindent 14 }}
+      ports:
+        - port: {{ $svc.port }}
+    {{- end }}
+    {{- range $namespace := $svc.allowFromNamespaces }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $namespace }}
       ports:
         - port: {{ $svc.port }}
     {{- end }}

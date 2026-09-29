@@ -46,14 +46,24 @@ it (the files migration's policies), and what processing it gets (the files proc
 ### Storage
 
 Everything goes through the `Storage` interface (`packages/nest-common/src/storage.ts`).
-`S3Storage` speaks the S3 API: AWS S3, Cloudflare R2 (what `infra/tofu` provisions), GCS
-with HMAC keys, RustFS locally, Azure through an S3 gateway. A provider without an S3 API
-gets its own `Storage` implementation; callers don't change. Virus scanning is behind
-`FileScanner` (`apps/worker/src/files/file-scanner.ts`), clamd today.
+`S3Storage` speaks the S3 API; the server is RustFS everywhere, locally (docker compose)
+and in every cluster (`deploy/charts/data`). A provider without an S3 API gets its own
+`Storage` implementation; callers don't change. Virus scanning is behind `FileScanner`
+(`apps/worker/src/files/file-scanner.ts`), clamd today.
 
 Browsers upload to the bucket directly, so it needs CORS for the site's origin (locally
-set by the `s3-init` container, in production by OpenTofu), and the web app's CSP must
-allow `STORAGE_ORIGIN`.
+set by the `s3-init` container, in a cluster by the data chart's bucket Job), and the web
+app's CSP must allow `STORAGE_ORIGIN`.
+
+In a cluster, the uploads bucket is on a RustFS server of its own, reached by browsers
+at a host of its own (`storage.uploads.host` in the environment's `data.yaml`, e.g.
+`files.example.com`) through the gateway and Cloudflare. A separate host rather than a
+path of the site, so an uploaded file can never run in the site's origin. The data chart
+generates its keys into the `storage` Secret, and the stack gives each service what it
+needs of it: the api signs URLs for the public host, the worker reads and writes
+in-cluster, the web app gets `STORAGE_ORIGIN`. Database backups are on a separate RustFS
+server the application has no keys to. Environments without ClamAV (kind, previews)
+leave files off.
 
 ### Locally
 

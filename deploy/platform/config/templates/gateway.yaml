@@ -14,7 +14,10 @@ spec:
     type: Kubernetes
     kubernetes:
       envoyService:
-        externalTrafficPolicy: Local
+        # Every node forwards to the proxies wherever they run: Cloudflare may send a
+        # request to any node's address. Clients' addresses come from X-Forwarded-For
+        # (below), not from the connection.
+        externalTrafficPolicy: Cluster
         {{- with .Values.gateway.serviceAnnotations }}
         annotations:
           {{- toYaml . | nindent 10 }}

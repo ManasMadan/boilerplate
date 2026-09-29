@@ -6,16 +6,16 @@ metadata:
   name: platform
   namespace: argocd
 spec:
-  description: Cluster add-ons and their settings (operators, CRDs, the gateway).
+  description: Cluster add-ons and their settings (operators, CRDs, the gateway, mail, observability).
   sourceRepos:
     - https://github.com/ManasMadan/boilerplate.git
     - https://charts.jetstack.io
     - registry-1.docker.io/envoyproxy
-    - https://charts.external-secrets.io
     - https://kubernetes-sigs.github.io/external-dns/
     - https://kedacore.github.io/charts
     - https://cloudnative-pg.github.io/charts
     - https://kyverno.github.io/kyverno/
+    - https://prometheus-community.github.io/helm-charts
   destinations:
     - server: "*"
       namespace: "*"

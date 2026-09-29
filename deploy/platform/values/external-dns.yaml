@@ -1,6 +1,8 @@
-# Records for every HTTPRoute's host, in the Cloudflare zone (proxied: Cloudflare's WAF
-# and CDN sit in front of the gateway). The cluster's own domain and owner id are set
-# per cluster by the platform ApplicationSet.
+# Records, proxied (Cloudflare's WAF and CDN sit in front of the gateway), for the
+# HTTPRoutes annotated boilerplate.dev/external-dns: "true" only: the files host. The
+# site, the preview wildcard and the mail records are OpenTofu's (modules/cloudflare),
+# and external-dns leaves records it doesn't own alone. The cluster's own domain and
+# owner id are set per cluster by the platform ApplicationSet.
 provider:
   name: cloudflare
 sources:
@@ -13,5 +15,6 @@ env:
         name: cloudflare-api-token
         key: token
 extraArgs:
+  - --annotation-filter=boilerplate.dev/external-dns=true
   - --cloudflare-proxied
   - --cloudflare-dns-records-per-page=5000

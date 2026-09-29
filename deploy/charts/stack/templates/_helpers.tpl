@@ -86,15 +86,29 @@ A service's settings: `defaults` with the service's own values merged over them
 {{- end -}}
 
 {{/*
-A service's environment: shared settings, its own, its database and Valkey URLs, and its
-Secret. Deployments and the jobs that run a service's image (re-encryption) share it, so
-a job always sees what the service sees.
+A service's environment: shared settings, its own, where to send telemetry, its
+database, Valkey and object storage details, and its Secret. Deployments and the jobs
+that run a service's image (re-encryption) share it, so a job always sees what the
+service sees.
 */}}
 {{- define "stack.containerEnv" -}}
 {{- $root := index . 0 -}}
 {{- $name := index . 1 -}}
 {{- $svc := index . 2 -}}
-{{- $env := mergeOverwrite (deepCopy $root.Values.env) ($svc.env | default dict) -}}
+{{- $telemetry := dict -}}
+{{- with $root.Values.observability -}}
+{{- if .enabled -}}
+{{- $telemetry = dict "OTEL_EXPORTER_OTLP_ENDPOINT" .otlpEndpoint "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT" .metricsEndpoint -}}
+{{- end -}}
+{{- end -}}
+{{- /* Explicit settings win over the observability defaults. */ -}}
+{{- $env := mergeOverwrite $telemetry (deepCopy $root.Values.env) ($svc.env | default dict) -}}
+{{- if $svc.caBundle -}}
+{{- /* Trusted besides the public CAs (the Deployment mounts it). */ -}}
+{{- $_ := set $env "NODE_EXTRA_CA_CERTS" "/etc/ssl/extra/ca.crt" -}}
+{{- end -}}
+{{- $storage := $svc.storage | default "none" -}}
+{{- $storageSecret := $root.Values.storage.secretName -}}
 {{- $secret := include "stack.secretName" (list $root $name $svc) -}}
 env:
   - name: RELEASE
@@ -127,6 +141,31 @@ env:
       secretKeyRef:
         name: {{ $root.Values.redis.secretName }}
         key: url
+  {{- end }}
+  {{- if eq $storage "origin" }}
+  - name: STORAGE_ORIGIN
+    valueFrom:
+      secretKeyRef:
+        name: {{ $storageSecret }}
+        key: publicEndpoint
+  {{- else if ne $storage "none" }}
+  {{- /* Presigned URLs go to browsers, so they're signed for the public endpoint. */}}
+  {{- $keys := dict
+    "S3_BUCKET" "bucket"
+    "S3_REGION" "region"
+    "S3_ENDPOINT" (ternary "publicEndpoint" "endpoint" (eq $storage "presign"))
+    "S3_ACCESS_KEY_ID" "accessKeyId"
+    "S3_SECRET_ACCESS_KEY" "secretAccessKey" }}
+  {{- range $var := keys $keys | sortAlpha }}
+  - name: {{ $var }}
+    valueFrom:
+      secretKeyRef:
+        name: {{ $storageSecret }}
+        key: {{ index $keys $var }}
+  {{- end }}
+  # RustFS serves buckets by path, not as subdomains.
+  - name: S3_FORCE_PATH_STYLE
+    value: "true"
   {{- end }}
 {{- if $secret }}
 envFrom:

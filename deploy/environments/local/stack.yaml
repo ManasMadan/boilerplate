@@ -27,19 +27,23 @@ services:
     autoscaling: { enabled: false }
   api:
     autoscaling: { enabled: false }
+    # No ClamAV locally, so no file uploads (the data chart's RustFS still runs).
+    storage: none
     env:
       # Local stand-ins, as in development.
       MINIMUM_CLIENT_VERSION: "0.0.0"
   worker:
     keda: { enabled: false }
+    storage: none
     env:
-      # No ClamAV locally (uploads are off without an S3 bucket).
       FILE_SCANNER: none
   notifications:
     keda: { enabled: false }
+    # Mailpit (deploy/local/mailpit.yaml) over TLS, with a certificate from the kind
+    # cluster's own authority; SMTP_URL is in the Secret `bun run k8s:up` creates.
+    caBundle: local-ca
     env:
-      # deploy/local/mailpit.yaml
-      SMTP_URL: smtp://mailpit:1025
+      EMAIL_FROM: Boilerplate <no-reply@boilerplate.localhost>
   webhooks:
     keda: { enabled: false }
   ai-worker:

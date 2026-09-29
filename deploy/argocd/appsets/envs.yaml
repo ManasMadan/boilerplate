@@ -1,8 +1,11 @@
 # Staging and production: the data and stack releases on each cluster labelled
 # boilerplate.dev/environment=staging|production, with that environment's values
 # (deploy/environments/<env>/). Data syncs first, so the stack's migration finds the
-# database up. Staging's image tag is committed by CI on every merge to master;
-# production's only changes through a promotion pull request.
+# database up. The stack also gets the environment's Secrets, decrypted from
+# deploy/environments/<env>/secrets/ by Argo CD's sops plugin, and exports telemetry to
+# the cluster's Jaeger and Prometheus when it has the boilerplate.dev/observability
+# label. Staging's image tag is committed by CI on every merge to master; production's
+# only changes through a promotion pull request.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -46,14 +49,6 @@ spec:
         - resources-finalizer.argocd.argoproj.io
     spec:
       project: apps
-      source:
-        repoURL: https://github.com/ManasMadan/boilerplate.git
-        targetRevision: HEAD
-        path: deploy/charts/{{ .chart }}
-        helm:
-          releaseName: boilerplate
-          valueFiles:
-            - ../../environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/{{ .chart }}.yaml
       destination:
         server: "{{ .server }}"
         namespace: boilerplate
@@ -67,3 +62,26 @@ spec:
           labels:
             pod-security.kubernetes.io/enforce: restricted
             pod-security.kubernetes.io/enforce-version: latest
+  templatePatch: |
+    {{- $env := index .metadata.labels "boilerplate.dev/environment" }}
+    spec:
+      sources:
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: HEAD
+          path: deploy/charts/{{ .chart }}
+          helm:
+            releaseName: boilerplate
+            valueFiles:
+              - ../../environments/{{ $env }}/{{ .chart }}.yaml
+            {{- if eq .chart "stack" }}
+            parameters:
+              - name: observability.enabled
+                value: {{ eq (index .metadata.labels "boilerplate.dev/observability" | default "") "true" | quote }}
+            {{- end }}
+        {{- if eq .chart "stack" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: HEAD
+          path: deploy/environments/{{ $env }}/secrets
+          plugin:
+            name: sops
+        {{- end }}

@@ -1,8 +1,18 @@
-# Production uses managed Postgres and Valkey (provisioned by OpenTofu).
-credentials:
-  source: extract
-  keyPrefix: boilerplate-production-
+# Production: two Postgres instances, continuous backups kept 30 days.
 postgres:
-  enabled: false
-valkey:
-  enabled: false
+  instances: 2
+  storage: { size: 50Gi }
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { memory: 2Gi }
+  backups:
+    enabled: true
+    retention: 30d
+storage:
+  uploads:
+    # Your production hosts: one of the gateway's (<domain> or *.<domain>).
+    host: files.example.com
+    corsOrigins: [https://app.example.com]
+    storage: { size: 100Gi }
+  backups:
+    storage: { size: 200Gi }

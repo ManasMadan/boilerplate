@@ -29,7 +29,7 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: RELEASE, value: sha-abc123 }
 
-  - it: gives each service its database role, Valkey and its own secrets
+  - it: gives each service its database role and Valkey
     documentSelector: { path: metadata.name, value: demo-worker }
     asserts:
       - contains:
@@ -47,9 +47,13 @@ tests:
           content:
             name: REDIS_URL
             valueFrom: { secretKeyRef: { name: valkey, key: url } }
+
+  - it: loads a service's own Secret, and none for services without secrets
+    documentSelector: { path: metadata.name, value: demo-notifications }
+    asserts:
       - equal:
           path: "spec.template.spec.containers[0].envFrom"
-          value: [{ secretRef: { name: demo-worker } }]
+          value: [{ secretRef: { name: demo-notifications } }]
 
   - it: points services at each other and the public site
     documentSelector: { path: metadata.name, value: demo-api }
@@ -62,11 +66,100 @@ tests:
           content: { name: BETTER_AUTH_URL, value: "https://app.example.com" }
 
   - it: leaves variables with an empty value unset
-    documentSelector: { path: metadata.name, value: demo-web }
+    set:
+      env.SENTRY_DSN: ""
+    documentSelector: { path: metadata.name, value: demo-api }
     asserts:
       - notContains:
           path: "spec.template.spec.containers[0].env"
-          content: { name: STORAGE_ORIGIN, value: "" }
+          content: { name: SENTRY_DSN, value: "" }
+
+  - it: signs uploads for the public files host in the api
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_ENDPOINT
+            valueFrom: { secretKeyRef: { name: storage, key: publicEndpoint } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_SECRET_ACCESS_KEY
+            valueFrom: { secretKeyRef: { name: storage, key: secretAccessKey } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: S3_FORCE_PATH_STYLE, value: "true" }
+
+  - it: reads and writes objects in-cluster from the worker
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_ENDPOINT
+            valueFrom: { secretKeyRef: { name: storage, key: endpoint } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_BUCKET
+            valueFrom: { secretKeyRef: { name: storage, key: bucket } }
+
+  - it: gives the web app only the files origin, for its content security policy
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: STORAGE_ORIGIN
+            valueFrom: { secretKeyRef: { name: storage, key: publicEndpoint } }
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_BUCKET
+            valueFrom: { secretKeyRef: { name: storage, key: bucket } }
+
+  - it: turns files off in a service without storage
+    set:
+      services.api.storage: none
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_BUCKET
+            valueFrom: { secretKeyRef: { name: storage, key: bucket } }
+
+  - it: exports nothing without observability
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger.observability.svc.cluster.local:4318" }
+
+  - it: sends traces to Jaeger and metrics to Prometheus with observability on
+    set:
+      observability.enabled: true
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger.observability.svc.cluster.local:4318" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+            value: "http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp/v1/metrics"
+
+  - it: lets an environment's own collector override the observability endpoints
+    set:
+      observability.enabled: true
+      env.OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://collector:4318" }
 
   - it: shares the AI service's secrets with its worker, which runs the same image
     documentSelector: { path: metadata.name, value: demo-ai-worker }
@@ -129,3 +222,23 @@ tests:
       image.tag: ""
     asserts:
       - failedTemplate: { errorMessage: image.tag is required }
+
+  - it: trusts a private certificate authority when a service has one
+    set:
+      services.notifications.caBundle: local-ca
+    documentSelector: { path: metadata.name, value: demo-notifications }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: NODE_EXTRA_CA_CERTS, value: /etc/ssl/extra/ca.crt }
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: ca-bundle, mountPath: /etc/ssl/extra, readOnly: true }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: ca-bundle, secret: { secretName: local-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+
+  - it: loads no Secret into services with nothing secret
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - notExists: { path: "spec.template.spec.containers[0].envFrom" }

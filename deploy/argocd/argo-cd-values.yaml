@@ -1,0 +1,64 @@
+# Values for the Argo CD Helm chart (argo-helm's argo-cd), which OpenTofu's bootstrap
+# installs Argo CD with. Not a manifest: root.yaml leaves this file out.
+#
+# Secrets are committed to this repository encrypted with SOPS (age). Argo CD decrypts
+# them with the `sops` config management plugin below: Applications whose source says
+# `plugin: { name: sops }` get every *.sops.yaml file of their path, decrypted. It runs
+# in a sidecar of the repo server, the only container that can read the cluster's age
+# key: the Secret `sops-age` in this namespace, key `keys.txt` (one or more
+# AGE-SECRET-KEY-... lines; the bootstrap creates it).
+configs:
+  cmp:
+    create: true
+    plugins:
+      sops:
+        generate:
+          command: [sh, -c]
+          args:
+            - |
+              set -eu
+              for file in *.sops.yaml; do
+                [ -e "$file" ] || continue
+                printf -- '---\n'
+                sops --decrypt "$file"
+              done
+
+repoServer:
+  extraContainers:
+    - name: sops
+      image: quay.io/getsops/sops:v3.13.3-alpine
+      # The plugin server Argo CD copies into var-files; it runs the command above.
+      command: [/var/run/argocd/argocd-cmp-server]
+      env:
+        - name: SOPS_AGE_KEY_FILE
+          value: /sops/keys.txt
+      securityContext:
+        runAsNonRoot: true
+        # Argo CD's user, as in the repo server.
+        runAsUser: 999
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests: { cpu: 10m, memory: 64Mi }
+        limits: { memory: 256Mi }
+      volumeMounts:
+        - { name: var-files, mountPath: /var/run/argocd }
+        - { name: plugins, mountPath: /home/argocd/cmp-server/plugins }
+        - { name: argocd-cmp-cm, mountPath: /home/argocd/cmp-server/config/plugin.yaml, subPath: sops.yaml }
+        - { name: sops-tmp, mountPath: /tmp }
+        - { name: sops-age, mountPath: /sops, readOnly: true }
+  volumes:
+    - name: argocd-cmp-cm
+      configMap:
+        name: argocd-cmp-cm
+    - name: sops-tmp
+      emptyDir: {}
+    - name: sops-age
+      secret:
+        secretName: sops-age
+        items:
+          - { key: keys.txt, path: keys.txt }

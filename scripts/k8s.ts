@@ -10,26 +10,30 @@
  * Then open http://boilerplate.localhost (email: `kubectl -n boilerplate port-forward
  * svc/mailpit 8025`, then http://localhost:8025).
  *
- * What differs from a cloud: no Argo CD, External Secrets, cert-manager or KEDA (the
- * Secrets are created here, once, from generated values; see
- * deploy/environments/local). Needs Docker with at least 8 GB of memory: the image
- * builds and the cluster together need it, and running out makes Docker kill other
- * containers too.
+ * What differs from a cluster: no Argo CD, cert-manager, KEDA or mail server. The data
+ * chart generates its own credentials as everywhere; the services' Secrets, which
+ * clusters decrypt from SOPS files, are created here once from generated values, in
+ * plain text straight into the cluster (never on disk). Email goes to Mailpit over TLS
+ * with a certificate authority made here too, since production settings refuse
+ * anything else. Needs Docker with at least 8 GB of memory: the image builds and the
+ * cluster together need it, and running out makes Docker kill other containers too.
  */
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fail, ok, ROOT } from "./lib";
 
 const CLUSTER = "boilerplate";
 const NAMESPACE = "boilerplate";
 const HOST = "boilerplate.localhost";
+/** The uploads bucket's public host (deploy/environments/local/data.yaml). */
+const FILES_HOST = "files.boilerplate.localhost";
 const STACK = "boilerplate";
 const DATA = "boilerplate-data";
 const IMAGES = ["api", "worker", "notifications", "webhooks", "web", "ai", "migrate"];
-const ROLES = ["migrator", "app_api", "app_worker", "app_notifications", "app_webhooks", "app_ai"];
 const MIN_DOCKER_MEMORY_GB = 8;
 const BUILDER = "boilerplate";
 const BUILD_MEMORY = "4g";
@@ -82,6 +86,7 @@ function preflight() {
     kind: ["version"],
     helm: ["version", "--short"],
     kubectl: ["version", "--client"],
+    openssl: ["version"],
   };
   for (const [tool, args] of Object.entries(versionArgs)) {
     if (!run(tool, args, { quiet: true }).ok) {
@@ -101,86 +106,127 @@ function preflight() {
   ok(`Docker has ${memoryGb.toFixed(1)} GB of memory`);
 }
 
+/**
+ * Mailpit's certificate, from a certificate authority of this cluster's own: the
+ * notifications service trusts it (`caBundle` in deploy/environments/local/stack.yaml)
+ * and checks the certificate, as production requires. Made once; the CA's key is thrown
+ * away, so nothing else can be signed with it.
+ */
+function mailpitCertificate() {
+  if (kubectl(["-n", NAMESPACE, "get", "secret", "mailpit-tls"]).ok) {
+    ok("Mailpit's certificate (exists)");
+    return;
+  }
+  const dir = mkdtempSync(join(tmpdir(), "boilerplate-kind-"));
+  const at = (file: string) => join(dir, file);
+  const openssl = (command: string) => {
+    const result = spawnSync("openssl", command.split(" "), { cwd: dir, encoding: "utf8" });
+    if (result.status !== 0) throw new Error(result.stderr);
+  };
+  let problem = "";
+  try {
+    writeFileSync(at("ext"), "subjectAltName=DNS:mailpit\nextendedKeyUsage=serverAuth\n");
+    openssl(
+      "req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=boilerplate-kind-ca " +
+        "-addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign " +
+        "-keyout ca.key -out ca.crt",
+    );
+    openssl("req -newkey rsa:2048 -nodes -subj /CN=mailpit -keyout tls.key -out tls.csr");
+    openssl(
+      "x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 3650 " +
+        "-extfile ext -out tls.crt",
+    );
+    const manifest = (name: string, stringData: Record<string, string>, type = "Opaque") => ({
+      apiVersion: "v1",
+      kind: "Secret",
+      metadata: { name, namespace: NAMESPACE },
+      type,
+      stringData,
+    });
+    const read = (file: string) => readFileSync(at(file), "utf8");
+    const items = [
+      manifest("local-ca", { "ca.crt": read("ca.crt") }),
+      manifest(
+        "mailpit-tls",
+        { "tls.crt": read("tls.crt"), "tls.key": read("tls.key") },
+        "kubernetes.io/tls",
+      ),
+    ];
+    const result = kubectl(
+      ["apply", "-f", "-"],
+      JSON.stringify({ apiVersion: "v1", kind: "List", items }),
+    );
+    if (!result.ok) problem = result.stderr;
+  } catch (error) {
+    problem = (error as Error).message;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  if (problem) {
+    fail("Mailpit's certificate");
+    console.error(problem);
+    process.exit(1);
+  }
+  ok("Mailpit's certificate");
+}
+
 const secret = (bytes = 32) => randomBytes(bytes).toString("base64url");
 
-/** The Secrets the charts read, created once and kept across `k8s:up` runs. */
+/**
+ * The services' Secrets (`<release>-<service>`), created once and kept across `k8s:up`
+ * runs. Clusters decrypt theirs from deploy/environments/<env>/secrets/; these are
+ * generated, and never leave the cluster. The data chart makes the database, Valkey and
+ * storage credentials itself.
+ */
 function secrets() {
-  const exists = (name: string) => kubectl(["-n", NAMESPACE, "get", "secret", name]).ok;
-  const manifests: object[] = [];
-  const add = (name: string, data: Record<string, string>, type = "Opaque") => {
-    if (!exists(name)) {
-      manifests.push({
-        apiVersion: "v1",
-        kind: "Secret",
-        metadata: { name, namespace: NAMESPACE },
-        type,
-        stringData: data,
-      });
-    }
-  };
-  const postgres = `${DATA}-postgres-rw.${NAMESPACE}.svc.cluster.local`;
-  for (const role of ROLES) {
-    const password = randomBytes(24).toString("hex");
-    const url = `postgresql://${role}:${password}@${postgres}:5432/app`;
-    add(
-      `db-${role.replaceAll("_", "-")}`,
-      { username: role, password, url, directUrl: url },
-      "kubernetes.io/basic-auth",
-    );
+  if (kubectl(["-n", NAMESPACE, "get", "secret", `${STACK}-api`]).ok) {
+    ok("secrets (exist)");
+    return;
   }
-  const valkeyPassword = randomBytes(24).toString("hex");
-  const valkeyHost = `${DATA}-valkey.${NAMESPACE}.svc.cluster.local`;
-  add("valkey", {
-    host: valkeyHost,
-    port: "6379",
-    password: valkeyPassword,
-    url: `redis://:${valkeyPassword}@${valkeyHost}:6379`,
-  });
   const encryptionKeys = `k1:${randomBytes(32).toString("base64")}`;
   const unsubscribe = secret();
   const aiService = secret();
+  // Mailpit takes any login; production settings still want one.
+  const smtpUrl = `smtps://no-reply%40${HOST}:${secret(16)}@mailpit:1025`;
+  // Generated together: shared values (encryption keys, service secret) must match.
   const services: Record<string, Record<string, string>> = {
-    web: {},
     api: {
       BETTER_AUTH_SECRET: secret(),
       ENCRYPTION_KEYS: encryptionKeys,
       UNSUBSCRIBE_SECRET: unsubscribe,
       AI_SERVICE_SECRET: aiService,
     },
-    worker: {},
-    notifications: { UNSUBSCRIBE_SECRET: unsubscribe },
+    notifications: { UNSUBSCRIBE_SECRET: unsubscribe, SMTP_URL: smtpUrl },
     webhooks: { ENCRYPTION_KEYS: encryptionKeys },
     ai: { AI_SERVICE_SECRET: aiService },
   };
-  // Generated together: shared values (encryption keys, service secret) must match.
-  if (!exists(`${STACK}-api`)) {
-    for (const [service, data] of Object.entries(services)) add(`${STACK}-${service}`, data);
+  const items = Object.entries(services).map(([service, stringData]) => ({
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: { name: `${STACK}-${service}`, namespace: NAMESPACE },
+    type: "Opaque",
+    stringData,
+  }));
+  const result = kubectl(
+    ["apply", "-f", "-"],
+    JSON.stringify({ apiVersion: "v1", kind: "List", items }),
+  );
+  if (!result.ok) {
+    fail("secrets");
+    console.error(result.stderr);
+    process.exit(1);
   }
-  if (manifests.length > 0) {
-    const result = kubectl(
-      ["apply", "-f", "-"],
-      JSON.stringify({ apiVersion: "v1", kind: "List", items: manifests }),
-    );
-    if (!result.ok) {
-      fail("secrets");
-      console.error(result.stderr);
-      process.exit(1);
-    }
-  }
-  ok(`secrets (${manifests.length} created, the rest kept)`);
+  ok(`secrets (${items.length} created)`);
 }
 
-/** A request through the gateway on port 80, with the site's host name. */
-function get(path: string) {
+/** A request through the gateway on port 80, with the site's host name (or another). */
+function get(path: string, host = HOST) {
   return new Promise<{ status: number; headers: Record<string, string | string[] | undefined> }>(
     (resolve, reject) => {
-      const req = request(
-        { host: "127.0.0.1", port: 80, path, headers: { host: HOST } },
-        (response) => {
-          response.resume();
-          resolve({ status: response.statusCode ?? 0, headers: response.headers });
-        },
-      );
+      const req = request({ host: "127.0.0.1", port: 80, path, headers: { host } }, (response) => {
+        response.resume();
+        resolve({ status: response.statusCode ?? 0, headers: response.headers });
+      });
       req.on("error", reject);
       req.setTimeout(10_000, () => req.destroy(new Error("timed out")));
       req.end();
@@ -208,6 +254,14 @@ async function smoke() {
     ],
   ];
   let passed = true;
+  // The uploads bucket's public host reaches RustFS, which answers its health check.
+  const files = await get("/health", FILES_HOST).catch(() => ({ status: 0 }));
+  if (files.status === 200) {
+    ok(`files: ${FILES_HOST}/health → ${files.status}`);
+  } else {
+    passed = false;
+    fail(`files: ${FILES_HOST}/health → ${files.status}`);
+  }
   for (const [label, path, expect] of checks) {
     const result = await get(path).catch((error: Error) => ({ status: 0, headers: {}, error }));
     if (expect(result)) {
@@ -295,6 +349,8 @@ async function up() {
   ]);
   kubectl(["create", "namespace", "gateway-system"]);
   kubectl(["create", "namespace", NAMESPACE]);
+  mailpitCertificate();
+  secrets();
   step("gateway", "kubectl", [
     "--context",
     `kind-${CLUSTER}`,
@@ -346,8 +402,7 @@ async function up() {
     ...IMAGES.map((image) => `boilerplate/${image}:dev`),
   ]);
 
-  secrets();
-  step("data (Postgres, Valkey)", "helm", [
+  step("data (Postgres, Valkey, RustFS; credentials generated)", "helm", [
     "upgrade",
     "--install",
     DATA,

@@ -1,6 +1,0 @@
-# AKS: the standard public load balancer, health-checked on Envoy's readiness endpoint.
-gateway:
-  serviceAnnotations:
-    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /ready
-secretStore:
-  provider: azure

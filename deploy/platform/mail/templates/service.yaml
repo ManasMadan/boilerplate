@@ -1,0 +1,30 @@
+{{- /*
+The mail ports. With externalTrafficPolicy Local, ServiceLB forwards only on the node the
+server runs on (the mail node, where DNS points) and keeps the client's address. Its
+forwarding pods get the mail node's toleration, or they couldn't run there.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mail.name" . }}
+  labels:
+    {{- include "mail.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.tolerations }}
+    svccontroller.k3s.cattle.io/tolerations: {{ toJson . | quote }}
+    {{- end }}
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if eq .Values.service.type "LoadBalancer" }}
+  externalTrafficPolicy: Local
+  {{- end }}
+  selector:
+    {{- include "mail.selectorLabels" . | nindent 4 }}
+  ports:
+    - { name: smtp, port: 25, targetPort: smtp }
+    - { name: submissions, port: 465, targetPort: submissions }
+    - { name: submission, port: 587, targetPort: submission }
+    - { name: imaps, port: 993, targetPort: imaps }

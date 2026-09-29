@@ -12,27 +12,7 @@ spec:
       name: letsencrypt-account
     solvers:
       - dns01:
-          {{- if eq $tls.dns01 "cloudflare" }}
           cloudflare:
             apiTokenSecretRef:
-              name: {{ $tls.cloudflare.tokenSecret }}
+              name: {{ $tls.cloudflareTokenSecret }}
               key: token
-          {{- else if eq $tls.dns01 "route53" }}
-          # Credentials from cert-manager's workload identity.
-          route53:
-            region: {{ required "tls.route53.region is required" $tls.route53.region }}
-            hostedZoneID: {{ required "tls.route53.hostedZoneID is required" $tls.route53.hostedZoneID }}
-          {{- else if eq $tls.dns01 "clouddns" }}
-          cloudDNS:
-            project: {{ required "tls.clouddns.project is required" $tls.clouddns.project }}
-          {{- else if eq $tls.dns01 "azuredns" }}
-          azureDNS:
-            subscriptionID: {{ required "tls.azuredns.subscriptionID is required" $tls.azuredns.subscriptionID }}
-            resourceGroupName: {{ required "tls.azuredns.resourceGroupName is required" $tls.azuredns.resourceGroupName }}
-            hostedZoneName: {{ required "tls.azuredns.hostedZoneName is required" $tls.azuredns.hostedZoneName }}
-            environment: AzurePublicCloud
-            managedIdentity:
-              clientID: {{ required "tls.azuredns.clientID is required" $tls.azuredns.clientID }}
-          {{- else }}
-          {{- fail (printf "tls.dns01 %q isn't supported (cloudflare, route53, clouddns, azuredns)" $tls.dns01) }}
-          {{- end }}

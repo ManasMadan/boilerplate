@@ -57,7 +57,19 @@ spec:
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
+                {{- with $svc.caBundle }}
+                - name: ca-bundle
+                  mountPath: /etc/ssl/extra
+                  readOnly: true
+                {{- end }}
           volumes:
             - name: tmp
               emptyDir: {}
+            {{- with $svc.caBundle }}
+            - name: ca-bundle
+              secret:
+                secretName: {{ . }}
+                items:
+                  - { key: ca.crt, path: ca.crt }
+            {{- end }}
 {{- end }}

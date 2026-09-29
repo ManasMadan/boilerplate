@@ -1,10 +1,15 @@
-# Every add-on in deploy/platform/addons on every managed cluster. A cluster is managed
-# when its Argo CD Secret (written by OpenTofu) has the label boilerplate.dev/managed;
-# its annotations (boilerplate.dev/cloud, /domain, …) configure the add-ons.
+# Every add-on in deploy/platform/addons on every cluster Argo CD manages for an
+# environment (its Argo CD Secret, written by OpenTofu, has the label
+# boilerplate.dev/environment). The Secret's labels and annotations configure them.
 #
-# Values per add-on: deploy/platform/values/<addon>.yaml, then <addon>.<cloud>.yaml
-# when it exists. `clusterParameters` in an add-on's file sets chart values from the
-# cluster: "name" is the cluster's name, anything else its boilerplate.dev/<key>
+# An add-on file is one of:
+#   repoURL + chart + version   a chart from a Helm repository or OCI registry, with our
+#                               values from deploy/platform/values/<addon>.yaml;
+#   path                        a chart in this repository;
+#   secretsPath                 SOPS-encrypted manifests in <secretsPath>/<environment>/,
+#                               decrypted by Argo CD's sops plugin (argo-cd-values.yaml).
+# `clusterParameters` sets chart values from the cluster: "name" is the cluster's name,
+# "label:<key>" its boilerplate.dev/<key> label, anything else its boilerplate.dev/<key>
 # annotation.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -19,8 +24,9 @@ spec:
         generators:
           - clusters:
               selector:
-                matchLabels:
-                  boilerplate.dev/managed: "true"
+                matchExpressions:
+                  - key: boilerplate.dev/environment
+                    operator: Exists
           - git:
               repoURL: https://github.com/ManasMadan/boilerplate.git
               revision: HEAD
@@ -53,39 +59,49 @@ spec:
             factor: 2
             maxDuration: 5m
   templatePatch: |
-    {{- $cloud := index .metadata.annotations "boilerplate.dev/cloud" }}
     {{- $cluster := . }}
     spec:
       sources:
+        {{- if hasKey . "secretsPath" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: HEAD
+          path: {{ .secretsPath }}/{{ index .metadata.labels "boilerplate.dev/environment" }}
+          plugin:
+            name: sops
+        {{- else }}
         {{- if hasKey . "path" }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
           targetRevision: HEAD
           path: {{ .path }}
           helm:
             releaseName: {{ .addon }}
-            ignoreMissingValueFiles: true
-            valueFiles:
-              - values-{{ $cloud }}.yaml
         {{- else }}
         - repoURL: {{ .repoURL }}
           chart: {{ .chart }}
           targetRevision: {{ .version }}
           helm:
             releaseName: {{ .addon }}
-            ignoreMissingValueFiles: true
             valueFiles:
               - $repo/deploy/platform/values/{{ .addon }}.yaml
-              - $repo/deploy/platform/values/{{ .addon }}.{{ $cloud }}.yaml
         {{- end }}
             {{- if hasKey . "clusterParameters" }}
             parameters:
               {{- range $key, $field := .clusterParameters }}
+              {{- $value := "" }}
+              {{- if eq $field "name" }}
+              {{- $value = $cluster.name }}
+              {{- else if hasPrefix "label:" $field }}
+              {{- $value = index $cluster.metadata.labels (printf "boilerplate.dev/%s" (trimPrefix "label:" $field)) | default "" }}
+              {{- else }}
+              {{- $value = index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" }}
+              {{- end }}
               - name: {{ $key | quote }}
-                value: {{ if eq $field "name" }}{{ $cluster.name | quote }}{{ else }}{{ index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" | quote }}{{ end }}
+                value: {{ $value | quote }}
               {{- end }}
             {{- end }}
         {{- if not (hasKey . "path") }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
           targetRevision: HEAD
           ref: repo
+        {{- end }}
         {{- end }}

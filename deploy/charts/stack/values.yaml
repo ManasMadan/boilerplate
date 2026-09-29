@@ -38,12 +38,19 @@ env:
   LOG_LEVEL: info
   # Who may set X-Forwarded-For: the gateway, which reaches pods from private addresses.
   TRUSTED_PROXIES: uniquelocal
-  # Traces and metrics: set OTEL_EXPORTER_OTLP_ENDPOINT here (an environment's values, e.g.
-  # http://otel-collector.observability:4318) to turn them on for every service.
 
-# Connection URLs, one Secret per database role with keys `url` (through the pooler,
-# when there is one) and `directUrl` (straight to the primary). The data chart writes
-# them for in-cluster Postgres; with a managed database, External Secrets does.
+# Traces and metrics, to the cluster's Jaeger and Prometheus (the observability
+# add-ons). The envs and previews ApplicationSets turn it on for clusters labelled
+# boilerplate.dev/observability. Off, the services export nothing.
+observability:
+  enabled: false
+  # OTLP over HTTP: traces (and anything without its own endpoint) to Jaeger...
+  otlpEndpoint: http://jaeger.observability.svc.cluster.local:4318
+  # ...and metrics to Prometheus's OTLP receiver, a full URL.
+  metricsEndpoint: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp/v1/metrics
+
+# Connection URLs, one Secret per database role with keys `url` and `directUrl` (both
+# straight to the primary). The data chart generates them.
 database:
   secretPrefix: db-
 
@@ -51,20 +58,21 @@ database:
 redis:
   secretName: valkey
 
-# Everything else secret (auth secret, API keys, signing keys): one Secret per service,
-# `<release>-<service>`, loaded as environment variables.
-secrets:
-  # Create those Secrets from a secret manager with External Secrets. Off, they must
-  # already exist (the kind setup creates them from generated values).
-  externalSecrets:
-    enabled: false
-    storeRef:
-      kind: ClusterSecretStore
-      name: platform
-    refreshInterval: 15m
-    # Each service's remote secret is `<keyPrefix><service>`: one JSON object whose keys
-    # are the variable names.
-    keyPrefix: ""
+# The Secret with the uploads bucket's details (the data chart generates it): bucket,
+# region, endpoint (in-cluster), publicEndpoint (what browsers reach), accessKeyId,
+# secretAccessKey. A service's `storage` says what it gets from it:
+#   presign   S3_* with the public endpoint: the URLs it signs are for browsers
+#   internal  S3_* with the in-cluster endpoint: it reads and writes objects itself
+#   origin    STORAGE_ORIGIN only (the web app's Content-Security-Policy)
+# Files are on in a service when it has S3_BUCKET, so leave `storage` off to keep them
+# off (an environment without ClamAV).
+storage:
+  secretName: storage
+
+# Everything else secret (auth secret, API keys, signing keys) is one Secret per
+# service, `<release>-<service>`, loaded as environment variables. They're committed
+# encrypted in deploy/environments/<env>/secrets/ (SOPS) and Argo CD decrypts them into
+# the namespace; on kind, `bun run k8s:up` creates them.
 
 # The database migration: `prisma migrate deploy` as the migrator role, before every
 # install and upgrade. Its URL is in the `<secretPrefix>migrator` Secret.
@@ -97,9 +105,6 @@ defaults:
   nodeSelector: {}
   tolerations: []
   podAnnotations: {}
-  # Annotations for the service account: workload identity (EKS Pod Identity, GKE and
-  # Azure workload identity) is granted to it per service.
-  serviceAccountAnnotations: {}
   # Spread replicas across nodes and zones where the cluster has them.
   topologySpread: true
   pdb:
@@ -120,8 +125,13 @@ defaults:
   # Other services of this release allowed to connect to this one (besides the gateway,
   # for routed services).
   allowFrom: []
+  # Namespaces whose pods may connect to this one (the mail server's, for webhooks).
+  allowFromNamespaces: []
   # Paths the process may write to (the root filesystem is read-only; /tmp always is).
   writablePaths: []
+  # A Secret with `ca.crt`: certificate authorities a Node service trusts besides the
+  # public ones (NODE_EXTRA_CA_CERTS), for servers with a private CA (kind's Mailpit).
+  caBundle: ""
 
 services:
   web:
@@ -135,9 +145,11 @@ services:
       - path: /
     writablePaths:
       - /app/apps/web/.next/cache
+    storage: origin
+    # Nothing secret: no Secret of its own.
+    secretFrom: none
     env:
       WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
-      STORAGE_ORIGIN: ""
     autoscaling:
       enabled: true
 
@@ -147,6 +159,7 @@ services:
     port: 3001
     database: { role: app_api, envPrefix: API }
     redis: true
+    storage: presign
     probes:
       liveness: /health/live
       readiness: /health/ready
@@ -178,6 +191,8 @@ services:
     port: 3002
     database: { role: app_worker, envPrefix: WORKER, directUrl: true }
     redis: true
+    storage: internal
+    secretFrom: none
     probes:
       liveness: /health/live
       readiness: /health/ready
@@ -219,6 +234,8 @@ services:
     routes:
       # Inbound provider webhooks (Stripe).
       - path: /webhooks
+    # The mail server posts delivery failures straight to it (/webhooks/stalwart).
+    allowFromNamespaces: [mail]
     terminationGracePeriodSeconds: 60
     env:
       PORT: "3004"

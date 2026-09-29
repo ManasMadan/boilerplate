@@ -1,8 +1,9 @@
 # A preview per pull request labelled `preview` (only maintainers can add labels), on
 # the clusters that host previews (label boilerplate.dev/previews=true, normally
-# staging's: each preview brings its own database, so it needs no managed one), at
-# https://pr-<number>.preview.<the cluster's domain>. It runs the PR's head commit:
-# the chart and values from it, and the images CI built from it (sha-<commit>). Removing
+# staging's), at https://pr-<number>.preview.<the cluster's domain>. It runs the PR's
+# head commit: the chart and values from it, the images CI built from it
+# (sha-<commit>), its own database and Valkey, and the shared preview Secrets
+# (deploy/environments/preview/secrets/, decrypted by Argo CD's sops plugin). Removing
 # the label or closing the PR deletes the preview and its namespace.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -56,10 +57,6 @@ spec:
         - resources-finalizer.argocd.argoproj.io
     spec:
       project: previews
-      source:
-        repoURL: https://github.com/ManasMadan/boilerplate.git
-        targetRevision: "{{ .head_sha }}"
-        path: deploy/charts/{{ .chart }}
       destination:
         server: "{{ .server }}"
         namespace: "pr-{{ .number }}"
@@ -69,18 +66,30 @@ spec:
           selfHeal: true
   templatePatch: |
     spec:
-      source:
-        helm:
-          releaseName: boilerplate
-          valueFiles:
-            - ../../environments/preview/{{ .chart }}.yaml
-          parameters:
-            {{- if eq .chart "data" }}
-            - name: preview.namespace
-              value: "pr-{{ .number }}"
-            {{- else }}
-            - name: image.tag
-              value: "sha-{{ .head_sha }}"
-            - name: site.host
-              value: 'pr-{{ .number }}.preview.{{ index .metadata.annotations "boilerplate.dev/domain" }}'
-            {{- end }}
+      sources:
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .head_sha }}"
+          path: deploy/charts/{{ .chart }}
+          helm:
+            releaseName: boilerplate
+            valueFiles:
+              - ../../environments/preview/{{ .chart }}.yaml
+            parameters:
+              {{- if eq .chart "data" }}
+              - name: preview.namespace
+                value: "pr-{{ .number }}"
+              {{- else }}
+              - name: image.tag
+                value: "sha-{{ .head_sha }}"
+              - name: site.host
+                value: 'pr-{{ .number }}.preview.{{ index .metadata.annotations "boilerplate.dev/domain" }}'
+              - name: observability.enabled
+                value: {{ eq (index .metadata.labels "boilerplate.dev/observability" | default "") "true" | quote }}
+              {{- end }}
+        {{- if eq .chart "stack" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .head_sha }}"
+          path: deploy/environments/preview/secrets
+          plugin:
+            name: sops
+        {{- end }}

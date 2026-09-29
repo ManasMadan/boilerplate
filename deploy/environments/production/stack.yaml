@@ -6,10 +6,6 @@ site:
   host: app.example.com
 env:
   LOG_LEVEL: info
-secrets:
-  externalSecrets:
-    enabled: true
-    keyPrefix: boilerplate-production-
 defaults:
   replicas: 3
   resources:
@@ -19,6 +15,12 @@ defaults:
     minReplicas: 2
     maxReplicas: 20
 services:
+  notifications:
+    env:
+      # Mail goes through the cluster's mail server (deploy/platform/mail): SMTP_URL,
+      # with the submission password, is in secrets/notifications.sops.yaml.
+      # Your sender: the mail server's submission account on its email domain.
+      EMAIL_FROM: Boilerplate <no-reply@example.com>
   web:
     autoscaling: { minReplicas: 3, maxReplicas: 20 }
   api:

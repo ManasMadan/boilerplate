@@ -1,6 +1,5 @@
-# A preview's own database and Valkey, in its own namespace, gone with the PR.
-credentials:
-  source: generate
+# A preview's own database and Valkey, in its own namespace, gone with the PR. No file
+# uploads (they need ClamAV, too big for a preview) and no backups.
 postgres:
   instances: 1
   storage: { size: 2Gi }
@@ -10,5 +9,8 @@ postgres:
 valkey:
   storage: { size: 1Gi }
   maxmemory: 200mb
+storage:
+  uploads:
+    enabled: false
 preview:
   enabled: true

@@ -27,6 +27,26 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{- printf "%s.%s.svc.cluster.local" (include "data.valkey" .) .Release.Namespace -}}
 {{- end -}}
 
+{{/* A RustFS server: (list $ "uploads") → <release>-uploads. */}}
+{{- define "data.rustfs" -}}
+{{- printf "%s-%s" (include "data.name" (index . 0)) (index . 1) -}}
+{{- end -}}
+
+{{- define "data.rustfsEndpoint" -}}
+{{- $root := index . 0 -}}
+{{- printf "http://%s.%s.svc.cluster.local:9000" (include "data.rustfs" .) $root.Release.Namespace -}}
+{{- end -}}
+
+{{/* The backups server's root keys (the ObjectStore and the bucket Job read them). */}}
+{{- define "data.backupsSecret" -}}
+{{- printf "%s-backups-storage" (include "data.name" .) -}}
+{{- end -}}
+
+{{/* The ObjectStore (barmancloud.cnpg.io) the cluster archives to. */}}
+{{- define "data.objectStore" -}}
+{{- printf "%s-backups" (include "data.name" .) -}}
+{{- end -}}
+
 {{/* A role's Secret: app_api → db-app-api. */}}
 {{- define "data.roleSecret" -}}
 {{- $root := index . 0 -}}
@@ -36,4 +56,27 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{/* The application roles (every role but the migrator, which owns the database). */}}
 {{- define "data.appRoles" -}}
 {{- without .Values.database.roles "migrator" | toJson -}}
+{{- end -}}
+
+{{/*
+A hook that runs before the release's resources, under Helm (kind) and Argo CD alike.
+Argo CD ignores the Helm annotations when its own are there; it runs it in the Sync
+phase, ordered by wave, because a preview's namespace (a resource of this release)
+must exist first.
+*/}}
+{{- define "data.preHook" -}}
+helm.sh/hook: pre-install,pre-upgrade
+helm.sh/hook-weight: {{ index . 1 | quote }}
+helm.sh/hook-delete-policy: before-hook-creation
+argocd.argoproj.io/hook: Sync
+argocd.argoproj.io/sync-wave: {{ index . 1 | quote }}
+argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+{{- end -}}
+
+{{/* A container locked down for the restricted Pod Security Standard. */}}
+{{- define "data.containerSecurity" -}}
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+capabilities:
+  drop: [ALL]
 {{- end -}}

@@ -1,19 +1,11 @@
-# This cluster's Gateway, certificate issuer, secret store and image policy
-# (deploy/platform/config), from the cluster's annotations.
+# This cluster's Gateway, certificate issuer and image policy (deploy/platform/config),
+# from the cluster's Argo CD Secret.
 addon: platform-config
 namespace: gateway-system
 path: deploy/platform/config
 wave: "0"
 clusterParameters:
-  cloud: cloud
-  environment: environment
-  previews: previews
-  secretPrefix: secret-prefix
   domain: domain
+  previews: label:previews
   tls.email: tls-email
-  tls.dns01: dns01
-  secretStore.provider: secret-store
-  secretStore.aws.region: aws-region
-  secretStore.gcp.projectID: gcp-project
-  secretStore.azure.vaultUrl: azure-vault-url
   imagePolicy.enabled: image-policy

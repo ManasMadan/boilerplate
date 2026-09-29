@@ -3,7 +3,6 @@ In-cluster Valkey: one node, append-only persistence, and no eviction (BullMQ ke
 queues in it; an evicted key is a lost job). Clients authenticate with the password
 from the `valkey` Secret.
 */}}
-{{- if .Values.valkey.enabled }}
 {{- $v := .Values.valkey }}
 {{- $name := include "data.valkey" . }}
 ---
@@ -102,7 +101,7 @@ spec:
           requests:
             storage: {{ $v.storage.size }}
 ---
-# Only this release's pods (the stack's services) reach Valkey.
+# Only pods in this namespace (the stack's services) reach Valkey.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -120,4 +119,3 @@ spec:
         - podSelector: {}
       ports:
         - port: 6379
-{{- end }}

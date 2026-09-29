@@ -1,9 +1,11 @@
-# Staging uses managed Postgres and Valkey (provisioned by OpenTofu, which writes their
-# credentials to the secret manager).
-credentials:
-  source: extract
-  keyPrefix: boilerplate-staging-
+# Staging: production's shape at a smaller size, with backups (so restores can be tried
+# here first).
 postgres:
-  enabled: false
-valkey:
-  enabled: false
+  backups:
+    enabled: true
+    retention: 7d
+storage:
+  uploads:
+    # Your staging hosts: one of the gateway's (<domain> or *.<domain>).
+    host: staging-files.example.com
+    corsOrigins: [https://staging.example.com]
