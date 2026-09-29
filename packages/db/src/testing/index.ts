@@ -70,6 +70,7 @@ export async function prepareTemplate() {
   await lock.connect();
   try {
     await lock.query("SELECT pg_advisory_lock($1)", [TEMPLATE_LOCK]);
+    await dropAbandonedTestDatabases();
     const client = new pg.Client({ connectionString: urlFor(TEMPLATE, "migrator") });
     await client.connect();
     try {
@@ -111,6 +112,42 @@ async function isStale(client: pg.Client) {
   });
 }
 
+/** Test database names carry the pid of the process that owns them (and drops them). */
+const TEST_DATABASE = /^app_test_(\d+)_[0-9a-f]+$/;
+
+function isRunning(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: it runs, as another user.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * Drops the test databases of runs that died before their files' `drop()` (killed,
+ * crashed, out of memory): the process in their name no longer runs. Test databases
+ * live on the local server only, so the pid is on this machine.
+ */
+export async function dropAbandonedTestDatabases() {
+  const client = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
+  await client.connect();
+  try {
+    const { rows } = await client.query<{ datname: string }>(
+      "SELECT datname FROM pg_database WHERE datname LIKE 'app\\_test\\_%'",
+    );
+    for (const { datname } of rows) {
+      const pid = TEST_DATABASE.exec(datname)?.[1];
+      if (pid !== undefined && !isRunning(Number(pid))) {
+        await client.query(`DROP DATABASE IF EXISTS ${pg.escapeIdentifier(datname)} WITH (FORCE)`);
+      }
+    }
+  } finally {
+    await client.end();
+  }
+}
+
 export interface TestDatabase {
   name: string;
   urlFor(role: string): string;
@@ -119,7 +156,7 @@ export interface TestDatabase {
 
 /** Clones the migrated template into a fresh database for one test file. */
 export async function createTestDatabase(): Promise<TestDatabase> {
-  const name = `app_test_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
+  const name = `app_test_${process.pid}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const admin = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
   await admin.connect();
   try {

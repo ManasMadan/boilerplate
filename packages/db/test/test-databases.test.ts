@@ -1,0 +1,41 @@
+/** Test databases left behind by a run that died are dropped by the next run. */
+import { spawnSync } from "node:child_process";
+import pg from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTestDatabase, dropAbandonedTestDatabases } from "../src/testing";
+
+const admin = () => {
+  const url = new URL(process.env.MIGRATOR_DATABASE_URL ?? "");
+  url.pathname = "/postgres";
+  return new pg.Client({ connectionString: url.toString() });
+};
+let client: pg.Client;
+const exists = async (name: string) =>
+  (await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [name])).rowCount === 1;
+
+beforeAll(async () => {
+  client = admin();
+  await client.connect();
+});
+afterAll(async () => {
+  await client.end();
+});
+
+describe("abandoned test databases", () => {
+  it("are dropped once their process is gone; a running process's stay", async () => {
+    // The pid of a process that has exited.
+    const gone = spawnSync("true").pid;
+    const abandoned = `app_test_${gone}_0123456789ab`;
+    await client.query(`CREATE DATABASE ${abandoned}`);
+    const live = await createTestDatabase();
+    try {
+      await dropAbandonedTestDatabases();
+      expect(await exists(abandoned)).toBe(false);
+      expect(await exists(live.name)).toBe(true);
+      expect(await exists("app_test")).toBe(true);
+    } finally {
+      await live.drop();
+      await client.query(`DROP DATABASE IF EXISTS ${abandoned}`);
+    }
+  });
+});
