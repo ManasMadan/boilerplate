@@ -4,6 +4,92 @@ What GitHub needs to be set to for the workflows in `.github/workflows` to gate,
 release as intended. Nothing here is needed to develop locally; do it once, when the
 repository starts shipping.
 
+## All of it from the command line
+
+The sections below say what each setting is for; these `gh` commands apply them (run
+them as the repository's admin, with `REPO` set to yours). Code scanning, which the
+Security workflow uploads to and the ruleset gates on, is free on public repositories
+only; a private one needs GitHub Code Security.
+
+```sh
+REPO=owner/name
+
+# Public, and offered as a template for new projects (`gh repo create --template`).
+gh repo edit "$REPO" --visibility public --accept-visibility-change-consequences --template
+
+# Squash merges only, titled by the pull request; head branches deleted after merging.
+gh repo edit "$REPO" --enable-squash-merge --squash-merge-commit-message pr-title-description \
+  --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge
+
+# Workflows get read-only tokens unless a job asks for more, and never approve pull requests.
+gh api -X PUT "repos/$REPO/actions/permissions/workflow" \
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
+
+# Security: private vulnerability reporting, Dependabot alerts, secret scanning with push
+# protection (the dependency graph is on for public repositories).
+gh api -X PUT "repos/$REPO/private-vulnerability-reporting"
+gh api -X PUT "repos/$REPO/vulnerability-alerts"
+gh api -X PATCH "repos/$REPO" --input - <<'JSON'
+{"security_and_analysis": {"secret_scanning": {"status": "enabled"},
+  "secret_scanning_push_protection": {"status": "enabled"}}}
+JSON
+
+# Environments, deployable from master only.
+for env in staging infra-staging infra-production; do
+  gh api -X PUT "repos/$REPO/environments/$env" --input - <<'JSON'
+{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+JSON
+  gh api -X POST "repos/$REPO/environments/$env/deployment-branch-policies" -f name=master -f type=branch
+done
+# Applying production's infrastructure waits for your approval.
+gh api -X PUT "repos/$REPO/environments/infra-production" --input - <<JSON
+{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true},
+ "reviewers": [{"type": "User", "id": $(gh api user --jq .id)}]}
+JSON
+
+# master: pull requests only, squash-merged, with CI, the security checks and CodeQL
+# passing. APPROVALS is 0 for a single maintainer (GitHub doesn't let you approve your
+# own pull request); make it 1 and CODE_OWNERS true once there's a team.
+APPROVALS=0 CODE_OWNERS=false
+gh api -X POST "repos/$REPO/rulesets" --input - <<JSON
+{"name": "master", "target": "branch", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+ "rules": [
+  {"type": "deletion"}, {"type": "non_fast_forward"},
+  {"type": "pull_request", "parameters": {
+    "required_approving_review_count": $APPROVALS, "require_code_owner_review": $CODE_OWNERS,
+    "dismiss_stale_reviews_on_push": true, "require_last_push_approval": false,
+    "required_review_thread_resolution": true, "allowed_merge_methods": ["squash"]}},
+  {"type": "required_status_checks", "parameters": {"strict_required_status_checks_policy": false,
+    "required_status_checks": [{"context": "CI passed"}, {"context": "Secrets in the history"},
+      {"context": "Dependency review"}, {"context": "Known vulnerabilities (OSV)"}]}},
+  {"type": "code_scanning", "parameters": {"code_scanning_tools": [
+    {"tool": "CodeQL", "security_alerts_threshold": "high_or_higher", "alerts_threshold": "errors"}]}}
+ ],
+ "bypass_actors": []}
+JSON
+
+# Release tags can't be moved or deleted, except by an admin (a tag pushed by mistake).
+gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
+{"name": "release tags", "target": "tag", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+ "rules": [{"type": "deletion"}, {"type": "update"}, {"type": "non_fast_forward"}],
+ "bypass_actors": [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]}
+JSON
+```
+
+The GitHub App is made in the web UI (below). Then, with its numeric App ID (on the
+App's page) and its client ID:
+
+```sh
+gh variable set BOT_APP_CLIENT_ID --repo "$REPO" --body "<client id>"
+gh secret set BOT_APP_PRIVATE_KEY --repo "$REPO" < path/to/the-app.private-key.pem
+RULESET=$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.name == "master") | .id')
+gh api -X PUT "repos/$REPO/rulesets/$RULESET" --input - <<JSON
+{"bypass_actors": [{"actor_id": <app id>, "actor_type": "Integration", "bypass_mode": "always"}]}
+JSON
+```
+
 ## Merging
 
 **Settings → General → Pull Requests**
