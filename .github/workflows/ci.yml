@@ -374,6 +374,41 @@ jobs:
 
   # Conventional pull-request titles: squash merges make them the commit on master, and
   # release-please turns those into versions and the changelog.
+  # The public REST API (/api/v1) against the base branch's: removing or narrowing
+  # anything third parties call fails, unless the title declares the breaking change
+  # (`feat(api)!: …`), which release-please then ships as a new major version. The
+  # document itself is kept current by the codegen job (apps/api/openapi.json).
+  api-compat:
+    name: API compatibility
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    env:
+      BASE: ${{ github.event.pull_request.base.sha }}
+      TITLE: ${{ github.event.pull_request.title }}
+      # renovate: datasource=docker depName=tufin/oasdiff
+      OASDIFF: tufin/oasdiff:v1.32.1
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Breaking changes
+        run: |
+          git fetch --quiet --depth=1 origin "$BASE"
+          if ! git cat-file -e "$BASE:apps/api/openapi.json" 2>/dev/null; then
+            echo "The base branch has no API document yet."
+            exit 0
+          fi
+          git show "$BASE:apps/api/openapi.json" > "$RUNNER_TEMP/base.json"
+          fail=(--fail-on ERR)
+          if [[ "$TITLE" =~ ^[a-z]+(\([a-z-]+\))?!: ]]; then
+            echo "The title declares a breaking change: reporting only."
+            fail=()
+          fi
+          docker run --rm -v "$RUNNER_TEMP:/base:ro" -v "$PWD/apps/api:/head:ro" "$OASDIFF" \
+            breaking /base/base.json /head/openapi.json --format githubactions "${fail[@]}"
+
   pr-title:
     name: Pull request title
     if: github.event_name == 'pull_request'
@@ -497,7 +532,7 @@ jobs:
   ci-ok:
     name: CI passed
     if: always()
-    needs: [pr-title, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images]
+    needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -505,11 +540,12 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
-        # Every job must have succeeded; the only one allowed to skip is the title check,
-        # outside pull requests.
+        # Every job must have succeeded; the only ones allowed to skip are the checks of a
+        # pull request itself (title, API compatibility), outside pull requests.
         run: |
           echo "$NEEDS" | jq -e --arg event "$EVENT" '
             to_entries | all(
               .value.result == "success"
-              or (.key == "pr-title" and .value.result == "skipped" and $event != "pull_request")
+              or ((.key == "pr-title" or .key == "api-compat")
+                  and .value.result == "skipped" and $event != "pull_request")
             )' > /dev/null

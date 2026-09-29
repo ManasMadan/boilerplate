@@ -5,5 +5,5 @@
     // types (BodyInit, RequestInfo); Node implements fetch, but only the DOM lib names them.
     "lib": ["ES2024", "DOM"]
   },
-  "include": ["src", "test", "*.config.ts"]
+  "include": ["src", "test", "scripts", "*.config.ts"]
 }

@@ -11,15 +11,12 @@
  * logs, queued jobs and outbox events all carry the same request id.
  */
 
-import { isContractProcedure } from "@orpc/contract";
-import { OpenAPIGenerator } from "@orpc/openapi";
 import { OpenAPIHandler } from "@orpc/openapi/fastify";
 import { RPCHandler } from "@orpc/server/fastify";
-import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { API_KEY_HEADER, contract, type ProcedureMeta } from "@repo/contracts/api";
 import { runWithContext } from "@repo/nest-common";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { contextFor, toHeaders } from "../http-context";
+import { openApiDocument } from "./openapi";
 import { toContractError } from "./procedures";
 import type { AppRouter } from "./router";
 
@@ -82,19 +79,10 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
   fastify.all("/rpc/*", serve(rpc, "/rpc"));
   fastify.all("/api/v1/*", serve(rest, "/api/v1"));
 
-  const spec = await new OpenAPIGenerator({
-    schemaConverters: [new ZodToJsonSchemaConverter()],
-  }).generate(contract, {
-    info: { title: "Boilerplate API", version: options.release },
-    servers: [{ url: new URL("/api/v1", options.publicUrl).toString() }],
-    components: {
-      securitySchemes: {
-        session: { type: "apiKey", in: "cookie", name: "better-auth.session_token" },
-        apiKey: { type: "apiKey", in: "header", name: API_KEY_HEADER },
-      },
-    },
+  const spec = await openApiDocument({
+    version: options.release,
+    serverUrl: new URL("/api/v1", options.publicUrl).toString(),
   });
-  markApiKeyOperations(spec, contract);
   fastify.get("/api/v1/openapi.json", async () => spec);
 
   if (options.exposeDocs) {
@@ -105,32 +93,5 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
 <body><script id="api-reference" data-url="/api/v1/openapi.json"></script>
 <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.1"></script></body></html>`),
     );
-  }
-}
-
-type Spec = Awaited<ReturnType<OpenAPIGenerator["generate"]>>;
-
-/**
- * Every operation takes a signed-in session; those whose contract names an API key scope
- * take a key with that scope too, and say so.
- */
-function markApiKeyOperations(spec: Spec, router: unknown) {
-  if (isContractProcedure(router)) {
-    const { route, meta } = router["~orpc"];
-    const operation =
-      route.path && route.method
-        ? spec.paths?.[route.path]?.[route.method.toLowerCase() as "get"]
-        : undefined;
-    if (!operation) return;
-    const scope = (meta as ProcedureMeta).apiKeyScope;
-    operation.security = scope ? [{ session: [] }, { apiKey: [] }] : [{ session: [] }];
-    if (scope) {
-      const note = `API keys need the \`${scope}\` scope.`;
-      operation.description = operation.description ? `${operation.description}\n\n${note}` : note;
-    }
-    return;
-  }
-  if (typeof router === "object" && router !== null) {
-    for (const child of Object.values(router)) markApiKeyOperations(spec, child);
   }
 }
