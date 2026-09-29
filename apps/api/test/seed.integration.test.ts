@@ -3,6 +3,7 @@ import { DATABASE, type Database } from "@repo/nest-common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Auth } from "../src/auth/auth.module";
 import { DEMO_PASSWORD, DEMO_PEOPLE, seedDemo } from "../src/seed/demo";
+import { loadEmail, signInLoadUsers } from "../src/seed/load-users";
 import { createSession, type Harness, startApi } from "./harness";
 
 let harness: Harness;
@@ -55,5 +56,33 @@ describe("demo seed", () => {
     expect(
       await database.write.user.count({ where: { email: { endsWith: "@example.com" } } }),
     ).toBe(2);
+  });
+});
+
+describe("load-test users", () => {
+  const signIn = (count: number) =>
+    signInLoadUsers(
+      { auth: harness.app.get<Auth>(AUTH), database: harness.app.get<Database>(DATABASE) },
+      count,
+    );
+  let AUTH: symbol;
+  beforeAll(async () => {
+    ({ AUTH } = await import("../src/auth/auth.module"));
+  });
+
+  it("signs in verified users with their own workspace, reusing them on the next run", async () => {
+    const first = await signIn(3);
+    expect(first).toHaveLength(3);
+    for (const cookie of first) {
+      const response = await fetch(`${harness.baseUrl}/api/v1/todos`, { headers: { cookie } });
+      expect(response.status).toBe(200);
+    }
+    const again = await signIn(3);
+    expect(again).toHaveLength(3);
+    expect(again).not.toEqual(first);
+    const users = await harness.app
+      .get<Database>(DATABASE)
+      .write.user.findMany({ where: { email: { in: [1, 2, 3].map(loadEmail) } } });
+    expect(users.map((user) => user.emailVerified)).toEqual([true, true, true]);
   });
 });
