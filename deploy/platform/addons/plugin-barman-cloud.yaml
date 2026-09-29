@@ -1,0 +1,7 @@
+# Continuous Postgres backups to object storage for CloudNativePG clusters.
+addon: plugin-barman-cloud
+namespace: cnpg-system
+repoURL: https://cloudnative-pg.github.io/charts
+chart: plugin-barman-cloud
+version: 0.8.0
+wave: "-10"

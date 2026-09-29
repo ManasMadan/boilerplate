@@ -1,0 +1,7 @@
+# EKS: an internet-facing NLB in IP mode (AWS Load Balancer Controller), so the gateway
+# sees clients' addresses and traffic skips kube-proxy.
+gateway:
+  serviceAnnotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing

@@ -10,6 +10,8 @@ deploy/
   charts/stack     the application: every service from one values file
   charts/data      Postgres (CloudNativePG or a managed database), Valkey, their Secrets
   environments/    values per environment: local (kind), preview, staging, production
+  platform/        cluster add-ons (addons/, values/) and each cluster's own settings (config/)
+  argocd/          the root Application, projects and ApplicationSets (GitOps)
 ```
 
 `bun run charts:check` lints both charts, runs their unit tests, renders them for every
@@ -40,3 +42,30 @@ ports) are in the stack chart's values; per-environment ones go in
 
 The site's hosts (`site.host`) in `environments/staging` and `environments/production`
 are placeholders: set yours.
+
+## GitOps
+
+OpenTofu installs Argo CD on each cluster and applies `argocd/root.yaml`; from then on
+everything comes from this repo. Three ApplicationSets do the work:
+
+- **platform**: every add-on in `platform/addons` on every managed cluster, plus
+  `platform/config` (the public Gateway and its certificates, the secret store, the
+  image policy).
+- **envs**: the data and stack releases on the staging and production clusters, data
+  first. A merge to master deploys staging (CI commits the new image tag); production
+  changes only through a promotion pull request.
+- **previews**: a preview per pull request labelled `preview`, in its own namespace,
+  at `https://pr-<number>.preview.<domain>`, deleted with the label or the PR.
+
+Clusters describe themselves in their Argo CD cluster Secret, which OpenTofu writes:
+
+| On the cluster Secret | Meaning |
+|---|---|
+| label `boilerplate.dev/managed: "true"` | gets the platform add-ons |
+| label `boilerplate.dev/environment` | `staging`, `production` or `preview` |
+| annotation `boilerplate.dev/cloud` | `aws`, `gcp`, `azure` or `other` (per-cloud values) |
+| annotation `boilerplate.dev/domain` | the DNS zone its hosts are in |
+| annotations `boilerplate.dev/environment`, `tls-email`, `dns01`, `secret-store`, `aws-region`, `gcp-project`, `azure-vault-url`, `azure-eso-client-id`, `image-policy` | the platform config's values |
+
+Platform credentials live in the secret manager too: `platform/cloudflare-api-token`
+(`{"token": …}`, Zone DNS edit) and, for previews, `platform/github-token`.

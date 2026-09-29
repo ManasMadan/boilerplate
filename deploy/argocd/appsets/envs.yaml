@@ -1,0 +1,69 @@
+# Staging and production: the data and stack releases on each cluster labelled
+# boilerplate.dev/environment=staging|production, with that environment's values
+# (deploy/environments/<env>/). Data syncs first, so the stack's migration finds the
+# database up. Staging's image tag is committed by CI on every merge to master;
+# production's only changes through a promotion pull request.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: envs
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchExpressions:
+                  - key: boilerplate.dev/environment
+                    operator: In
+                    values: [staging, production]
+          - list:
+              elements:
+                - chart: data
+                - chart: stack
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: chart
+              operator: In
+              values: [data]
+        - matchExpressions:
+            - key: chart
+              operator: In
+              values: [stack]
+  template:
+    metadata:
+      name: '{{ index .metadata.labels "boilerplate.dev/environment" }}-{{ .chart }}'
+      labels:
+        chart: "{{ .chart }}"
+        environment: '{{ index .metadata.labels "boilerplate.dev/environment" }}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: apps
+      source:
+        repoURL: https://github.com/ManasMadan/boilerplate.git
+        targetRevision: HEAD
+        path: deploy/charts/{{ .chart }}
+        helm:
+          releaseName: boilerplate
+          valueFiles:
+            - ../../environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/{{ .chart }}.yaml
+      destination:
+        server: "{{ .server }}"
+        namespace: boilerplate
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          labels:
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/enforce-version: latest

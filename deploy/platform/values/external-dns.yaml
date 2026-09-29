@@ -1,0 +1,17 @@
+# Records for every HTTPRoute's host, in the Cloudflare zone (proxied: Cloudflare's WAF
+# and CDN sit in front of the gateway). The cluster's own domain and owner id are set
+# per cluster by the platform ApplicationSet.
+provider:
+  name: cloudflare
+sources:
+  - gateway-httproute
+policy: sync
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: token
+extraArgs:
+  - --cloudflare-proxied
+  - --cloudflare-dns-records-per-page=5000

@@ -1,0 +1,91 @@
+# Every add-on in deploy/platform/addons on every managed cluster. A cluster is managed
+# when its Argo CD Secret (written by OpenTofu) has the label boilerplate.dev/managed;
+# its annotations (boilerplate.dev/cloud, /domain, …) configure the add-ons.
+#
+# Values per add-on: deploy/platform/values/<addon>.yaml, then <addon>.<cloud>.yaml
+# when it exists. `clusterParameters` in an add-on's file sets chart values from the
+# cluster: "name" is the cluster's name, anything else its boilerplate.dev/<key>
+# annotation.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  boilerplate.dev/managed: "true"
+          - git:
+              repoURL: https://github.com/ManasMadan/boilerplate.git
+              revision: HEAD
+              files:
+                - path: deploy/platform/addons/*.yaml
+  template:
+    metadata:
+      name: "{{ .name }}-{{ .addon }}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{ .wave }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform
+      destination:
+        server: "{{ .server }}"
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          # CRDs larger than the client-side apply annotation limit (cert-manager, KEDA).
+          - ServerSideApply=true
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+  templatePatch: |
+    {{- $cloud := index .metadata.annotations "boilerplate.dev/cloud" }}
+    {{- $cluster := . }}
+    spec:
+      sources:
+        {{- if hasKey . "path" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: HEAD
+          path: {{ .path }}
+          helm:
+            releaseName: {{ .addon }}
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - values-{{ $cloud }}.yaml
+        {{- else }}
+        - repoURL: {{ .repoURL }}
+          chart: {{ .chart }}
+          targetRevision: {{ .version }}
+          helm:
+            releaseName: {{ .addon }}
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - $repo/deploy/platform/values/{{ .addon }}.yaml
+              - $repo/deploy/platform/values/{{ .addon }}.{{ $cloud }}.yaml
+        {{- end }}
+            {{- if hasKey . "clusterParameters" }}
+            parameters:
+              {{- range $key, $field := .clusterParameters }}
+              - name: {{ $key | quote }}
+                value: {{ if eq $field "name" }}{{ $cluster.name | quote }}{{ else }}{{ index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" | quote }}{{ end }}
+              {{- end }}
+            {{- end }}
+        {{- if not (hasKey . "path") }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: HEAD
+          ref: repo
+        {{- end }}

@@ -11,7 +11,7 @@ tests:
       - equal: { path: spec.hostnames, value: [app.example.com] }
       - equal:
           path: spec.parentRefs
-          value: [{ name: public, namespace: gateway-system, sectionName: https }]
+          value: [{ name: public, namespace: gateway-system }]
 
   - it: gives the api's oRPC path (event streams) no request timeout
     documentSelector: { path: metadata.name, value: demo-api }

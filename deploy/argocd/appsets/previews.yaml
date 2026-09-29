@@ -1,0 +1,85 @@
+# A preview per pull request labelled `preview` (only maintainers can add labels), on
+# the cluster labelled boilerplate.dev/environment=preview, at
+# https://pr-<number>.preview.<the cluster's domain>. It runs the PR's head commit:
+# the chart and values from it, and the images CI built from it (sha-<commit>). Removing
+# the label or closing the PR deletes the preview and its namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: previews
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  boilerplate.dev/environment: preview
+          - matrix:
+              generators:
+                - pullRequest:
+                    github:
+                      owner: ManasMadan
+                      repo: boilerplate
+                      labels: [preview]
+                      tokenRef:
+                        secretName: github-token
+                        key: token
+                    requeueAfterSeconds: 120
+                - list:
+                    elements:
+                      - chart: data
+                      - chart: stack
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: chart
+              operator: In
+              values: [data]
+        - matchExpressions:
+            - key: chart
+              operator: In
+              values: [stack]
+  template:
+    metadata:
+      name: "pr-{{ .number }}-{{ .chart }}"
+      labels:
+        chart: "{{ .chart }}"
+        preview: "pr-{{ .number }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: previews
+      source:
+        repoURL: https://github.com/ManasMadan/boilerplate.git
+        targetRevision: "{{ .head_sha }}"
+        path: deploy/charts/{{ .chart }}
+      destination:
+        server: "{{ .server }}"
+        namespace: "pr-{{ .number }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+  templatePatch: |
+    spec:
+      source:
+        helm:
+          releaseName: boilerplate
+          valueFiles:
+            - ../../environments/preview/{{ .chart }}.yaml
+          parameters:
+            {{- if eq .chart "data" }}
+            - name: preview.namespace
+              value: "pr-{{ .number }}"
+            {{- else }}
+            - name: image.tag
+              value: "sha-{{ .head_sha }}"
+            - name: site.host
+              value: 'pr-{{ .number }}.preview.{{ index .metadata.annotations "boilerplate.dev/domain" }}'
+            {{- end }}

@@ -1,0 +1,99 @@
+{{- $domain := required "domain is required" .Values.domain }}
+{{- $hosts := list $domain (printf "*.%s" $domain) }}
+{{- if eq .Values.environment "preview" }}
+{{- $hosts = append $hosts (printf "*.preview.%s" $domain) }}
+{{- end }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: public
+  namespace: gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        externalTrafficPolicy: Local
+        {{- with .Values.gateway.serviceAnnotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      envoyDeployment:
+        replicas: 2
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: public
+    namespace: gateway-system
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public
+  namespace: gateway-system
+  annotations:
+    # A certificate per HTTPS listener, from its hostname.
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  gatewayClassName: envoy
+  listeners:
+    # Plain HTTP only redirects (the route below); applications can't attach to it.
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- range $i, $host := $hosts }}
+    - name: https-{{ $i }}
+      protocol: HTTPS
+      port: 443
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: {{ printf "tls-%s" ($host | replace "*." "wildcard-" | replace "." "-") }}
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-redirect
+  namespace: gateway-system
+spec:
+  parentRefs:
+    - name: public
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+# The client's address from X-Forwarded-For, past the proxies in front (Cloudflare);
+# the services then trust the gateway's (TRUSTED_PROXIES) for rate limits and audit.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: public
+  namespace: gateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+  clientIPDetection:
+    xForwardedFor:
+      numTrustedHops: {{ .Values.gateway.trustedHops }}

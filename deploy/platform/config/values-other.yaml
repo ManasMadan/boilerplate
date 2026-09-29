@@ -1,0 +1,4 @@
+# Your own cluster: no cloud secret manager, so secrets come from Vault or OpenBao, and
+# the gateway's Service gets whatever your load balancer needs (none by default).
+secretStore:
+  provider: vault

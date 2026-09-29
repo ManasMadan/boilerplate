@@ -1,0 +1,9 @@
+apiVersion: v2
+name: platform-config
+description: >-
+  A cluster's own platform settings on top of the add-ons: the public Gateway and its
+  certificates, the secret store External Secrets reads from, and the image policy.
+  The platform ApplicationSet fills the values from the cluster's Argo CD Secret, which
+  OpenTofu writes (cloud, domain, secret manager, identities).
+type: application
+version: 0.1.0

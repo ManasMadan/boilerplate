@@ -18,13 +18,14 @@ site:
   host: ""
   scheme: https
 
-# Gateway API routes to the services (Envoy Gateway in this repo's platform).
+# Gateway API routes to the services (Envoy Gateway in this repo's platform). Routes
+# attach to whichever of the gateway's HTTPS listeners matches the site's host (the
+# plain-HTTP listener only redirects, and accepts no application routes).
 gateway:
   enabled: true
   parentRefs:
     - name: public
       namespace: gateway-system
-      sectionName: https
   # Pods of the gateway, allowed through each routed service's network policy.
   namespaceSelector:
     kubernetes.io/metadata.name: gateway-system

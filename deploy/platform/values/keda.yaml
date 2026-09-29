@@ -1,0 +1,3 @@
+podDisruptionBudget:
+  operator:
+    minAvailable: 1
