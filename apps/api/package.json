@@ -51,6 +51,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "auth": "1.7.6",
+    "jose": "^6.2.12",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

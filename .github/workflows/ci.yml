@@ -117,9 +117,7 @@ jobs:
       # `migrate diff` exits 0 silently without a datasource, so the URLs above are required.
       - name: Migrations match the Prisma schema
         working-directory: packages/db
-        run: |
-          bunx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code
-          bunx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code
+        run: bun run drift
       - name: Wait for storage and clamd, and create the bucket
         run: |
           docker compose --profile files up -d --wait rustfs clamav
@@ -175,6 +173,9 @@ jobs:
       S3_SECRET_ACCESS_KEY: rustfs-secret
       S3_FORCE_PATH_STYLE: "true"
       STORAGE_ORIGIN: http://localhost:9000
+      # The assistant without a model provider: quotes the best passage (local:extractive).
+      AI_MODEL: local:extractive
+      AI_EMBEDDINGS: hashing
       # Billing on, against the local fake Stripe started with the stack (test-only keys).
       STRIPE_SECRET_KEY: sk_test_ci
       STRIPE_WEBHOOK_SECRET: whsec_ci
@@ -201,6 +202,7 @@ jobs:
             echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
             echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
             echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
+            echo "AI_SERVICE_SECRET=$(openssl rand -base64 32)"
             # Browser push (VAPID key pair) and its contact.
             node -e 'const e = require("node:crypto").createECDH("prime256v1"); e.generateKeys();
               console.log(`VAPID_PUBLIC_KEY=${e.getPublicKey("base64url")}`);
@@ -225,9 +227,10 @@ jobs:
           (cd apps/worker && nohup bun run start > ../../logs/worker.log 2>&1 &)
           (cd apps/webhooks && nohup bun run start > ../../logs/webhooks.log 2>&1 &)
           (cd apps/ai && nohup bun run start > ../../logs/ai.log 2>&1 &)
+          (cd apps/ai && nohup bun run worker > ../../logs/ai-worker.log 2>&1 &)
           (cd apps/web && nohup bun run start > ../../logs/web.log 2>&1 &)
           (cd packages/fake-stripe && nohup bun src/main.ts > ../../logs/fake-stripe.log 2>&1 &)
-          for url in http://127.0.0.1:12111/__fake/state http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:3004/health/ready http://localhost:8000/health http://localhost:3000/healthz; do
+          for url in http://127.0.0.1:12111/__fake/state http://localhost:3001/health/ready http://localhost:3002/health/ready http://localhost:3003/health/ready http://localhost:3004/health/ready http://localhost:8000/health/ready http://localhost:3000/healthz; do
             if ! timeout 90 bash -c "until curl -sf $url > /dev/null; do sleep 1; done"; then
               echo "::error::$url never became ready"; tail -n 50 logs/*.log; exit 1
             fi
@@ -250,6 +253,20 @@ jobs:
     name: Python service
     runs-on: ubuntu-latest
     permissions: { contents: read }
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+    env:
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
     defaults:
       run: { working-directory: apps/ai }
     steps:
@@ -257,13 +274,21 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with: { enable-cache: true, cache-dependency-glob: apps/ai/uv.lock }
-      - run: uv sync --locked
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run basedpyright
       - run: uv run pytest
+      # The same database the TypeScript services use, migrated by Prisma (which owns the DDL).
+      - name: Bootstrap database roles and migrate
+        working-directory: .
+        env: { PGPASSWORD: postgres }
+        run: |
+          psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+          bun run db:deploy
+      # Routes, tenancy, indexing, the assistant, the worker, and models vs database.
+      - run: uv run pytest -m integration
 
   codegen:
     name: Generated code is committed

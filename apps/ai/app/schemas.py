@@ -8,7 +8,9 @@ Constrain every field (lengths, ranges, enums). The constraints are enforced at
 runtime by Pydantic *and* end up in the OpenAPI schema as documentation.
 """
 
+from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -25,3 +27,18 @@ class SentimentResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["ok"]
+
+
+class DocumentCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=200_000, description="Plain text.")
+
+
+class DocumentOut(BaseModel):
+    id: UUID
+    title: str
+    status: Literal["pending", "indexing", "ready", "failed"]
+    error: str | None
+    chunkCount: int
+    createdBy: UUID | None
+    createdAt: datetime

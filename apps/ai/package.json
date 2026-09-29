@@ -5,9 +5,14 @@
   "scripts": {
     "dev": "bun --env-file=../../.env run uv run fastapi dev app/main.py --port 8000",
     "start": "bun --env-file=../../.env run uv run fastapi run app/main.py --port 8000",
-    "gen": "uv run python -m app.export_openapi openapi.json",
+    "gen": "uv run python -m app.export_openapi openapi.json && uv run datamodel-codegen --input ../../packages/jobs/generated/schemas --input-file-type jsonschema --output app/contracts --output-model-type pydantic_v2.BaseModel --target-python-version 3.14 --use-standard-collections --use-union-operator --field-constraints --disable-timestamp --use-double-quotes --use-title-as-name --formatters ruff-format && uv run ruff format app/contracts && uv run ruff check --fix --quiet app/contracts && cp ../../packages/jobs/generated/queue-settings.json app/contracts/queue_settings.json",
     "check-types": "uv run basedpyright",
     "lint": "uv run ruff check . && uv run ruff format --check .",
-    "test": "uv run pytest"
+    "test": "uv run pytest",
+    "test:integration": "bun --env-file=../../.env run uv run pytest -m integration",
+    "worker": "bun --env-file=../../.env run uv run python -m app.worker"
+  },
+  "devDependencies": {
+    "@repo/jobs": "workspace:*"
   }
 }

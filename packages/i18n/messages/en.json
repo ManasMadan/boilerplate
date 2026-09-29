@@ -25,7 +25,8 @@
       "system": "System"
     },
     "language": "Language",
-    "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload."
+    "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
+    "assistant": "Assistant"
   },
   "meta": {
     "title": "Boilerplate",
@@ -415,7 +416,11 @@
     "FILE_NOT_READY": "That file is still being checked. Try again in a moment.",
     "ENTITLEMENT_REQUIRED": "Your plan doesn't include this. Upgrade in billing settings to use it.",
     "ALREADY_SUBSCRIBED": "This workspace already has a paid plan. Manage it from billing settings.",
-    "NO_SUBSCRIPTION": "This workspace doesn't have a paid plan yet."
+    "NO_SUBSCRIPTION": "This workspace doesn't have a paid plan yet.",
+    "DOCUMENT_NOT_FOUND": "That document doesn't exist in this workspace.",
+    "DOCUMENT_INDEXING_FAILED": "This document couldn't be prepared for the assistant. Try adding it again.",
+    "AI_BUDGET_EXCEEDED": "This workspace has used this month's assistant allowance. It resets on the 1st.",
+    "AI_RUN_LIMIT": "That question needed more work than one answer allows. Try a narrower question."
   },
   "workspace": {
     "switcher": {
@@ -775,5 +780,33 @@
     "checkoutDone": "Thanks! Your plan will update in a moment.",
     "limitReached": "Your plan allows {limit} members. Upgrade in billing settings to invite more.",
     "upgradeForWebhooks": "Webhooks are part of Pro. Upgrade in billing settings to send events to your endpoints."
+  },
+  "assistant": {
+    "title": "Assistant",
+    "description": "Ask questions and get answers from this workspace's documents.",
+    "ask": "Ask",
+    "question": "Your question",
+    "placeholder": "How long do refunds take?",
+    "thinking": "Looking through your documents…",
+    "sources": "From",
+    "empty": "Add a document below, then ask about it.",
+    "documents": {
+      "title": "Documents",
+      "description": "What the assistant can answer from. Everyone in the workspace can use them.",
+      "add": "Add document",
+      "docTitle": "Title",
+      "content": "Text",
+      "added": "Document added. It will be ready in a moment.",
+      "remove": "Remove",
+      "removed": "Document removed",
+      "none": "No documents yet.",
+      "status": {
+        "pending": "Waiting",
+        "indexing": "Preparing",
+        "ready": "Ready",
+        "failed": "Failed"
+      },
+      "passages": "{count, plural, one {# passage} other {# passages}}"
+    }
   }
 }

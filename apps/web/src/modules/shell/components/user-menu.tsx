@@ -1,5 +1,6 @@
 "use client";
 
+import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -23,6 +24,7 @@ interface UserMenuProps {
 export function UserMenu({ user }: UserMenuProps) {
   const t = useTranslations("common");
   const router = useRouter();
+  const { data: system } = useSystemInfoQuery();
 
   async function signOut() {
     await authClient.signOut();
@@ -57,6 +59,11 @@ export function UserMenu({ user }: UserMenuProps) {
         <DropdownMenuItem onClick={() => router.push("/dashboard")}>
           {t("dashboard")}
         </DropdownMenuItem>
+        {system?.features.ai ? (
+          <DropdownMenuItem onClick={() => router.push("/assistant")}>
+            {t("assistant")}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onClick={() => router.push("/settings")}>
           {t("settings")}
         </DropdownMenuItem>

@@ -14,6 +14,8 @@ export const realtimeMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("todos.changed") }),
   /** The user's in-app notifications changed (a new one, or read elsewhere). */
   z.object({ type: z.literal("notifications.changed") }),
+  /** The organization's assistant documents changed (added, indexed, removed). */
+  z.object({ type: z.literal("documents.changed") }),
   /** One of the user's uploads was checked (ready or rejected). */
   z.object({ type: z.literal("files.changed") }),
 ]);

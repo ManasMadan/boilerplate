@@ -41,6 +41,7 @@ model User {
   notificationDigestItems NotificationDigestItem[]
   notificationDevices     NotificationDevice[]
   files                   File[]
+  aiDocuments             Document[]
   invitations             Invitation[]
 
   @@map("user")
@@ -48,19 +49,19 @@ model User {
 }
 
 model Session {
-  id                   String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  token                String   @unique
-  userId               String   @map("user_id") @db.Uuid
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt            DateTime @map("expires_at") @db.Timestamptz(3)
-  ipAddress            String?  @map("ip_address")
-  userAgent            String?  @map("user_agent")
+  id                   String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  token                String               @unique
+  userId               String               @map("user_id") @db.Uuid
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt            DateTime             @map("expires_at") @db.Timestamptz(3)
+  ipAddress            String?              @map("ip_address")
+  userAgent            String?              @map("user_agent")
   // organization plugin: the organization this session is working in.
-  activeOrganizationId String?  @map("active_organization_id") @db.Uuid
+  activeOrganizationId String?              @map("active_organization_id") @db.Uuid
   // admin plugin: set while an admin impersonates this user.
-  impersonatedBy       String?  @map("impersonated_by") @db.Uuid
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  impersonatedBy       String?              @map("impersonated_by") @db.Uuid
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
   notificationDevices  NotificationDevice[]
 
   @@index([userId])
@@ -152,6 +153,8 @@ model Organization {
   todos            Todo[]
   webhookEndpoints WebhookEndpoint[]
   billingCustomer  BillingCustomer?
+  aiDocuments      Document[]
+  aiUsage          AiUsage[]
   subscriptions    Subscription[]
   invitations      Invitation[]
 

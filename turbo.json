@@ -14,7 +14,13 @@
     // type-checks, tests or bundles, so a fresh clone never sees missing types.
     "gen": {
       "dependsOn": ["^gen"],
-      "outputs": ["src/generated/**", "src/**/*.gen.ts", "openapi.json"]
+      "outputs": [
+        "src/generated/**",
+        "src/**/*.gen.ts",
+        "openapi.json",
+        "app/contracts/**",
+        "generated/**"
+      ]
     },
     "build": {
       "dependsOn": ["^build", "gen", "^gen"],

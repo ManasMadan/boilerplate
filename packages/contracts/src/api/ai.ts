@@ -1,18 +1,50 @@
+/**
+ * The AI features, served by apps/api on top of the Python service (apps/ai). Limits
+ * here must match the Python models; a test in apps/api compares them through the
+ * generated AI client's schemas.
+ */
+import { eventIterator } from "@orpc/contract";
 import { z } from "zod";
 import { base } from "./base";
 
-// Must not exceed the Python model's max_length (apps/ai/app/schemas.py); a test in
-// apps/api compares the two through the generated AI client schema.
 export const SENTIMENT_TEXT_MAX_LENGTH = 5_000;
+export const DOCUMENT_TITLE_MAX_LENGTH = 200;
+export const DOCUMENT_CONTENT_MAX_LENGTH = 200_000;
+export const QUESTION_MAX_LENGTH = 2_000;
+
+export const aiDocumentSchema = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  /** pending → indexing → ready (or failed, with an error code). */
+  status: z.enum(["pending", "indexing", "ready", "failed"]),
+  error: z.string().nullable(),
+  chunkCount: z.number().int(),
+  createdBy: z.uuid().nullable(),
+  createdAt: z.date(),
+});
+export type AiDocument = z.infer<typeof aiDocumentSchema>;
+
+/** One step of a streamed answer. */
+export const assistantEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), text: z.string() }),
+  z.object({
+    type: z.literal("sources"),
+    sources: z.array(z.object({ documentId: z.uuid(), title: z.string() })),
+  }),
+  z.object({
+    type: z.literal("done"),
+    usage: z.object({ inputTokens: z.number().int(), outputTokens: z.number().int() }),
+  }),
+  /** The answer stopped: a stable error code (AI_RUN_LIMIT, UPSTREAM_UNAVAILABLE). */
+  z.object({ type: z.literal("error"), code: z.string() }),
+]);
+export type AssistantEvent = z.infer<typeof assistantEventSchema>;
+
+const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
+  base.route({ method, path, tags: ["AI"], summary });
 
 export const aiContract = {
-  sentiment: base
-    .route({
-      method: "POST",
-      path: "/ai/sentiment",
-      tags: ["AI"],
-      summary: "Classify the sentiment of a text",
-    })
+  sentiment: route("POST", "/ai/sentiment", "Classify the sentiment of a text")
     .input(z.object({ text: z.string().trim().min(1).max(SENTIMENT_TEXT_MAX_LENGTH) }))
     .output(
       z.object({
@@ -21,4 +53,24 @@ export const aiContract = {
         model: z.string(),
       }),
     ),
+  /** The workspace's documents the assistant answers from, newest first. */
+  documents: route("GET", "/ai/documents", "The assistant's documents").output(
+    z.array(aiDocumentSchema),
+  ),
+  addDocument: route("POST", "/ai/documents", "Add a document for the assistant")
+    .input(
+      z.object({
+        title: z.string().trim().min(1).max(DOCUMENT_TITLE_MAX_LENGTH),
+        content: z.string().trim().min(1).max(DOCUMENT_CONTENT_MAX_LENGTH),
+      }),
+    )
+    .output(aiDocumentSchema),
+  /** Its creator or a workspace admin (FORBIDDEN otherwise). */
+  removeDocument: route("POST", "/ai/documents/{documentId}/remove", "Remove a document")
+    .input(z.object({ documentId: z.uuid() }))
+    .output(z.void()),
+  /** Streams an answer from the workspace's documents (AI_BUDGET_EXCEEDED when used up). */
+  ask: route("POST", "/ai/answers", "Ask the assistant")
+    .input(z.object({ question: z.string().trim().min(1).max(QUESTION_MAX_LENGTH) }))
+    .output(eventIterator(assistantEventSchema)),
 };

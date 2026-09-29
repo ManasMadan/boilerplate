@@ -25,7 +25,8 @@
       "system": "Sistema"
     },
     "language": "Idioma",
-    "captchaFailed": "No se pudo cargar la verificación de seguridad. Revisa tu conexión, permite challenges.cloudflare.com si usas un bloqueador y recarga la página."
+    "captchaFailed": "No se pudo cargar la verificación de seguridad. Revisa tu conexión, permite challenges.cloudflare.com si usas un bloqueador y recarga la página.",
+    "assistant": "Asistente"
   },
   "meta": {
     "title": "Boilerplate",
@@ -415,7 +416,11 @@
     "FILE_NOT_READY": "Todavía estamos revisando ese archivo. Inténtalo de nuevo en un momento.",
     "ENTITLEMENT_REQUIRED": "Tu plan no incluye esto. Mejóralo en la configuración de facturación para usarlo.",
     "ALREADY_SUBSCRIBED": "Este espacio de trabajo ya tiene un plan de pago. Gestiónalo desde la configuración de facturación.",
-    "NO_SUBSCRIPTION": "Este espacio de trabajo aún no tiene un plan de pago."
+    "NO_SUBSCRIPTION": "Este espacio de trabajo aún no tiene un plan de pago.",
+    "DOCUMENT_NOT_FOUND": "Ese documento no existe en este espacio de trabajo.",
+    "DOCUMENT_INDEXING_FAILED": "No se pudo preparar este documento para el asistente. Prueba a añadirlo de nuevo.",
+    "AI_BUDGET_EXCEEDED": "Este espacio de trabajo ya usó la asignación del asistente de este mes. Se renueva el día 1.",
+    "AI_RUN_LIMIT": "Esa pregunta necesitaba más trabajo del que permite una respuesta. Prueba con una pregunta más concreta."
   },
   "workspace": {
     "switcher": {
@@ -775,5 +780,33 @@
     "checkoutDone": "¡Gracias! Tu plan se actualizará en un momento.",
     "limitReached": "Tu plan permite {limit} miembros. Mejóralo en la configuración de facturación para invitar a más.",
     "upgradeForWebhooks": "Los webhooks forman parte de Pro. Mejora tu plan en la configuración de facturación para enviar eventos a tus endpoints."
+  },
+  "assistant": {
+    "title": "Asistente",
+    "description": "Haz preguntas y obtén respuestas a partir de los documentos de este espacio de trabajo.",
+    "ask": "Preguntar",
+    "question": "Tu pregunta",
+    "placeholder": "¿Cuánto tardan los reembolsos?",
+    "thinking": "Buscando en tus documentos…",
+    "sources": "De",
+    "empty": "Añade un documento abajo y luego pregunta sobre él.",
+    "documents": {
+      "title": "Documentos",
+      "description": "Lo que el asistente puede usar para responder. Todos en el espacio de trabajo pueden usarlos.",
+      "add": "Añadir documento",
+      "docTitle": "Título",
+      "content": "Texto",
+      "added": "Documento añadido. Estará listo en un momento.",
+      "remove": "Quitar",
+      "removed": "Documento quitado",
+      "none": "Todavía no hay documentos.",
+      "status": {
+        "pending": "En espera",
+        "indexing": "Preparando",
+        "ready": "Listo",
+        "failed": "Falló"
+      },
+      "passages": "{count, plural, one {# pasaje} other {# pasajes}}"
+    }
   }
 }

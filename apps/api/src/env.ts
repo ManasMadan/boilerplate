@@ -63,8 +63,10 @@ export const env = createEnv({
           .map((part) => part.trim())
           .filter(Boolean),
       ),
-    // Optional: the Python AI service.
+    // Optional: the Python AI service, and the secret this API signs its calls with
+    // (the same AI_SERVICE_SECRET the service verifies with).
     AI_URL: z.url().optional(),
+    AI_SERVICE_SECRET: z.string().min(32).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

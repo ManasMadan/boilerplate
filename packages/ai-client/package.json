@@ -1,21 +1,23 @@
 {
   "name": "@repo/ai-client",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "scripts": {
-    "gen": "openapi-typescript ../../apps/ai/openapi.json -o src/schema.gen.ts",
-    "check-types": "tsc"
-  },
-  "dependencies": {
-    "openapi-fetch": "^0.17.0"
-  },
   "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
     "@repo/ai": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "openapi-typescript": "^7.13.0",
     "typescript": "catalog:"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schemas": "./src/generated/zod.gen.ts"
+  },
+  "private": true,
+  "scripts": {
+    "gen": "openapi-ts",
+    "check-types": "tsc"
+  },
+  "type": "module",
+  "dependencies": {
+    "jose": "^6.2.12",
+    "zod": "catalog:"
   }
 }

@@ -251,6 +251,14 @@ export const queues = {
     jobs: { process: z.object({ fileId: z.uuid() }) },
     options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
   },
+  /**
+   * Indexing a document for the assistant (apps/ai produces and consumes it; the payload
+   * reaches Python as generated Pydantic models, see scripts/export-schemas.ts).
+   */
+  "ai-ingest": {
+    jobs: { ingest: z.object({ documentId: z.uuid(), orgId: z.uuid() }) },
+    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
+  },
   maintenance: {
     jobs: {
       "outbox-retention": z.object({}),

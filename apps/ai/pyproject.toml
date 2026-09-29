@@ -2,15 +2,29 @@
 name = "ai"
 version = "0.1.0"
 description = "Python inference service. Its Pydantic models are the source of truth for the TypeScript client in packages/ai-client."
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
+  "bullmq>=3.2.8",
   "fastapi[standard]>=0.141.1",
+  "langgraph>=1.2.12",
+  "mcp>=2.2.0",
+  "pgvector>=0.5.0",
+  "psycopg[binary,pool]>=3.3.6",
   "pydantic>=2.13.5",
+  "pydantic-ai-slim[anthropic,openai]>=2.51.0",
+  "pydantic-settings>=2.15.0",
+  "pyjwt[crypto]>=2.10.1",
+  "sqlalchemy[asyncio]>=2.1.1",
+  "structlog>=26.1.0",
 ]
 
 [dependency-groups]
 dev = [
+  "alembic>=1.17.0",
   "basedpyright>=1.40.1",
+  "datamodel-code-generator>=0.83.0",
+  "pydantic-evals>=2.51.0",
+  "pytest-asyncio>=1.2.0",
   "httpx2>=2.13.1",
   "pytest>=9.1.1",
   "ruff>=0.16.9",
@@ -22,7 +36,7 @@ package = false
 
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py314"
 
 [tool.ruff.lint]
 # Pyflakes, pycodestyle, isort, bugbear, pyupgrade, simplify, ruff-specific.
@@ -32,11 +46,24 @@ select = ["F", "E", "W", "I", "B", "UP", "SIM", "RUF"]
 # Strict mode: every function signature and model field must be typed. This is what
 # keeps the generated OpenAPI schema (and therefore the TypeScript types) precise.
 typeCheckingMode = "strict"
-pythonVersion = "3.13"
+pythonVersion = "3.14"
 include = ["app", "tests"]
 reportUnusedCallResult = false
 reportAny = false
 reportExplicitAny = false
+# Tests drive untyped third-party clients (redis-py, TestClient internals) directly;
+# the application code keeps every strict rule.
+executionEnvironments = [
+  { root = "tests", extraPaths = ["."], reportUnknownMemberType = false, reportUnknownVariableType = false, reportUnknownArgumentType = false, reportUnknownLambdaType = false, reportAttributeAccessIssue = false, reportIndexIssue = false, reportArgumentType = false, reportPrivateUsage = false },
+  { root = "app", extraPaths = ["."] },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+# `integration` tests need Postgres and Redis (bun run test:integration); the default
+# run (bun run test) is pure.
+markers = ["integration: needs Postgres and Redis"]
+addopts = "-m 'not integration'"

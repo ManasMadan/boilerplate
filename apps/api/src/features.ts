@@ -29,7 +29,7 @@ export const features: Record<Feature, boolean> = {
     env.GOOGLE_CLIENT_ID,
     env.GOOGLE_CLIENT_SECRET,
   ),
-  ai: Boolean(env.AI_URL),
+  ai: pair("AI service (AI_URL/AI_SERVICE_SECRET)", env.AI_URL, env.AI_SERVICE_SECRET),
   captcha: pair(
     "Captcha (TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY)",
     env.TURNSTILE_SITE_KEY,
