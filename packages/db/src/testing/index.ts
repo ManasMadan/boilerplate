@@ -22,6 +22,11 @@ export { factories } from "./factories";
 
 const DB_PACKAGE = join(import.meta.dirname, "../..");
 const TEMPLATE = "app_test";
+/**
+ * Advisory lock guarding the template: preparing it takes it exclusively, cloning it
+ * shared, so test runs of several packages at once never clone mid-migration.
+ */
+const TEMPLATE_LOCK = 482_117_001;
 
 /** Local role passwords match the role names (infra/postgres/init). */
 const ROLE_PASSWORDS: Record<string, string> = {
@@ -59,18 +64,26 @@ function urlFor(database: string, role: string) {
  * live in `public` and stay.
  */
 export async function prepareTemplate() {
-  const client = new pg.Client({ connectionString: urlFor(TEMPLATE, "migrator") });
-  await client.connect();
+  // The lock is held from the maintenance database: Postgres refuses to clone a database
+  // anyone is connected to, so nothing but the work below may touch the template.
+  const lock = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
+  await lock.connect();
   try {
-    await client.query("SELECT pg_advisory_lock(hashtext('prepare-test-template'))");
-    if (await isStale(client)) {
-      const { rows } = await client.query<{ nspname: string }>(
-        "SELECT nspname FROM pg_namespace WHERE nspowner = 'migrator'::regrole",
-      );
-      for (const { nspname } of rows) {
-        await client.query(`DROP SCHEMA ${pg.escapeIdentifier(nspname)} CASCADE`);
+    await lock.query("SELECT pg_advisory_lock($1)", [TEMPLATE_LOCK]);
+    const client = new pg.Client({ connectionString: urlFor(TEMPLATE, "migrator") });
+    await client.connect();
+    try {
+      if (await isStale(client)) {
+        const { rows } = await client.query<{ nspname: string }>(
+          "SELECT nspname FROM pg_namespace WHERE nspowner = 'migrator'::regrole",
+        );
+        for (const { nspname } of rows) {
+          await client.query(`DROP SCHEMA ${pg.escapeIdentifier(nspname)} CASCADE`);
+        }
+        await client.query("DROP TABLE IF EXISTS public._prisma_migrations");
       }
-      await client.query("DROP TABLE IF EXISTS public._prisma_migrations");
+    } finally {
+      await client.end();
     }
     execFileSync("bunx", ["prisma", "migrate", "deploy"], {
       cwd: DB_PACKAGE,
@@ -78,7 +91,8 @@ export async function prepareTemplate() {
       stdio: "pipe",
     });
   } finally {
-    await client.end();
+    // Ending the session releases the lock, after every connection to the template closed.
+    await lock.end();
   }
 }
 
@@ -109,7 +123,9 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   const admin = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
   await admin.connect();
   try {
+    await admin.query("SELECT pg_advisory_lock_shared($1)", [TEMPLATE_LOCK]);
     await admin.query(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE}`);
+    await admin.query("SELECT pg_advisory_unlock_shared($1)", [TEMPLATE_LOCK]);
     // Database-level privileges are not copied from the template.
     await admin.query(`REVOKE ALL ON DATABASE ${name} FROM PUBLIC`);
     await admin.query(`GRANT CONNECT ON DATABASE ${name} TO ${SERVICE_ROLES.join(", ")}`);
