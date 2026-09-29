@@ -1,0 +1,62 @@
+# Releases and production. release-please keeps a release pull request open with the
+# next version and changelog (from the conventional commits since the last release);
+# merging it tags the release. A release then opens the production promotion pull
+# request, which points production at that commit's images (built and signed by
+# deploy.yml). Merging the promotion is the deploy: Argo CD rolls it out.
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release-please:
+    name: Release pull request
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write }
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  promote:
+    name: Production promotion
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write }
+    env:
+      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG: sha-${{ needs.release-please.outputs.sha }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: master }
+      - name: Open the promotion pull request
+        run: |
+          branch="release/production-v$VERSION"
+          file=deploy/environments/production/stack.yaml
+          git switch -c "$branch"
+          sed -i -E '/^image:/,/^[^ ]/ s/^  tag: .*/  tag: "'"$TAG"'"/' "$file"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(infra): deploy v$VERSION to production"
+          git push origin "$branch"
+          gh pr create --base master --head "$branch" \
+            --title "chore(infra): deploy v$VERSION to production" \
+            --body "Points production at the images of v$VERSION ($TAG), already running on staging. Merging deploys it."
