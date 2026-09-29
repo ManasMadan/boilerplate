@@ -138,9 +138,12 @@ jobs:
         image: axllent/mailpit:v1.31.3
         ports: ["1025:1025", "8025:8025"]
         env: { MP_MAX_MESSAGES: "5000" }
-    # The same configuration as local development (.env.example), minus secrets.
+    # The same configuration as local development (.env.example), minus secrets. The
+    # services run as "test": production refuses the local stand-ins the suite relies on
+    # (loopback webhook receivers, texts delivered to Mailpit). What's built is still the
+    # production build.
     env:
-      NODE_ENV: production
+      NODE_ENV: test
       MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
       API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
       NOTIFICATIONS_DATABASE_URL: postgresql://app_notifications:app_notifications@localhost:5432/app
@@ -182,6 +185,7 @@ jobs:
             echo "VAPID_SUBJECT=mailto:ci@example.com"
           } >> "$GITHUB_ENV"
       - name: Build the services under test
+        env: { NODE_ENV: production }
         run: bunx turbo run build --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks --filter=@repo/web
       - name: Install the browser
         working-directory: apps/web
