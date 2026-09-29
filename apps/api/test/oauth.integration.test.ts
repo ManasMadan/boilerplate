@@ -518,3 +518,58 @@ describe("connected apps", () => {
     expect((error as ORPCError<string, unknown>).code).toBe("UNAUTHENTICATED");
   });
 });
+
+describe("client ID metadata documents", () => {
+  async function authorizeAs(clientId: string) {
+    const { session } = await signedIn();
+    const { challenge } = pkce();
+    return fetch(
+      `${harness.baseUrl}/api/auth/oauth2/authorize?${new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
+        redirect_uri: REDIRECT_URI,
+        scope: "openid todos:read",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        resource: resource(),
+      })}`,
+      { redirect: "manual", headers: { cookie: cookieHeader(session) } },
+    );
+  }
+
+  it.each([
+    "https://127.0.0.1/client.json",
+    "https://localhost/client.json",
+    "https://10.0.0.5/client.json",
+  ])("never fetches a metadata document from a private address: %s", async (clientId) => {
+    const response = await authorizeAs(clientId);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: "invalid_client",
+      error_description: "client_id URL must not target a private or reserved address",
+    });
+  });
+
+  it("treats a non-HTTPS client id as an unknown client", async () => {
+    const answer = await redirectOf(await authorizeAs("http://client.example/client.json"));
+    expect(answer.pathname).toBe("/api/auth/error");
+    expect(answer.searchParams.get("error")).toBe("invalid_client");
+  });
+
+  // Needs a client whose metadata document is on a public HTTPS URL (the transport
+  // refuses loopback and private addresses by design). Set E2E_CIMD_CLIENT_ID to one.
+  it.skipIf(!process.env.E2E_CIMD_CLIENT_ID)(
+    "discovers a client from its public metadata document",
+    async () => {
+      const { session } = await signedIn();
+      const { challenge } = pkce();
+      const consentUrl = await authorize(
+        session,
+        process.env.E2E_CIMD_CLIENT_ID as string,
+        challenge,
+        { redirect_uri: process.env.E2E_CIMD_REDIRECT_URI as string },
+      );
+      expect(consentUrl.pathname).toBe("/oauth/consent");
+    },
+  );
+});
