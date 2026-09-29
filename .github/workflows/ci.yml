@@ -1,6 +1,9 @@
 # Every check a change must pass before it can merge. Branch protection requires the
 # `ci-ok` job, which only succeeds when all others do, so adding a job here never
 # needs a settings change.
+#
+# Nightly, the same checks run on master with more weight: the load test ramps to a real
+# load instead of the smoke run, and the evals measure the configured model (evals job).
 name: CI
 
 on:
@@ -8,10 +11,13 @@ on:
   push:
     branches: [master]
   merge_group:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
 
-# One run per PR/branch: a new push cancels the outdated run.
+# One run per PR/branch: a new push cancels the outdated run (never the nightly one).
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 # Least privilege: jobs get read access to the code and nothing else.
@@ -154,7 +160,8 @@ jobs:
   e2e:
     name: End-to-end tests
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # The nightly load test holds its load for five minutes on top.
+    timeout-minutes: ${{ github.event_name == 'schedule' && 40 || 25 }}
     permissions: { contents: read }
     services:
       postgres:
@@ -248,7 +255,16 @@ jobs:
       # Builds the services, starts them fresh, runs Playwright and the k6 smoke, and stops them
       # (scripts/e2e.ts), the same way as locally.
       - name: Run the end-to-end suite
+        env:
+          PROFILE: ${{ github.event_name == 'schedule' && 'load' || 'smoke' }}
+          TARGET_RPS: ${{ vars.LOAD_TARGET_RPS || '50' }}
         run: bun run test:e2e
+      # Backs up the database the suite just filled, restores it and requires an identical
+      # copy: rows, row-level security, grants and functions (scripts/restore-drill.ts).
+      - name: Restore drill
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: bun run db:restore-drill
       - name: Keep the report and service logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -306,6 +322,33 @@ jobs:
       # every test counted toward the coverage floor (pyproject.toml, tool.coverage).
       - name: All tests with coverage
         run: uv run pytest -m "integration or not integration" --cov --cov-report=term
+
+  # The evals against a real model, nightly: set the EVAL_MODEL variable (and optionally
+  # EVAL_EMBEDDINGS, EVAL_JUDGE_MODEL, EVAL_MIN_PASS_RATE, EVAL_MIN_RELEVANCE) and the
+  # provider keys as secrets. Every change already runs them with the local stand-ins.
+  evals:
+    name: Evals (${{ vars.EVAL_MODEL }})
+    if: github.event_name == 'schedule' && vars.EVAL_MODEL != ''
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    defaults:
+      run: { working-directory: apps/ai }
+    env:
+      AI_MODEL: ${{ vars.EVAL_MODEL }}
+      AI_EMBEDDINGS: ${{ vars.EVAL_EMBEDDINGS || 'hashing' }}
+      AI_MIN_RELEVANCE: ${{ vars.EVAL_MIN_RELEVANCE || '0' }}
+      EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL }}
+      EVAL_MIN_PASS_RATE: ${{ vars.EVAL_MIN_PASS_RATE || '0.9' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - run: uv run python -m evals
 
   codegen:
     name: Generated code is committed
