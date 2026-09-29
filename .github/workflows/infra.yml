@@ -1,0 +1,138 @@
+# Infrastructure changes (infra/tofu). Pull requests get a `tofu plan` for every
+# environment listed in the TOFU_TARGETS repository variable, posted on the pull
+# request. Applying is manual (Run workflow → cloud, environment, apply) and waits for
+# the GitHub environment's required reviewers.
+#
+# Setup, per environment (GitHub → Settings → Environments → <cloud>-<env>):
+#   TOFU_TARGETS (repository variable)  e.g. [{"cloud":"aws","env":"staging"}]
+#   TOFU_BACKEND (environment secret)   the contents of backend-<env>.hcl
+#   TOFU_TFVARS (environment secret)    the contents of <env>.tfvars
+#   CLOUDFLARE_API_TOKEN (environment secret)
+#   plus the cloud's OIDC federation (no long-lived keys):
+#     aws    AWS_ROLE_ARN, AWS_REGION                       (variables)
+#     gcp    GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT
+#     azure  AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   and TF_VAR_state_passphrase (secret) on Azure, TF_VAR_github_token where previews run.
+name: Infrastructure
+
+on:
+  pull_request:
+    paths: ["infra/tofu/**"]
+  workflow_dispatch:
+    inputs:
+      cloud:
+        type: choice
+        options: [aws, gcp, azure]
+      env:
+        type: choice
+        options: [staging, production]
+      apply:
+        description: Apply the plan (otherwise only plan)
+        type: boolean
+        default: false
+
+concurrency:
+  group: infra-${{ github.event.pull_request.number || format('{0}-{1}', inputs.cloud, inputs.env) }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  targets:
+    name: Environments
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - id: targets
+        env:
+          TARGETS: ${{ vars.TOFU_TARGETS }}
+          EVENT: ${{ github.event_name }}
+          CLOUD: ${{ inputs.cloud }}
+          ENV: ${{ inputs.env }}
+        run: |
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            echo "matrix=[{\"cloud\":\"$CLOUD\",\"env\":\"$ENV\"}]" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=${TARGETS:-[]}" >> "$GITHUB_OUTPUT"
+          fi
+
+  tofu:
+    name: ${{ matrix.target.cloud }} ${{ matrix.target.env }}
+    needs: targets
+    if: needs.targets.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.target.cloud }}-${{ matrix.target.env }}
+    permissions: { contents: read, id-token: write, pull-requests: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: infra/tofu/envs/${{ matrix.target.cloud }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_state_passphrase: ${{ secrets.TF_VAR_state_passphrase }}
+      TF_VAR_github_token: ${{ secrets.TF_VAR_github_token }}
+      TF_IN_AUTOMATION: "1"
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with: { tofu_version: 1.11.6, tofu_wrapper: false }
+      - if: matrix.target.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - if: matrix.target.cloud == 'gcp'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - if: matrix.target.cloud == 'azure'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Environment files
+        env:
+          BACKEND: ${{ secrets.TOFU_BACKEND }}
+          TFVARS: ${{ secrets.TOFU_TFVARS }}
+        run: |
+          printf '%s\n' "$BACKEND" > backend.hcl
+          printf '%s\n' "$TFVARS" > env.tfvars
+      - run: tofu init -input=false -backend-config=backend.hcl
+      - name: Plan
+        id: plan
+        run: |
+          tofu plan -input=false -no-color -var-file=env.tfvars -out=tfplan | tee plan.txt
+      - name: Post the plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TARGET: ${{ matrix.target.cloud }}-${{ matrix.target.env }}
+          PLAN_DIR: infra/tofu/envs/${{ matrix.target.cloud }}
+        with:
+          script: |
+            const fs = require("node:fs");
+            const plan = fs.readFileSync(`${process.env.PLAN_DIR}/plan.txt`, "utf8");
+            const summary = plan.split("\n").filter((line) => /^(Plan:|No changes\.)/.test(line)).join("\n");
+            const marker = `<!-- tofu-plan ${process.env.TARGET} -->`;
+            const body = `${marker}\n**OpenTofu plan: ${process.env.TARGET}**\n\n${summary || "(see the run's log)"}\n\n<details><summary>Plan</summary>\n\n\`\`\`\n${plan.slice(-60000)}\n\`\`\`\n</details>`;
+            const number = context.payload.pull_request.number;
+            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: number });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
+            }
+      - name: Apply
+        if: github.event_name == 'workflow_dispatch' && inputs.apply
+        run: tofu apply -input=false tfplan
