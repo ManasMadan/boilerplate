@@ -59,6 +59,11 @@
         }
       }
     },
+    "managedRoles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "image": { "type": "string", "minLength": 1 } }
+    },
     "valkey": {
       "type": "object",
       "additionalProperties": false,

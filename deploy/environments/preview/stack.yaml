@@ -5,7 +5,7 @@ secrets:
   externalSecrets:
     enabled: true
     # Shared, non-production credentials for every preview (test-mode Stripe, …).
-    keyPrefix: boilerplate/preview/
+    keyPrefix: boilerplate-preview-
 defaults:
   replicas: 1
   topologySpread: false

@@ -8,7 +8,7 @@ site:
 secrets:
   externalSecrets:
     enabled: true
-    keyPrefix: boilerplate/staging/
+    keyPrefix: boilerplate-staging-
 services:
   web:
     autoscaling: { minReplicas: 2, maxReplicas: 4 }

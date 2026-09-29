@@ -21,8 +21,9 @@ credentials:
   storeRef:
     kind: ClusterSecretStore
     name: platform
-  # extract: the remote secret for a role is `<keyPrefix><role>`, a JSON object with
-  # the four keys above.
+  # extract: the remote secret for a role is `<keyPrefix><role>` with dashes (app_api →
+  # boilerplate-production-app-api: every cloud's secret manager accepts those names),
+  # a JSON object with the four keys above.
   keyPrefix: ""
 
 # In-cluster Postgres with CloudNativePG. Off when the database is managed (RDS,
@@ -48,6 +49,14 @@ postgres:
     # retention is configured there.
     objectStore: ""
     schedule: "0 0 3 * * *"
+
+# Managed Postgres (postgres.enabled=false): after every install and upgrade a Job
+# creates the roles above, sets their passwords from their Secrets and grants them what
+# local development gets (infra/postgres/init). It connects with the database's admin
+# credentials, the `<secretPrefix>admin` Secret (key `url`), extracted from the secret
+# manager like the others. Safe to run any number of times.
+managedRoles:
+  image: docker.io/library/postgres:18-alpine
 
 # In-cluster Valkey (a single node: queues, sessions, rate limits, caches). Off for a
 # managed Valkey/Redis (ElastiCache, Memorystore, Azure Cache): then the `valkey`

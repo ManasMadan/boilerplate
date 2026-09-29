@@ -2,7 +2,7 @@
 # credentials to the secret manager).
 credentials:
   source: extract
-  keyPrefix: boilerplate/staging/
+  keyPrefix: boilerplate-staging-
 postgres:
   enabled: false
 valkey:

@@ -41,7 +41,7 @@ tests:
     template: externalsecret.yaml
     set:
       secrets.externalSecrets.enabled: true
-      secrets.externalSecrets.keyPrefix: boilerplate/production/
+      secrets.externalSecrets.keyPrefix: boilerplate-production-
     asserts:
       # ai-worker shares the AI service's secret, and ClamAV (disabled) has none.
       - hasDocuments: { count: 6 }
@@ -50,9 +50,9 @@ tests:
     template: externalsecret.yaml
     set:
       secrets.externalSecrets.enabled: true
-      secrets.externalSecrets.keyPrefix: boilerplate/production/
+      secrets.externalSecrets.keyPrefix: boilerplate-production-
     documentSelector: { path: metadata.name, value: demo-api }
     asserts:
-      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate/production/api } }] }
+      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate-production-api } }] }
       - equal: { path: spec.target, value: { name: demo-api, creationPolicy: Owner } }
       - equal: { path: spec.secretStoreRef, value: { kind: ClusterSecretStore, name: platform } }

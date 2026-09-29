@@ -67,5 +67,5 @@ Clusters describe themselves in their Argo CD cluster Secret, which OpenTofu wri
 | annotation `boilerplate.dev/domain` | the DNS zone its hosts are in |
 | annotations `boilerplate.dev/environment`, `tls-email`, `dns01`, `secret-store`, `aws-region`, `gcp-project`, `azure-vault-url`, `azure-eso-client-id`, `image-policy` | the platform config's values |
 
-Platform credentials live in the secret manager too: `platform/cloudflare-api-token`
-(`{"token": …}`, Zone DNS edit) and, for previews, `platform/github-token`.
+Platform credentials live in the secret manager too: `platform-cloudflare-api-token`
+(`{"token": …}`, Zone DNS edit) and, for previews, `platform-github-token`.

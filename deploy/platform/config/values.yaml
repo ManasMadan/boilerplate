@@ -42,8 +42,8 @@ secretStore:
 # that need them: the Cloudflare API token (DNS records and DNS-01), and on the preview
 # cluster the GitHub token Argo CD lists pull requests with.
 platformSecrets:
-  cloudflareToken: platform/cloudflare-api-token
-  githubToken: platform/github-token
+  cloudflareToken: platform-cloudflare-api-token
+  githubToken: platform-github-token
 
 # Only images built and signed by this repo's CI (keyless, GitHub OIDC) may run in the
 # application namespaces. On for production.

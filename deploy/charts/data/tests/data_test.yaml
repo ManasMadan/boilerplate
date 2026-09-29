@@ -71,12 +71,13 @@ tests:
       postgres.enabled: false
       valkey.enabled: false
       credentials.source: extract
-      credentials.keyPrefix: boilerplate/production/
+      credentials.keyPrefix: boilerplate-production-
     asserts:
-      - hasDocuments: { count: 7 }
-      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate/production/app_api } }] }
+      # Six roles, the admin login and Valkey.
+      - hasDocuments: { count: 8 }
+      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate-production-app-api } }] }
         documentSelector: { path: metadata.name, value: db-app-api }
-      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate/production/valkey } }] }
+      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate-production-valkey } }] }
         documentSelector: { path: metadata.name, value: valkey }
 
   - it: refuses to generate passwords for a database it doesn't run
@@ -120,3 +121,54 @@ tests:
       preview.enabled: true
     asserts:
       - failedTemplate: { errorMessage: preview.namespace is required for a preview }
+
+  - it: sets up roles on a managed database after each sync, with its admin login
+    template: managed-roles.yaml
+    set:
+      postgres.enabled: false
+      valkey.enabled: false
+      credentials.source: extract
+    asserts:
+      - hasDocuments: { count: 2 }
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/hook: post-install,post-upgrade
+            helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+        documentSelector: { path: kind, value: Job }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: ADMIN_URL
+            valueFrom: { secretKeyRef: { name: db-admin, key: url } }
+        documentSelector: { path: kind, value: Job }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: APP_API_PASSWORD
+            valueFrom: { secretKeyRef: { name: db-app-api, key: password } }
+        documentSelector: { path: kind, value: Job }
+      - matchRegex:
+          path: data["roles.sql"]
+          pattern: "ALTER ROLE app_api WITH LOGIN NOINHERIT PASSWORD :'app_api_password';"
+        documentSelector: { path: kind, value: ConfigMap }
+      - matchRegex:
+          path: data["roles.sql"]
+          pattern: "RAISE EXCEPTION 'a role of the application can bypass row-level security'"
+        documentSelector: { path: kind, value: ConfigMap }
+
+  - it: extracts the admin login only for a managed database
+    template: credentials.yaml
+    set:
+      postgres.enabled: false
+      valkey.enabled: false
+      credentials.source: extract
+      credentials.keyPrefix: boilerplate-production-
+    documentSelector: { path: metadata.name, value: db-admin }
+    asserts:
+      - equal: { path: spec.dataFrom, value: [{ extract: { key: boilerplate-production-admin } }] }
+
+  - it: runs no roles Job for in-cluster Postgres
+    template: managed-roles.yaml
+    asserts:
+      - hasDocuments: { count: 0 }

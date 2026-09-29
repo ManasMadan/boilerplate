@@ -9,7 +9,7 @@ env:
 secrets:
   externalSecrets:
     enabled: true
-    keyPrefix: boilerplate/production/
+    keyPrefix: boilerplate-production-
 defaults:
   replicas: 3
   resources:
