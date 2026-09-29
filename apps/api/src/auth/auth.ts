@@ -16,6 +16,9 @@
  */
 import { randomUUID } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
+import { cimd } from "@better-auth/cimd";
+import { fetchClientMetadataResource } from "@better-auth/cimd/node";
+import { mcp } from "@better-auth/mcp";
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
 import {
@@ -29,6 +32,16 @@ import {
 } from "@repo/contracts/auth";
 import type { Entitlements } from "@repo/contracts/billing";
 import type { EventName, EventPayload } from "@repo/contracts/events";
+import {
+  AI_MCP_PATH,
+  IDENTITY_SCOPES,
+  MCP_ACCESS_TOKEN_SECONDS,
+  MCP_PATH,
+  MCP_SCOPES,
+  MCP_SERVER_SCOPES,
+  mcpResource,
+  ORG_CLAIM,
+} from "@repo/contracts/mcp";
 import { type Db, transaction } from "@repo/db";
 import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
 import type { JobMeta, Producer } from "@repo/jobs";
@@ -40,6 +53,7 @@ import { captcha } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { haveIBeenPwned } from "better-auth/plugins/haveibeenpwned";
+import { jwt } from "better-auth/plugins/jwt";
 import { organization } from "better-auth/plugins/organization";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Redis } from "ioredis";
@@ -61,6 +75,8 @@ export interface AuthDependencies {
     entitlements(orgId: string): Promise<Entitlements>;
     cancelFor(orgId: string): Promise<void>;
   };
+  /** Where better-auth stores its rows; Postgres through Prisma unless given (auth.cli.ts). */
+  database?: BetterAuthOptions["database"];
 }
 
 const MINUTE = 60;
@@ -83,6 +99,7 @@ export function createAuth({
   notifications,
   memberships,
   billing,
+  database = prismaAdapter(db, { provider: "postgresql" }),
 }: AuthDependencies) {
   const webOrigin = new URL(env.WEB_URL);
 
@@ -111,8 +128,11 @@ export function createAuth({
     secret: env.BETTER_AUTH_SECRET,
     // Browsers may only call auth endpoints from the web app's origin (CSRF protection).
     trustedOrigins: [env.WEB_URL],
+    // The JWT plugin's /token would hand any session a signed JWT; access tokens come
+    // only from the OAuth flow below.
+    disabledPaths: ["/token"],
 
-    database: prismaAdapter(db, { provider: "postgresql" }),
+    database,
     // Session lookups hit Redis, not Postgres, on every request.
     secondaryStorage: redisStorage({ client: redis, keyPrefix: "auth:" }),
     advanced: {
@@ -148,6 +168,9 @@ export function createAuth({
         "/email-otp/*": { window: MINUTE, max: 5 },
         "/two-factor/*": { window: MINUTE, max: 5 },
         "/forget-password/*": { window: MINUTE, max: 3 },
+        // Anyone may register an MCP client (it still needs a user's consent to get a
+        // token), so registration is limited per address.
+        "/oauth2/register": { window: MINUTE, max: 5 },
       },
     },
 
@@ -245,7 +268,7 @@ export function createAuth({
         const userId = account?.id;
         if (userId) {
           await transaction(db, (tx) =>
-            emitAnyEvent(tx, auditEventForAlert(alert.event, userId), userId, {
+            emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
               actorId: userId,
               orgId: null,
             }),
@@ -262,7 +285,7 @@ export function createAuth({
             },
             data: {
               event: alert.event,
-              ...(alert.newEmail && { newEmail: alert.newEmail }),
+              ...("newEmail" in alert && alert.newEmail && { newEmail: alert.newEmail }),
               securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
             },
           },
@@ -532,6 +555,71 @@ export function createAuth({
       admin({ impersonationSessionDuration: 60 * MINUTE }),
       // API keys for third-party REST access; hashed at rest, rate limited per key.
       apiKey({ defaultPrefix: "bp_", enableMetadata: true }),
+      // Signing keys for OAuth access tokens, published at /api/auth/jwks so each MCP
+      // server verifies tokens itself. Keys rotate; old ones stay published for the
+      // grace period so tokens signed just before a rotation still verify.
+      jwt({
+        jwks: { rotationInterval: 90 * DAY, gracePeriod: 30 * DAY },
+        // Sessions stay cookies; only the OAuth flow issues JWTs.
+        disableSettingJwtHeader: true,
+      }),
+      // The OAuth 2.1 authorization server for MCP clients (Claude, IDEs, agents).
+      // Signed-out users sign in through the normal pages (every step keeps the signed
+      // OAuth request in its URL), then approve on /oauth/consent, where they also pick
+      // the workspace the client may act in. That workspace is the consent's reference,
+      // so each workspace is approved separately, and it travels in the token's `org`
+      // claim. Tokens are audience-bound to one MCP server and last 15 minutes; refresh
+      // tokens rotate, and deleting the connection (settings) revokes them.
+      mcp({
+        loginPage: "/sign-in",
+        consentPage: "/oauth/consent",
+        resource: mcpResource(env.BETTER_AUTH_URL, MCP_PATH),
+        scopes: [...IDENTITY_SCOPES, ...MCP_SCOPES],
+        // Each MCP server accepts tokens only for the scopes its tools use.
+        resources: [
+          {
+            identifier: mcpResource(env.BETTER_AUTH_URL, MCP_PATH),
+            allowedScopes: [...MCP_SERVER_SCOPES[MCP_PATH]],
+          },
+          {
+            identifier: mcpResource(env.BETTER_AUTH_URL, AI_MCP_PATH),
+            allowedScopes: [...MCP_SERVER_SCOPES[AI_MCP_PATH]],
+          },
+        ],
+        // Clients that register themselves may use both servers.
+        clientRegistrationDefaultResources: [mcpResource(env.BETTER_AUTH_URL, AI_MCP_PATH)],
+        // The resource policy above is the source of truth on every boot.
+        resourceSeedMode: "overwrite",
+        accessTokenExpiresIn: MCP_ACCESS_TOKEN_SECONDS,
+        // MCP clients register themselves: by URL (Client ID Metadata Documents, below)
+        // or, for clients that don't publish one, with RFC 7591 registration.
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        postLogin: {
+          page: "/oauth/consent",
+          // The workspace is chosen on the consent page itself (it becomes the active
+          // one), so there is no separate step after sign-in.
+          shouldRedirect: () => false,
+          consentReferenceId: ({ session }) => {
+            const orgId = session?.activeOrganizationId;
+            if (typeof orgId !== "string") {
+              throw new APIError("BAD_REQUEST", { error: "invalid_request" });
+            }
+            return orgId;
+          },
+        },
+        customAccessTokenClaims: async ({ user, referenceId }) => {
+          // The consent named a workspace; it must still be one of the user's.
+          if (!user || !referenceId || !(await memberships.role(referenceId, user.id))) {
+            throw new APIError("FORBIDDEN", { error: "access_denied" });
+          }
+          return { [ORG_CLAIM]: referenceId };
+        },
+      }),
+      // Client ID Metadata Documents (the MCP 2026-07-28 way): a client's id is a URL to
+      // its metadata, fetched through a transport that resolves DNS once, refuses private
+      // addresses and never follows redirects (no SSRF).
+      cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
       ...(features.captcha && env.TURNSTILE_SECRET_KEY
         ? [
             captcha({

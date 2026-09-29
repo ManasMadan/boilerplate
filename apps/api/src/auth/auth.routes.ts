@@ -1,53 +1,69 @@
 /**
- * Serves better-auth under /api/auth/* on the Fastify instance.
+ * Serves better-auth under /api/auth/*, and the OAuth discovery documents it answers at
+ * the site root (/.well-known/oauth-authorization-server/api/auth,
+ * /.well-known/openid-configuration/api/auth and
+ * /.well-known/oauth-protected-resource/api/mcp).
  *
- * Fastify has already parsed the JSON body by the time the route runs, so the request
- * is rebuilt as a Web Request for better-auth, carrying the verified client IP. Set-Cookie headers are copied one by one:
+ * The routes live in their own Fastify scope that keeps every request body as raw bytes:
+ * better-auth reads JSON from the browser and form-encoded bodies from OAuth clients
+ * (the token, revoke and introspect endpoints), so it gets the body exactly as sent.
+ * The request carries the verified client IP. Set-Cookie headers are copied one by one:
  * joining them with commas (what a plain header copy does) corrupts cookie attributes.
  */
 
 import { runWithContext, updateContext } from "@repo/nest-common";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { contextFor, toHeaders } from "../http-context";
 import type { Auth } from "./auth";
 
-export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string) {
-  fastify.route({
-    method: ["GET", "POST"],
-    url: "/api/auth/*",
-    handler: (request, reply) =>
-      // Same request context as the rest of the API: logs, queued emails and audit
-      // events from auth flows carry the request id and the acting user.
-      runWithContext(contextFor(request), async () => {
-        const url = new URL(request.url, baseUrl);
-        const headers = toHeaders(request);
-        // better-auth rate-limits and records sessions by the first X-Forwarded-For entry,
-        // which any client can write. Replace it with the address Fastify resolved through
-        // TRUSTED_PROXIES, so only a trusted gateway can vouch for the client IP.
-        headers.set("x-forwarded-for", request.ip);
-        if (request.headers.cookie?.includes("session_token")) {
-          const session = await auth.api.getSession({ headers });
-          if (session) updateContext({ userId: session.user.id });
-        }
-        const body =
-          request.method === "GET" || request.body === undefined
-            ? undefined
-            : JSON.stringify(request.body);
-        const response = await auth.handler(
-          new Request(url, {
-            method: request.method,
-            headers,
-            ...(body !== undefined && { body }),
-          }),
-        );
+/** Authorization-server metadata sits under the issuer's path (RFC 8414 §3). */
+const DISCOVERY_PATHS = [
+  "/.well-known/oauth-authorization-server/api/auth",
+  "/.well-known/openid-configuration/api/auth",
+  "/.well-known/oauth-protected-resource/api/mcp",
+];
 
-        reply.status(response.status);
-        for (const [key, value] of response.headers) {
-          if (key.toLowerCase() !== "set-cookie") reply.header(key, value);
-        }
-        const cookies = response.headers.getSetCookie();
-        if (cookies.length) reply.header("set-cookie", cookies);
-        return reply.send(response.body ? Buffer.from(await response.arrayBuffer()) : null);
-      }),
+export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string) {
+  const handle = (request: FastifyRequest, reply: FastifyReply) =>
+    // Same request context as the rest of the API: logs, queued emails and audit
+    // events from auth flows carry the request id and the acting user.
+    runWithContext(contextFor(request), async () => {
+      const url = new URL(request.url, baseUrl);
+      const headers = toHeaders(request);
+      // better-auth rate-limits and records sessions by the first X-Forwarded-For entry,
+      // which any client can write. Replace it with the address Fastify resolved through
+      // TRUSTED_PROXIES, so only a trusted gateway can vouch for the client IP.
+      headers.set("x-forwarded-for", request.ip);
+      if (request.headers.cookie?.includes("session_token")) {
+        const session = await auth.api.getSession({ headers });
+        if (session) updateContext({ userId: session.user.id });
+      }
+      const body = Buffer.isBuffer(request.body) ? request.body : undefined;
+      const response = await auth.handler(
+        new Request(url, {
+          method: request.method,
+          headers,
+          ...(body !== undefined && { body: new Uint8Array(body) }),
+        }),
+      );
+
+      reply.status(response.status);
+      for (const [key, value] of response.headers) {
+        if (key.toLowerCase() !== "set-cookie") reply.header(key, value);
+      }
+      const cookies = response.headers.getSetCookie();
+      if (cookies.length) reply.header("set-cookie", cookies);
+      return reply.send(response.body ? Buffer.from(await response.arrayBuffer()) : null);
+    });
+
+  fastify.register((scope, _options, done) => {
+    scope.removeAllContentTypeParsers();
+    scope.addContentTypeParser("*", { parseAs: "buffer" }, (_request, body, next) =>
+      next(null, body),
+    );
+    scope.route({ method: ["GET", "POST"], url: "/api/auth/*", handler: handle });
+    for (const url of DISCOVERY_PATHS)
+      scope.route({ method: ["GET", "HEAD"], url, handler: handle });
+    done();
   });
 }

@@ -7,6 +7,7 @@
  */
 import { populateContractRouterPaths } from "@orpc/contract";
 import { aiContract } from "./ai";
+import { appsContract } from "./apps";
 import { auditContract } from "./audit";
 import { billingContract } from "./billing";
 import { filesContract } from "./files";
@@ -20,6 +21,7 @@ import { webhooksContract } from "./webhooks";
 export const contract = populateContractRouterPaths({
   system: systemContract,
   user: userContract,
+  apps: appsContract,
   todo: todoContract,
   ai: aiContract,
   audit: auditContract,
@@ -33,6 +35,7 @@ export const contract = populateContractRouterPaths({
 export type Contract = typeof contract;
 
 export * from "./ai";
+export * from "./apps";
 export * from "./audit";
 export * from "./base";
 export * from "./billing";

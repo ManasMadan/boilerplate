@@ -8,6 +8,7 @@
  */
 import type { INestApplication } from "@nestjs/common";
 import { AiService, aiRouter } from "../modules/ai";
+import { AppsService, appsRouter } from "../modules/apps";
 import { AuditService, auditRouter } from "../modules/audit";
 import { BillingService, billingRouter } from "../modules/billing";
 import { FilesService, filesRouter } from "../modules/files";
@@ -23,6 +24,7 @@ export function createRouter(procedures: Procedures, app: INestApplication) {
   return procedures.os.router({
     system: systemRouter(procedures),
     user: userRouter(procedures, app.get(PhoneService), app.get(AvatarService)),
+    apps: appsRouter(procedures, app.get(AppsService)),
     todo: todoRouter(procedures, app.get(TodoService)),
     ai: aiRouter(procedures, app.get(AiService)),
     audit: auditRouter(procedures, app.get(AuditService)),

@@ -26,10 +26,10 @@ describe("auth audit events", () => {
   });
 
   it("maps every security alert to an audit event", () => {
-    expect(auditEventForAlert("two-factor-disabled", "u1")).toEqual({
+    expect(auditEventForAlert({ event: "two-factor-disabled" }, "u1")).toEqual({
       name: "auth.two_factor_changed.v1",
       payload: { userId: "u1", enabled: false },
     });
-    expect(auditEventForAlert("email-changed", "u1").name).toBe("auth.email_changed.v1");
+    expect(auditEventForAlert({ event: "email-changed" }, "u1").name).toBe("auth.email_changed.v1");
   });
 });

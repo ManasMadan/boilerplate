@@ -58,6 +58,7 @@ export const SECURITY_EVENTS = [
   "passkey-added",
   "phone-added",
   "phone-removed",
+  "app-connected",
 ] as const;
 export type SecurityEvent = (typeof SECURITY_EVENTS)[number];
 const locale = z.enum(locales);

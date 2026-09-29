@@ -13,6 +13,7 @@ import {
 import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
 import { AiModule } from "./modules/ai";
+import { AppsModule } from "./modules/apps";
 import { AuditModule } from "./modules/audit";
 import { BillingModule } from "./modules/billing";
 import { FilesModule } from "./modules/files";
@@ -49,6 +50,7 @@ import { NotificationsProducerModule } from "./notifications";
     TodoModule,
     UserModule,
     AiModule,
+    AppsModule,
     AuditModule,
     WebhooksModule,
     RealtimeModule,

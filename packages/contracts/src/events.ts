@@ -54,6 +54,9 @@ export const events = {
   "auth.two_factor_changed.v1": userEvent.extend({ enabled: z.boolean() }),
   "auth.passkey_added.v1": userEvent,
   "auth.phone_changed.v1": userEvent.extend({ change: z.enum(["added", "removed"]) }),
+  /** An OAuth (MCP) client was approved for, or disconnected from, one of the user's workspaces. */
+  "auth.app_connected.v1": userEvent.extend({ clientId: z.string() }),
+  "auth.app_disconnected.v1": userEvent.extend({ clientId: z.string(), organizationId: z.uuid() }),
   "auth.account_deleted.v1": userEvent,
 
   "org.created.v1": z.object({ organizationId: z.uuid(), name: z.string() }),

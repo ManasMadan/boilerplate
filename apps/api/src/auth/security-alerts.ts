@@ -10,12 +10,23 @@ interface AfterHookContext {
   context: { session?: { user: { email: string; twoFactorEnabled?: boolean | null } } | null };
 }
 
+/** What changed; an approved app (MCP client) also names the client. */
+export type SecurityChange =
+  | { event: Exclude<SecurityEvent, "app-connected">; newEmail?: string }
+  | { event: "app-connected"; clientId: string };
+
+/** A change and the address its alert goes to. */
+export type SecurityAlert = SecurityChange & { email: string };
+
 /** Which security alert (if any) a successful auth request should send, and to whom. */
-export function securityAlertFor(
-  ctx: AfterHookContext,
-): { event: SecurityEvent; email: string; newEmail?: string } | undefined {
+export function securityAlertFor(ctx: AfterHookContext): SecurityAlert | undefined {
   const user = ctx.context.session?.user;
-  const body = (ctx.body ?? {}) as { email?: unknown; newEmail?: unknown };
+  const body = (ctx.body ?? {}) as {
+    email?: unknown;
+    newEmail?: unknown;
+    accept?: unknown;
+    oauth_query?: unknown;
+  };
   switch (ctx.path) {
     case "/change-password":
       return user && { event: "password-changed", email: user.email };
@@ -37,6 +48,16 @@ export function securityAlertFor(
       return user && { event: "two-factor-disabled", email: user.email };
     case "/passkey/verify-registration":
       return user && { event: "passkey-added", email: user.email };
+    case "/oauth2/consent": {
+      // An app (an MCP client) was approved; the signed request names it.
+      const clientId =
+        typeof body.oauth_query === "string"
+          ? new URLSearchParams(body.oauth_query).get("client_id")
+          : null;
+      return user && body.accept === true && clientId
+        ? { event: "app-connected", email: user.email, clientId }
+        : undefined;
+    }
     default:
       return undefined;
   }

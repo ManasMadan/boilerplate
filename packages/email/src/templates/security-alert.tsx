@@ -9,7 +9,8 @@ export type SecurityEventName =
   | "two-factor-disabled"
   | "passkey-added"
   | "phone-added"
-  | "phone-removed";
+  | "phone-removed"
+  | "app-connected";
 
 export interface SecurityAlertEmailProps extends LocalizedProps {
   event: SecurityEventName;
