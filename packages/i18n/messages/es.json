@@ -633,7 +633,7 @@
         "copied": "Copiado",
         "done": "Ya lo guardé",
         "rotate": "Cambiar secreto",
-        "rotated": "Se creó un secreto nuevo. El anterior ya no funciona."
+        "rotated": "Se creó un secreto nuevo. El anterior sigue firmando las entregas junto a él durante {hours} horas: cambia tu receptor al secreto nuevo antes de que termine ese plazo."
       },
       "status": {
         "enabled": "Activo",

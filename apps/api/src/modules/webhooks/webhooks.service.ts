@@ -4,7 +4,11 @@
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import { Inject, Injectable, type OnApplicationShutdown } from "@nestjs/common";
-import { WEBHOOK_ENDPOINT_LIMIT, type WebhookEndpoint } from "@repo/contracts/api";
+import {
+  WEBHOOK_ENDPOINT_LIMIT,
+  WEBHOOK_SECRET_OVERLAP_HOURS,
+  type WebhookEndpoint,
+} from "@repo/contracts/api";
 import type { EventPayload, WebhookEventName } from "@repo/contracts/events";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
 import { tenantTx } from "@repo/db";
@@ -140,15 +144,26 @@ export class WebhooksService implements OnApplicationShutdown {
     });
   }
 
+  /**
+   * A new signing secret. The one it replaces keeps signing too until the overlap ends
+   * (WEBHOOK_SECRET_OVERLAP_HOURS); rotating again inside that window drops the older
+   * one, since its replacement was never put to use.
+   */
   rotateSecret(orgId: string, id: string) {
     const secret = newSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {
-      if (!(await this.repository.findEndpoint(tx, id))) {
-        throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
-      }
+      const current = await tx.webhookEndpoint.findUnique({
+        where: { id },
+        select: { secret: true },
+      });
+      if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
       await tx.webhookEndpoint.update({
         where: { id },
-        data: { secret: this.box.encrypt(secret) },
+        data: {
+          secret: this.box.encrypt(secret),
+          previousSecret: current.secret,
+          previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000),
+        },
       });
       await emitEvent(tx, "webhook.secret_rotated.v1", id, { endpointId: id });
       return { secret };

@@ -11,6 +11,7 @@ import {
   useUpdateWebhookEndpointMutation,
   useWebhookEndpointsQuery,
 } from "@repo/client/api/webhooks/endpoints";
+import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -103,7 +104,7 @@ export function WebhookEndpointPage({ id }: { id: string }) {
                 {
                   onError,
                   onSuccess: (result) => {
-                    toast.success(t("secret.rotated"));
+                    toast.success(t("secret.rotated", { hours: WEBHOOK_SECRET_OVERLAP_HOURS }));
                     setSecret(result.secret);
                   },
                 },

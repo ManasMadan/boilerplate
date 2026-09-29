@@ -633,7 +633,7 @@
         "copied": "Copied",
         "done": "I've saved it",
         "rotate": "Rotate secret",
-        "rotated": "New secret created. The old one no longer works."
+        "rotated": "New secret created. The old one keeps signing deliveries next to it for {hours} hours: switch your receiver to the new secret before then."
       },
       "status": {
         "enabled": "Active",

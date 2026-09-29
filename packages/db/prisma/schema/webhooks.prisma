@@ -7,22 +7,26 @@
 
 /// A customer's HTTPS endpoint that receives events for their organization.
 model WebhookEndpoint {
-  id             String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  orgId          String            @map("org_id") @db.Uuid
-  url            String
-  description    String            @default("")
+  id                      String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId                   String            @map("org_id") @db.Uuid
+  url                     String
+  description             String            @default("")
   /// Subscribed event names (packages/contracts webhookEvents); empty means all of them.
-  events         String[]
+  events                  String[]
   /// Signing secret (whsec_...), encrypted with ENCRYPTION_KEYS; shown to the admin once.
-  secret         String
-  createdById    String?           @map("created_by_id") @db.Uuid
-  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  secret                  String
+  /// The secret before the last rotation, still signed with until the expiry below so
+  /// receivers can switch without dropping deliveries. Encrypted like `secret`.
+  previousSecret          String?           @map("previous_secret")
+  previousSecretExpiresAt DateTime?         @map("previous_secret_expires_at") @db.Timestamptz(3)
+  createdById             String?           @map("created_by_id") @db.Uuid
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
   /// Set by an admin ("manual") or by the delivery service ("failing").
-  disabledAt     DateTime?         @map("disabled_at") @db.Timestamptz(3)
-  disabledReason String?           @map("disabled_reason")
-  organization   Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  deliveries     WebhookDelivery[]
+  disabledAt              DateTime?         @map("disabled_at") @db.Timestamptz(3)
+  disabledReason          String?           @map("disabled_reason")
+  organization            Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  deliveries              WebhookDelivery[]
 
   @@index([orgId])
   @@map("endpoint")

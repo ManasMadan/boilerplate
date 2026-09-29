@@ -8,6 +8,11 @@ import { page, pageInput } from "../pagination";
 import { base } from "./base";
 
 export const WEBHOOK_ENDPOINT_LIMIT = 20;
+/**
+ * After a rotation the old signing secret still signs deliveries (next to the new one)
+ * for this long, so a customer can update their receiver without dropping any.
+ */
+export const WEBHOOK_SECRET_OVERLAP_HOURS = 24;
 
 export const webhookEndpointSchema = z.object({
   id: z.uuid(),

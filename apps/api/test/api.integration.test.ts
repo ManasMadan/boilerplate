@@ -3,6 +3,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
+import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
 import { createSignedTokens, S3Storage } from "@repo/nest-common";
@@ -402,6 +403,20 @@ describe("webhook endpoints", () => {
 
     const rotated = await session.rpc.webhooks.rotateSecret({ id: created.endpoint.id });
     expect(rotated.secret).not.toBe(created.secret);
+    // The replaced secret keeps signing for the overlap (apps/webhooks signs with both).
+    const after = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await after.connect();
+    const { rows: stored } = await after
+      .query<{ secret: string; previous_secret: string; previous_secret_expires_at: Date }>(
+        "SELECT secret, previous_secret, previous_secret_expires_at FROM webhooks.endpoint WHERE id = $1",
+        [created.endpoint.id],
+      )
+      .finally(() => after.end());
+    expect(stored[0]?.previous_secret).toBe(rows[0].secret);
+    expect(stored[0]?.secret).not.toBe(rows[0].secret);
+    const overlap = (stored[0]?.previous_secret_expires_at.getTime() ?? 0) - Date.now();
+    expect(overlap).toBeGreaterThan((WEBHOOK_SECRET_OVERLAP_HOURS - 1) * 3_600_000);
+    expect(overlap).toBeLessThanOrEqual(WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000);
   });
 
   it("refuses URLs that point at private or unresolvable hosts", async () => {

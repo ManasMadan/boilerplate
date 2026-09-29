@@ -57,7 +57,14 @@ async function asRole<T>(role: string, fn: (client: pg.Client) => Promise<T>): P
 }
 
 /** An organization with one endpoint, created the way apps/api does. */
-async function endpoint(options: { url?: string; events?: string[] } = {}) {
+async function endpoint(
+  options: {
+    url?: string;
+    events?: string[];
+    /** A secret replaced by a rotation, still signing until `expiresAt`. */
+    previous?: { secret: string; expiresAt: Date };
+  } = {},
+) {
   const orgId = randomUUID();
   const secret = `whsec_${randomBytes(24).toString("base64")}`;
   const id = await asRole("app_api", async (client) => {
@@ -68,9 +75,17 @@ async function endpoint(options: { url?: string; events?: string[] } = {}) {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
     const { rows } = await client.query<{ id: string }>(
-      `INSERT INTO webhooks.endpoint (org_id, url, events, secret, updated_at)
-       VALUES ($1, $2, $3, $4, now()) RETURNING id`,
-      [orgId, options.url ?? receiverUrl, options.events ?? [], box.encrypt(secret)],
+      `INSERT INTO webhooks.endpoint
+         (org_id, url, events, secret, previous_secret, previous_secret_expires_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id`,
+      [
+        orgId,
+        options.url ?? receiverUrl,
+        options.events ?? [],
+        box.encrypt(secret),
+        options.previous ? box.encrypt(options.previous.secret) : null,
+        options.previous?.expiresAt ?? null,
+      ],
     );
     await client.query("COMMIT");
     return rows[0]?.id as string;
@@ -188,6 +203,39 @@ describe("outbound deliveries", () => {
     expect(verified).toMatchObject({ type: "todo.created.v1", data: { title: "Ship it" } });
     expect(request?.headers["webhook-id"]).toBe(event.id);
     expect(request?.headers["user-agent"]).toMatch(/Boilerplate-Webhooks/);
+  });
+
+  it("signs with the rotated-out secret too until its overlap ends", async () => {
+    const previous = `whsec_${randomBytes(24).toString("base64")}`;
+    const hour = 60 * 60 * 1000;
+    const during = await endpoint({
+      previous: { secret: previous, expiresAt: new Date(Date.now() + hour) },
+    });
+    const after = await endpoint({
+      previous: { secret: previous, expiresAt: new Date(Date.now() - hour) },
+    });
+
+    await publish(during.orgId);
+    await eventually(
+      () => received.length,
+      (n) => n === 1,
+    );
+    const [overlap] = received;
+    const headers = overlap?.headers as Record<string, string>;
+    // Receivers holding either secret accept it.
+    expect(new Webhook(during.secret).verify(overlap?.body ?? "", headers)).toBeTruthy();
+    expect(new Webhook(previous).verify(overlap?.body ?? "", headers)).toBeTruthy();
+
+    await publish(after.orgId);
+    await eventually(
+      () => received.length,
+      (n) => n === 2,
+    );
+    const expired = received[1];
+    const expiredHeaders = expired?.headers as Record<string, string>;
+    expect(expiredHeaders["webhook-signature"]?.split(" ")).toHaveLength(1);
+    expect(new Webhook(after.secret).verify(expired?.body ?? "", expiredHeaders)).toBeTruthy();
+    expect(() => new Webhook(previous).verify(expired?.body ?? "", expiredHeaders)).toThrow();
   });
 
   it("only sends subscribed events, and nothing for other organizations", async () => {

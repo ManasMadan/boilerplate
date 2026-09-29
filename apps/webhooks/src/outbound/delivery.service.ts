@@ -37,12 +37,35 @@ export class DeliveryService {
     @InjectPinoLogger(DeliveryService.name) private readonly log: PinoLogger,
   ) {}
 
+  /** The endpoint's signing secrets, newest first: the previous one until its overlap ends. */
+  private secretsOf(endpoint: {
+    secret: string;
+    previousSecret: string | null;
+    previousSecretExpiresAt: Date | null;
+  }) {
+    const secrets = [this.box.decrypt(endpoint.secret)];
+    if (endpoint.previousSecret && (endpoint.previousSecretExpiresAt ?? new Date(0)) > new Date())
+      secrets.push(this.box.decrypt(endpoint.previousSecret));
+    return secrets;
+  }
+
   /** One attempt. `isLastAttempt`: no retry follows if this one fails. */
   async attempt(orgId: string, deliveryId: string, isLastAttempt: boolean): Promise<AttemptResult> {
     const tenant = withTenant(this.database.write, orgId);
     const delivery = await tenant.webhookDelivery.findUnique({
       where: { id: deliveryId },
-      include: { endpoint: { select: { id: true, url: true, secret: true, disabledAt: true } } },
+      include: {
+        endpoint: {
+          select: {
+            id: true,
+            url: true,
+            secret: true,
+            previousSecret: true,
+            previousSecretExpiresAt: true,
+            disabledAt: true,
+          },
+        },
+      },
     });
     if (delivery?.status !== "pending") return "skipped";
     if (delivery.endpoint.disabledAt) {
@@ -62,11 +85,7 @@ export class DeliveryService {
         headers: {
           "content-type": "application/json",
           "user-agent": USER_AGENT,
-          ...signatureHeaders(
-            this.box.decrypt(delivery.endpoint.secret),
-            delivery.eventId,
-            delivery.body,
-          ),
+          ...signatureHeaders(this.secretsOf(delivery.endpoint), delivery.eventId, delivery.body),
         },
         body: delivery.body,
         timeoutMs: env.WEBHOOK_TIMEOUT_MS,

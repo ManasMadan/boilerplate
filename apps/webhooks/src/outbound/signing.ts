@@ -6,6 +6,9 @@
  *   webhook-timestamp: <unix seconds>   receivers reject old ones (replay protection)
  *   webhook-signature: v1,<base64 HMAC-SHA256(secret, "<id>.<timestamp>.<body>")>
  *
+ * Right after a rotation there are two secrets, and the header carries a signature for
+ * each, space-separated (the standard's way): a receiver with either one accepts it.
+ *
  * Secrets look like `whsec_<base64 of 24 random bytes>`; the key is the decoded part.
  */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -28,9 +31,9 @@ function sign(secret: string, messageId: string, timestamp: number, body: string
   return `v1,${digest}`;
 }
 
-/** The headers for one delivery attempt. */
+/** The headers for one delivery attempt, signed with every secret given (newest first). */
 export function signatureHeaders(
-  secret: string,
+  secrets: readonly string[],
   messageId: string,
   body: string,
   now = Date.now(),
@@ -39,19 +42,26 @@ export function signatureHeaders(
   return {
     "webhook-id": messageId,
     "webhook-timestamp": String(timestamp),
-    "webhook-signature": sign(secret, messageId, timestamp, body),
+    "webhook-signature": secrets
+      .map((secret) => sign(secret, messageId, timestamp, body))
+      .join(" "),
   };
 }
 
-/** Constant-time check of one signature (what receivers do; used in our tests). */
+/**
+ * What a receiver does: accepts the header when any of its signatures matches the
+ * secret it holds, compared in constant time. Used in our tests.
+ */
 export function verify(
   secret: string,
   messageId: string,
   timestamp: number,
   body: string,
-  signature: string,
+  header: string,
 ) {
   const expected = Buffer.from(sign(secret, messageId, timestamp, body));
-  const actual = Buffer.from(signature);
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
+  return header.split(" ").some((signature) => {
+    const actual = Buffer.from(signature);
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  });
 }
