@@ -93,6 +93,7 @@
     "db:up:full": "bun scripts/services.ts up --full",
     "db:down": "bun scripts/services.ts down",
     "db:lint": "bun scripts/lint-migrations.ts",
+    "db:restore-drill": "bun scripts/restore-drill.ts",
     "docker:clean": "bun scripts/docker-clean.ts",
     "db:migrate": "bun run --filter @repo/db migrate",
     "db:deploy": "bun run --filter @repo/db deploy",
