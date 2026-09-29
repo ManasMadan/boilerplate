@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
 import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
+import { expo } from "@better-auth/expo";
 import { mcp } from "@better-auth/mcp";
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
@@ -80,6 +81,8 @@ export interface AuthDependencies {
 }
 
 const MINUTE = 60;
+/** The mobile app's URL scheme (apps/mobile app.config.ts). */
+const MOBILE_SCHEME = "boilerplate";
 const DAY = 24 * 60 * MINUTE;
 const INVITATION_DAYS = 7;
 
@@ -126,8 +129,9 @@ export function createAuth({
     appName: "Boilerplate",
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
-    // Browsers may only call auth endpoints from the web app's origin (CSRF protection).
-    trustedOrigins: [env.WEB_URL],
+    // Browsers may only call auth endpoints from the product's own origins (CSRF
+    // protection); the mobile app's scheme is added by the Expo plugin below.
+    trustedOrigins: [env.WEB_URL, ...env.APP_ORIGINS, `${MOBILE_SCHEME}://`],
     // The JWT plugin's /token would hand any session a signed JWT; access tokens come
     // only from the OAuth flow below.
     disabledPaths: ["/token"],
@@ -414,6 +418,9 @@ export function createAuth({
     },
 
     plugins: [
+      // The mobile app: it sends its origin in a header of its own (native requests have
+      // none), and Expo Go's exp:// is trusted in development.
+      expo(),
       emailOTP({
         otpLength: OTP_LENGTH,
         expiresIn: OTP_EXPIRES_IN,

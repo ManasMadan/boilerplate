@@ -23,8 +23,23 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(32, "Generate one with: openssl rand -base64 32"),
     /** Public URL of this API; OAuth callbacks and cookies are derived from it. */
     BETTER_AUTH_URL: z.url(),
-    /** Public URL of the web app: the only browser origin allowed to call the API. */
+    /** Public URL of the web app, the browser origin allowed to call the API. */
     WEB_URL: z.url(),
+    /**
+     * Other origins of this product that may sign users in (comma-separated): the mobile
+     * app's web build, for example. Native apps need nothing here (their scheme is
+     * trusted by the Expo plugin).
+     */
+    APP_ORIGINS: z
+      .string()
+      .default("")
+      .transform((value) =>
+        value
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean),
+      )
+      .pipe(z.array(z.url())),
 
     /** Oldest web/mobile app version still supported; older clients get CLIENT_OUTDATED. */
     MINIMUM_CLIENT_VERSION: z.string().default("0.0.0"),
