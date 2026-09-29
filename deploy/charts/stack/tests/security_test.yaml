@@ -12,7 +12,7 @@ tests:
       - equal:
           path: spec.ingress
           value:
-            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: gateway-system } } }]
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: envoy-gateway-system } } }]
               ports: [{ port: 3000 }]
 
   - it: lets only the listed services reach the AI service directly

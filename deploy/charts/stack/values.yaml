@@ -26,9 +26,10 @@ gateway:
   parentRefs:
     - name: public
       namespace: gateway-system
-  # Pods of the gateway, allowed through each routed service's network policy.
+  # Where the gateway's proxy pods run, allowed through each routed service's network
+  # policy (Envoy Gateway runs them in its own namespace, not the Gateway's).
   namespaceSelector:
-    kubernetes.io/metadata.name: gateway-system
+    kubernetes.io/metadata.name: envoy-gateway-system
 
 # Settings every service gets. Values are templates, so they can refer to the site or
 # to other services (`{{ include "stack.url" (list $ "api") }}`).
