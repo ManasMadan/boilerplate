@@ -60,6 +60,25 @@ describe("catalog completeness", () => {
     }
   });
 
+  it("names every notification category and in-app notification type", async () => {
+    const { inAppNotifications, notificationCategories } = await import(
+      "@repo/contracts/notifications"
+    );
+    for (const locale of ["en", "es"] as const) {
+      const t = await createI18n(bundledMessages).getTranslator(locale);
+      for (const name of Object.keys(notificationCategories)) {
+        const key = `notificationSettings.categories.${name}.title` as Parameters<typeof t>[0];
+        expect(t.has(key), `${locale} is missing ${key}`).toBe(true);
+      }
+      for (const type of Object.keys(inAppNotifications)) {
+        for (const part of ["title", "body"]) {
+          const key = `notification.${type}.${part}` as Parameters<typeof t>[0];
+          expect(t.has(key), `${locale} is missing ${key}`).toBe(true);
+        }
+      }
+    }
+  });
+
   it("labels every event customers can subscribe to", async () => {
     const { webhookEvents } = await import("@repo/contracts/events");
     for (const locale of ["en", "es"] as const) {

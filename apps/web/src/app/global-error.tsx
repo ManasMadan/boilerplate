@@ -2,8 +2,8 @@
 
 import "@repo/ui/globals.css";
 import { negotiateLocale } from "@repo/i18n";
-import en from "@repo/i18n/messages/en.json";
-import es from "@repo/i18n/messages/es.json";
+import en from "@repo/i18n/messages/en.json" with { type: "json" };
+import es from "@repo/i18n/messages/es.json" with { type: "json" };
 import { useEffect, useState } from "react";
 
 // Shown when the root layout itself fails, so no providers (and no next-intl) exist.

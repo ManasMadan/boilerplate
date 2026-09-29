@@ -11,7 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
-import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
@@ -23,14 +22,13 @@ interface UserMenuProps {
 export function UserMenu({ user }: UserMenuProps) {
   const t = useTranslations("common");
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   async function signOut() {
     await authClient.signOut();
-    // Nothing from this account may remain visible to the next person at the keyboard.
-    queryClient.clear();
-    router.replace("/");
-    router.refresh();
+    // A full page load, not a client-side navigation: nothing from this account (cached
+    // queries, open streams, in-memory state) survives for the next person at the
+    // keyboard, and no mounted component refetches as a signed-out user in between.
+    window.location.assign("/");
   }
 
   return (

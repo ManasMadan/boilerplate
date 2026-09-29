@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
+import { createSignedTokens } from "@repo/nest-common";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -509,6 +510,105 @@ describe("realtime", () => {
     await expectError(
       stream.then((iterator) => iterator[Symbol.asyncIterator]().next()),
       "UNAUTHENTICATED",
+    );
+  });
+});
+
+describe("notifications", () => {
+  /** Puts in-app notifications in a user's inbox, as apps/notifications does. */
+  async function deliver(userId: string, titles: string[]) {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    for (const title of titles) {
+      await client.query(
+        `INSERT INTO notifications.notification (user_id, template, data, link) VALUES ($1, 'todo.reminder', $2, '/dashboard')`,
+        [userId, JSON.stringify({ todoId: randomUUID(), title })],
+      );
+    }
+    await client.end();
+  }
+
+  it("lists the inbox newest first, counts unread, marks read", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    await deliver(me.id, ["first", "second", "third"]);
+    const page = await session.rpc.notifications.list({ limit: 2 });
+    expect(page.items.map((item) => item.data.title)).toEqual(["third", "second"]);
+    expect(page.nextCursor).not.toBeNull();
+    expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 3 });
+
+    await session.rpc.notifications.markRead({ ids: [page.items[0]?.id as string] });
+    expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 2 });
+    await session.rpc.notifications.markAllRead();
+    expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 0 });
+  });
+
+  it("keeps each inbox private", async () => {
+    const owner = await signedInUser();
+    await deliver((await owner.session.rpc.user.me()).id, ["private"]);
+    const other = await signedInUser();
+    expect((await other.session.rpc.notifications.list({ limit: 20 })).items).toEqual([]);
+  });
+
+  it("saves preferences, digest and quiet hours, but security email can't be turned off", async () => {
+    const { session } = await signedInUser();
+    const defaults = await session.rpc.notifications.preferences();
+    expect(defaults.categories.map((c) => c.name)).toEqual(["workspace", "activity"]);
+    expect(defaults.categories.every((c) => c.channels.every((ch) => ch.enabled))).toBe(true);
+
+    const updated = await session.rpc.notifications.updatePreferences({
+      channels: [{ category: "activity", channel: "email", enabled: false }],
+      dailyDigest: true,
+      quietHours: { start: 22 * 60, end: 7 * 60 },
+    });
+    expect(updated.categories.find((c) => c.name === "activity")?.channels).toContainEqual({
+      channel: "email",
+      enabled: false,
+    });
+    expect(updated).toMatchObject({ dailyDigest: true, quietHours: { start: 1320, end: 420 } });
+
+    await expectError(
+      session.rpc.notifications.updatePreferences({
+        channels: [{ category: "security", channel: "email", enabled: false }],
+      }),
+      "VALIDATION_FAILED",
+    );
+  });
+
+  it("unsubscribes from a signed link, one-click included, and rejects forgeries", async () => {
+    const { session } = await signedInUser();
+    const { id } = await session.rpc.user.me();
+    const tokens = createSignedTokens(process.env.UNSUBSCRIBE_SECRET as string);
+
+    const anonymous = createSession(harness);
+    expect(
+      await anonymous.rpc.notifications.unsubscribe({
+        token: tokens.sign("unsubscribe", [id, "activity"]),
+      }),
+    ).toEqual({ category: "activity" });
+    const oneClick = await fetch(
+      `${harness.baseUrl}/api/v1/notifications/unsubscribe?token=${encodeURIComponent(tokens.sign("unsubscribe", [id, "workspace"]))}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "List-Unsubscribe=One-Click",
+      },
+    );
+    expect(oneClick.status).toBe(200);
+    const preferences = await session.rpc.notifications.preferences();
+    for (const category of preferences.categories) {
+      expect(category.channels.find((ch) => ch.channel === "email")?.enabled).toBe(false);
+    }
+
+    await expectError(
+      anonymous.rpc.notifications.unsubscribe({ token: "forged.token" }),
+      "UNSUBSCRIBE_LINK_INVALID",
+    );
+    await expectError(
+      anonymous.rpc.notifications.unsubscribe({
+        token: tokens.sign("unsubscribe", [id, "security"]),
+      }),
+      "UNSUBSCRIBE_LINK_INVALID",
     );
   });
 });

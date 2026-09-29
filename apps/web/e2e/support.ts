@@ -61,9 +61,12 @@ async function messagesTo(to: string): Promise<MailSummary[]> {
   return ((await response.json()) as { messages?: MailSummary[] }).messages ?? [];
 }
 
-/** A mailbox: remembers how many emails it has seen, so `next()` never returns an old one. */
+/**
+ * A mailbox: remembers which emails it has already seen, so `next()` never returns an
+ * old one. (By id, not count: Mailpit prunes old messages, so counts can go down.)
+ */
 export async function mailbox(to: string) {
-  let seen = (await messagesTo(to)).length;
+  const seen = new Set((await messagesTo(to)).map((message) => message.ID));
   return {
     /** The next email to arrive (plain text, HTML and subject). */
     async next() {
@@ -71,18 +74,19 @@ export async function mailbox(to: string) {
       await expect
         .poll(
           async () => {
-            const messages = await messagesTo(to);
-            latest = messages.length > seen ? messages[0] : undefined;
+            latest = (await messagesTo(to)).find((message) => !seen.has(message.ID));
             return Boolean(latest);
           },
           { timeout: 20_000, message: `an email to ${to}` },
         )
         .toBe(true);
-      seen += 1;
-      const message = (await fetch(`${MAILPIT}/api/v1/message/${latest?.ID}`).then((r) =>
-        r.json(),
-      )) as { Text: string; HTML: string; Subject: string };
-      return message;
+      const id = latest?.ID as string;
+      seen.add(id);
+      return (await fetch(`${MAILPIT}/api/v1/message/${id}`).then((r) => r.json())) as {
+        Text: string;
+        HTML: string;
+        Subject: string;
+      };
     },
     async nextCode() {
       const { Text } = await this.next();
@@ -295,4 +299,19 @@ export async function inviteAndAccept(
  */
 export async function settled(page: Page) {
   await expect(page.locator("[data-slot=skeleton]")).toHaveCount(0);
+}
+
+// ---------------------------------------------------------------------------- notifications
+
+/** Queues a reminder for the page's user, the way a producer service would. */
+export async function sendReminder(page: Page, title: string) {
+  const { createProducer } = await import("@repo/jobs");
+  const me = (await (await page.request.get("/api/v1/me")).json()) as { id: string };
+  const producer = createProducer("notifications-bulk", authStore());
+  await producer.add(
+    "send",
+    { template: "todo.reminder", to: { userId: me.id }, data: { todoId: randomUUID(), title } },
+    { jobId: randomUUID() },
+  );
+  await producer.close();
 }

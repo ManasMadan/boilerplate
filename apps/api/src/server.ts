@@ -8,6 +8,7 @@ import { AppModule } from "./app.module";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.module";
 import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
+import { mountOneClickUnsubscribe, NotificationsService } from "./modules/notifications";
 import { createProcedures } from "./rpc/procedures";
 import { createRouter } from "./rpc/router";
 import { mountRpc } from "./rpc/rpc.routes";
@@ -24,6 +25,7 @@ export function createApiServer() {
       const memberships = app.get<Memberships>(MEMBERSHIPS);
       const logger = app.get(Logger);
       mountAuth(fastify, auth, env.BETTER_AUTH_URL);
+      mountOneClickUnsubscribe(fastify, app.get(NotificationsService));
       await mountRpc(fastify, createRouter(createProcedures(auth, memberships), app), {
         logError: (error) => logger.error(error, "unhandled error in procedure"),
         publicUrl: env.BETTER_AUTH_URL,

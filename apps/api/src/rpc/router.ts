@@ -9,6 +9,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { AiService, aiRouter } from "../modules/ai";
 import { AuditService, auditRouter } from "../modules/audit";
+import { NotificationsService, notificationsRouter } from "../modules/notifications";
 import { RealtimeService, realtimeRouter } from "../modules/realtime";
 import { systemRouter } from "../modules/system";
 import { TodoService, todoRouter } from "../modules/todo";
@@ -25,6 +26,7 @@ export function createRouter(procedures: Procedures, app: INestApplication) {
     audit: auditRouter(procedures, app.get(AuditService)),
     webhooks: webhooksRouter(procedures, app.get(WebhooksService)),
     realtime: realtimeRouter(procedures, app.get(RealtimeService)),
+    notifications: notificationsRouter(procedures, app.get(NotificationsService)),
   });
 }
 

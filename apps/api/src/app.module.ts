@@ -11,6 +11,7 @@ import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
 import { AiModule } from "./modules/ai";
 import { AuditModule } from "./modules/audit";
+import { NotificationsModule } from "./modules/notifications";
 import { RealtimeModule } from "./modules/realtime";
 import { TodoModule } from "./modules/todo";
 import { WebhooksModule } from "./modules/webhooks";
@@ -39,6 +40,7 @@ import { NotificationsProducerModule } from "./notifications";
     AuditModule,
     WebhooksModule,
     RealtimeModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

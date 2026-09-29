@@ -68,7 +68,8 @@ export function useLiveUpdates(activeOrganizationId: string | null | undefined) 
   const queryClient = useQueryClient();
   const refetch = {
     "todos.changed": () => queryClient.invalidateQueries({ queryKey: api.todo.list.key() }),
-    "notifications.changed": () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    "notifications.changed": () =>
+      queryClient.invalidateQueries({ queryKey: api.notifications.key() }),
   } satisfies Record<RealtimeMessage["type"], () => Promise<void>>;
 
   useRealtime(

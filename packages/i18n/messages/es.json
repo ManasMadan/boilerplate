@@ -352,7 +352,8 @@
     "WEBHOOK_ENDPOINT_NOT_FOUND": "Ese endpoint de webhook no existe.",
     "WEBHOOK_DELIVERY_NOT_FOUND": "Esa entrega no existe.",
     "WEBHOOK_URL_NOT_ALLOWED": "Usa una URL pública https://. Las direcciones privadas o internas no pueden recibir webhooks.",
-    "WEBHOOK_ENDPOINT_LIMIT": "Este espacio ya tiene {max} endpoints de webhook. Elimina uno para añadir otro."
+    "WEBHOOK_ENDPOINT_LIMIT": "Este espacio ya tiene {max} endpoints de webhook. Elimina uno para añadir otro.",
+    "UNSUBSCRIBE_LINK_INVALID": "Este enlace para darse de baja no es válido. Cambia lo que recibes en los ajustes de notificaciones."
   },
   "workspace": {
     "switcher": {
@@ -580,5 +581,62 @@
       }
     },
     "noOrganization": "Ya no estás en ese espacio; cambiamos a {name}."
+  },
+  "notificationCenter": {
+    "open": "Notificaciones",
+    "unread": "{count, plural, one {# notificación sin leer} other {# notificaciones sin leer}}",
+    "title": "Notificaciones",
+    "empty": "Estás al día.",
+    "markAllRead": "Marcar todo como leído",
+    "viewAll": "Ver todas las notificaciones",
+    "loadMore": "Cargar más"
+  },
+  "notificationSettings": {
+    "title": "Notificaciones",
+    "description": "Elige qué te llega y por dónde. Los códigos de acceso y las alertas de seguridad se envían siempre.",
+    "channels": {
+      "in_app": "En la aplicación",
+      "email": "Correo",
+      "push": "Push",
+      "sms": "Mensaje de texto"
+    },
+    "categories": {
+      "workspace": {
+        "title": "Espacio de trabajo",
+        "description": "Cosas que requieren a un administrador, como un webhook que falla continuamente."
+      },
+      "activity": {
+        "title": "Actividad",
+        "description": "Recordatorios y novedades sobre tu trabajo."
+      },
+      "security": {
+        "title": "Seguridad",
+        "description": "Códigos de acceso y alertas sobre cambios en tu cuenta."
+      },
+      "invitations": {
+        "title": "Invitaciones",
+        "description": "Invitaciones para unirte a un espacio de trabajo."
+      }
+    },
+    "digest": {
+      "title": "Resumen diario",
+      "description": "Recibe un correo al día con todo lo que no es urgente, en lugar de un correo por cada cosa."
+    },
+    "quietHours": {
+      "title": "Horas de silencio",
+      "description": "Las notificaciones push y los mensajes esperan hasta que terminen las horas de silencio (en tu zona horaria).",
+      "enable": "Pausar push y mensajes por la noche",
+      "start": "Desde",
+      "end": "Hasta"
+    },
+    "saved": "Ajustes de notificaciones guardados"
+  },
+  "unsubscribe": {
+    "title": "Darse de baja",
+    "confirm": "Dejar de recibir correos de «{category}»",
+    "description": "Dejarás de recibir correos de {category}. Los códigos de acceso y las alertas de seguridad seguirán llegando.",
+    "done": "Listo. Ya no recibirás correos de {category}.",
+    "manage": "Gestionar todos los ajustes de notificaciones",
+    "missing": "Esta página necesita el enlace de uno de nuestros correos."
   }
 }

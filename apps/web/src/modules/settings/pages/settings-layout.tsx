@@ -41,6 +41,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
   const personal: Tab[] = [
     { href: "/settings", label: t("settings.profile.title") },
     { href: "/settings/security", label: t("settings.security.title") },
+    { href: "/settings/notifications", label: t("notificationSettings.title") },
   ];
   const team: Tab[] = [
     { href: "/settings/workspace", label: t("workspace.nav.general") },

@@ -352,7 +352,8 @@
     "WEBHOOK_ENDPOINT_NOT_FOUND": "That webhook endpoint doesn't exist.",
     "WEBHOOK_DELIVERY_NOT_FOUND": "That delivery doesn't exist.",
     "WEBHOOK_URL_NOT_ALLOWED": "Use a public https:// URL. Private and internal addresses can't receive webhooks.",
-    "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another."
+    "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another.",
+    "UNSUBSCRIBE_LINK_INVALID": "This unsubscribe link isn't valid. Change what you receive in notification settings instead."
   },
   "workspace": {
     "switcher": {
@@ -580,5 +581,62 @@
       }
     },
     "noOrganization": "You're no longer in that workspace; switched to {name}."
+  },
+  "notificationCenter": {
+    "open": "Notifications",
+    "unread": "{count, plural, one {# unread notification} other {# unread notifications}}",
+    "title": "Notifications",
+    "empty": "You're all caught up.",
+    "markAllRead": "Mark all as read",
+    "viewAll": "See all notifications",
+    "loadMore": "Load more"
+  },
+  "notificationSettings": {
+    "title": "Notifications",
+    "description": "Choose what reaches you, and where. Sign-in codes and security alerts are always sent.",
+    "channels": {
+      "in_app": "In the app",
+      "email": "Email",
+      "push": "Push",
+      "sms": "Text message"
+    },
+    "categories": {
+      "workspace": {
+        "title": "Workspace",
+        "description": "Things that need an admin, like a webhook that keeps failing."
+      },
+      "activity": {
+        "title": "Activity",
+        "description": "Reminders and updates about your work."
+      },
+      "security": {
+        "title": "Security",
+        "description": "Sign-in codes and alerts about changes to your account."
+      },
+      "invitations": {
+        "title": "Invitations",
+        "description": "Invitations to join a workspace."
+      }
+    },
+    "digest": {
+      "title": "Daily digest",
+      "description": "Get one email a day with everything non-urgent, instead of one email each."
+    },
+    "quietHours": {
+      "title": "Quiet hours",
+      "description": "Push notifications and texts wait until quiet hours end (in your time zone).",
+      "enable": "Pause push and texts at night",
+      "start": "From",
+      "end": "Until"
+    },
+    "saved": "Notification settings saved"
+  },
+  "unsubscribe": {
+    "title": "Unsubscribe",
+    "confirm": "Stop “{category}” emails",
+    "description": "You'll stop getting {category} emails. Sign-in codes and security alerts still arrive.",
+    "done": "Done. You won't get {category} emails anymore.",
+    "manage": "Manage all notification settings",
+    "missing": "This page needs the link from one of our emails."
   }
 }

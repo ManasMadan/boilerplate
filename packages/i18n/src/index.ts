@@ -18,8 +18,8 @@
  * English, so a missing key fails `check-types` instead of rendering a raw key.
  */
 import { createTranslator } from "use-intl/core";
-import en from "../messages/en.json";
-import es from "../messages/es.json";
+import en from "../messages/en.json" with { type: "json" };
+import es from "../messages/es.json" with { type: "json" };
 
 export const locales = ["en", "es"] as const;
 export type Locale = (typeof locales)[number];

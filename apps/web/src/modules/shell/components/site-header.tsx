@@ -5,6 +5,7 @@ import { Skeleton } from "@repo/ui/components/skeleton";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
+import { NotificationBell } from "@/modules/notifications";
 import { WorkspaceSwitcher } from "@/modules/workspace";
 import { LanguageSwitcher } from "./language-switcher";
 import { ThemeToggle } from "./theme-toggle";
@@ -29,7 +30,10 @@ export function SiteHeader() {
           {isPending && !session ? (
             <Skeleton className="h-8 w-20" />
           ) : session ? (
-            <UserMenu user={session.user} />
+            <>
+              <NotificationBell />
+              <UserMenu user={session.user} />
+            </>
           ) : (
             <Link href="/sign-in" className={buttonVariants({ size: "sm" })}>
               {t("signIn")}

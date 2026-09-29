@@ -79,6 +79,7 @@ jobs:
       mailpit:
         image: axllent/mailpit:v1.31.3
         ports: ["1025:1025", "8025:8025"]
+        env: { MP_MAX_MESSAGES: "5000" }
     # Services connect as their own least-privileged roles, exactly as in production.
     env:
       MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
@@ -136,6 +137,7 @@ jobs:
       mailpit:
         image: axllent/mailpit:v1.31.3
         ports: ["1025:1025", "8025:8025"]
+        env: { MP_MAX_MESSAGES: "5000" }
     # The same configuration as local development (.env.example), minus secrets.
     env:
       NODE_ENV: production

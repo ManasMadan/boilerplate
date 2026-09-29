@@ -27,17 +27,27 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
   const problems: string[] = [];
   page.on("console", (message) => message.type() === "error" && problems.push(message.text()));
   page.on("pageerror", (error) => problems.push(error.message));
-  for (const path of ["/", "/sign-in", "/sign-up", "/forgot-password", "/terms", "/privacy"])
+  for (const path of [
+    "/",
+    "/sign-in",
+    "/sign-up",
+    "/forgot-password",
+    "/terms",
+    "/privacy",
+    "/unsubscribe",
+  ])
     await page.goto(path);
   await signUp(page);
   for (const path of [
     "/dashboard",
     "/settings",
     "/settings/security",
+    "/settings/notifications",
     "/settings/workspace",
     "/settings/members",
     "/settings/webhooks",
     "/settings/audit",
+    "/notifications",
   ]) {
     await page.goto(path);
     await settled(page);
@@ -84,6 +94,8 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
       "/settings/members",
       "/settings/webhooks",
       "/settings/audit",
+      "/settings/notifications",
+      "/notifications",
     ]) {
       await page.goto(path);
       await settled(page);

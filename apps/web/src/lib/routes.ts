@@ -2,7 +2,7 @@
  * Route groups the proxy and the client both need to agree on.
  * APP_PATHS need a session; GUEST_PATHS are pointless with one.
  */
-export const APP_PATHS = ["/dashboard", "/settings", "/invitations"];
+export const APP_PATHS = ["/dashboard", "/settings", "/invitations", "/notifications"];
 export const GUEST_PATHS = [
   "/sign-in",
   "/sign-up",
