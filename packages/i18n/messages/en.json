@@ -327,6 +327,10 @@
     "UPSTREAM_UNAVAILABLE": "A service we depend on is unavailable. Please try again.",
     "NO_ACTIVE_ORGANIZATION": "Choose a workspace first.",
     "TODO_NOT_FOUND": "That todo no longer exists.",
-    "TODO_VERSION_CONFLICT": "Someone else changed this todo. We've loaded the latest version."
+    "TODO_VERSION_CONFLICT": "Someone else changed this todo. We've loaded the latest version.",
+    "WEBHOOK_ENDPOINT_NOT_FOUND": "That webhook endpoint doesn't exist.",
+    "WEBHOOK_DELIVERY_NOT_FOUND": "That delivery doesn't exist.",
+    "WEBHOOK_URL_NOT_ALLOWED": "Use a public https:// URL. Private and internal addresses can't receive webhooks.",
+    "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another."
   }
 }

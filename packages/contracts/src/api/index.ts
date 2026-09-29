@@ -11,6 +11,7 @@ import { auditContract } from "./audit";
 import { systemContract } from "./system";
 import { todoContract } from "./todo";
 import { userContract } from "./user";
+import { webhooksContract } from "./webhooks";
 
 export const contract = populateContractRouterPaths({
   system: systemContract,
@@ -18,6 +19,7 @@ export const contract = populateContractRouterPaths({
   todo: todoContract,
   ai: aiContract,
   audit: auditContract,
+  webhooks: webhooksContract,
 });
 
 export type Contract = typeof contract;
@@ -28,3 +30,4 @@ export * from "./base";
 export * from "./system";
 export * from "./todo";
 export * from "./user";
+export * from "./webhooks";

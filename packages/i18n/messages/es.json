@@ -327,6 +327,10 @@
     "UPSTREAM_UNAVAILABLE": "Un servicio del que dependemos no está disponible. Inténtalo de nuevo.",
     "NO_ACTIVE_ORGANIZATION": "Primero elige un espacio de trabajo.",
     "TODO_NOT_FOUND": "Esa tarea ya no existe.",
-    "TODO_VERSION_CONFLICT": "Otra persona cambió esta tarea. Cargamos la versión más reciente."
+    "TODO_VERSION_CONFLICT": "Otra persona cambió esta tarea. Cargamos la versión más reciente.",
+    "WEBHOOK_ENDPOINT_NOT_FOUND": "Ese endpoint de webhook no existe.",
+    "WEBHOOK_DELIVERY_NOT_FOUND": "Esa entrega no existe.",
+    "WEBHOOK_URL_NOT_ALLOWED": "Usa una URL pública https://. Las direcciones privadas o internas no pueden recibir webhooks.",
+    "WEBHOOK_ENDPOINT_LIMIT": "Este espacio ya tiene {max} endpoints de webhook. Elimina uno para añadir otro."
   }
 }

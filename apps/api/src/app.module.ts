@@ -12,6 +12,7 @@ import { env } from "./env";
 import { AiModule } from "./modules/ai";
 import { AuditModule } from "./modules/audit";
 import { TodoModule } from "./modules/todo";
+import { WebhooksModule } from "./modules/webhooks";
 import { NotificationsProducerModule } from "./notifications";
 
 @Module({
@@ -35,6 +36,7 @@ import { NotificationsProducerModule } from "./notifications";
     TodoModule,
     AiModule,
     AuditModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}

@@ -34,6 +34,18 @@ export const env = createEnv({
     // site key is public (browsers render the widget with it); the secret stays here.
     TURNSTILE_SITE_KEY: z.string().min(1).optional(),
     TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
+    // Encrypts webhook signing secrets at rest (apps/webhooks decrypts them to sign).
+    ENCRYPTION_KEYS: z.string().min(1),
+    // Exact private IPs webhook endpoints may use, for local development and tests only.
+    WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: z
+      .string()
+      .default("")
+      .transform((value) =>
+        value
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean),
+      ),
     // Optional: the Python AI service.
     AI_URL: z.url().optional(),
   },
@@ -42,3 +54,7 @@ export const env = createEnv({
 });
 
 export type Env = typeof env;
+
+if (env.NODE_ENV === "production" && env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES.length > 0) {
+  throw new Error("WEBHOOK_ALLOWED_PRIVATE_ADDRESSES must be empty in production");
+}

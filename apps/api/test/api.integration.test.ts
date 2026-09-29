@@ -3,6 +3,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
+import { queuePrefix } from "@repo/jobs";
+import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -20,7 +22,11 @@ import {
 let harness: Harness;
 
 beforeAll(async () => {
-  harness = await startApi({ MINIMUM_CLIENT_VERSION: "2.0.0" });
+  harness = await startApi({
+    MINIMUM_CLIENT_VERSION: "2.0.0",
+    // The test receiver below runs on loopback.
+    WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
+  });
 });
 afterAll(() => harness?.close());
 
@@ -360,6 +366,104 @@ describe("organizations and the audit trail", () => {
     const log = await owner.session.rpc.audit.list({ limit: 20 });
     expect(log.items.map((entry) => entry.payload.title)).toEqual(["Audited"]);
     await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
+  });
+});
+
+describe("webhook endpoints", () => {
+  const url = "http://127.0.0.1:9/hook";
+
+  it("returns the signing secret once and keeps it encrypted at rest", async () => {
+    const { session } = await signedInUser();
+    const created = await session.rpc.webhooks.createEndpoint({ url, events: ["todo.created.v1"] });
+    expect(created.secret).toMatch(/^whsec_/);
+    expect(created.endpoint).toMatchObject({ url, events: ["todo.created.v1"], disabledAt: null });
+    expect(JSON.stringify(await session.rpc.webhooks.listEndpoints())).not.toContain(
+      created.secret,
+    );
+
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client.query("SELECT secret FROM webhooks.endpoint WHERE id = $1", [
+      created.endpoint.id,
+    ]);
+    const events = await client.query("SELECT name FROM app.outbox_event WHERE key = $1", [
+      created.endpoint.id,
+    ]);
+    await client.end();
+    expect(rows[0].secret).not.toContain(created.secret.slice(6));
+    expect(rows[0].secret).toMatch(/^v1\./);
+    expect(events.rows.map((row) => row.name)).toEqual(["webhook.endpoint_created.v1"]);
+
+    const rotated = await session.rpc.webhooks.rotateSecret({ id: created.endpoint.id });
+    expect(rotated.secret).not.toBe(created.secret);
+  });
+
+  it("refuses URLs that point at private or unresolvable hosts", async () => {
+    const { session } = await signedInUser();
+    for (const bad of [
+      "http://10.0.0.1/hook",
+      "http://169.254.169.254/latest",
+      "https://does-not-exist.invalid/",
+    ]) {
+      await expectError(
+        session.rpc.webhooks.createEndpoint({ url: bad }),
+        "WEBHOOK_URL_NOT_ALLOWED",
+      );
+    }
+  });
+
+  it("turns an endpoint off and on, and records who changed what", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    const off = await session.rpc.webhooks.updateEndpoint({ id: endpoint.id, enabled: false });
+    expect(off).toMatchObject({ disabledReason: "manual" });
+    expect(off.disabledAt).toBeInstanceOf(Date);
+    const on = await session.rpc.webhooks.updateEndpoint({
+      id: endpoint.id,
+      enabled: true,
+      description: "Prod",
+    });
+    expect(on).toMatchObject({ disabledAt: null, disabledReason: null, description: "Prod" });
+  });
+
+  it("queues a test event for the delivery service", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    await session.rpc.webhooks.sendTest({ id: endpoint.id });
+    const queue = new Queue("webhook-deliveries", {
+      connection: harness.redis,
+      prefix: queuePrefix("webhook-deliveries"),
+    });
+    const jobs = await queue.getJobs(["waiting"]);
+    await queue.close();
+    expect(
+      jobs.some((job) => job.name === "send-test" && job.data.payload.endpointId === endpoint.id),
+    ).toBe(true);
+  });
+
+  it("is for owners and admins of the organization only", async () => {
+    const owner = await signedInUser();
+    const { endpoint } = await owner.session.rpc.webhooks.createEndpoint({ url });
+    const stranger = await signedInUser();
+    expect(await stranger.session.rpc.webhooks.listEndpoints()).toEqual([]);
+    await expectError(
+      stranger.session.rpc.webhooks.deleteEndpoint({ id: endpoint.id }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+    await expectError(
+      stranger.session.rpc.webhooks.listDeliveries({ id: endpoint.id, limit: 20 }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+  });
+
+  it("limits endpoints per organization", async () => {
+    const { session } = await signedInUser();
+    for (let i = 0; i < 20; i++) await session.rpc.webhooks.createEndpoint({ url });
+    const error = await expectError(
+      session.rpc.webhooks.createEndpoint({ url }),
+      "WEBHOOK_ENDPOINT_LIMIT",
+    );
+    expect(error.data.params).toEqual({ max: 20 });
   });
 });
 
