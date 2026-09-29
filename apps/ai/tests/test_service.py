@@ -10,86 +10,16 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
-from urllib.parse import urlsplit, urlunsplit
-from uuid import UUID, uuid4
+from uuid import UUID
 
-import psycopg
 import pytest
 import redis
 from fastapi.testclient import TestClient
 
 from app.settings import get_settings
-from tests.tokens import SECRET, service_token
+from tests.support import ENV, REDIS_URL, as_org, headers, index_all, new_org
 
 pytestmark = pytest.mark.integration
-
-# Its own Redis database (the TypeScript suites use 7-15; 0 is the dev stack).
-REDIS_URL = urlunsplit(
-    urlsplit(os.environ.get("REDIS_URL", "redis://localhost:6379"))._replace(path="/6")
-)
-ENV = {
-    "REDIS_URL": REDIS_URL,
-    "AI_SERVICE_SECRET": SECRET,
-    "AI_MODEL": "local:extractive",
-    "AI_EMBEDDINGS": "hashing",
-    "AI_MONTHLY_TOKENS_PER_ORG": "2000000",
-    "NODE_ENV": "test",
-}
-
-
-def _migrator() -> psycopg.Connection:
-    return psycopg.connect(os.environ["MIGRATOR_DATABASE_URL"], autocommit=True)
-
-
-def as_org(org: UUID, query: str, params: tuple[object, ...] = ()) -> list[tuple[object, ...]]:
-    """A statement on ai tables, scoped to one organization (row-level security applies
-    to every role, the migrator included)."""
-    with _migrator() as db, db.transaction():
-        db.execute("SELECT set_config('app.org_id', %s, true)", (str(org),))
-        cursor = db.execute(query, params)  # pyright: ignore[reportArgumentType]
-        return cursor.fetchall() if cursor.description else []
-
-
-def new_org() -> tuple[UUID, UUID]:
-    """An organization with one user, as apps/api would have created them."""
-    org, user = uuid4(), uuid4()
-    with _migrator() as db:
-        db.execute(
-            "INSERT INTO auth.organization (id, name, slug) VALUES (%s, 'Org', %s)", (org, str(org))
-        )
-        db.execute(
-            'INSERT INTO auth."user" (id, name, email, updated_at) VALUES (%s, %s, %s, now())',
-            (user, "U", f"{user}@test.dev"),
-        )
-    return org, user
-
-
-def headers(org: UUID, user: UUID) -> dict[str, str]:
-    return {"authorization": f"Bearer {service_token(user, org)}", "x-request-id": "req-test"}
-
-
-@pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    for key, value in ENV.items():
-        monkeypatch.setenv(key, value)
-    get_settings.cache_clear()
-    redis.Redis.from_url(REDIS_URL).flushdb()
-    from app.main import app
-
-    with TestClient(app) as test_client:
-        yield test_client
-    get_settings.cache_clear()
-
-
-def index_all(client: TestClient, org: UUID) -> None:
-    """What the worker does for each queued document, run in-process."""
-    from app.main import app
-
-    documents = app.state.documents
-    for doc in client.get("/v1/documents", headers=headers(org, uuid4())).json():
-        # On the app's own event loop, where its database engine lives.
-        client.portal.call(documents.index, org, UUID(doc["id"]))  # pyright: ignore[reportOptionalMemberAccess]
 
 
 def test_health(client: TestClient) -> None:

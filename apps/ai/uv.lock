@@ -18,6 +18,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "bullmq" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "httpx" },
     { name = "langgraph" },
     { name = "mcp" },
     { name = "pgvector" },
@@ -46,6 +47,7 @@ dev = [
 requires-dist = [
     { name = "bullmq", specifier = ">=3.2.8" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "langgraph", specifier = ">=1.2.12" },
     { name = "mcp", specifier = ">=2.2.0" },
     { name = "pgvector", specifier = ">=0.5.0" },

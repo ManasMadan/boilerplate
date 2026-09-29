@@ -3,20 +3,22 @@
 Internal: only apps/api calls it, with a typed client generated from this app's OpenAPI
 schema (packages/ai-client) and a short-lived token naming the user and organization
 (app/auth.py). Browsers never reach it, so end-user auth, rate limits and input limits
-stay in the API.
+stay in the API. The one exception is the MCP server at /ai/mcp (app/mcp_server.py),
+which MCP clients reach through the gateway and which checks OAuth tokens itself.
 
 Long work (indexing documents) runs in app/worker.py from the `ai-ingest` queue.
 """
 
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy import text
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import model
 from app.assistant import Assistant, AssistantEvent, AssistantRequest, create_agent, create_model
@@ -27,6 +29,7 @@ from app.documents import Documents, create_summaries
 from app.embeddings import create_embedder
 from app.errors import AppError, install_error_handlers
 from app.log import configure_logging
+from app.mcp_server import create_mcp_server, mcp_app
 from app.queues import IngestQueue
 from app.schemas import (
     DocumentCreate,
@@ -50,6 +53,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.redis = redis
     app.state.documents = documents
+    exit_stack = AsyncExitStack()
+    app.state.mcp = None
+    if settings.site_url and settings.api_url:
+        mcp = create_mcp_server(
+            site_url=str(settings.site_url),
+            api_url=str(settings.api_url),
+            release=settings.release,
+            documents=lambda: documents,
+            redis=lambda: redis,
+        )
+        app.state.mcp = mcp_app(mcp)
+        await exit_stack.enter_async_context(mcp.session_manager.run())
     app.state.assistant = (
         Assistant(
             create_agent(create_model(settings.model, settings.fallback_model)),
@@ -62,6 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         else None
     )
     yield
+    await exit_stack.aclose()
     await queue.close()
     await redis.aclose()
     await close_engine()
@@ -69,6 +85,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 app = FastAPI(title="ai", version="0.1.0", lifespan=lifespan)
 install_error_handlers(app)
+
+
+async def _mcp(scope: Scope, receive: Receive, send: Send) -> None:
+    """Hands requests to the MCP server built at startup (it answers /ai/mcp and its
+    protected-resource metadata); not found when it's off."""
+    server: ASGIApp | None = app.state.mcp
+    if server is None:
+        await JSONResponse({"detail": "Not Found"}, status_code=404)(scope, receive, send)
+        return
+    await server(scope, receive, send)
 
 
 def _documents(request: Request) -> Documents:
@@ -176,3 +202,7 @@ async def answer(
         media_type="text/event-stream",
         headers={"cache-control": "no-cache, no-transform", "x-accel-buffering": "no"},
     )
+
+
+# Registered last, so every route above takes precedence.
+app.mount("/", _mcp)

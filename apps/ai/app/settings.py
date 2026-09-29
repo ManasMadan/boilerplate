@@ -8,7 +8,7 @@ at its first use, with a readable message.
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import Field, PostgresDsn, RedisDsn, model_validator
+from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # The embedding model, as a Pydantic AI name ("openai:text-embedding-3-small"), or
     # "hashing" (local and lexical: development and tests only). Must give 1536 dimensions.
     embeddings: str = Field(default="hashing", min_length=1, alias="AI_EMBEDDINGS")
+
+    # The MCP server (app/mcp_server.py): the site's public origin, where it and apps/api's
+    # OAuth issuer live (the same BETTER_AUTH_URL as the api), and the api's internal URL,
+    # for its signing keys. Either unset: no MCP server.
+    site_url: AnyHttpUrl | None = Field(default=None, alias="BETTER_AUTH_URL")
+    api_url: AnyHttpUrl | None = Field(default=None, alias="API_URL")
 
     # Budgets: tokens a workspace may use per calendar month, and per assistant answer.
     monthly_tokens_per_org: int = Field(default=2_000_000, ge=0, alias="AI_MONTHLY_TOKENS_PER_ORG")

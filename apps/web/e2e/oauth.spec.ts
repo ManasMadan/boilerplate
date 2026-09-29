@@ -54,17 +54,21 @@ async function registerClient(page: Page, name = "E2E Agent") {
 }
 
 /** Starts the app's authorization request in the browser; returns what the app needs later. */
-async function startAuthorization(page: Page, clientId: string) {
+async function startAuthorization(
+  page: Page,
+  clientId: string,
+  params: { scope?: string; resource?: string } = {},
+) {
   const verifier = randomBytes(32).toString("base64url");
   const query = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
     redirect_uri: REDIRECT_URI,
-    scope: "openid offline_access todos:read todos:write",
+    scope: params.scope ?? "openid offline_access todos:read todos:write",
     state: "e2e-state",
     code_challenge: createHash("sha256").update(verifier).digest("base64url"),
     code_challenge_method: "S256",
-    resource: MCP_RESOURCE,
+    resource: params.resource ?? MCP_RESOURCE,
   });
   await page.goto(`/api/auth/oauth2/authorize?${query}`);
   return { verifier };
@@ -237,4 +241,73 @@ test("the consent page explains itself when opened directly", async ({ page }) =
 test("the consent page needs a session", async ({ page }) => {
   await page.goto("/oauth/consent?client_id=x&sig=y");
   await expect(page).toHaveURL(/\/sign-in\?next=/);
+});
+
+test("the AI service's MCP server accepts the api's tokens for it", async ({ page }) => {
+  await signUp(page);
+  const clientId = await registerClient(page);
+  const aiResource = `${BASE_URL}/ai/mcp`;
+  const { verifier } = await startAuthorization(page, clientId, {
+    scope: "openid documents:read",
+    resource: aiResource,
+  });
+  await expect(page.getByText("Search the workspace's documents")).toBeVisible();
+  await page.getByRole("button", { name: "Allow" }).click();
+  const code = (await callback(page)).get("code") as string;
+  const tokens = await page.request.post("/api/auth/oauth2/token", {
+    form: {
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: clientId,
+      code_verifier: verifier,
+      resource: aiResource,
+    },
+  });
+  const { access_token } = (await tokens.json()) as { access_token: string };
+  const tools = await page.request.post("/ai/mcp", {
+    headers: {
+      authorization: `Bearer ${access_token}`,
+      accept: "application/json, text/event-stream",
+    },
+    data: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+  });
+  expect(tools.status(), await tools.text()).toBe(200);
+  const names = (
+    (await tools.json()) as { result: { tools: { name: string }[] } }
+  ).result.tools.map((tool) => tool.name);
+  expect(names.sort()).toEqual(["list_documents", "search_documents"]);
+  // The api's MCP server doesn't take a token meant for the AI service.
+  const api = await page.request.post("/api/mcp", {
+    headers: {
+      authorization: `Bearer ${access_token}`,
+      accept: "application/json, text/event-stream",
+    },
+    data: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+  });
+  expect(api.status()).toBe(401);
+});
+
+test("MCP clients discover everything on the site's origin", async ({ request }) => {
+  const get = async (path: string) => {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+    return (await response.json()) as Record<string, unknown>;
+  };
+  const issuer = `${BASE_URL}/api/auth`;
+  expect(await get("/.well-known/oauth-authorization-server/api/auth")).toMatchObject({ issuer });
+  expect(await get("/.well-known/oauth-protected-resource/api/mcp")).toMatchObject({
+    resource: `${BASE_URL}/api/mcp`,
+    authorization_servers: [issuer],
+  });
+  expect(await get("/.well-known/oauth-protected-resource/ai/mcp")).toMatchObject({
+    resource: `${BASE_URL}/ai/mcp`,
+    authorization_servers: [issuer],
+  });
+  // An unauthenticated call is answered with the challenge that starts it all.
+  const challenge = await request.post("/ai/mcp", { data: {} });
+  expect(challenge.status()).toBe(401);
+  expect(challenge.headers()["www-authenticate"]).toContain(
+    `${BASE_URL}/.well-known/oauth-protected-resource/ai/mcp`,
+  );
 });
