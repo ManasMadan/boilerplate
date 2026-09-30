@@ -60,6 +60,32 @@ async function expectError(promise: Promise<unknown>, code: string) {
   return orpcError;
 }
 
+describe("the mobile sign-in redirect", () => {
+  const proxy = (target: string) =>
+    fetch(
+      `${harness.baseUrl}/api/auth/expo-authorization-proxy?${new URLSearchParams({ authorizationURL: target })}`,
+      { redirect: "manual" },
+    );
+
+  it("sends people only to a sign-in provider", async () => {
+    const google = await proxy("https://accounts.google.com/o/oauth2/v2/auth?state=abc");
+    expect(google.status).toBe(302);
+    expect(google.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com\//);
+  });
+
+  it("refuses any other address", async () => {
+    for (const target of [
+      "https://evil.example/login?state=abc",
+      "https://accounts.google.com.evil.example/?state=abc",
+      "not a url",
+    ]) {
+      const response = await proxy(target);
+      expect(response.status, target).toBe(400);
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+});
+
 describe("sign-up and verification", () => {
   it("issues no session until the email is verified, and queues the code in the browser's language", async () => {
     const session = createSession(harness, { locale: "es-ES,es;q=0.9" });

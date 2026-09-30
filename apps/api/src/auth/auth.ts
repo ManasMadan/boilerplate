@@ -75,6 +75,9 @@ import type { Memberships } from "./memberships";
 import { orgAccess, orgRoles } from "./org-access";
 import { securityAlertFor } from "./security-alerts";
 
+/** Where the mobile sign-in redirect (/expo-authorization-proxy) may send people. */
+const PROVIDER_ORIGINS = new Set(["https://accounts.google.com"]);
+
 export interface AuthDependencies {
   env: Env;
   db: Db;
@@ -322,8 +325,19 @@ export function createAuth({
     // takeover (or a mistake) never goes unnoticed. Runs after the endpoint, only when
     // it succeeded, and never fails the request: the email is queued with retries.
     hooks: {
-      // Per account, on top of the per-address limits above (account-limits.ts).
       before: createAuthMiddleware(async (ctx) => {
+        // The mobile app's sign-in goes through this redirect; left alone it sends anyone
+        // anywhere over https from our own domain (phishing, planted OAuth state).
+        if (ctx.path === "/expo-authorization-proxy") {
+          const target = String(ctx.query?.authorizationURL ?? "");
+          if (!URL.canParse(target) || !PROVIDER_ORIGINS.has(new URL(target).origin)) {
+            throw new APIError("BAD_REQUEST", {
+              message: "Not a sign-in provider's address.",
+              code: "INVALID_REDIRECT",
+            });
+          }
+        }
+        // Per account, on top of the per-address limits above (account-limits.ts).
         await accountLimits({
           path: ctx.path,
           body: ctx.body,

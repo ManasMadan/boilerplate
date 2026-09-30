@@ -39,6 +39,9 @@ ships with it.
   deletion always ask for the password.
 - The mobile app uses better-auth's Expo plugin: the session lives in the device's secure
   storage and travels in a header; its `boilerplate://` scheme is a trusted origin.
+  Social sign-in goes through the plugin's `/expo-authorization-proxy` redirect, which
+  only sends people to a provider's sign-in page (`PROVIDER_ORIGINS` in `auth.ts`; add a
+  provider's origin there along with the provider).
 - `trustedOrigins` (CSRF) are `WEB_URL`, `APP_ORIGINS` and the mobile scheme.
 
 ## Organizations and roles
