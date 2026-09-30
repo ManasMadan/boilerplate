@@ -9,10 +9,9 @@
  *
  * `check` and `notes` are what release.yml runs; they work locally too.
  */
-import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fail, ok, ROOT } from "./lib";
+import { fail, ok, ROOT, type Run, runSync } from "./lib";
 
 const TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const MOBILE_CONFIG = "apps/mobile/app.config.ts";
@@ -100,44 +99,61 @@ export function releaseImageTag(commit: string, facts: ReleaseFacts): string | u
   return bump && facts.deployed(parent) ? `sha-${parent}` : undefined;
 }
 
-function git(args: string[]) {
-  const result = spawnSync("git", args, { cwd: ROOT, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr.trim()}`);
-  return result.stdout.trim();
+/** What the release commands touch; the tests replace them. */
+export interface Tools {
+  run: Run;
+  /** The checkout the commands run in (production's release.yaml is written there). */
+  root: string;
+  sleep: (ms: number) => Promise<unknown>;
+  /** Where `notes` prints the notes. */
+  write: (text: string) => unknown;
 }
 
-function gh(args: string[]) {
-  const result = spawnSync("gh", args, { cwd: ROOT, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`gh ${args.join(" ")}: ${result.stderr.trim()}`);
-  return result.stdout.trim();
-}
+const REAL: Tools = {
+  run: runSync,
+  root: ROOT,
+  sleep: Bun.sleep,
+  write: process.stdout.write.bind(process.stdout),
+};
 
-interface Run {
+interface WorkflowRun {
   workflowName: string;
   status: string;
   conclusion: string;
 }
-const runsOf = (commit: string) =>
-  JSON.parse(
-    gh(["run", "list", "--commit", commit, "--json", "workflowName,status,conclusion"]),
-  ) as Run[];
 
-const facts: ReleaseFacts = {
-  deployed: (commit) =>
-    runsOf(commit).some((run) => run.workflowName === "Deploy" && run.conclusion === "success"),
-  changedFiles: (commit) =>
-    git(["diff-tree", "--no-commit-id", "--name-only", "-r", commit]).split("\n").filter(Boolean),
-  parent: (commit) => git(["rev-parse", `${commit}^`]),
-  stagingTag: (commit) => {
-    const values = Bun.YAML.parse(git(["show", `${commit}:${STAGING}`])) as {
-      image?: { tag?: unknown };
-    };
-    return typeof values.image?.tag === "string" ? values.image.tag : undefined;
-  },
-};
+/** git and gh in the checkout, and the facts about a release they answer. */
+function helpers({ run, root }: Tools) {
+  const command = (name: string) => (args: string[]) => {
+    const result = run(name, args, { cwd: root });
+    if (result.status !== 0) throw new Error(`${name} ${args.join(" ")}: ${result.stderr.trim()}`);
+    return result.stdout.trim();
+  };
+  const git = command("git");
+  const gh = command("gh");
+  const runsOf = (commit: string) =>
+    JSON.parse(
+      gh(["run", "list", "--commit", commit, "--json", "workflowName,status,conclusion"]),
+    ) as WorkflowRun[];
+  const facts: ReleaseFacts = {
+    deployed: (commit) =>
+      runsOf(commit).some((run) => run.workflowName === "Deploy" && run.conclusion === "success"),
+    changedFiles: (commit) =>
+      git(["diff-tree", "--no-commit-id", "--name-only", "-r", commit]).split("\n").filter(Boolean),
+    parent: (commit) => git(["rev-parse", `${commit}^`]),
+    stagingTag: (commit) => {
+      const values = Bun.YAML.parse(git(["show", `${commit}:${STAGING}`])) as {
+        image?: { tag?: unknown };
+      };
+      return typeof values.image?.tag === "string" ? values.image.tag : undefined;
+    },
+  };
+  return { run, root, git, gh, runsOf, facts };
+}
+type Helpers = ReturnType<typeof helpers>;
 
 /** Waits while CI or deploy.yml is still running on the commit (a tag pushed right after a merge). */
-async function settled(commit: string) {
+async function settled({ runsOf }: Helpers, sleep: Tools["sleep"], commit: string) {
   const deadline = Date.now() + DEPLOY_WAIT_MS;
   for (;;) {
     const busy = runsOf(commit).filter(
@@ -147,7 +163,7 @@ async function settled(commit: string) {
     console.log(
       `  waiting for ${busy.map((run) => run.workflowName).join(" and ")} on ${commit.slice(0, 7)}`,
     );
-    await Bun.sleep(30_000);
+    await sleep(30_000);
   }
 }
 
@@ -155,11 +171,10 @@ const noImages = (tag: string, commit: string) =>
   `${tag} (${commit.slice(0, 7)}) has no images: deploy.yml hasn't passed for it. ` +
   "Tag a commit that deployed (the merge, or the staging bump right after it).";
 
-function commitsSince(tag: string): Commit[] {
+function commitsSince({ run, root, git }: Helpers, tag: string): Commit[] {
   // The previous release, if there is one: every commit before it is in an older release.
-  const previous = spawnSync("git", ["describe", "--tags", "--abbrev=0", "--match=v*", `${tag}^`], {
-    cwd: ROOT,
-    encoding: "utf8",
+  const previous = run("git", ["describe", "--tags", "--abbrev=0", "--match=v*", `${tag}^`], {
+    cwd: root,
   });
   const range = previous.status === 0 ? `${previous.stdout.trim()}..${tag}` : tag;
   const log = git(["log", "--no-merges", "--format=%h%x1f%s%x1f%b%x1e", range]);
@@ -175,17 +190,19 @@ function commitsSince(tag: string): Commit[] {
 
 /**
  * A release tag must be a version, on master, have images (a commit deploy.yml passed for,
- * or the staging bump right after one), and match the mobile app's version.
+ * or the staging bump right after one), and match the mobile app's version; the exit code.
  */
-async function check(tag: string) {
+async function check(tools: Helpers, sleep: Tools["sleep"], tag: string) {
+  const { run, root, git, facts } = tools;
   const problems: string[] = [];
   if (!TAG.test(tag)) problems.push(`${tag} isn't a version tag like v1.4.0`);
   const commit = git(["rev-list", "-n", "1", tag]);
-  const onMaster =
-    spawnSync("git", ["merge-base", "--is-ancestor", commit, "origin/master"], { cwd: ROOT })
-      .status === 0;
+  const ancestor = run("git", ["merge-base", "--is-ancestor", commit, "origin/master"], {
+    cwd: root,
+  });
+  const onMaster = ancestor.status === 0;
   if (!onMaster) problems.push(`${tag} (${commit.slice(0, 7)}) isn't on master`);
-  await settled(commit);
+  await settled(tools, sleep, commit);
   const images = releaseImageTag(commit, facts);
   if (!images) problems.push(noImages(tag, commit));
   const version = mobileVersion(git(["show", `${tag}:${MOBILE_CONFIG}`]));
@@ -196,22 +213,23 @@ async function check(tag: string) {
     );
   }
   for (const problem of problems) fail(problem);
-  if (problems.length) process.exit(1);
+  if (problems.length) return 1;
   ok(`${tag} is a release of ${commit.slice(0, 7)}, with the images ${images}`);
+  return 0;
 }
 
-/** Opens production's promotion pull request for a release, as whoever runs it. */
-function promote(tag: string) {
+/** Opens production's promotion pull request for a release, as whoever runs it; the exit code. */
+function promote({ root, git, gh, facts }: Helpers, tag: string) {
   git(["fetch", "--quiet", "--tags", "origin", "master"]);
   const commit = git(["rev-list", "-n", "1", tag]);
   const imageTag = releaseImageTag(commit, facts);
   if (!imageTag) {
     fail(noImages(tag, commit));
-    process.exit(1);
+    return 1;
   }
   const branch = `release/production-${tag}`;
   const title = `chore(infra): deploy ${tag} to production`;
-  const file = join(ROOT, PRODUCTION);
+  const file = join(root, PRODUCTION);
   const from = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   git(["switch", "--quiet", "-c", branch, "origin/master"]);
   writeFileSync(file, releaseFile(readFileSync(file, "utf8"), tag, imageTag));
@@ -231,15 +249,24 @@ function promote(tag: string) {
     `Points production at ${tag}: its charts, values and Secrets, and its images (\`${imageTag}\`), already running on staging. Merging deploys it.`,
   ]);
   ok(`Promotion pull request: ${url}`);
+  return 0;
 }
 
-if (import.meta.main) {
-  const [command, tag] = process.argv.slice(2);
+/** `check`, `notes` or `promote` a tag; the exit code. */
+export async function release(argv = process.argv.slice(2), given: Partial<Tools> = {}) {
+  const tools = { ...REAL, ...given };
+  const [command, tag] = argv;
   if (!tag || !["check", "notes", "promote"].includes(command ?? "")) {
     console.error("usage: bun scripts/release.ts check|notes|promote v<major>.<minor>.<patch>");
-    process.exit(1);
+    return 1;
   }
-  if (command === "check") await check(tag);
-  else if (command === "notes") process.stdout.write(releaseNotes(commitsSince(tag)));
-  else promote(tag);
+  const commands = helpers(tools);
+  if (command === "check") return check(commands, tools.sleep, tag);
+  if (command === "notes") {
+    tools.write(releaseNotes(commitsSince(commands, tag)));
+    return 0;
+  }
+  return promote(commands, tag);
 }
+
+if (import.meta.main) process.exit(await release());
