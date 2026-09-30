@@ -32,3 +32,25 @@ export function coverage(): CoverageOptions {
     reportOnFailure: true,
   };
 }
+
+/**
+ * For NestJS packages (`plugins: [decoratorMetadata()]`). oxc compiles the type of each
+ * injected constructor parameter to `typeof X === "undefined" ? Object : X`, a guard for
+ * a class still undefined in an import cycle. That branch is in no source line and no
+ * test can take it, so coverage would count it against every service; vitest already
+ * leaves out SWC's decorator code the same way. It's compiled to plain `X` here (padded
+ * to the same length, so the source map still holds). An import cycle then fails Nest's
+ * injection with Nest's own error, as it would anyway with `Object`.
+ */
+export function decoratorMetadata() {
+  const guard = /typeof ([\w$]+) === "undefined" \? Object : \1\b/g;
+  return {
+    name: "repo:decorator-metadata",
+    enforce: "post" as const,
+    transform(code: string) {
+      if (!code.includes('=== "undefined" ? Object : ')) return undefined;
+      const replaced = code.replace(guard, (match, name: string) => name.padEnd(match.length));
+      return { code: replaced, map: null };
+    },
+  };
+}

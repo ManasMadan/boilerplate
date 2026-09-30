@@ -95,6 +95,10 @@ file below 100%, or one no test loads.
   branches included, in `apps/ai/pyproject.toml`). Bun's report counts only for
   `scripts/` and `.claude/hooks/`: it counts lines v8 doesn't, so its view of a package
   file a script imports would show lines as missed that the package's own suite ran.
+- A NestJS package's `vitest.config.ts` also adds `decoratorMetadata()` from
+  `packages/vitest-config`: the compiler turns every injected constructor parameter into
+  a branch that exists in no source line (a guard for import cycles), and this compiles
+  it away so coverage counts only the code that was written.
 - The merged report is `coverage/merged.lcov`. CI runs diff-cover on it against the base
   branch at 100%, so a pull request can't add or change a line without covering it.
 - A file may be below 100% only if the table below lists it, with the reason and the

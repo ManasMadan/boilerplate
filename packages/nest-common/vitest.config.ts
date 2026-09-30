@@ -3,13 +3,14 @@
  * the docker compose Redis and RustFS).
  */
 import { applyTestEnvironment } from "@repo/testing/environment";
-import { coverage } from "@repo/vitest-config";
+import { coverage, decoratorMetadata } from "@repo/vitest-config";
 import { defineConfig } from "vitest/config";
 
 // .env.example's values (not the developer's .env), before global setup and the workers.
 applyTestEnvironment();
 
 export default defineConfig({
+  plugins: [decoratorMetadata()],
   test: {
     coverage: coverage(),
     projects: [
