@@ -10,6 +10,7 @@
  */
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { MCP_PATH, mcpResource } from "@repo/contracts/mcp";
+import type { Locale } from "@repo/i18n";
 import {
   type AppError,
   createRateLimiter,
@@ -30,7 +31,7 @@ export interface McpRouteOptions {
   grantActive: TokenVerifierOptions["grantActive"];
   redis: Redis;
   server: Omit<McpServerDependencies, "describeError">;
-  describeError: (error: AppError, locale: string | undefined) => Promise<string>;
+  describeError: (error: AppError, locale: Locale) => Promise<string>;
 }
 
 /** Tool calls per app and user per minute. */

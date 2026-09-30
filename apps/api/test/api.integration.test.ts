@@ -29,9 +29,12 @@ import {
 } from "./harness";
 
 let harness: Harness;
+const GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com";
 
 beforeAll(async () => {
   harness = await startApi(13, {
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: "test-google-secret",
     MINIMUM_CLIENT_VERSION: "2.0.0",
     // The test receiver below runs on loopback.
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
@@ -199,6 +202,13 @@ describe("the mobile sign-in redirect", () => {
     expect(google.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com\//);
   });
 
+  it("refuses a request without an address", async () => {
+    const response = await fetch(`${harness.baseUrl}/api/auth/expo-authorization-proxy`, {
+      redirect: "manual",
+    });
+    expect(response.status).toBe(400);
+  });
+
   it("refuses any other address", async () => {
     for (const target of [
       "https://evil.example/login?state=abc",
@@ -209,6 +219,59 @@ describe("the mobile sign-in redirect", () => {
       expect(response.status, target).toBe(400);
       expect(response.headers.get("location")).toBeNull();
     }
+  });
+});
+
+describe("Google sign-in", () => {
+  it("is on when configured, and sends the browser to Google", async () => {
+    const session = createSession(harness);
+    expect((await session.rpc.system.info()).features.google).toBe(true);
+    const started = await session.auth<{ url: string; redirect: boolean }>("/sign-in/social", {
+      provider: "google",
+      callbackURL: process.env.WEB_URL,
+    });
+    expect(started.status).toBe(200);
+    expect(new URL(started.body.url).origin).toBe("https://accounts.google.com");
+    expect(new URL(started.body.url).searchParams.get("client_id")).toBe(GOOGLE_CLIENT_ID);
+  });
+});
+
+describe("profile settings", () => {
+  it("saves a known language and time zone, and refuses anything else", async () => {
+    const { session } = await signedInUser();
+    expect(
+      (await session.auth("/update-user", { locale: "es", timezone: "Asia/Tokyo" })).status,
+    ).toBe(200);
+    expect(await session.rpc.user.me()).toMatchObject({ locale: "es", timezone: "Asia/Tokyo" });
+    for (const change of [{ locale: "xx" }, { timezone: "Mars/Olympus" }]) {
+      const refused = await session.auth<{ code?: string }>("/update-user", change);
+      expect(refused.status, JSON.stringify(change)).toBe(400);
+      expect(refused.body.code).toBe("VALIDATION_FAILED");
+    }
+    expect(await session.rpc.user.me()).toMatchObject({ locale: "es", timezone: "Asia/Tokyo" });
+  });
+});
+
+describe("an account without a workspace", () => {
+  it("can still sign in, and is told to pick one for workspace data", async () => {
+    const { session, email, password } = await signedInUser();
+    const { activeOrganizationId } = await session.rpc.user.me();
+    expect(
+      (await session.auth("/organization/delete", { organizationId: activeOrganizationId })).status,
+    ).toBe(200);
+    await session.auth("/sign-out");
+    expect((await session.auth("/sign-in/email", { email, password })).status).toBe(200);
+    expect((await session.rpc.user.me()).activeOrganizationId).toBeNull();
+    await expectError(session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+  });
+});
+
+describe("a session cookie that names no session", () => {
+  it("is treated as signed out, on auth routes as on the API", async () => {
+    const session = createSession(harness);
+    session.useCookies(new Map([["better-auth.session_token", "not-a-session.signature"]]));
+    expect((await session.authGet<unknown>("/get-session")) ?? null).toBeNull();
+    await expectError(session.rpc.user.me(), "UNAUTHENTICATED");
   });
 });
 
@@ -442,6 +505,27 @@ describe("account security", () => {
     expect(queued).toEqual([]);
   });
 
+  it("a change still succeeds when its alert can't be recorded", async () => {
+    const { session, password } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    // Another transaction holds the outbox, so the alert's transaction times out.
+    const holder = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await holder.connect();
+    await holder.query("BEGIN");
+    await holder.query("LOCK TABLE app.outbox_event IN SHARE MODE");
+    const changed = await session
+      .auth("/change-password", { currentPassword: password, newPassword: newPassword() })
+      .finally(() => holder.query("ROLLBACK"));
+    const { rows } = await holder
+      .query(
+        "SELECT 1 FROM app.outbox_event WHERE actor_id = $1::uuid AND name = 'auth.password_changed.v1'",
+        [userId],
+      )
+      .finally(() => holder.end());
+    expect(changed.status).toBe(200);
+    expect(rows).toEqual([]);
+  });
+
   it("a failed change sends no alert", async () => {
     const { session, email } = await signedInUser();
     const failed = await session.auth("/change-password", {
@@ -651,6 +735,46 @@ describe("organizations and the audit trail", () => {
     expect(over.body.code).toBe("INVITATION_LIMIT_REACHED");
   });
 
+  it("limits the invitations one person sends in an hour, across workspaces", async () => {
+    const { session } = await signedInUser();
+    const workspace = async () => {
+      const org = await session.auth<{ id: string }>("/organization/create", {
+        name: "Team",
+        slug: `team-${randomUUID().slice(0, 8)}`,
+      });
+      return org.body.id;
+    };
+    const invite = (organizationId: string) =>
+      session.auth<{ code?: string }>("/organization/invite-member", {
+        email: newEmail(),
+        role: "member",
+        organizationId,
+      });
+    // Two workspaces, so the per-workspace limit on waiting invitations isn't what stops it.
+    const [first, second] = [await workspace(), await workspace()];
+    for (let i = 0; i < PENDING_INVITATION_LIMIT; i++)
+      expect((await invite(first)).status).toBe(200);
+    for (let i = PENDING_INVITATION_LIMIT; i < 30; i++)
+      expect((await invite(second)).status).toBe(200);
+    const over = await invite(second);
+    expect(over.status).toBe(429);
+    expect(over.body.code).toBe("RATE_LIMITED");
+  });
+
+  it("refuses an invitation without a session, or without an address", async () => {
+    const { session } = await signedInUser();
+    const anonymous = createSession(harness);
+    expect(
+      (await anonymous.auth("/organization/invite-member", { email: newEmail(), role: "member" }))
+        .status,
+    ).toBe(401);
+    const noAddress = await session.auth("/organization/invite-member", {
+      email: 42,
+      role: "member",
+    });
+    expect(noAddress.status).toBe(400);
+  });
+
   it("won't let a client mark a workspace as someone's personal one", async () => {
     const { session } = await signedInUser();
     const slug = `team-${randomUUID().slice(0, 8)}`;
@@ -750,6 +874,40 @@ describe("organizations and the audit trail", () => {
     const log = await owner.session.rpc.audit.list({ limit: 20 });
     expect(log.items.map((entry) => entry.payload.title)).toEqual(["Audited"]);
     await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
+  });
+
+  it("names who did each thing in the audit log, newest first, a page at a time", async () => {
+    const { owner, orgId } = await team();
+    const { id: ownerId } = await owner.session.rpc.user.me();
+    const admin = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await admin.connect();
+    await admin.query("SELECT audit.ensure_partitions(1, 1)");
+    // Oldest first: by the owner, by an account deleted since, and by the system (a job).
+    for (const [actor, payload] of [
+      [ownerId, '{"title":"By the owner"}'],
+      [randomUUID(), "null"],
+      [null, '{"title":"By a job"}'],
+    ]) {
+      await admin.query(
+        `INSERT INTO audit.audit_log (id, occurred_at, name, key, payload, org_id, actor_id, source)
+         VALUES (uuidv7(), now(), 'todo.created.v1', 'k', $1::jsonb, $2, $3, 'app')`,
+        [payload, orgId, actor],
+      );
+    }
+    await admin.end();
+
+    const first = await owner.session.rpc.audit.list({ limit: 2 });
+    expect(first.items.map((entry) => [entry.actor, entry.payload])).toEqual([
+      [null, { title: "By a job" }],
+      [null, {}],
+    ]);
+    const rest = await owner.session.rpc.audit.list({
+      limit: 2,
+      cursor: first.nextCursor as string,
+    });
+    expect(rest.items.find((entry) => entry.payload.title === "By the owner")?.actor).toMatchObject(
+      { id: ownerId },
+    );
   });
 
   it("reads a stored role by an allow-list: an unknown one grants nothing, a compound one its strongest part", async () => {
@@ -923,6 +1081,116 @@ describe("webhook endpoints", () => {
     );
   });
 
+  it("records only what an update really changed", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    const changes = async () => {
+      const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+      await client.connect();
+      const { rows } = await client
+        .query<{ payload: { changed: string[] } }>(
+          "SELECT payload FROM app.outbox_event WHERE key = $1 AND name = 'webhook.endpoint_updated.v1' ORDER BY id",
+          [endpoint.id],
+        )
+        .finally(() => client.end());
+      return rows.map((row) => row.payload.changed);
+    };
+    // The same URL, description and state again: nothing to record.
+    await session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url, enabled: true });
+    expect(await changes()).toEqual([]);
+    const updated = await session.rpc.webhooks.updateEndpoint({
+      id: endpoint.id,
+      url: "http://127.0.0.1:9/moved",
+      events: ["todo.completed.v1"],
+    });
+    expect(updated).toMatchObject({
+      url: "http://127.0.0.1:9/moved",
+      events: ["todo.completed.v1"],
+    });
+    expect(await changes()).toEqual([["url", "events"]]);
+    await expectError(
+      session.rpc.webhooks.updateEndpoint({ id: randomUUID(), enabled: false }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+  });
+
+  it("deletes an endpoint, once", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    await session.rpc.webhooks.deleteEndpoint({ id: endpoint.id });
+    expect(await session.rpc.webhooks.listEndpoints()).toEqual([]);
+    await expectError(
+      session.rpc.webhooks.deleteEndpoint({ id: endpoint.id }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+  });
+
+  it("can't rotate the secret of, or test, an endpoint that isn't there", async () => {
+    const { session } = await signedInUser();
+    await expectError(
+      session.rpc.webhooks.rotateSecret({ id: randomUUID() }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+    await expectError(
+      session.rpc.webhooks.sendTest({ id: randomUUID() }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+  });
+
+  it("lists an endpoint's deliveries newest first, and sends one again", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    const { activeOrganizationId: orgId } = await session.rpc.user.me();
+    // apps/webhooks records deliveries; here they're written as it would, oldest first.
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const ids: string[] = [];
+    for (const [status, lastError] of [
+      ["succeeded", null],
+      ["failed", "timeout"],
+      // A code from before the current list reads as a failed connection.
+      ["failed", "socket hang up"],
+    ]) {
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO webhooks.delivery (endpoint_id, org_id, event_id, event_name, body, status, attempts, last_error)
+         VALUES ($1, $2, $3, 'todo.created.v1', '{}', $4, 1, $5) RETURNING id`,
+        [endpoint.id, orgId, randomUUID(), status, lastError],
+      );
+      ids.push((rows[0] as { id: string }).id);
+    }
+    await client.end();
+
+    const first = await session.rpc.webhooks.listDeliveries({ id: endpoint.id, limit: 2 });
+    expect(first.items.map((delivery) => [delivery.status, delivery.lastError])).toEqual([
+      ["failed", "connection_failed"],
+      ["failed", "timeout"],
+    ]);
+    const rest = await session.rpc.webhooks.listDeliveries({
+      id: endpoint.id,
+      limit: 2,
+      cursor: first.nextCursor as string,
+    });
+    expect(rest).toMatchObject({ items: [{ id: ids[0], status: "succeeded" }], nextCursor: null });
+
+    await session.rpc.webhooks.redeliver({ id: ids[1] as string });
+    const queue = new Queue("webhook-deliveries", {
+      connection: harness.redis,
+      prefix: queuePrefix("webhook-deliveries"),
+    });
+    const jobs = await queue.getJobs(["waiting"]);
+    await queue.close();
+    expect(
+      jobs.some((job) => job.name === "redeliver" && job.data.payload.deliveryId === ids[1]),
+    ).toBe(true);
+
+    // Another workspace's delivery, or none at all, isn't found.
+    const stranger = await signedInUser();
+    await expectError(
+      stranger.session.rpc.webhooks.redeliver({ id: ids[1] as string }),
+      "WEBHOOK_DELIVERY_NOT_FOUND",
+    );
+  });
+
   it("limits endpoints per organization", async () => {
     const { session } = await signedInUser();
     for (let i = 0; i < 20; i++) await session.rpc.webhooks.createEndpoint({ url });
@@ -1003,6 +1271,29 @@ describe("realtime", () => {
     expect(received).toEqual([{ type: "todos.changed" }, { type: "notifications.changed" }]);
   });
 
+  it("drops a message outside the contract and keeps streaming", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const { RealtimeService } = await import("../src/modules/realtime");
+    // In-process, without a signal: the stream ends when its reader stops.
+    const stream = harness.app
+      .get(RealtimeService)
+      .stream(me.id, me.activeOrganizationId as string, undefined);
+    const first = stream.next();
+    const channel = `realtime:${realtimeChannel.user(me.id)}`;
+    for (let i = 0; i < 100; i++) {
+      const [, subscribers] = (await harness.redis.pubsub("NUMSUB", channel)) as [string, number];
+      if (subscribers > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    await harness.redis.publish(channel, JSON.stringify({ type: "not.in.the.contract" }));
+    await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
+      type: "notifications.changed",
+    });
+    expect((await first).value).toEqual({ type: "notifications.changed" });
+    await stream.return(undefined);
+  });
+
   it("needs a session", async () => {
     const anonymous = createSession(harness);
     const stream = anonymous.rpc.realtime.subscribe(undefined);
@@ -1036,10 +1327,31 @@ describe("notifications", () => {
     expect(page.nextCursor).not.toBeNull();
     expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 3 });
 
+    const rest = await session.rpc.notifications.list({
+      limit: 2,
+      cursor: page.nextCursor as string,
+    });
+    expect(rest).toMatchObject({ items: [{ data: { title: "first" } }], nextCursor: null });
+
     await session.rpc.notifications.markRead({ ids: [page.items[0]?.id as string] });
     expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 2 });
     await session.rpc.notifications.markAllRead();
     expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 0 });
+  });
+
+  it("lists a notification that carries no data", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    await client
+      .query(
+        `INSERT INTO notifications.notification (user_id, template, data, link) VALUES ($1, 'todo.reminder', 'null', '/dashboard')`,
+        [me.id],
+      )
+      .finally(() => client.end());
+    const { items } = await session.rpc.notifications.list({ limit: 20 });
+    expect(items.map((item) => item.data)).toEqual([{}]);
   });
 
   it("keeps each inbox private", async () => {
@@ -1066,12 +1378,33 @@ describe("notifications", () => {
     });
     expect(updated).toMatchObject({ dailyDigest: true, quietHours: { start: 1320, end: 420 } });
 
+    // Changing only the digest, then clearing quiet hours, keeps everything else.
+    expect(await session.rpc.notifications.updatePreferences({ dailyDigest: false })).toMatchObject(
+      { dailyDigest: false, quietHours: { start: 1320, end: 420 } },
+    );
+    const cleared = await session.rpc.notifications.updatePreferences({ quietHours: null });
+    expect(cleared).toMatchObject({ dailyDigest: false, quietHours: null });
+    expect(cleared.categories.find((c) => c.name === "activity")?.channels).toContainEqual({
+      channel: "email",
+      enabled: false,
+    });
+
     await expectError(
       session.rpc.notifications.updatePreferences({
         channels: [{ category: "security", channel: "email", enabled: false }],
       }),
       "VALIDATION_FAILED",
     );
+  });
+
+  it("answers a one-click unsubscribe without a token as an invalid link", async () => {
+    const response = await fetch(`${harness.baseUrl}/api/v1/notifications/unsubscribe`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "List-Unsubscribe=One-Click",
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe("UNSUBSCRIBE_LINK_INVALID");
   });
 
   it("unsubscribes from a signed link, one-click included, and rejects forgeries", async () => {
@@ -1262,6 +1595,73 @@ describe("phone number", () => {
     expect((await second.session.rpc.user.me()).phoneNumber).toBeNull();
   });
 
+  it("of two requests with the right code at once, only one adds the number", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    // In-process, so both pass the attempt count before either claims the code.
+    const phone = harness.app.get<PhoneService>(
+      (await import("../src/modules/user/phone.service")).PhoneService,
+    );
+    const results = await Promise.allSettled([
+      phone.verify(userId, phoneNumber, data.code),
+      phone.verify(userId, phoneNumber, data.code),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      reason: { code: "PHONE_CODE_INVALID" },
+    });
+    expect((await session.rpc.user.me()).phoneNumber).toBe(phoneNumber);
+  });
+
+  it("texts and alerts in English when the account's language is no longer offered", async () => {
+    const { session, email, password } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    await client
+      .query("UPDATE auth.user SET locale = 'fr' WHERE id = $1", [userId])
+      .finally(() => client.end());
+    // A new session reads the account as it's stored now.
+    await session.auth("/sign-in/email", { email, password });
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const text = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    expect(text.to.locale).toBe("en");
+    await session.rpc.user.verifyPhone({ phoneNumber, code: text.data.code });
+    expect((await takeNotification(harness, "auth.security-alert", email)).to.locale).toBe("en");
+  });
+
+  it("removing a number when there is none changes nothing and alerts nobody", async () => {
+    const { session, email } = await signedInUser();
+    const me = await session.rpc.user.me();
+    expect((await session.rpc.user.removePhone()).phoneNumber).toBeNull();
+    expect(await outboxEvents(me.id)).toEqual([]);
+    await expect(takeNotification(harness, "auth.security-alert", email)).rejects.toThrow(
+      /No auth.security-alert/,
+    );
+  });
+
+  it("a number that can't be saved fails as INTERNAL, not as taken", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    // Another transaction holds the account's row, so the change times out.
+    const holder = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await holder.connect();
+    await holder.query("BEGIN");
+    await holder.query("SELECT 1 FROM auth.user WHERE id = $1 FOR UPDATE", [userId]);
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "INTERNAL",
+    ).finally(() => holder.query("ROLLBACK").then(() => holder.end()));
+    expect((await session.rpc.user.me()).phoneNumber).toBeNull();
+  });
+
   it("limits texts per account and per number", async () => {
     const { session } = await signedInUser();
     for (let i = 0; i < 5; i++) await session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() });
@@ -1450,6 +1850,43 @@ describe("uploads and the profile picture", () => {
     );
     await queue.close();
     expect(jobs.map((job) => job.id)).toEqual([done.id]);
+  });
+
+  it("completing a file that's already been checked just returns it", async () => {
+    const { session } = await signedInUser();
+    const file = await uploaded(session);
+    await markReady(file.id);
+    expect(await session.rpc.files.completeUpload({ fileId: file.id })).toMatchObject({
+      id: file.id,
+      status: "ready",
+    });
+  });
+
+  it("a file kept for another purpose can't be the picture, and downloads under its name", async () => {
+    const { session } = await signedInUser();
+    const file = await uploaded(session);
+    await markReady(file.id);
+    await sql("UPDATE files.file SET purpose = 'document', filename = 'notes.txt' WHERE id = $1", [
+      file.id,
+    ]);
+    await expectError(session.rpc.user.setAvatar({ fileId: file.id }), "FILE_NOT_FOUND");
+    const content = await fetch(`${harness.baseUrl}/api/v1/files/${file.id}/content`, {
+      headers: { cookie: [...session.cookies()].map(([k, v]) => `${k}=${v}`).join("; ") },
+      redirect: "manual",
+    });
+    expect(content.status).toBe(302);
+    const download = await fetch(content.headers.get("location") as string);
+    expect(download.headers.get("content-disposition")).toContain("notes.txt");
+  });
+
+  it("answers an id that isn't a file id as not found", async () => {
+    const { session } = await signedInUser();
+    const response = await fetch(`${harness.baseUrl}/api/v1/files/not-an-id/content`, {
+      headers: { cookie: [...session.cookies()].map(([k, v]) => `${k}=${v}`).join("; ") },
+      redirect: "manual",
+    });
+    expect(response.status).toBe(404);
+    expect((await response.json()).code).toBe("FILE_NOT_FOUND");
   });
 
   it("keeps each user's uploads private", async () => {
@@ -1929,6 +2366,34 @@ describe("todos", () => {
     await migrator.$disconnect();
     expect(events.map((event) => event.name)).toEqual(["todo.created.v1"]);
     expect(events[0]?.requestId).toBeTruthy();
+  });
+
+  it("records completing a todo, not reopening it", async () => {
+    const { session } = await signedInUser();
+    const todo = await session.rpc.todo.create({ title: "back and forth" });
+    const done = await session.rpc.todo.setCompleted({
+      id: todo.id,
+      completed: true,
+      version: todo.version,
+    });
+    await session.rpc.todo.setCompleted({ id: todo.id, completed: false, version: done.version });
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client
+      .query("SELECT name FROM app.outbox_event WHERE key = $1 ORDER BY id", [todo.id])
+      .finally(() => client.end());
+    expect(rows.map((row) => row.name)).toEqual(["todo.created.v1", "todo.completed.v1"]);
+  });
+});
+
+describe("the REST API's reference", () => {
+  it("serves the OpenAPI document, and a page to read it outside production", async () => {
+    const spec = await fetch(`${harness.baseUrl}/api/v1/openapi.json`);
+    expect(spec.status).toBe(200);
+    expect((await spec.json()).info).toMatchObject({ title: "Boilerplate API" });
+    const docs = await fetch(`${harness.baseUrl}/docs`);
+    expect(docs.headers.get("content-type")).toContain("text/html");
+    expect(await docs.text()).toContain('data-url="/api/v1/openapi.json"');
   });
 });
 

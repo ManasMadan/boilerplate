@@ -88,6 +88,34 @@ function refusePersonal(org: { slug?: string; metadata?: Record<string, unknown>
 /** The paths that create an account from a social provider's profile (Google's). */
 const SOCIAL_SIGN_UP = /^\/(callback\/|sign-in\/social$)/;
 
+/**
+ * A new account's row, its client-supplied preferences normalised instead of trusted.
+ * Without an explicit locale, the browser's language decides (so the verification email
+ * sent right after sign-up is already in the right language).
+ */
+export function newUserFields<
+  T extends {
+    name: unknown;
+    image?: string | null | undefined;
+    locale?: unknown;
+    timezone?: unknown;
+  },
+>(user: T, ctx: { path?: string; headers?: Headers | undefined } | null | undefined) {
+  return {
+    ...user,
+    // A picture comes only from a social provider's profile at sign-up; sign-up's body
+    // would take any string, and the avatar flow owns it after that.
+    image: SOCIAL_SIGN_UP.test(ctx?.path ?? "") ? (user.image ?? null) : null,
+    name: String(user.name).trim().slice(0, NAME_MAX_LENGTH),
+    locale: negotiateLocale(
+      typeof user.locale === "string" && user.locale
+        ? user.locale
+        : (ctx?.headers?.get("x-locale") ?? ctx?.headers?.get("accept-language")),
+    ),
+    timezone: isTimeZone(user.timezone) ? user.timezone : "UTC",
+  };
+}
+
 /** Where the mobile sign-in redirect (/expo-authorization-proxy) may send people. */
 const PROVIDER_ORIGINS = new Set(["https://accounts.google.com"]);
 
@@ -312,7 +340,8 @@ export function createAuth({
         // The memberships went with the account (the rows cascade), past the organization
         // hooks: end them the same way a removal does.
         afterDelete: async (user) => {
-          const left = leavingWithAccount.get(user.id) ?? [];
+          // beforeDelete ran first, in the same request.
+          const left = leavingWithAccount.get(user.id) as RemovedMember[];
           leavingWithAccount.delete(user.id);
           for (const member of left) await memberRemoved(member, user.id);
         },
@@ -379,32 +408,31 @@ export function createAuth({
         // better-auth has committed the change by now: whatever fails here is logged, and
         // never turns a change that happened into an error for the user.
         try {
-          const account = await db.user.findUnique({
+          // The change succeeded, so its account exists.
+          const account = await db.user.findUniqueOrThrow({
             where: ctx.context.session
               ? { id: ctx.context.session.user.id }
               : { email: alert.email },
             select: { id: true, phoneNumber: true },
           });
-          const userId = account?.id ?? null;
+          const userId = account.id;
           const locale = await localeFor(alert.email, ctx.headers);
           // The audit entry and the alert in one transaction: both or neither, and the
           // alert leaves through the outbox, so Redis being down delays it, never loses it.
           await transaction(db, async (tx) => {
-            if (userId) {
-              await emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
-                actorId: userId,
-                orgId: null,
-              });
-            }
+            await emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
+              actorId: userId,
+              orgId: null,
+            });
             await requestNotification(
               tx,
-              userId ?? alert.email,
+              userId,
               {
                 template: "auth.security-alert",
                 to: {
                   email: alert.email,
                   locale,
-                  ...(account?.phoneNumber && { phone: account.phoneNumber }),
+                  ...(account.phoneNumber && { phone: account.phoneNumber }),
                 },
                 data: {
                   event: alert.event,
@@ -424,24 +452,7 @@ export function createAuth({
     databaseHooks: {
       user: {
         create: {
-          // Normalise client-supplied preferences instead of trusting them. Without an
-          // explicit locale, the browser's language decides (so the verification email
-          // sent right after sign-up is already in the right language).
-          before: async (user, ctx) => ({
-            data: {
-              ...user,
-              // A picture comes only from a social provider's profile at sign-up; sign-up's
-              // body would take any string, and the avatar flow owns it after that.
-              image: SOCIAL_SIGN_UP.test(ctx?.path ?? "") ? (user.image ?? null) : null,
-              name: String(user.name).trim().slice(0, NAME_MAX_LENGTH),
-              locale: negotiateLocale(
-                typeof user.locale === "string" && user.locale
-                  ? user.locale
-                  : (ctx?.headers?.get("x-locale") ?? ctx?.headers?.get("accept-language")),
-              ),
-              timezone: isTimeZone(user.timezone) ? user.timezone : "UTC",
-            },
-          }),
+          before: async (user, ctx) => ({ data: newUserFields(user, ctx) }),
           // Every user gets a personal workspace, so tenant-scoped features work from
           // the first sign-in, for solo users and teams alike.
           after: async (user) => {

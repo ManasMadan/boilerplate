@@ -2,7 +2,6 @@
  * Builds the API application: Nest modules, better-auth under /api/auth, and the oRPC
  * router under /rpc and /api/v1. main.ts starts it; integration tests build it in-process.
  */
-import { isLocale } from "@repo/i18n";
 import {
   createServer,
   DATABASE,
@@ -61,7 +60,7 @@ export function createApiServer() {
           logError: (error) => logger.error({ err: describeError(error) }, "MCP tool failed"),
         },
         describeError: async (error, locale) => {
-          const t = await i18n.getTranslator(isLocale(locale) ? locale : "en");
+          const t = await i18n.getTranslator(locale);
           return t(`errors.${error.code}`, error.params);
         },
       });

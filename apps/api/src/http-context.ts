@@ -4,11 +4,11 @@
  * `runWithContext(contextFor(request), ...)`; the user and organization are added once
  * the session is resolved.
  */
-import { negotiateLocale } from "@repo/i18n";
+import { type Locale, negotiateLocale } from "@repo/i18n";
 import type { RequestContext } from "@repo/nest-common";
 import type { FastifyRequest } from "fastify";
 
-export function contextFor(request: FastifyRequest): RequestContext {
+export function contextFor(request: FastifyRequest): RequestContext & { locale: Locale } {
   const header = (name: string) => {
     const value = request.headers[name];
     return typeof value === "string" ? value : undefined;

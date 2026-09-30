@@ -177,6 +177,20 @@ describe("authorization", () => {
     expect(callback.searchParams.get("code")).toBeNull();
   });
 
+  it("refuses an approval without a workspace to approve it for", async () => {
+    const { session } = await signedIn();
+    const { challenge } = pkce();
+    const consentUrl = await authorize(session, await client(), challenge);
+    await session.auth("/organization/set-active", { organizationId: null });
+    const response = await session.auth<{ url?: string; error?: string }>("/oauth2/consent", {
+      accept: true,
+      oauth_query: consentUrl.search.slice(1),
+    });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ error: "invalid_request" });
+    expect(response.body.url).toBeUndefined();
+  });
+
   it("refuses a tampered consent request", async () => {
     const { session } = await signedIn();
     const { challenge } = pkce();
@@ -445,6 +459,13 @@ describe("connected apps", () => {
       connectedAt: expect.any(Date),
       lastUsedAt: expect.any(Date),
     });
+  });
+
+  it("shows no last use for an app that has never renewed its access", async () => {
+    const { session } = await signedIn();
+    await grant(session, await client(), { scope: "openid todos:read" });
+    const [app] = await session.rpc.apps.list();
+    expect(app?.lastUsedAt).toBeNull();
   });
 
   it("disconnecting revokes the approval and every token issued under it", async () => {

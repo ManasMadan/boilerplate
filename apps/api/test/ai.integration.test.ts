@@ -39,7 +39,12 @@ let ai: Server;
 const documents: Doc[] = [];
 const calls: { path: string; org: string; user: string; requestId: string | undefined }[] = [];
 /** Per organization: what the next answer does. */
-const behaviour = new Map<string, "answer" | "budget" | "off" | "stream-error" | "down">();
+const behaviour = new Map<
+  string,
+  "answer" | "budget" | "off" | "stream-error" | "down" | "drop" | "hang"
+>();
+/** Organizations whose hanging answer the API stopped reading (the connection closed). */
+const closed = new Set<string>();
 
 async function body(request: IncomingMessage) {
   const chunks: Buffer[] = [];
@@ -116,7 +121,16 @@ beforeAll(async () => {
       if (mode === "down") return fail(500, "INTERNAL");
       response.writeHead(200, { "content-type": "text/event-stream" });
       const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
+      // The connection breaks midway (closed without ending the response), or the answer
+      // never ends.
+      if (mode === "drop") {
+        return response.write(
+          `data: ${JSON.stringify({ event: { type: "text", text: "Refunds take " } })}\n\n`,
+          () => response.socket?.end(),
+        );
+      }
       send({ type: "text", text: "Refunds take " });
+      if (mode === "hang") return response.on("close", () => closed.add(org));
       send({ type: "text", text: "five days." });
       if (mode === "stream-error") {
         send({ type: "error", code: "AI_RUN_LIMIT" });
@@ -271,6 +285,10 @@ describe("AI features", () => {
       member.session.rpc.ai.removeDocument({ documentId: ownersDoc.id }),
       "FORBIDDEN",
     );
+    await expectError(
+      member.session.rpc.ai.removeDocument({ documentId: randomUUID() }),
+      "DOCUMENT_NOT_FOUND",
+    );
     await member.session.rpc.ai.removeDocument({ documentId: membersDoc.id });
     const again = await member.session.rpc.ai.addDocument({
       title: "Member's again",
@@ -299,6 +317,32 @@ describe("AI features", () => {
     behaviour.set(org, "stream-error");
     const events = await collect(session.rpc.ai.ask({ question: "Hi?" }));
     expect(events.at(-1)).toEqual({ type: "error", code: "AI_RUN_LIMIT" });
+  });
+
+  it("ends an answer whose connection breaks with an error event", async () => {
+    const { session, me } = await signedIn();
+    behaviour.set(me.activeOrganizationId as string, "drop");
+    expect(await collect(session.rpc.ai.ask({ question: "Hi?" }))).toEqual([
+      { type: "text", text: "Refunds take " },
+      { type: "error", code: "UPSTREAM_UNAVAILABLE" },
+    ]);
+  });
+
+  it("stops reading the service's answer when the client goes away", async () => {
+    const { session, me } = await signedIn();
+    const org = me.activeOrganizationId as string;
+    behaviour.set(org, "hang");
+    const controller = new AbortController();
+    const stream = await session.rpc.ai.ask({ question: "Hi?" }, { signal: controller.signal });
+    for await (const event of stream) {
+      expect(event).toEqual({ type: "text", text: "Refunds take " });
+      break;
+    }
+    controller.abort();
+    for (let i = 0; i < 200 && !closed.has(org); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(closed.has(org)).toBe(true);
   });
 
   it("passes on what the service's error says, params included", async () => {

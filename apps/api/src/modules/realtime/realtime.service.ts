@@ -47,7 +47,8 @@ export class RealtimeService implements OnApplicationShutdown {
     try {
       yield* this.hub.stream([realtimeChannel.user(userId), realtimeChannel.org(orgId)], done);
     } finally {
-      const remaining = (this.open.get(userId) ?? 1) - 1;
+      // Counted up when this stream started.
+      const remaining = (this.open.get(userId) as number) - 1;
       if (remaining > 0) this.open.set(userId, remaining);
       else this.open.delete(userId);
     }

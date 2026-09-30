@@ -7,7 +7,8 @@ export const systemRouter = ({ base }: Procedures) => ({
     release: env.RELEASE,
     features,
     minimumClientVersion: env.MINIMUM_CLIENT_VERSION,
-    captchaSiteKey: features.captcha ? (env.TURNSTILE_SITE_KEY ?? null) : null,
+    // The captcha is on only with its site key set (src/features.ts).
+    captchaSiteKey: features.captcha ? (env.TURNSTILE_SITE_KEY as string) : null,
     webPushPublicKey: env.VAPID_PUBLIC_KEY ?? null,
   })),
 });

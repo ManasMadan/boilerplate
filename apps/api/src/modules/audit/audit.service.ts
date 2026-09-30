@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import type { AuditEntry } from "@repo/contracts/api";
 import type { EventName } from "@repo/contracts/events";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
@@ -6,7 +6,7 @@ import { AuditRepository } from "./audit.repository";
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly audit: AuditRepository) {}
+  constructor(@Inject(AuditRepository) private readonly audit: AuditRepository) {}
 
   async list(orgId: string, input: PageInput) {
     const rows = await this.audit.list(orgId, input);

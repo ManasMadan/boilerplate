@@ -123,10 +123,7 @@ export class ApiKeysService {
         { actorId: userId, orgId },
       ),
     );
-    const row = await this.keys.find(orgId, created.id);
-    if (!row) throw new Error("The API key just created wasn't found");
-    const [apiKey] = await this.present([row]);
-    if (!apiKey) throw new Error("The API key just created couldn't be listed");
+    const [apiKey] = (await this.present([await this.keys.find(orgId, created.id)])) as [ApiKey];
     return { apiKey, key: created.key };
   }
 
@@ -153,8 +150,8 @@ export class ApiKeysService {
     const result = await this.auth.api.verifyApiKey({ body: { key } });
     if (!result.valid || !result.key) {
       if (result.error?.code === "RATE_LIMITED") {
-        const details = rateLimitDetails.safeParse(result.error);
-        const retryAfterMs = details.success ? details.data.details.tryAgainIn : 60_000;
+        // The plugin's rate limit always says when to try again.
+        const retryAfterMs = rateLimitDetails.parse(result.error).details.tryAgainIn;
         throw new AppError("RATE_LIMITED", {
           params: { retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)) },
         });
