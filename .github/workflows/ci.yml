@@ -31,7 +31,7 @@ env:
 jobs:
   lint:
     name: Lint and boundaries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -47,7 +47,7 @@ jobs:
 
   types:
     name: Type-check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -60,7 +60,7 @@ jobs:
 
   unit:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -75,7 +75,7 @@ jobs:
 
   components:
     name: Components (stories, a11y, screenshots)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -99,7 +99,7 @@ jobs:
 
   integration:
     name: Integration tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     services:
       postgres:
@@ -181,7 +181,7 @@ jobs:
   # tests: on one runner the suite alone took over ten minutes, the slowest job by far.
   e2e:
     name: End-to-end tests (${{ matrix.shard }}/4)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The nightly load test holds its load for five minutes on top.
     timeout-minutes: ${{ github.event_name == 'schedule' && 40 || 25 }}
     permissions: { contents: read }
@@ -309,7 +309,7 @@ jobs:
 
   python:
     name: Python service
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     services:
       postgres:
@@ -360,7 +360,7 @@ jobs:
   evals:
     name: Evals (${{ vars.EVAL_MODEL }})
     if: github.event_name == 'schedule' && vars.EVAL_MODEL != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     defaults:
       run: { working-directory: apps/ai }
@@ -383,7 +383,7 @@ jobs:
 
   codegen:
     name: Generated code is committed
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -409,7 +409,7 @@ jobs:
   api-compat:
     name: API compatibility
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     env:
       BASE: ${{ github.event.pull_request.base.sha }}
@@ -440,7 +440,7 @@ jobs:
   pr-title:
     name: Pull request title
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { pull-requests: read }
     steps:
       - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
@@ -476,7 +476,7 @@ jobs:
   # New migrations must be safe to run while the previous release is still serving.
   migrations:
     name: Migration safety
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -488,7 +488,7 @@ jobs:
 
   charts:
     name: Helm charts and GitOps
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -509,7 +509,7 @@ jobs:
 
   infra:
     name: OpenTofu
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -531,7 +531,7 @@ jobs:
   # One job per image: loading all seven into one runner's Docker runs it out of disk.
   images:
     name: Container images (${{ matrix.image }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     strategy:
       fail-fast: false
@@ -542,16 +542,17 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      - uses: ./.github/actions/free-disk
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      # Reads the layers deploy.yml caches on master (amd64, like this runner) and writes
-      # none, so pull requests don't crowd the repository's cache.
+      # Reads the layers deploy.yml caches on master for this image (amd64, like this
+      # runner) and writes none, so pull requests don't crowd the repository's cache.
       - uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           source: .
           targets: ${{ matrix.image }}
           load: true
           set: |
-            *.cache-from=type=gha,scope=amd64
+            *.cache-from=type=gha,scope=${{ matrix.image }}-amd64
             *.args.RELEASE=${{ github.sha }}
       - name: Scan the image
         env:
@@ -567,7 +568,7 @@ jobs:
     name: CI passed
     if: always()
     needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: {}
     steps:
       - name: Require every job to succeed

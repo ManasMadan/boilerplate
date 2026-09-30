@@ -24,8 +24,11 @@ docker buildx bake              # every image, for this machine
 docker buildx bake api web      # some of them
 ```
 
-On every pull request CI's **Container images** job builds them all and fails on a fixable
-critical or high vulnerability (Trivy).
+Every image builds in a job of its own, in CI, in deploy.yml (once per architecture) and
+for previews: seven images on one runner ran it out of disk. On every pull request CI's
+**Container images** jobs build each image and fail on a fixable critical or high
+vulnerability (Trivy). Build caches are kept per image and architecture
+(`<image>-<arch>`): deploy.yml writes them on master, and CI, previews and kind read them.
 
 ## Environments
 

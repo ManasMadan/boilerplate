@@ -25,7 +25,7 @@ permissions: {}
 jobs:
   kind:
     name: kind deploy and smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     timeout-minutes: 60
     steps:

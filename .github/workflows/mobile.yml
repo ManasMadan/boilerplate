@@ -39,7 +39,7 @@ jobs:
   eas:
     name: ${{ startsWith(github.ref, 'refs/tags/v') && 'Store builds' || 'Over-the-air update' }}
     if: vars.EAS_PROJECT_ID != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     env:
       EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}

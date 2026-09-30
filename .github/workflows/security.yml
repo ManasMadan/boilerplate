@@ -21,7 +21,7 @@ permissions: {}
 jobs:
   codeql:
     name: CodeQL (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read, security-events: write }
     strategy:
       fail-fast: false
@@ -43,7 +43,7 @@ jobs:
 
   secrets:
     name: Secrets in the history
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -59,7 +59,7 @@ jobs:
   dependencies:
     name: Dependency review
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read, pull-requests: write }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -83,7 +83,7 @@ jobs:
   # Reviewed exceptions live in osv-scanner.toml, each with a reason and an expiry.
   osv:
     name: Known vulnerabilities (OSV)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read, security-events: write }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -109,7 +109,7 @@ jobs:
   # Security tab for review rather than blocking: some are deliberate and documented.
   misconfig:
     name: Infrastructure misconfigurations
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read, security-events: write }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1

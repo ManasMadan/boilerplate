@@ -396,8 +396,12 @@ async function buildImages(cluster: Promise<void>) {
     "--load",
     "--set",
     "*.args.RELEASE=dev",
+    // deploy.yml caches each image's layers on master under <image>-<arch>.
     ...(IN_CI && process.env.ACTIONS_CACHE_URL
-      ? ["--set", "*.cache-from=type=gha,scope=amd64"]
+      ? targets.flatMap((target) => [
+          "--set",
+          `${target}.cache-from=type=gha,scope=${target}-amd64`,
+        ])
       : []),
   ];
   const load = (images: string[]) =>
