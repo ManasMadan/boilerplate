@@ -374,3 +374,11 @@ script straight into the cluster (never written to disk or git), and Mailpit get
 certificate from an authority made for the cluster, since production settings only
 submit mail over verified TLS. No Argo CD, cert-manager, KEDA or backups. The smoke
 test checks the routes (the site and the files host) and runs re-encryption.
+
+docker compose (local development and CI's tests) runs the same images as the clusters
+for Valkey, RustFS, ClamAV, the mail server, Jaeger and Mailpit
+(`scripts/compose.test.ts` fails when one drifts). Postgres is the exception:
+CloudNativePG runs its own PostgreSQL 18 image with pgvector, which doesn't start on its
+own, so compose runs pgvector's image of the same major version. What kind leaves out
+(Argo CD and its sops plugin, KEDA, cert-manager, backups) is first exercised in
+staging.

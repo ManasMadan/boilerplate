@@ -310,13 +310,14 @@ services:
   clamav:
     enabled: false
     image: ""
-    imageRef: docker.io/clamav/clamav:1.5
+    # The Debian image, as locally: it has arm64 builds too.
+    imageRef: docker.io/clamav/clamav-debian:1.5
     port: 3310
     tcpProbe: true
     replicas: 1
     # Signature updates rewrite its database; it runs as the image's own user.
     readOnlyRootFilesystem: false
-    runAsUser: 100
+    runAsUser: 1000
     resources:
       requests: { cpu: 200m, memory: 1536Mi }
       limits: { memory: 3Gi }

@@ -160,7 +160,7 @@ services:
   # address that doesn't exist, so bounces work offline. Delivery failures are posted to the webhooks
   # service on the host (/webhooks/stalwart), signed with STALWART_WEBHOOK_SECRET.
   stalwart:
-    image: stalwartlabs/stalwart:v0.16.24-alpine
+    image: stalwartlabs/stalwart:v0.16.24
     profiles: [mail, full]
     environment:
       # Signs in to the management API (the init service below and the tests use it).
