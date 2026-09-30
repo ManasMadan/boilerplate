@@ -37,6 +37,7 @@ export class AiService {
       : null;
   private readonly questions;
   private readonly uploads;
+  private readonly sentiments;
 
   constructor(@InjectRedis() redis: Redis) {
     this.questions = createRateLimiter(redis, {
@@ -49,6 +50,12 @@ export class AiService {
       points: 30,
       windowSeconds: 60 * 60,
     });
+    // Each one is a model call too.
+    this.sentiments = createRateLimiter(redis, {
+      name: "ai-sentiment",
+      points: 60,
+      windowSeconds: 60,
+    });
   }
 
   private get ai() {
@@ -60,15 +67,6 @@ export class AiService {
     return { userId, orgId, requestId: currentContext()?.requestId };
   }
 
-  private async limit(limiter: typeof this.questions, key: string) {
-    const result = await limiter.consume(key);
-    if (!result.allowed) {
-      throw new AppError("RATE_LIMITED", {
-        params: { retryAfterSeconds: result.retryAfterSeconds },
-      });
-    }
-  }
-
   private async call<T>(work: () => Promise<T>): Promise<T> {
     try {
       return await work();
@@ -77,7 +75,8 @@ export class AiService {
     }
   }
 
-  sentiment(userId: string, orgId: string, text: string) {
+  async sentiment(userId: string, orgId: string, text: string) {
+    await this.sentiments.take(userId);
     return this.call(() => this.ai.sentiment(this.caller(userId, orgId), text));
   }
 
@@ -87,7 +86,7 @@ export class AiService {
   }
 
   async addDocument(userId: string, orgId: string, input: { title: string; content: string }) {
-    await this.limit(this.uploads, userId);
+    await this.uploads.take(userId);
     const row = await this.call(() => this.ai.createDocument(this.caller(userId, orgId), input));
     return toDocument(row);
   }
@@ -113,7 +112,7 @@ export class AiService {
     question: string,
     signal?: AbortSignal,
   ): Promise<AsyncGenerator<AssistantEvent>> {
-    await this.limit(this.questions, userId);
+    await this.questions.take(userId);
     const stream = await this.call(() =>
       this.ai.answer(this.caller(userId, orgId), question, signal),
     );

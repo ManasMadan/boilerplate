@@ -194,7 +194,7 @@ Redis is down. The cost: someone can spend an account's attempts and lock it out
 these endpoints for the window; a passkey or an existing session still works.
 
 Elsewhere, `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`) limits
-assistant questions (20 a minute), AI documents and file uploads (30 an hour), phone
+assistant questions (20 a minute), sentiment checks (60 a minute), AI documents and file uploads (30 an hour), phone
 codes (5 an hour per user, 3 per number, refused when Redis is down), MCP tool calls and
 API keys, all shared across replicas through Redis. Anything that makes our servers call
 a customer's URL is limited per workspace too: webhook test sends (10 a minute),

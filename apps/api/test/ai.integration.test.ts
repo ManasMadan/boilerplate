@@ -322,6 +322,12 @@ describe("AI features", () => {
     await expectError(collect(session.rpc.ai.ask({ question: "Hi?" })), "UPSTREAM_UNAVAILABLE");
   });
 
+  it("limits sentiment checks per user", async () => {
+    const { session } = await signedIn();
+    for (let i = 0; i < 60; i++) await session.rpc.ai.sentiment({ text: "great" });
+    await expectError(session.rpc.ai.sentiment({ text: "great" }), "RATE_LIMITED");
+  });
+
   it("limits questions per user", async () => {
     const { session } = await signedIn();
     for (let i = 0; i < 20; i++) await collect(session.rpc.ai.ask({ question: `Q${i}?` }));
