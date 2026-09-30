@@ -64,17 +64,26 @@ as plain text).
 
 - **Models**: `AI_MODEL`, with `AI_FALLBACK_MODEL` when it fails. An LLM gateway is just
   another model name. Unset `AI_MODEL` turns the assistant off (`FEATURE_DISABLED`).
-- **Budgets** (`app/usage.py`): a workspace's monthly allowance
-  (`AI_MONTHLY_TOKENS_PER_ORG`) is checked before each answer, before streaming starts,
-  so an exhausted budget is a normal `AI_BUDGET_EXCEEDED` response; each answer is
-  capped at `AI_TOKENS_PER_RUN`; and every answer's usage is recorded in `ai.usage`.
+- **Budgets** (`app/usage.py`): before streaming starts, each answer reserves up to
+  `AI_TOKENS_PER_RUN` from what's left of the workspace's monthly allowance
+  (`AI_MONTHLY_TOKENS_PER_ORG`), under a per-workspace lock so concurrent answers can't
+  all fit into the same remainder; nothing left is a normal `AI_BUDGET_EXCEEDED`
+  response. The answer is capped at what it reserved, and records what it actually used
+  however it ends: answered, stopped at the limit (`AI_RUN_LIMIT`), failed, or abandoned
+  by the client. The run happens in its own task, so a client that goes away stops it
+  between events and the accounting still finishes. `ai.usage` is append-only for this
+  service, so a reservation is one row and settling it adds the difference; the month's
+  sum is what counts, and a run that never settles (the process died) keeps its
+  reservation.
 
 ## Summaries
 
 `app/summaries.py` is a LangGraph workflow: `summarize_passages` then `combine`, each
 step a Pydantic AI agent, so budgets and providers work as for the assistant. When a
 model is configured, indexing queues a `summarize` job that runs it and stores the
-summary on the document. It's the pattern for multi-step AI work: add a node (a quality
+summary on the document. It reserves and settles its tokens like an answer; a workspace
+with nothing left gets no summary, and a document that needs more than one run may spend
+ends without one instead of failing the job, which would only spend it again on retry. It's the pattern for multi-step AI work: add a node (a quality
 check, a translation) without rewriting the rest.
 
 ## Local stand-ins

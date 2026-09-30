@@ -203,11 +203,12 @@ async def delete_document(
 async def answer(
     body: AssistantRequest, caller: CallerDep, assistant: AssistantDep
 ) -> StreamingResponse:
-    # Checked before streaming starts, so an exhausted budget is a normal error response.
-    await assistant.check_budget(caller.org_id)
+    # Reserved before streaming starts, so an exhausted budget is a normal error response.
+    # A client that leaves before the stream starts leaves the reservation counted as spent.
+    reservation = await assistant.reserve(caller.org_id, caller.user_id)
 
     async def events() -> AsyncIterator[str]:
-        async for event in assistant.answer(caller.org_id, caller.user_id, body.question):
+        async for event in assistant.answer(reservation, body.question):
             yield f"data: {event.model_dump_json()}\n\n"
 
     return StreamingResponse(

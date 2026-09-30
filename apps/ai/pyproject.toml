@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Python inference service. Its Pydantic models are the source of truth for the TypeScript client in packages/ai-client."
 requires-python = ">=3.14"
 dependencies = [
+  "anyio>=4.15.1",
   "bullmq>=3.2.8",
   "fastapi[standard]>=0.141.1",
   "httpx>=0.28.1",

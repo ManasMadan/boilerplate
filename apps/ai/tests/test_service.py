@@ -151,8 +151,16 @@ def test_the_assistant_streams_an_answer_from_the_workspace_s_documents(client: 
     usage = done["usage"]
     assert isinstance(usage, dict) and usage["inputTokens"] > 0  # pyright: ignore[reportUnknownMemberType]
 
-    rows = as_org(org, "SELECT feature, model, user_id FROM ai.usage WHERE org_id = %s", (org,))
-    assert rows == [("assistant", "local:extractive", user)]
+    # The ledger holds the reservation and the settlement; together, what the answer cost.
+    rows = as_org(
+        org,
+        "SELECT feature, model, user_id, sum(input_tokens), sum(output_tokens) FROM ai.usage"
+        " WHERE org_id = %s GROUP BY 1, 2, 3",
+        (org,),
+    )
+    assert rows == [
+        ("assistant", "local:extractive", user, usage["inputTokens"], usage["outputTokens"])  # pyright: ignore[reportUnknownMemberType]
+    ]
 
 
 def test_passages_below_the_relevance_floor_are_never_used(client: TestClient) -> None:
@@ -261,7 +269,9 @@ def test_the_worker_indexes_queued_documents_then_summarizes_them(client: TestCl
         # The local summarizer keeps a passage's opening sentence.
         assert listed["summary"] == "Indexed by the worker."
         [(feature, model, by)] = as_org(
-            org, "SELECT feature, model, user_id FROM ai.usage WHERE org_id = %s", (org,)
+            org,
+            "SELECT DISTINCT feature, model, user_id FROM ai.usage WHERE org_id = %s",
+            (org,),
         )
         assert (feature, model, by) == ("summary", "local:extractive", user)
     finally:

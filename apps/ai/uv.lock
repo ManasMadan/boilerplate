@@ -16,6 +16,7 @@ name = "ai"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "bullmq" },
     { name = "fastapi", extra = ["standard"] },
     { name = "httpx" },
@@ -54,6 +55,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.15.1" },
     { name = "bullmq", specifier = ">=3.2.8" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
     { name = "httpx", specifier = ">=0.28.1" },

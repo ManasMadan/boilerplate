@@ -9,6 +9,8 @@ A graph because it's the pattern for multi-step AI work here: each step is a nod
 typed state, steps can be added (a quality check, a translation) without rewriting the
 rest, and a checkpointer can be attached when a workflow needs to pause for a person.
 This one doesn't pause: it runs inside one job, and a failed job simply runs it again.
+Every step spends from one usage counter, capped by the limits the caller passes in (what
+it reserved from the workspace's budget, see app/usage.py).
 
 Each step calls the model through a Pydantic AI agent, so budgets and providers work
 exactly as they do for the assistant. With "local:extractive", summaries are the
@@ -68,17 +70,15 @@ class SummaryState(TypedDict):
     summaries: list[str]
     summary: str
     usage: RunUsage
+    limits: UsageLimits
 
 
-def build_summary_graph(
-    model: Model | str, tokens_per_run: int
-) -> CompiledStateGraph[SummaryState]:
+def build_summary_graph(model: Model | str) -> CompiledStateGraph[SummaryState]:
     summarizer = Agent(model, instructions=SUMMARIZE, defer_model_check=True)
     combiner = Agent(model, instructions=COMBINE, defer_model_check=True)
-    limits = UsageLimits(total_tokens_limit=tokens_per_run)
 
     async def summarize_passages(state: SummaryState) -> dict[str, object]:
-        usage = state["usage"]
+        usage, limits = state["usage"], state["limits"]
         gate = asyncio.Semaphore(PARALLEL)
 
         async def one(passage: str) -> str:
@@ -93,7 +93,7 @@ def build_summary_graph(
         if len(state["summaries"]) == 1:
             return {"summary": state["summaries"][0]}
         result = await combiner.run(
-            "\n".join(state["summaries"]), usage=state["usage"], usage_limits=limits
+            "\n".join(state["summaries"]), usage=state["usage"], usage_limits=state["limits"]
         )
         return {"summary": result.output.strip()}
 
@@ -107,12 +107,16 @@ def build_summary_graph(
 
 
 async def summarize(
-    graph: CompiledStateGraph[SummaryState], passages: list[str]
-) -> tuple[str, RunUsage]:
+    graph: CompiledStateGraph[SummaryState],
+    passages: list[str],
+    usage: RunUsage,
+    limits: UsageLimits,
+) -> str:
+    """The summary; `usage` counts what it spent, also when it raises (UsageLimitExceeded
+    once `limits` are reached)."""
     if not passages:
-        return "", RunUsage()
-    usage = RunUsage()
+        return ""
     final = await graph.ainvoke(
-        {"passages": passages, "summaries": [], "summary": "", "usage": usage}
+        {"passages": passages, "summaries": [], "summary": "", "usage": usage, "limits": limits}
     )
-    return str(final["summary"]), usage
+    return str(final["summary"])

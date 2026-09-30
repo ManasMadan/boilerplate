@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
+from pydantic_ai import UsageLimitExceeded
+from pydantic_ai.usage import RunUsage, UsageLimits
 from redis.asyncio import Redis
 from sqlalchemy import delete, func, select, update
 
@@ -23,7 +25,7 @@ from app.queues import IngestQueue
 from app.realtime import publish_to_org
 from app.settings import Settings
 from app.summaries import SummaryState, build_summary_graph, local_summarizer, summarize
-from app.usage import record, used_this_month
+from app.usage import reserve, settle
 
 # Passages sent to the embedding model per request.
 EMBED_BATCH = 64
@@ -46,6 +48,7 @@ class Summaries:
     graph: CompiledStateGraph[SummaryState]
     model_name: str
     monthly_tokens: int
+    tokens_per_run: int
 
 
 class Documents:
@@ -164,26 +167,40 @@ class Documents:
         allowance simply gets no summary; answering questions matters more."""
         if not self._summaries:
             return
-        if await used_this_month(org_id) >= self._summaries.monthly_tokens:
-            log.info("skipping a summary: monthly budget used", document_id=str(document_id))
-            return
-        async with tenant(org_id) as session:
-            passages = list(
-                await session.scalars(
-                    select(DocumentChunk.content)
-                    .where(DocumentChunk.document_id == document_id)
-                    .order_by(DocumentChunk.ordinal)
-                )
-            )
-        summary, usage = await summarize(self._summaries.graph, passages)
-        await record(
+        reservation = await reserve(
             org_id,
             user_id,
             "summary",
             self._summaries.model_name,
-            usage.input_tokens,
-            usage.output_tokens,
+            most=self._summaries.tokens_per_run,
+            monthly=self._summaries.monthly_tokens,
         )
+        if reservation is None:
+            log.info("skipping a summary: monthly budget used", document_id=str(document_id))
+            return
+        usage = RunUsage()
+        try:
+            async with tenant(org_id) as session:
+                passages = list(
+                    await session.scalars(
+                        select(DocumentChunk.content)
+                        .where(DocumentChunk.document_id == document_id)
+                        .order_by(DocumentChunk.ordinal)
+                    )
+                )
+            summary = await summarize(
+                self._summaries.graph,
+                passages,
+                usage,
+                UsageLimits(total_tokens_limit=reservation.tokens),
+            )
+        except UsageLimitExceeded:
+            # The document needs more than this run may spend: running the job again would
+            # only spend it again, so it ends here, without a summary.
+            log.info("skipping a summary: over the run's token limit", document_id=str(document_id))
+            return
+        finally:
+            await settle(reservation, usage.input_tokens, usage.output_tokens)
         async with tenant(org_id) as session:
             await session.execute(
                 update(Document)
@@ -218,7 +235,8 @@ def create_summaries(settings: Settings) -> Summaries | None:
         return None
     model = local_summarizer() if settings.model == "local:extractive" else settings.model
     return Summaries(
-        graph=build_summary_graph(model, settings.tokens_per_run),
+        graph=build_summary_graph(model),
         model_name=settings.model,
         monthly_tokens=settings.monthly_tokens_per_org,
+        tokens_per_run=settings.tokens_per_run,
     )

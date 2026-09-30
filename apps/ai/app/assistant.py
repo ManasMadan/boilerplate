@@ -5,8 +5,10 @@ the caller's organization only. The answer streams back as events (`AssistantEve
 text as it's written, the documents it used, then the tokens it cost.
 
 Guardrails:
-  - budgets: a workspace's monthly token allowance is checked before each answer, and
-    each answer is capped (UsageLimits); every answer's usage is recorded (ai.usage);
+  - budgets: each answer reserves its tokens from the workspace's monthly allowance
+    before it starts, is capped at what it reserved (UsageLimits), and records what it
+    used however it ends: answered, stopped at the limit, failed, or abandoned by the
+    client (app/usage.py);
   - retrieved text is untrusted: the instructions say to treat it as data, and clients
     render answers as plain text, never HTML;
   - models: AI_MODEL with an optional AI_FALLBACK_MODEL when it fails. "local:extractive"
@@ -15,12 +17,14 @@ Guardrails:
 Seam: an LLM gateway (LiteLLM, a provider router) is just another model name here.
 """
 
+import asyncio
 import json
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
+import anyio
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext, UsageLimitExceeded
 from pydantic_ai.messages import (
@@ -34,12 +38,12 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.documents import Documents, Passage
 from app.errors import AppError
 from app.log import log
-from app.usage import record, used_this_month
+from app.usage import Reservation, reserve, settle
 
 INSTRUCTIONS = """You answer questions for the members of one workspace, using only its \
 documents. Always call search_documents first. Answer from what it returns; if the \
@@ -200,41 +204,73 @@ class Assistant:
         self._monthly_tokens = monthly_tokens
         self._tokens_per_run = tokens_per_run
 
-    async def check_budget(self, org_id: UUID) -> None:
-        if await used_this_month(org_id) >= self._monthly_tokens:
+    async def reserve(self, org_id: UUID, user_id: UUID) -> Reservation:
+        """This answer's share of the workspace's allowance; AI_BUDGET_EXCEEDED when the
+        month's is used up."""
+        reservation = await reserve(
+            org_id,
+            user_id,
+            "assistant",
+            self._model_name,
+            most=self._tokens_per_run,
+            monthly=self._monthly_tokens,
+        )
+        if reservation is None:
             raise AppError("AI_BUDGET_EXCEEDED")
+        return reservation
 
     async def answer(
-        self, org_id: UUID, user_id: UUID, question: str
+        self, reservation: Reservation, question: str
     ) -> AsyncGenerator[AssistantEvent]:
-        deps = Deps(org_id=org_id, documents=self._documents)
-        input_tokens = output_tokens = 0
+        """The answer's events. The run happens in its own task, so a client that stops
+        reading (the stream is closed or cancelled) stops the run between events, and the
+        run still records what it spent before it ends."""
+        events: asyncio.Queue[AssistantEvent | None] = asyncio.Queue()
+        run = asyncio.create_task(self._run(reservation, question, events.put_nowait))
+        try:
+            while (event := await events.get()) is not None:
+                yield event
+        finally:
+            run.cancel()  # nothing to stop when it has finished
+            # Shielded: the cancellation that stopped the stream mustn't stop the run from
+            # recording what it spent.
+            with anyio.CancelScope(shield=True):
+                await asyncio.wait([run])
+
+    async def _run(
+        self,
+        reservation: Reservation,
+        question: str,
+        emit: Callable[[AssistantEvent | None], None],
+    ) -> None:
+        deps = Deps(org_id=reservation.org_id, documents=self._documents)
+        # Passed in so it's still here, counted so far, however the run ends.
+        usage = RunUsage()
         try:
             async with self._agent.run_stream(
                 question,
                 deps=deps,
-                usage_limits=UsageLimits(total_tokens_limit=self._tokens_per_run, request_limit=6),
-            ) as run:
-                async for text in run.stream_text(delta=True):
-                    yield AssistantEvent(event=TextEvent(text=text))
-                usage = run.usage
-                input_tokens, output_tokens = usage.input_tokens, usage.output_tokens
+                usage=usage,
+                usage_limits=UsageLimits(total_tokens_limit=reservation.tokens, request_limit=6),
+            ) as stream:
+                async for text in stream.stream_text(delta=True):
+                    emit(AssistantEvent(event=TextEvent(text=text)))
+            sources = [Source(documentId=doc, title=title) for doc, title in deps.sources.items()]
+            emit(AssistantEvent(event=SourcesEvent(sources=sources)))
+            emit(
+                AssistantEvent(
+                    event=DoneEvent(
+                        usage=Usage(
+                            inputTokens=usage.input_tokens, outputTokens=usage.output_tokens
+                        )
+                    )
+                )
+            )
         except UsageLimitExceeded:
-            yield AssistantEvent(event=ErrorEvent(code="AI_RUN_LIMIT"))
-            return
+            emit(AssistantEvent(event=ErrorEvent(code="AI_RUN_LIMIT")))
         except Exception:
             log.exception("assistant run failed")
-            yield AssistantEvent(event=ErrorEvent(code="UPSTREAM_UNAVAILABLE"))
-            return
+            emit(AssistantEvent(event=ErrorEvent(code="UPSTREAM_UNAVAILABLE")))
         finally:
-            await record(
-                org_id, user_id, "assistant", self._model_name, input_tokens, output_tokens
-            )
-        yield AssistantEvent(
-            event=SourcesEvent(
-                sources=[Source(documentId=doc, title=title) for doc, title in deps.sources.items()]
-            )
-        )
-        yield AssistantEvent(
-            event=DoneEvent(usage=Usage(inputTokens=input_tokens, outputTokens=output_tokens))
-        )
+            await settle(reservation, usage.input_tokens, usage.output_tokens)
+            emit(None)
