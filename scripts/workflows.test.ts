@@ -360,3 +360,28 @@ describe("preview.yml's cleanup", () => {
     expect(deleted).toEqual([1, 2]);
   });
 });
+
+describe("CI's caches", () => {
+  const ci = workflow("ci.yml");
+  const setup = Bun.YAML.parse(
+    readFileSync(join(ROOT, ".github/actions/setup/action.yml"), "utf8"),
+  ) as {
+    runs: { steps: Step[] };
+  };
+  const cached = (steps: Step[] = []) =>
+    steps.filter((step) => step.uses?.startsWith("actions/cache@")).map((step) => step.with?.path);
+
+  it("keeps Bun's downloads, and a uv cache per job so the jobs don't race to save one", () => {
+    expect(cached(setup.runs.steps)).toContain("~/.bun/install/cache");
+    const uv = setup.runs.steps.find((step) => step.uses?.startsWith("astral-sh/setup-uv@"));
+    expect(uv?.with?.["cache-suffix"]).toBe(`\${{ github.job }}`);
+  });
+
+  it("keeps the browsers, Next's build cache and Trivy's database", () => {
+    expect(cached(ci.jobs.components?.steps)).toContain("~/.cache/ms-playwright");
+    expect(cached(ci.jobs.e2e?.steps)).toEqual(
+      expect.arrayContaining(["~/.cache/ms-playwright", "apps/web/.next/cache"]),
+    );
+    expect(cached(ci.jobs.images?.steps)).toContain("~/.cache/trivy");
+  });
+});

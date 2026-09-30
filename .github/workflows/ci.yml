@@ -124,6 +124,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
+      # The browser itself, by Playwright's version; its system libraries still come from apt.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: playwright-${{ runner.os }}-
       - name: Install the browser
         run: bunx playwright install --with-deps chromium
       - name: Every story renders, passes its play function and axe, in both themes
@@ -331,6 +337,17 @@ jobs:
               console.log(`VAPID_PRIVATE_KEY=${Buffer.from(e.getPrivateKey("hex").padStart(64, "0"), "hex").toString("base64url")}`);'
             echo "VAPID_SUBJECT=mailto:ci@example.com"
           } >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: playwright-${{ runner.os }}-
+      # Next's build cache: an unchanged page isn't compiled again.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+          restore-keys: next-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
       - name: Install the browser
         working-directory: apps/web
         run: bunx playwright install --with-deps chromium
@@ -666,15 +683,28 @@ jobs:
           set: |
             *.cache-from=type=gha,scope=${{ matrix.image }}-amd64
             *.args.RELEASE=${{ github.sha }}
+      # Trivy's vulnerability database (hundreds of MB), fetched once a day rather than by
+      # each of the seven jobs, from a mirror without GHCR's rate limit.
+      - name: The day, for the database's cache key
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ steps.day.outputs.day }}
+          restore-keys: trivy-db-
       - name: Scan the image
         env:
           # renovate: datasource=docker depName=aquasec/trivy
           TRIVY: aquasec/trivy:0.74.0
           IMAGE: boilerplate/${{ matrix.image }}:dev
         run: |
+          mkdir -p ~/.cache/trivy
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
             -v "$PWD/.trivyignore.yaml:/trivyignore.yaml:ro" \
             "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed --ignorefile /trivyignore.yaml \
+            --db-repository mirror.gcr.io/aquasec/trivy-db \
             --severity CRITICAL,HIGH "$IMAGE"
 
   # The code generators (turbo/generators): each one's output must pass lint, types and

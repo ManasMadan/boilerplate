@@ -15,7 +15,8 @@ paths:
 - Every job has a `timeout-minutes`, sized to about twice its normal run
   (`scripts/workflows.test.ts` refuses a job without one).
 - Toolchain through `./.github/actions/setup` (Node from `.nvmrc`, Bun from
-  `package.json`, uv on request, the Turborepo cache), not a job's own setup steps. A job
+  `package.json`, uv on request, Bun's download cache and the Turborepo cache), not a
+  job's own setup steps. A job
   that runs turbo asks for uv (`python: "true"`): tasks depend on `^gen`, which reaches
   the Python service's `gen` through the AI client (`scripts/workflows.test.ts` checks).
 - A new CI job goes in `ci-ok`'s `needs` list, the one required check, so branch

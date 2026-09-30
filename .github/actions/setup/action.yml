@@ -21,6 +21,15 @@ runs:
       with:
         enable-cache: true
         cache-dependency-glob: apps/ai/uv.lock
+        # A key per job: with one shared key, the jobs that finish together race to save
+        # it ("Unable to reserve cache") and most of them save nothing.
+        cache-suffix: ${{ github.job }}
+    # Bun's download cache, so an install only fetches what the lockfile changed.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+        restore-keys: bun-${{ runner.os }}-
     - name: Install dependencies
       shell: bash
       run: bun install --frozen-lockfile
