@@ -35,6 +35,9 @@ export async function failedJobs(queue: Queue<unknown>, limit = 50): Promise<Fai
 /**
  * Moves failed jobs back to waiting: the given ids, or every failed job. Returns how
  * many moved; an id that isn't failed (already retried, or removed) is skipped.
+ *
+ * One job at a time rather than `queue.retryJobs()`: that moves them back without
+ * resetting their attempts, so a job would come back with its retries already spent.
  */
 export async function retryFailed(queue: Queue, ids?: readonly string[]): Promise<number> {
   const targets = ids ?? (await allFailedIds(queue));

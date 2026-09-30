@@ -1,6 +1,5 @@
 export * from "./bootstrap";
 export * from "./cache";
-export * from "./clock";
 export * from "./context";
 export * from "./crypto";
 export * from "./database";
