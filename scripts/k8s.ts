@@ -20,7 +20,16 @@
  */
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -82,23 +91,34 @@ function step(label: string, command: string, args: string[], input?: string) {
   ok(label);
 }
 
+/** Where steps that run side by side log: a private directory (mkdtemp makes it 0700). */
+let logs: string | undefined;
+
 /**
  * step(), without blocking: steps that don't depend on each other run side by side. The
  * output goes to a file, not a pipe, so a long build never stalls while a blocking step
  * runs; it's shown when the step fails.
  */
 async function stepAsync(label: string, command: string, args: string[]) {
-  const log = join(tmpdir(), `k8s-${label.replace(/\W+/g, "-")}-${process.pid}.log`);
-  const fd = openSync(log, "w");
+  if (!logs) {
+    const dir = mkdtempSync(join(tmpdir(), "boilerplate-k8s-"));
+    logs = dir;
+    process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
+  }
+  // Created here or not at all ("x"), and read back through the same descriptor rather
+  // than reopened by name.
+  const fd = openSync(join(logs, `${label.replace(/\W+/g, "-")}.log`), "wx+");
   const child = Bun.spawn([command, ...args], { cwd: ROOT, stdout: fd, stderr: fd });
   const code = await child.exited;
-  closeSync(fd);
   if (code !== 0) {
+    const output = Buffer.alloc(fstatSync(fd).size);
+    readSync(fd, output, 0, output.length, 0);
+    closeSync(fd);
     fail(label);
-    console.error(readFileSync(log, "utf8").trim().split("\n").slice(-80).join("\n"));
+    console.error(output.toString("utf8").trim().split("\n").slice(-80).join("\n"));
     process.exit(1);
   }
-  rmSync(log, { force: true });
+  closeSync(fd);
   ok(label);
 }
 
