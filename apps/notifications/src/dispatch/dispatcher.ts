@@ -117,7 +117,8 @@ export class Dispatcher implements OnApplicationShutdown {
         try {
           failures.push(
             ...(await this.deliverPush(
-              recipient.userId,
+              // reaches() has checked it: push goes only to a recipient with an account.
+              recipient.userId as string,
               recipient,
               name,
               template,
