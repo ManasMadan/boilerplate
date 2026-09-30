@@ -73,11 +73,31 @@ export class FcmTransport implements PushTransport {
     if (response.ok)
       return { ok: true, providerMessageId: ((await response.json()) as { name: string }).name };
     const text = await response.text();
-    // UNREGISTERED (404) and INVALID_ARGUMENT for a bad token mean the token is dead.
-    const gone =
-      response.status === 404 ||
-      text.includes("UNREGISTERED") ||
-      text.includes("registration-token-not-registered");
-    return { ok: false, gone, error: `FCM ${response.status}: ${text.slice(0, 200)}` };
+    return {
+      ok: false,
+      gone: tokenIsDead(response.status, text),
+      error: `FCM ${response.status}: ${text.slice(0, 200)}`,
+    };
   }
+}
+
+/**
+ * Whether FCM's error means the token will never work: UNREGISTERED (404), or
+ * INVALID_ARGUMENT naming the token field (a malformed token). INVALID_ARGUMENT about
+ * anything else is our message's fault, and forgetting the device for it would be wrong.
+ */
+export function tokenIsDead(status: number, body: string): boolean {
+  if (status === 404 || body.includes("UNREGISTERED")) return true;
+  let error: { status?: string; details?: { fieldViolations?: { field?: string }[] }[] };
+  try {
+    ({ error } = JSON.parse(body) as { error: typeof error });
+  } catch {
+    return false;
+  }
+  return (
+    error?.status === "INVALID_ARGUMENT" &&
+    (error.details ?? []).some((detail) =>
+      (detail.fieldViolations ?? []).some((violation) => violation.field === "message.token"),
+    )
+  );
 }

@@ -3,8 +3,9 @@
  * OAuth token exchange (RS256 JWT) and send API, APNs over h2c (ES256 JWT, topic header)
  * and a Web Push service that decrypts the payload (RFC 8291) and checks the VAPID header.
  *
- * Tokens select the outcome: "dead" tokens are reported unregistered, "flaky" ones fail
- * with a 500 until `recover()` is called.
+ * Tokens select the outcome: "dead" tokens are reported unregistered, "malformed" ones
+ * refused as an invalid token (FCM's INVALID_ARGUMENT on message.token), "flaky" ones
+ * fail with a 500 until `recover()` is called.
  */
 import {
   createECDH,
@@ -102,6 +103,20 @@ export async function startFakePush() {
       if (message.token.startsWith("dead"))
         return reply(404, {
           error: { status: "NOT_FOUND", details: [{ errorCode: "UNREGISTERED" }] },
+        });
+      if (message.token.startsWith("malformed"))
+        return reply(400, {
+          error: {
+            status: "INVALID_ARGUMENT",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.BadRequest",
+                fieldViolations: [
+                  { field: "message.token", description: "Invalid registration token" },
+                ],
+              },
+            ],
+          },
         });
       if (message.token.startsWith("flaky") && !healthy)
         return reply(500, { error: { status: "INTERNAL" } });

@@ -562,14 +562,15 @@ describe("notifications service", () => {
     const user = await newUser();
     const live = `android-${randomUUID()}`;
     await addDevice(user.id, "android", `dead-${randomUUID()}`);
+    await addDevice(user.id, "android", `malformed-${randomUUID()}`);
     await addDevice(user.id, "android", live);
     await addDevice(user.id, "ios", DEAD_APNS_TOKEN);
     await addDevice(user.id, "web", push.goneSubscription());
 
     const jobId = await reminder(user.id);
-    await settle(jobId, 6);
+    await settle(jobId, 7);
     const statuses = (await pushStatuses(jobId)).map((row) => row.status).sort();
-    expect(statuses).toEqual(["sent", "skipped", "skipped", "skipped"]);
+    expect(statuses).toEqual(["sent", "skipped", "skipped", "skipped", "skipped"]);
     expect(await devices(user.id)).toEqual([live]);
     expect(deliveredTo(live)).toHaveLength(1);
   });
