@@ -17,7 +17,11 @@ describe("passkeys", () => {
     await userEvent.click(page.getByRole("button", { name: "Add a passkey" }));
     await expect.element(page.getByText("Passkey added")).toBeVisible();
     // Unnamed, with the day it was added.
-    const today = new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date());
+    // In the page's zone (renderPage's default, UTC), not the machine's: they differ
+    // around midnight.
+    const today = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(
+      new Date(),
+    );
     await expect.element(page.getByText(today)).toBeVisible();
     expect(page.getByText(today).element().parentElement?.textContent).toBe(`Passkey${today}`);
     await userEvent.click(page.getByRole("button", { name: "Remove" }));

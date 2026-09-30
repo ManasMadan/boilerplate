@@ -22,8 +22,9 @@ export function redisDatabase(index: number): string {
  */
 export async function flushTestDatabase(redis: Redis) {
   const info = String(await redis.call("CLIENT", "INFO"));
-  const db = Number(/\bdb=(\d+)/.exec(info)?.[1] ?? 0);
-  if (db === 0) {
+  // CLIENT INFO always names the connection's database; anything else reads as 0.
+  const db = Number(info.replace(/^.*\bdb=(\d+).*$/s, "$1"));
+  if (!db) {
     throw new Error(
       "Refusing to flush Valkey database 0, the dev stack's: the suite's own database doesn't exist. Recreate Valkey with the databases docker-compose.yml asks for (`docker compose up -d valkey`).",
     );
