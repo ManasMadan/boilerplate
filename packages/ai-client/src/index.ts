@@ -82,6 +82,9 @@ export function createAiClient(options: {
     return createClient({
       baseUrl: options.baseUrl,
       headers: await headers(caller),
+      // Always JSON, so the validator sees every body: left to the content type, a body
+      // without one would come back as a raw stream, unchecked.
+      parseAs: "json",
       fetch: (input: RequestInfo | URL, init?: RequestInit) =>
         fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) }),
     });

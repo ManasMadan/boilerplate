@@ -161,6 +161,12 @@ describe("documents and sentiment", () => {
     expect(error).toMatchObject({ status: 502, code: "UPSTREAM_UNAVAILABLE" });
   });
 
+  it("refuses a successful answer that isn't JSON", async () => {
+    handler = (_request, response) => response.writeHead(200).end("positive");
+    const error = await failed(client().sentiment(caller, "Great!"));
+    expect(error).toMatchObject({ status: 502, code: "UPSTREAM_UNAVAILABLE" });
+  });
+
   it("says the service is unavailable when nothing listens", async () => {
     const closed = createServer();
     await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
