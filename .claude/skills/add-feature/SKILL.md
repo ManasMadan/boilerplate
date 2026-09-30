@@ -18,11 +18,15 @@ The todo feature is the reference for every layer: copy its shape, not just its 
    - `apps/api/src/modules/<name>/` (module, repository, service, router, index), registered
      in `apps/api/src/app.module.ts` and `apps/api/src/rpc/router.ts`
    - `packages/client/src/api/<name>/list.ts` (an infinite-query hook)
+   - the `<item>.deleted.v1` event in `packages/contracts/src/events.ts`, described under
+     `workspace.audit.events` in `packages/i18n/messages/en.json` and, as a draft to
+     translate, `es.json`
    - a `describe` block at the end of `apps/api/test/api.integration.test.ts`: empty for a
-     new workspace, another workspace's rows never listed, paging, 401 signed out, 422 on
-     a bad page size
-   The scaffold is one `list` procedure that returns `id` and `createdAt`; everything
-   else is yours.
+     new workspace, another workspace's rows never listed and never deletable, paging,
+     the delete recording its event, `NOT_FOUND` for one that isn't there, 401 signed
+     out, 422 on a bad page size or id
+   The scaffold is a `list` procedure that returns `id` and `createdAt` and a `delete`
+   that emits its event in the same transaction; everything else is yours.
 3. **Contract.** Add the fields to the item schema and the writes (`create`, `update`,
    `delete`) with input schemas and limits, like `packages/contracts/src/api/todo.ts`.
    New error codes go in `packages/contracts/src/errors.ts` and `errors.<CODE>` in every

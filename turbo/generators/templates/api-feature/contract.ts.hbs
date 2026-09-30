@@ -1,4 +1,4 @@
-/** The {{lowerCase (sentenceCase name)}} procedures. Add writes the way todo.ts does (input schema, scope, errors). */
+/** The {{lowerCase (sentenceCase name)}} procedures. Add the other writes the way todo.ts does (input schema, scope, errors). */
 import * as z from "zod";
 import { page, pageInput } from "../pagination";
 import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
@@ -26,4 +26,15 @@ export const {{camelCase name}}Contract = {
     })
     .input(pageInput)
     .output(page({{camelCase item}}Schema)),
+  delete: base
+    .errors(errors)
+    .route({
+      method: "DELETE",
+      path: "/{{kebabCase name}}/{id}",
+      tags: ["{{titleCase (sentenceCase name)}}"],
+      summary: "Delete a {{lowerCase (sentenceCase item)}}",
+      successStatus: 204,
+    })
+    .input(z.object({ id: z.uuid() }))
+    .output(z.void()),
 };

@@ -10,7 +10,7 @@
  * (scripts/generators.ts). The .claude/skills add-feature and add-package say what to do next.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PlopTypes } from "@turbo/gen";
 
@@ -34,7 +34,7 @@ export default function generator(plop: PlopTypes.NodePlopAPI): void {
 
   plop.setGenerator("api-feature", {
     description:
-      "An API feature reading an existing tenant table: contract, apps/api module, client hook, integration test",
+      "An API feature over an existing tenant table (list, and delete with its event): contract, apps/api module, client hook, integration test",
     prompts: [
       {
         type: "input",
@@ -97,6 +97,31 @@ export default function generator(plop: PlopTypes.NodePlopAPI): void {
         pattern: /(\n\}\);\n\nexport type Contract = typeof contract;\n\n)/,
         template:
           '\n  {{camelCase name}}: {{camelCase name}}Contract,$1export * from "./{{kebabCase name}}";\n',
+      },
+      {
+        type: "modify",
+        path: "packages/contracts/src/events.ts",
+        pattern: /(\nexport const events = \{\n)/,
+        template:
+          '$1  "{{snakeCase item}}.deleted.v1": z.object({ {{camelCase item}}Id: z.uuid() }),\n',
+      },
+      // The audit log describes every event in every language: English, and a Spanish
+      // draft for a translator to finish.
+      ({ item }) => {
+        const words = plop.getHelper("lowerCase")(plop.getHelper("sentenceCase")(item));
+        const article = /^[aeiou]/.test(words) ? "an" : "a";
+        const labels = { en: `Deleted ${article} ${words}`, es: `Eliminó «${words}»` };
+        for (const [locale, label] of Object.entries(labels)) {
+          const path = join(root, `packages/i18n/messages/${locale}.json`);
+          const messages = JSON.parse(readFileSync(path, "utf8")) as {
+            workspace: { audit: { events: Record<string, unknown> } };
+          };
+          messages.workspace.audit.events[plop.getHelper("snakeCase")(item)] = {
+            deleted: { v1: label },
+          };
+          writeFileSync(path, `${JSON.stringify(messages, null, 2)}\n`);
+        }
+        return "described its event in the audit log";
       },
       {
         type: "add",
@@ -167,6 +192,9 @@ export default function generator(plop: PlopTypes.NodePlopAPI): void {
         return [
           `packages/contracts/src/api/${kebab}.ts`,
           "packages/contracts/src/api/index.ts",
+          "packages/contracts/src/events.ts",
+          "packages/i18n/messages/en.json",
+          "packages/i18n/messages/es.json",
           `apps/api/src/modules/${kebab}`,
           "apps/api/src/app.module.ts",
           "apps/api/src/rpc/router.ts",
