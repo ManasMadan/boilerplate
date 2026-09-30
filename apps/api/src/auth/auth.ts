@@ -32,10 +32,12 @@ import {
 import {
   FRESH_SESSION_AGE,
   NAME_MAX_LENGTH,
+  ORGANIZATION_LIMIT,
   OTP_EXPIRES_IN,
   OTP_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PENDING_INVITATION_LIMIT,
   userAdditionalFields,
 } from "@repo/contracts/auth";
 import type { Entitlements } from "@repo/contracts/billing";
@@ -57,7 +59,7 @@ import type { JobMeta, Producer } from "@repo/jobs";
 import { currentContext } from "@repo/nest-common";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -69,7 +71,7 @@ import type { Redis } from "ioredis";
 import type { Env } from "../env";
 import { features } from "../features";
 import { type EventOrigin, emitAnyEvent, emitEvent } from "../outbox";
-import { createAccountLimits } from "./account-limits";
+import { createAccountLimits, createEmailLimits } from "./account-limits";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import type { Memberships } from "./memberships";
 import { orgAccess, orgRoles } from "./org-access";
@@ -127,6 +129,7 @@ export function createAuth({
 }: AuthDependencies) {
   const webOrigin = new URL(env.WEB_URL);
   const accountLimits = createAccountLimits(redis);
+  const emailLimits = createEmailLimits(redis);
 
   /** Records an audit event for auth activity (see auth-events.ts for why it's separate). */
   function record<N extends EventName>(
@@ -337,6 +340,14 @@ export function createAuth({
             });
           }
         }
+        // Invitation emails go out in the background, too late to refuse; so the limit is
+        // taken here, for new invitations and resends alike.
+        if (ctx.path === "/organization/invite-member") {
+          const session = await getSessionFromCtx(ctx);
+          const email = (ctx.body as { email?: unknown } | undefined)?.email;
+          if (session && typeof email === "string")
+            await emailLimits.invitation(session.user.id, email);
+        }
         // Per account, on top of the per-address limits above (account-limits.ts).
         await accountLimits({
           path: ctx.path,
@@ -521,6 +532,10 @@ export function createAuth({
         // address, so a hijacked session alone can't move the account elsewhere.
         changeEmail: { enabled: true, verifyCurrentEmail: true },
         sendVerificationOTP: async ({ email, otp, type }, ctx) => {
+          // better-auth sends codes in the background and answers the same either way (so
+          // nobody learns which addresses have accounts): past the limit the code is
+          // dropped, and better-auth logs why.
+          await emailLimits.code(email);
           await notifications.add(
             "send",
             {
@@ -546,6 +561,8 @@ export function createAuth({
         ac: orgAccess,
         roles: orgRoles,
         invitationExpiresIn: INVITATION_DAYS * DAY,
+        organizationLimit: ORGANIZATION_LIMIT,
+        invitationLimit: PENDING_INVITATION_LIMIT,
         // The plan's member limit (packages/contracts billing); null means none.
         membershipLimit: async (_user, org) =>
           (await billing.entitlements(org.id)).members ?? Number.MAX_SAFE_INTEGER,

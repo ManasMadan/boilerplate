@@ -89,3 +89,48 @@ export function createAccountLimits(redis: Redis) {
     }
   };
 }
+
+const HOUR = 60 * 60;
+
+/**
+ * Emails our domain sends to an address someone else typed: sign-in and verification
+ * codes, and invitations. Limited where they're sent, whatever endpoint asked, per
+ * recipient (nobody gets flooded) and per inviter (no account becomes a spam cannon),
+ * failing closed like the limits above.
+ */
+export const EMAIL_LIMITS = {
+  /** Codes to one address, for any purpose. */
+  codesPerRecipient: { points: 10, windowSeconds: HOUR },
+  invitationsPerRecipient: { points: 3, windowSeconds: 24 * HOUR },
+  invitationsPerInviter: { points: 30, windowSeconds: HOUR },
+};
+
+export function createEmailLimits(redis: Redis) {
+  const limiter = (name: keyof typeof EMAIL_LIMITS) =>
+    createRateLimiter(redis, {
+      name: `email:${name}`,
+      ...EMAIL_LIMITS[name],
+      onRedisError: "deny",
+    });
+  const limiters = {
+    codesPerRecipient: limiter("codesPerRecipient"),
+    invitationsPerRecipient: limiter("invitationsPerRecipient"),
+    invitationsPerInviter: limiter("invitationsPerInviter"),
+  };
+  const refuse = () => {
+    throw new APIError("TOO_MANY_REQUESTS", {
+      message: "Too many emails; try again later.",
+      code: "RATE_LIMITED",
+    });
+  };
+  const address = (email: string) => email.trim().toLowerCase();
+  return {
+    async code(email: string) {
+      if (!(await limiters.codesPerRecipient.consume(address(email))).allowed) refuse();
+    },
+    async invitation(inviterId: string, email: string) {
+      if (!(await limiters.invitationsPerInviter.consume(inviterId)).allowed) refuse();
+      if (!(await limiters.invitationsPerRecipient.consume(address(email))).allowed) refuse();
+    },
+  };
+}

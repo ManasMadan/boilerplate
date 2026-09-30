@@ -309,9 +309,9 @@
       "body": "This is your reminder for “{title}”."
     },
     "orgInvitation": {
-      "subject": "{inviterName} invited you to {organizationName}",
-      "heading": "Join {organizationName}",
-      "body": "{inviterName} invited you to collaborate in {organizationName}.",
+      "subject": "You're invited to a workspace on Boilerplate",
+      "heading": "Join “{organizationName}”",
+      "body": "“{inviterName}” invited you to collaborate in the workspace “{organizationName}”.",
       "cta": "Accept invitation",
       "expires": "This invitation expires in {days, plural, one {# day} other {# days}}."
     },

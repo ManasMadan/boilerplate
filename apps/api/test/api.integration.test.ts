@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import http from "node:http";
 import { ORPCError } from "@orpc/client";
 import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
+import { ORGANIZATION_LIMIT, PENDING_INVITATION_LIMIT } from "@repo/contracts/auth";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
 import { createSignedTokens, S3Storage } from "@repo/nest-common";
@@ -141,6 +142,22 @@ describe("the mobile sign-in redirect", () => {
 });
 
 describe("sign-up and verification", () => {
+  it("sends one address at most ten codes an hour, whichever endpoint asks", async () => {
+    const session = createSession(harness);
+    const email = newEmail();
+    const password = newPassword();
+    await session.auth("/sign-up/email", { email, password, name: "Codes" });
+    // Eleven requests for a code, within each endpoint's per-address limit: the sign-up,
+    // three resets, five verification codes and two sign-ins to the unverified account.
+    for (let i = 0; i < 3; i++) await session.auth("/forget-password/email-otp", { email });
+    for (let i = 0; i < 5; i++) {
+      await session.auth("/email-otp/send-verification-otp", { email, type: "email-verification" });
+    }
+    for (let i = 0; i < 2; i++) await session.auth("/sign-in/email", { email, password });
+    for (let i = 0; i < 10; i++) await takeOtp(harness, email);
+    await expect(takeOtp(harness, email)).rejects.toThrow(/No auth.otp queued/);
+  });
+
   it("issues no session until the email is verified, and queues the code in the browser's language", async () => {
     const session = createSession(harness, { locale: "es-ES,es;q=0.9" });
     const email = newEmail();
@@ -485,6 +502,48 @@ describe("organizations and the audit trail", () => {
       actor_id: ownerId,
       payload: { role: "admin", previousRole: "member" },
     });
+  });
+
+  it("limits invitations, per address and per workspace, so our domain can't be used to spam", async () => {
+    const { owner, orgId } = await team();
+    const invite = (email: string, resend = false) =>
+      owner.session.auth<{ code?: string }>("/organization/invite-member", {
+        email,
+        role: "member",
+        organizationId: orgId,
+        resend,
+      });
+    // One address: three emails a day, however they're asked for.
+    const target = newEmail();
+    expect((await invite(target)).status).toBe(200);
+    expect((await invite(target, true)).status).toBe(200);
+    expect((await invite(target, true)).status).toBe(200);
+    expect((await invite(target, true)).status).toBe(429);
+    // One workspace: PENDING_INVITATION_LIMIT waiting at once (the team already has one,
+    // its member's accepted one doesn't count, and the one above does).
+    let sent = 1;
+    while (sent < PENDING_INVITATION_LIMIT) {
+      expect((await invite(newEmail())).status).toBe(200);
+      sent++;
+    }
+    const over = await invite(newEmail());
+    expect(over.status).toBe(403);
+    expect(over.body.code).toBe("INVITATION_LIMIT_REACHED");
+  });
+
+  it(`caps the workspaces one account belongs to at ${ORGANIZATION_LIMIT}`, async () => {
+    const { session } = await signedInUser();
+    const create = () =>
+      session.auth<{ code?: string }>("/organization/create", {
+        name: "Many",
+        slug: `many-${randomUUID().slice(0, 8)}`,
+      });
+    // The personal workspace is the first.
+    for (let count = 1; count < ORGANIZATION_LIMIT; count++)
+      expect((await create()).status).toBe(200);
+    const over = await create();
+    expect(over.status).toBe(403);
+    expect(over.body.code).toBe("YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS");
   });
 
   it("a removed member loses access on their very next request", async () => {

@@ -170,6 +170,15 @@ Redis, with tighter rules on the endpoints that guess secrets:
 | `/forget-password/*` | 3 a minute |
 | `/oauth2/register` | 5 a minute |
 
+Emails to an address someone else typed are limited where they're sent, whichever
+endpoint asked: ten codes an hour per address (past that the code is dropped; better-auth
+answers the same either way, so nobody learns which addresses have accounts), and
+invitations to three a day per address and thirty an hour per inviter (refused with
+429). An account belongs to at most 20 workspaces, and a workspace has at most 20
+invitations waiting (`ORGANIZATION_LIMIT`, `PENDING_INVITATION_LIMIT` in
+`packages/contracts/src/auth-settings.ts`). The invitation's subject names neither the
+workspace nor the inviter, which someone else chose; the body quotes both.
+
 An address can be rotated, so the endpoints that guess or send secrets are also limited
 per account (`apps/api/src/auth/account-limits.ts`), whatever address the attempts come
 from: 10 password sign-ins, reset-password or verify-email attempts and 10 second-factor
