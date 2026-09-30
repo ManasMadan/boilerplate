@@ -223,6 +223,9 @@ jobs:
         run: |
           docker compose --profile mail up -d --wait stalwart mailpit
           docker compose --profile mail run --rm stalwart-init
+      # The web app's pages are tested in Chromium (vitest's browser mode).
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
       # Unit and integration tests together, with coverage: the coverage job merges these
       # reports with the stories' and the Python service's and checks every file.
       - name: Tests with coverage

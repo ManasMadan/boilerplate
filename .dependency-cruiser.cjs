@@ -35,8 +35,11 @@ module.exports = {
       comment:
         "The web app only renders. Data and logic come from the API through packages/client. " +
         "Database, queue, server framework and auth-server code must never be bundled into it. " +
-        "(Test harnesses under e2e/ may reach the stack's services to simulate time.)",
-      from: { path: "^apps/(web|mobile)/", pathNot: "^apps/(web|mobile)/e2e/" },
+        "(Test harnesses under e2e/, and the web's browser-test harness under test/, may reach the stack's services to set data up.)",
+      from: {
+        path: "^apps/(web|mobile)/",
+        pathNot: ["^apps/(web|mobile)/e2e/", "^apps/web/test/"],
+      },
       to: {
         path: [
           "^packages/(db|nest-common|jobs|logger|email)/",

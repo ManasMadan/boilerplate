@@ -3,7 +3,7 @@
 | Layer | Where | Command | Needs |
 |---|---|---|---|
 | Unit | `src/**/*.test.ts(x)` in each package, `apps/mobile/src`, `apps/ai/tests` (not marked `integration`) | `bun run test` | nothing (cached by turbo) |
-| Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/ai` tests marked `integration` | `bun run test:integration` | Postgres, Valkey, Mailpit, RustFS, ClamAV, Stalwart (started for you) |
+| Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/web/test` (in Chromium), `apps/ai` tests marked `integration` | `bun run test:integration` | Postgres, Valkey, Mailpit, RustFS, ClamAV, Stalwart (started for you) |
 | Coverage | every suite merged, every file at 100% | `bun run test:coverage` | the same services |
 | End to end | `apps/web/e2e`, `apps/mobile/e2e`, then the k6 smoke | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
 | Components | every story in `packages/ui` | `bun run --cwd packages/ui test:stories`, `test:visual` | Chromium; Docker for `test:visual` |
@@ -38,8 +38,8 @@ background when a tool times out commands (an agent's shell, for one).
   32 (the `--databases` flag in `docker-compose.yml`, which CI's integration job runs too).
   Taken: the api's files 1 to 5, 7 to 10 and 13 (one per file, `startApi(<n>)`),
   webhooks 11, nest-common 12, notifications 14, worker 15, webhooks' Stalwart suite 16,
-  the api's breached-password suite 17 and Python 6. A new suite takes the next free
-  number, 18 onwards;
+  the api's breached-password suite 17, the web's browser tests 18 and Python 6. A new
+  suite takes the next free number, 19 onwards;
   `scripts/redis-databases.test.ts` fails when two suites that flush share one. A change
   to the flag needs the local container recreated (`docker compose up -d valkey`).
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker
@@ -64,6 +64,42 @@ registers a webhook pointing at itself, sends one message that is delivered (to
 Mailpit, DKIM-signed) and one to `bounce.test` that is refused, and checks the signed
 `delivery.dsn-perm-fail` Stalwart posts becomes the feedback event that suppresses the
 address.
+
+## Web
+
+`apps/web` has two kinds of vitest test, both counted in coverage:
+
+- **Server side** (`src/**/*.test.ts(x)`, the `unit` project, in Node): helpers, the
+  proxy, route handlers and route files, and server components. `test/next-server.ts`
+  stands in for the request Next.js would be rendering: set `request.cookies` and
+  `request.headers`, and next-intl's server functions read them through the real
+  `src/i18n/request.ts`. `renderHtml(await Page())` renders a server component,
+  async children included. Part of `bun run test`.
+- **In the browser** (`test/**/*.test.tsx`, in Chromium through vitest's browser mode):
+  pages and components, rendered with `renderPage(<Page />, { url })` from
+  `test/render.tsx` inside the app's real providers, and driven like a user with
+  `userEvent` and `page` locators from `vitest/browser`. They call the real API: the
+  global setup builds apps/api and runs it twice, once with every optional feature on
+  (billing against the fake Stripe, files on RustFS, a stand-in for the AI service in
+  `test/fake-ai.ts`, Google sign-in) and once with them all off except captcha, where
+  Turnstile's script is a stand-in (`test/commands.ts`) and tokens are checked with
+  Cloudflare's always-pass test secret. Files named `*.features-off.test.tsx` run against
+  the second. The test pages are served on the origin the API knows as `WEB_URL`, and
+  `/rpc` and `/api` are proxied to it, so cookies, CORS and passkeys work as on the site.
+  Part of `bun run test:integration`.
+
+What a page can't do itself is a command (`commands.<name>()` from `vitest/browser`,
+defined in `test/commands.ts`, run in Node): read the code the API queued for an email
+(`takeNotification`), set data up with SQL, add a virtual passkey authenticator, compute
+an authenticator code. Accounts come from `test/users.ts` (`signUp()` signs a new,
+verified user in on the page). Next.js's router exists only inside a Next server, so
+`renderPage` provides a stand-in: `router.push` and `<Link>` change the page's URL
+(`currentUrl()`), and leaving the page's path unmounts it, as in the app. Full-page
+navigations (`window.location.assign`, a redirect to Stripe or Google) are answered
+"204 No Content" so the test page stays, and `commands.hardNavigations()` lists them.
+
+Each test starts signed out, with a client IP of its own (the API's auth rate limits
+are per IP).
 
 ## Not tested automatically
 

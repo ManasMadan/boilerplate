@@ -29,10 +29,20 @@ paths:
   not authorization; the API decides. New third-party origins need a CSP entry there.
 - Server config is `src/env.ts`. The browser gets no env; if the client needs a value,
   serve it from the API.
-- Tests: pure hooks and helpers as `src/**/*.test.ts`. User flows are Playwright specs in
-  `e2e/*.spec.ts` using the helpers in `e2e/support.ts` (real stack, Mailpit mailbox,
-  `expectAccessible` for axe). `bun run --cwd apps/web test:e2e` runs them against a
-  running `bun dev`; `bun run test:e2e --app web` builds and starts a fresh stack.
+- Tests (docs/testing.md, "Web"), every file at 100%:
+  - server side in Node, next to the code (`src/**/*.test.ts(x)`): helpers, the proxy,
+    route files, server components (`renderHtml` and `request` from
+    `test/next-server.ts`);
+  - pages and client components in Chromium (`test/<module>/*.test.tsx`), rendered with
+    `renderPage` from `test/render.tsx` against the real API; `*.features-off.test.tsx`
+    for the API with optional features off. Data comes from the API itself
+    (`test/users.ts`, `fetch("/api/auth/...")`, the page's own client); Node-only setup
+    is a command in `test/commands.ts`. Stub only what has no local stand-in (Next's
+    router is provided by `renderPage`);
+  - user flows across pages as Playwright specs in `e2e/*.spec.ts` using the helpers in
+    `e2e/support.ts` (real stack, Mailpit mailbox, `expectAccessible` for axe).
+    `bun run --cwd apps/web test:e2e` runs them against a running `bun dev`;
+    `bun run test:e2e --app web` builds and starts a fresh stack.
 - First-load JavaScript per route has a budget (`apps/web/scripts/bundle-budget.ts`,
   `bun run --cwd apps/web budget` after a build; CI runs it).
   Prefer server components for static content and lazy-load heavy client code.
