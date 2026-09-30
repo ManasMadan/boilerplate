@@ -11,12 +11,11 @@ templates are Handlebars files in `templates/<generator>/`.
 - What a generator writes must pass everything a pull request must: Biome, the
   boundary rules, knip, types, and its own tests. A template never contains code the
   repo bans (`as any`, suppressions, hand-written query keys, raw `fetch`).
-- Each generator also wires what it wrote in (routers, modules, registries, the commit
-  scopes), and formats every file it touched, so its output needs no follow-up edit.
+- Each generator also wires what it wrote in (routers, modules, registries), and formats
+  every file it touched, so its output needs no follow-up edit. Commit scopes need
+  nothing: `commitlint.config.ts` reads the workspace folders.
 - `bun scripts/generators.ts` runs every generator into a scratch worktree and checks
   the output (CI's generators job runs it `--in-place`). Run it after changing a
   template; it takes minutes, so in the background.
-- A generator that adds a commit scope must also add it to the pull request title list
-  in `.github/workflows/ci.yml`, or say that it can't.
 - The matching skill (add-feature, add-package) says what the generator does and what
   is left to write by hand; update it with the generator.
