@@ -23,15 +23,15 @@ devcontainer has only OpenTofu, kubectl and Helm of them.
 - [ ] Create the repository from this one (it's a template repository once its settings
       are applied, see step 3): `gh repo create <owner>/<name> --template
       ManasMadan/boilerplate --public --clone`.
-- [ ] Rename the owner, repository and product. `git grep -n -i "manasmadan"` lists the
-      repository (Argo CD's `repoURL`s, `infra/tofu/modules/bootstrap/variables.tf`),
-      the image registry (`ghcr.io/<owner>/<repo>`: `deploy/charts/stack/values.yaml`,
-      `deploy.yml`, `preview.yml`, `docker-bake.hcl`, the image-signing policy in
-      `deploy/platform/config/values.yaml`, and the chart tests that assert them),
-      `.github/CODEOWNERS` and the security links. `git grep -n "Boilerplate"` finds
-      the product name: better-auth's app name, the two-factor issuer and passkeys'
-      relying party (`apps/api/src/auth/auth.ts`), the API docs' title, `EMAIL_FROM`
-      and the UI's messages (`packages/i18n`).
+- [ ] Rename the owner, repository, product and mobile app: `bun run rename <name>
+      --owner <owner> --product "<Product>" --bundle-id <com.example.app>`. It rewrites
+      every tracked file (the repository in Argo CD's `repoURL`s and the bootstrap, the
+      image registry `ghcr.io/<owner>/<name>`, `CODEOWNERS` and the security links, the
+      product name in auth, the API docs and the UI's messages, the mobile bundle id and
+      URL scheme, and the `boilerplate` name in compose, kind, Kubernetes labels and
+      resources, cookies and test addresses), then fails naming any line it couldn't.
+      The bundle id can't change once the app is in a store. Then `bun install` and
+      review the diff. In Claude Code, `/new-project` walks this list with you.
 - [ ] Your domains in `deploy/environments/{staging,production}/`: `site.host`,
       `storage.uploads.host` and `corsOrigins` (data.yaml), `EMAIL_FROM`. The
       `example.com` values there are placeholders.

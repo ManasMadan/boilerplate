@@ -58,6 +58,7 @@ them, but each is a plain Markdown checklist you can follow by hand.
 | [add-app](../.claude/skills/add-app/SKILL.md) | a new deployable service or app, wired everywhere |
 | [add-helm-value](../.claude/skills/add-helm-value/SKILL.md) | a chart setting, or a cluster add-on |
 | [add-load-test](../.claude/skills/add-load-test/SKILL.md) | a k6 scenario and its latency budget |
+| [new-project](../.claude/skills/new-project/SKILL.md) | renaming a fresh copy of the template and working through the new-project checklist |
 | [remove-feature](../.claude/skills/remove-feature/SKILL.md) | removing an optional feature completely, tables last |
 | [write-tests](../.claude/skills/write-tests/SKILL.md) | missing tests, and getting a file to 100% coverage |
 | [fix-ci](../.claude/skills/fix-ci/SKILL.md) | a red CI run: find the failing step, reproduce it, fix the cause |
