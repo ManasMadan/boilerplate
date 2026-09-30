@@ -561,7 +561,8 @@ jobs:
           IMAGE: boilerplate/${{ matrix.image }}:dev
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed \
+            -v "$PWD/.trivyignore.yaml:/trivyignore.yaml:ro" \
+            "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed --ignorefile /trivyignore.yaml \
             --severity CRITICAL,HIGH "$IMAGE"
 
   ci-ok:

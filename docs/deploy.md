@@ -27,7 +27,11 @@ docker buildx bake api web      # some of them
 Every image builds in a job of its own, in CI, in deploy.yml (once per architecture) and
 for previews: seven images on one runner ran it out of disk. On every pull request CI's
 **Container images** jobs build each image and fail on a fixable critical or high
-vulnerability (Trivy). Build caches are kept per image and architecture
+vulnerability (Trivy). A finding reviewed as not reaching the services (in a base-image
+package nothing loads, while the base image's rebuild is pending) goes in
+`.trivyignore.yaml` with the reason and an expiry, after which the scan fails again. The
+ai image installs Debian's security updates at build time, since Python links the system
+OpenSSL. Build caches are kept per image and architecture
 (`<image>-<arch>`): deploy.yml writes them on master, and CI, previews and kind read them.
 
 ## Environments

@@ -31,6 +31,9 @@ ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     RELEASE=${RELEASE}
+# Debian's security updates the base image doesn't have yet: Python links the system
+# OpenSSL, so a fix published after the python image was built must reach this one.
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 # The base image's pip is never used (dependencies are in the virtualenv) and vendors
 # its own, older copies of other packages, which scanners rightly flag: it goes.
 RUN python -m pip uninstall --yes --root-user-action=ignore pip

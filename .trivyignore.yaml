@@ -1,0 +1,18 @@
+# Image vulnerabilities reviewed as not reaching the services, for the Trivy scan of every
+# built image (CI's Container images jobs). Each entry says why and expires: once it does,
+# the scan fails again, so an entry can't outlive its reason. The real fix is a rebuilt
+# base image (Renovate brings those in); an entry only covers the days until then.
+vulnerabilities:
+  # Debian fixed both in libssl3t64 3.5.7-1~deb13u3 before distroless rebuilt its images.
+  # Node in distroless doesn't load the system libssl (it's built with its own OpenSSL,
+  # node_shared_openssl false, and maps no libssl or libcrypto), and neither QUIC flow
+  # control nor DTLS is used by anything here. The ai image, whose Python does link the
+  # system OpenSSL, installs Debian's security updates instead (deploy/docker/ai.Dockerfile).
+  - id: CVE-2026-75804
+    purls: ["pkg:deb/debian/libssl3t64"]
+    statement: Node in the distroless images uses its own OpenSSL; no QUIC server here
+    expired_at: 2026-10-14
+  - id: CVE-2026-84782
+    purls: ["pkg:deb/debian/libssl3t64"]
+    statement: Node in the distroless images uses its own OpenSSL; no DTLS here
+    expired_at: 2026-10-14
