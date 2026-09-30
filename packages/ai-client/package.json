@@ -16,7 +16,8 @@
   "scripts": {
     "gen": "openapi-ts",
     "check-types": "tsc",
-    "coverage": "vitest run --coverage --passWithNoTests"
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "type": "module",
   "dependencies": {

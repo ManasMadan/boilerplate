@@ -91,19 +91,16 @@ export function createAiClient(options: {
   async function settle<R extends { error?: unknown; response?: Response }>(
     call: Promise<R>,
   ): Promise<R> {
-    let result: R;
-    try {
-      result = await call;
-    } catch (cause) {
-      throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });
-    }
+    // The generated client never rejects: an unreachable service comes back as a result
+    // without a response.
+    const result = await call;
     if (!result.response?.ok) throw toServiceError(result.response?.status ?? 503, result.error);
     return result;
   }
 
   async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: Response }>) {
     const { data } = await settle(call);
-    // The generated client validated the body, so only a response without one lands here.
+    // The generated client validated the body; one that broke the contract lands here.
     if (data === undefined) throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
     return data;
   }
