@@ -65,9 +65,6 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
     return payload;
   });
 
-  // oRPC parses non-JSON bodies (multipart uploads) itself; Nest's adapter keeps JSON.
-  fastify.addContentTypeParser("*", (_request, _payload, done) => done(null, undefined));
-
   const serve = (handler: RPCHandler<object> | OpenAPIHandler<object>, prefix: `/${string}`) =>
     async function handle(
       request: FastifyRequest,
@@ -82,8 +79,21 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
       });
     };
 
-  fastify.all("/rpc/*", serve(rpc, "/rpc"));
-  fastify.all("/api/v1/*", serve(rest, "/api/v1"));
+  // Both protocols speak JSON only (files go straight to storage through presigned URLs),
+  // parsed by Fastify under the server's bodyLimit before any procedure or auth check
+  // runs: anything else is refused (415), and an oversized body too (413). oRPC would
+  // otherwise read the raw stream itself, with no limit, for any other content type.
+  fastify.register((scope, _options, done) => {
+    scope.removeAllContentTypeParsers();
+    scope.addContentTypeParser(
+      "application/json",
+      { parseAs: "string" },
+      scope.getDefaultJsonParser("error", "error"),
+    );
+    scope.all("/rpc/*", serve(rpc, "/rpc"));
+    scope.all("/api/v1/*", serve(rest, "/api/v1"));
+    done();
+  });
 
   const spec = await openApiDocument({
     version: options.release,

@@ -2,6 +2,7 @@
  * The API's security and behaviour guarantees, against the real app, database and Redis.
  */
 import { randomUUID } from "node:crypto";
+import http from "node:http";
 import { ORPCError } from "@orpc/client";
 import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import { realtimeChannel } from "@repo/contracts/realtime";
@@ -59,6 +60,59 @@ async function expectError(promise: Promise<unknown>, code: string) {
   expect(orpcError.code).toBe(code);
   return orpcError;
 }
+
+describe("request bodies", () => {
+  const post = (path: string, type: string, body: BodyInit) =>
+    fetch(`${harness.baseUrl}${path}`, { method: "POST", headers: { "content-type": type }, body });
+
+  /**
+   * The status for a request announcing a body of `bytes`: sends only the headers and
+   * waits, so a refusal by length alone shows (nothing is read or parsed).
+   */
+  function statusFor(path: string, bytes: number, type = "application/json") {
+    return new Promise<number>((resolve, reject) => {
+      const request = http.request(`${harness.baseUrl}${path}`, {
+        method: "POST",
+        headers: { "content-type": type, "content-length": bytes },
+      });
+      request.on("response", (response) => {
+        resolve(response.statusCode ?? 0);
+        request.destroy();
+      });
+      request.on("error", reject);
+      request.flushHeaders();
+    });
+  }
+
+  it("refuses an oversized body before any procedure or auth check runs", async () => {
+    const big = 2 * 1024 * 1024;
+    expect(await statusFor("/rpc/todo/create", big)).toBe(413);
+    expect(await statusFor("/api/v1/todos", big)).toBe(413);
+    // 100 MB of text, unauthenticated: refused from the headers, never read.
+    expect(await statusFor("/rpc/todo/create", 100 * 1024 * 1024, "text/plain")).toBe(415);
+  });
+
+  it("accepts only JSON on the API routes", async () => {
+    for (const type of [
+      "text/plain",
+      "application/octet-stream",
+      "multipart/form-data; boundary=x",
+    ]) {
+      expect((await post("/rpc/todo/create", type, "x".repeat(1024))).status, type).toBe(415);
+      expect((await post("/api/v1/todos", type, "x".repeat(1024))).status, type).toBe(415);
+    }
+  });
+
+  it("still serves JSON calls", async () => {
+    const response = await post(
+      "/rpc/todo/list",
+      "application/json",
+      JSON.stringify({ json: { limit: 1 } }),
+    );
+    // Unauthenticated, but parsed and routed: the procedure answered.
+    expect(response.status).toBe(401);
+  });
+});
 
 describe("the mobile sign-in redirect", () => {
   const proxy = (target: string) =>
