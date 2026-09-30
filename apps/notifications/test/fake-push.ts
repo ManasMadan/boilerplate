@@ -5,7 +5,8 @@
  *
  * Tokens select the outcome: "dead" tokens are reported unregistered, "malformed" ones
  * refused as an invalid token (FCM's INVALID_ARGUMENT on message.token), "flaky" ones
- * fail with a 500 until `recover()` is called.
+ * fail with a 500 until `recover()` is called. `whileDelivering`, when set, runs while an
+ * FCM send is in flight, before it's answered.
  */
 import {
   createECDH,
@@ -66,8 +67,9 @@ export async function startFakePush() {
   const vapid = webPush.generateVAPIDKeys();
   const accessToken = randomBytes(16).toString("hex");
   const delivered: Delivered[] = [];
-  const subscribers = new Map<string, { ecdh: ECDH; auth: string }>();
+  const subscribers = new Map<string, { ecdh: ECDH; auth: string; location: boolean }>();
   let healthy = false;
+  const hooks: { whileDelivering?: (() => Promise<unknown>) | undefined } = {};
 
   // FCM (OAuth + send) and Web Push share one HTTP/1.1 server.
   const http: Server = createServer(async (request: IncomingMessage, response) => {
@@ -118,6 +120,7 @@ export async function startFakePush() {
         });
       if (message.token.startsWith("flaky") && !healthy)
         return reply(500, { error: { status: "INTERNAL" } });
+      await hooks.whileDelivering?.();
       delivered.push({
         provider: "fcm",
         token: message.token,
@@ -157,7 +160,11 @@ export async function startFakePush() {
         link: payload.link,
         headers: request.headers,
       });
-      response.writeHead(201, { location: `/messages/${randomBytes(4).toString("hex")}` });
+      // RFC 8030 says to name the message; not every push service does.
+      response.writeHead(
+        201,
+        subscriber.location ? { location: `/messages/${randomBytes(4).toString("hex")}` } : {},
+      );
       return response.end();
     }
     reply(404, {});
@@ -197,6 +204,7 @@ export async function startFakePush() {
 
   return {
     delivered,
+    hooks,
     env: {
       FCM_PROJECT_ID: "test-project",
       FCM_CLIENT_EMAIL: "push@test-project.iam.gserviceaccount.com",
@@ -213,13 +221,16 @@ export async function startFakePush() {
       VAPID_SUBJECT: "mailto:push@boilerplate.dev",
       WEB_PUSH_TEST_ORIGIN: httpUrl,
     },
-    /** A browser subscription on the fake push service, as stored in the device table. */
-    webSubscription(endpoint?: string) {
+    /**
+     * A browser subscription on the fake push service, as stored in the device table.
+     * `location: false`: its push service accepts messages without naming them.
+     */
+    webSubscription(endpoint?: string, { location = true } = {}) {
       const id = randomBytes(8).toString("hex");
       const ecdh = createECDH("prime256v1");
       ecdh.generateKeys();
       const auth = randomBytes(16).toString("base64url");
-      subscribers.set(id, { ecdh, auth });
+      subscribers.set(id, { ecdh, auth, location });
       return {
         id,
         token: JSON.stringify({

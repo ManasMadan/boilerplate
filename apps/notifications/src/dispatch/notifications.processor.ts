@@ -13,17 +13,17 @@ import { Dispatcher } from "./dispatcher";
  * the failed set for inspection and replay.
  */
 async function handle(queue: NotificationQueue, job: Job, dispatcher: Dispatcher) {
-  if (!job.id) throw new Error(`Job on ${queue} has no id; producers must set jobId`);
+  // BullMQ gives every job an id; producers choose it (createProducer requires one).
+  const jobId = job.id as string;
   if (job.name === "deferred") {
     const { meta, payload } = parseJob(queue, "deferred", job.data);
-    await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${job.id}` }, () =>
+    await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${jobId}` }, () =>
       dispatcher.deliverDeferred(payload.payload, payload.channel, payload.userId, payload.key),
     );
     return;
   }
   if (job.name !== "send") throw new Error(`Unknown job "${job.name}" on ${queue}`);
   const { meta, payload } = parseJob(queue, "send", job.data);
-  const jobId = job.id;
   // Restore the producer's request context so these logs carry its request id.
   await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${jobId}` }, () =>
     // The producer-chosen job id is stable across retries and Redis restarts.

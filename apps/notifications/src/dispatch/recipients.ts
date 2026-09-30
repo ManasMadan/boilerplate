@@ -42,7 +42,7 @@ export class RecipientResolver {
 
   async resolve(to: NotificationPayload["to"]): Promise<Recipient[]> {
     if ("email" in to) {
-      const phone = "phone" in to ? (to.phone ?? null) : null;
+      const phone = ("phone" in to && to.phone) || null;
       return [
         { userId: null, email: to.email, phone, name: null, locale: to.locale, timeZone: "UTC" },
       ];

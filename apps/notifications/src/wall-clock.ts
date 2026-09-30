@@ -16,11 +16,12 @@ export function wallClock(timeZone: string | null | undefined, now = new Date())
     second: "2-digit",
     hourCycle: "h23",
   }).formatToParts(now);
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  // Every part asked for above is in the result.
+  const part = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return {
-    hour: Number(get("hour")),
-    minute: Number(get("minute")),
-    second: Number(get("second")),
-    date: `${get("year")}-${get("month")}-${get("day")}`,
+    hour: Number(part.hour),
+    minute: Number(part.minute),
+    second: Number(part.second),
+    date: `${part.year}-${part.month}-${part.day}`,
   };
 }

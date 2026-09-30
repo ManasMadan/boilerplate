@@ -72,7 +72,6 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
   async scheduleDue(now = new Date()) {
     const rows = await this.database.read.$queryRaw<{ id: string }[]>`
       SELECT notifications.users_with_digest_items() AS id`;
-    if (rows.length === 0) return 0;
     const users = await this.database.read.user.findMany({
       where: { id: { in: rows.map((row) => row.id) } },
       select: { id: true, timezone: true },
@@ -81,16 +80,15 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
       const { hour, date } = wallClock(user.timezone, now);
       return hour >= env.DIGEST_HOUR ? [{ userId: user.id, date }] : [];
     });
-    if (due.length > 0) {
-      await this.producer.addBulk(
-        due.map((digest) => ({
-          name: "digest" as const,
-          payload: digest,
-          // Queued every hour until sent: the id keeps it to one job per user and day.
-          options: { jobId: `digest-${digest.userId}-${digest.date}` },
-        })),
-      );
-    }
+    // Nothing due is an empty bulk add, which writes nothing.
+    await this.producer.addBulk(
+      due.map((digest) => ({
+        name: "digest" as const,
+        payload: digest,
+        // Queued every hour until sent: the id keeps it to one job per user and day.
+        options: { jobId: `digest-${digest.userId}-${digest.date}` },
+      })),
+    );
     return due.length;
   }
 
@@ -118,7 +116,8 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
 
     const t = await this.i18n.getTranslator(recipient.locale, recipient.timeZone);
     const lines = items.map((item) => {
-      const data = (item.data ?? {}) as Record<string, string>;
+      // Written from an in-app message's data, always an object (see the dispatcher).
+      const data = item.data as Record<string, string>;
       const base = `notification.${item.template}`;
       return {
         title: t(`${base}.title` as Parameters<typeof t>[0], data),

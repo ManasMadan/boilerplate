@@ -15,6 +15,8 @@ export interface ApnsConfig {
   bundleId: string;
   /** api.push.apple.com, or the sandbox for development builds; overridable for tests. */
   url: string;
+  /** How long one notification may take (default 10 s). */
+  timeoutMs?: number;
 }
 
 const REFRESH_MS = 50 * 60_000;
@@ -66,7 +68,7 @@ export class ApnsTransport implements PushTransport {
       });
       let status = 0;
       let text = "";
-      request.setTimeout(10_000, () => {
+      request.setTimeout(this.config.timeoutMs ?? 10_000, () => {
         request.close();
         resolve({ ok: false, gone: false, error: "APNs timed out" });
       });

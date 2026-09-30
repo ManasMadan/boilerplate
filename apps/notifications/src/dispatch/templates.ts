@@ -52,7 +52,7 @@ export interface InAppMessage {
   type: InAppNotificationType;
   data: Record<string, string>;
   /** A path on the web app. */
-  link?: string;
+  link: string;
   orgId?: string;
 }
 
