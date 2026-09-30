@@ -40,7 +40,7 @@ Locally: `bun run setup` adds the new key to `.env` (the doctor fails until then
 `bun run env:set NAME=value` sets it. Never read `.env`.
 
 Removing one: delete it from all of the above in one change; the doctor then reports it
-as stale in existing `.env` files, for the user to delete.
+as stale in existing `.env` files, and `bun run env:unset NAME` deletes it.
 
 ## Done when
 

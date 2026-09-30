@@ -24,5 +24,10 @@ if (!key || !/^[A-Z][A-Z0-9_]*$/.test(key)) {
 }
 
 const value = rest.length > 0 ? rest.join("=") : (await Bun.stdin.text()).trim();
-writeEnvValue(ENV_PATH, key, value);
+try {
+  writeEnvValue(ENV_PATH, key, value);
+} catch (error) {
+  console.error((error as Error).message);
+  process.exit(1);
+}
 ok(`${key} updated in .env`);

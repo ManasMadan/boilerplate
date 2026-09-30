@@ -37,7 +37,12 @@ To set one value without opening `.env`:
 ```sh
 bun run env:set STRIPE_SECRET_KEY=sk_test_...
 echo "sk_test_..." | bun run env:set STRIPE_SECRET_KEY   # value from stdin, not argv
+bun run env:unset OLD_VARIABLE
 ```
+
+It quotes the value as needed so the services (Node's `--env-file`) and the AI service's
+dev commands (Bun's) read it the same. A value with `$` is refused: Bun expands it even
+in quotes and Node never does, so no spelling works for both.
 
 `bun run doctor` reports `.env` drift against `.env.example`.
 

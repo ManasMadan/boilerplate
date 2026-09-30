@@ -20,7 +20,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | Every check that applies to a change | the `verify` skill |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
 | New database migration | `bun run db:migrate` |
-| Set a secret in .env (you cannot read .env) | `bun run env:set KEY=value` |
+| Set a secret in .env (you cannot read .env) | `bun run env:set KEY=value` (`env:unset KEY` removes one) |
 
 Run commands from the repo root. Never `cd` into a package to run tools directly; for one
 package use `bun run --filter @repo/<name> <script>` (or `bun run --cwd <dir> <script>`).
