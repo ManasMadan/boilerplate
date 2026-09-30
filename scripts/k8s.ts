@@ -303,7 +303,12 @@ export async function k8s(argv = process.argv.slice(2), given: Partial<Cluster> 
           resolve({ status: response.statusCode ?? 0, headers: response.headers });
         });
         req.on("error", reject);
-        req.setTimeout(timeoutMs, () => req.destroy(new Error("timed out")));
+        // Rejected here: under Bun, destroy(error) closes the request without emitting it,
+        // and a route that never answers would hang the smoke test for good.
+        req.setTimeout(timeoutMs, () => {
+          reject(new Error("timed out"));
+          req.destroy();
+        });
         req.end();
       },
     );

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync, writeSync } from "node:fs";
+import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addon, type Cluster, k8s } from "./k8s";
@@ -361,6 +362,22 @@ describe("the local cluster", () => {
     expect(printed()).toContain("files: files.localhost/health → 0");
     expect(printed()).toContain("api: /api/v1/system → 0");
     expect(calls).toEqual([]);
+
+    // A gateway that takes the connection and never answers.
+    const sockets: Socket[] = [];
+    const silent = createServer((socket) => sockets.push(socket)).listen(0, "127.0.0.1");
+    await new Promise((resolve) => silent.once("listening", resolve));
+    const address = silent.address();
+    const hanging = machine(undefined, {
+      gateway: { port: typeof address === "object" && address ? address.port : 0, timeoutMs: 20 },
+    });
+    try {
+      await expect(k8s(["smoke"], hanging.given)).rejects.toThrow("exit 1");
+      expect(printed()).toContain("web page: /sign-in → 0");
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      silent.close();
+    }
 
     const wrong = machine(undefined, {
       gateway: gateway(() => new Response(null, { status: 502 })),
