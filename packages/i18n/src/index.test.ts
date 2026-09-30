@@ -1,13 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json" with { type: "json" };
-import { bundledMessages, createI18n, type MessageSource, negotiateLocale } from "./index";
+import {
+  bundledMessages,
+  createI18n,
+  type MessageSource,
+  negotiateLocale,
+  timeZoneOrUtc,
+} from "./index";
 
 describe("negotiateLocale", () => {
   it("picks exact, then base-language matches, then the default", () => {
     expect(negotiateLocale("es-MX,es;q=0.9,en;q=0.8")).toBe("es");
     expect(negotiateLocale(["fr-FR", "en-GB"])).toBe("en");
     expect(negotiateLocale("de")).toBe("en");
+    expect(negotiateLocale(["es"])).toBe("es");
     expect(negotiateLocale(undefined)).toBe("en");
+  });
+});
+
+describe("timeZoneOrUtc", () => {
+  it("keeps a zone the runtime knows and falls back to UTC for anything else", () => {
+    expect(timeZoneOrUtc("Europe/Lisbon")).toBe("Europe/Lisbon");
+    expect(timeZoneOrUtc("Mars/Olympus")).toBe("UTC");
+    expect(timeZoneOrUtc("")).toBe("UTC");
+    expect(timeZoneOrUtc(null)).toBe("UTC");
   });
 });
 
@@ -35,6 +51,12 @@ describe("createI18n", () => {
     i18n.invalidate("en");
     await i18n.getTranslator("en");
     expect(load).toHaveBeenCalledTimes(3);
+
+    await i18n.getTranslator("es");
+    i18n.invalidate();
+    await i18n.getTranslator("en");
+    await i18n.getTranslator("es");
+    expect(load).toHaveBeenCalledTimes(6);
   });
 });
 

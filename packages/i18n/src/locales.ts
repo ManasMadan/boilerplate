@@ -40,7 +40,7 @@ export function negotiateLocale(
     typeof preferences === "string"
       ? preferences
           .split(",")
-          .map((part) => part.split(";")[0]?.trim() ?? "")
+          .map((part) => part.replace(/;.*/, "").trim())
           .filter(Boolean)
       : (preferences ?? []);
   for (const tag of list) {
