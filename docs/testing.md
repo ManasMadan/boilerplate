@@ -152,6 +152,10 @@ file below 100%, or one no test loads.
 It refuses to start while something already listens on the stack's ports, so an old
 server can't answer instead.
 
+In CI a failed test is retried up to twice, to tell a flaky one from a broken one, but a
+test that only passed on a retry still fails the run (`failOnFlakyTests`): fix it rather
+than rerunning the job.
+
 ```sh
 bun run test:e2e                                    # everything
 bun run test:e2e --app web e2e/assistant.spec.ts    # one app; the rest goes to Playwright
