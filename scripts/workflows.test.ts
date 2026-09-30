@@ -348,7 +348,7 @@ describe("preview.yml's cleanup", () => {
           deletePackageVersionForUser: async (r: { package_version_id: number }) => {
             deleted.push(r.package_version_id);
           },
-          deletePackageVersionForOrg: async () => {},
+          deletePackageVersionForOrg: async () => undefined,
         },
       },
     };
@@ -359,9 +359,11 @@ describe("preview.yml's cleanup", () => {
         repository: { owner: { login: "me", type: "User" } },
       },
     };
-    const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+    const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor;
     process.env.IMAGES = "api";
-    await new AsyncFunction("github", "context", "core", script)(github, context, { info() {} });
+    await new AsyncFunction("github", "context", "core", script)(github, context, {
+      info: () => undefined,
+    });
     return deleted;
   }
 
