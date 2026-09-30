@@ -306,6 +306,7 @@
     "todoReminder": {
       "subject": "Recordatorio: {title}",
       "greeting": "Hola {name},",
+      "greetingNoName": "Hola:",
       "body": "Este es tu recordatorio para «{title}»."
     },
     "orgInvitation": {

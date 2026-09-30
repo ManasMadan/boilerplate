@@ -22,7 +22,12 @@ export default function Settings() {
   const { data: session, refetch } = authClient.useSession();
   const workspaces = useQuery({
     queryKey: ["auth", "workspace", "list"],
-    queryFn: async () => (await authClient.organization.list()).data ?? [],
+    queryFn: async () => {
+      // An error stays an error (the screen shows it), not an empty list of workspaces.
+      const { data, error } = await authClient.organization.list();
+      if (error) throw error;
+      return data;
+    },
   });
   const register = useRegisterDeviceMutation();
   const [push, setPush] = useState<PushState>();

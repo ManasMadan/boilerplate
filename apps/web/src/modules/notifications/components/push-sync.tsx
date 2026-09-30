@@ -19,9 +19,13 @@ export function PushSync() {
     if (!userId || typeof Notification === "undefined" || Notification.permission !== "granted")
       return;
     let cancelled = false;
-    void currentSubscription().then((subscription) => {
-      if (subscription && !cancelled) mutate({ device: toDevice(subscription) });
-    });
+    void currentSubscription()
+      .then((subscription) => {
+        if (subscription && !cancelled) mutate({ device: toDevice(subscription) });
+      })
+      // A subscription without keys stays unregistered: turning push on in settings shows
+      // the error (toDevice throws it there too).
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

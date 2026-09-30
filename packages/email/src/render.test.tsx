@@ -6,6 +6,8 @@ import {
   renderEmail,
   SecurityAlertEmail,
   securityAlertSubject,
+  TodoReminderEmail,
+  todoReminderSubject,
 } from "./index";
 
 const i18n = createI18n(bundledMessages);
@@ -51,5 +53,22 @@ describe("security alert", () => {
     expect(email.subject).toBe("Your email address was changed");
     expect(email.text).toContain("new@example.com");
     expect(email.html).toContain("https://app.example/settings/security");
+  });
+});
+
+describe("todo reminder", () => {
+  it('greets by name, or without one when there\'s none (never "Hi ,")', async () => {
+    const render = async (name: string | null) =>
+      renderEmail(TodoReminderEmail, todoReminderSubject, {
+        locale: "en",
+        t: await i18n.getTranslator("en"),
+        name,
+        title: "Water the plants",
+      });
+    // The HTML: plain text renders headings in capitals.
+    expect((await render("Ada")).html).toContain("Hi Ada,");
+    const unnamed = (await render(null)).html;
+    expect(unnamed).toContain("Hi,");
+    expect(unnamed).not.toContain("Hi ,");
   });
 });

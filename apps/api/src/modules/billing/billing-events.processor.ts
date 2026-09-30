@@ -15,6 +15,7 @@ import { events } from "@repo/contracts/events";
 import { parseJob, queuePrefix } from "@repo/jobs";
 import { runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
+import * as z from "zod";
 import { env } from "../../env";
 import { type CriticalNotifications, InjectCriticalNotifications } from "../../notifications";
 import { BillingService } from "./billing.service";
@@ -28,12 +29,19 @@ const SUBSCRIPTION_EVENTS = new Set([
   "customer.subscription.resumed",
 ]);
 
+/**
+ * What a failed payment's alert needs from the invoice. Parsed, not defaulted: an alert
+ * saying "a payment of 0 USD failed" is worse than a job that fails loudly.
+ */
+const failedInvoice = z.object({
+  amount_due: z.number().int().nonnegative(),
+  currency: z.string().length(3),
+});
+
 interface StripeObject {
   id?: string;
   subscription?: string | null;
   parent?: { subscription_details?: { subscription?: string } | null } | null;
-  amount_due?: number;
-  currency?: string;
 }
 
 @Processor("events-billing", { concurrency: 5, prefix: queuePrefix("events-billing") })
@@ -73,6 +81,7 @@ export class BillingEventsProcessor extends WorkerHost {
     await this.billing.sync(subscriptionId);
 
     if (type === "invoice.payment_failed") {
+      const invoice = failedInvoice.parse(object);
       const org = await this.billing.orgFor(subscriptionId);
       if (!org) return;
       await this.notifications.add(
@@ -82,8 +91,8 @@ export class BillingEventsProcessor extends WorkerHost {
           to: { orgId: org.id, roles: ["owner", "admin"] },
           data: {
             organizationName: org.name,
-            amount: stripeObject.amount_due ?? 0,
-            currency: (stripeObject.currency ?? "usd").toUpperCase(),
+            amount: invoice.amount_due,
+            currency: invoice.currency.toUpperCase(),
             billingUrl: new URL("/settings/billing", env.WEB_URL).toString(),
           },
         },

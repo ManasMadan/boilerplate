@@ -306,6 +306,7 @@
     "todoReminder": {
       "subject": "Reminder: {title}",
       "greeting": "Hi {name},",
+      "greetingNoName": "Hi,",
       "body": "This is your reminder for “{title}”."
     },
     "orgInvitation": {

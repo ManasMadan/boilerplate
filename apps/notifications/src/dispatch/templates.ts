@@ -168,7 +168,7 @@ const templates = {
       renderEmail(TodoReminderEmail, todoReminderSubject, {
         locale: recipient.locale,
         t,
-        name: recipient.name ?? recipient.email ?? "",
+        name: recipient.name?.trim() || null,
         title: payload.data.title,
         unsubscribeUrl,
       }),
