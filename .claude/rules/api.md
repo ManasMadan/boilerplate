@@ -15,14 +15,17 @@ paths:
 - Routers are thin: pick the procedure builder, call the service, nothing else.
 - Pick the narrowest builder from `src/rpc/procedures.ts`: `base` (public), `authed`,
   `fresh` (recent sign-in, for account changes), `inOrg` (tenant data), `orgAdmin`
-  (owner/admin). Never re-implement session or membership checks in a service.
+  (owner/admin). Never re-implement session or membership checks in a service. A
+  procedure on `base` must be listed in `PUBLIC` in `src/rpc/router.test.ts` with the
+  reason anyone may call it; the test fails for any other one a signed-out call reaches.
 - Repositories are the only code that touches Prisma, including raw SQL and tables
   owned by another module (a module reads the organization or its members through its
   own repository). Reads use `withTenant(this.database.read, orgId)`. A multi-statement
   write stays in the service: it opens `tenantTx(this.database.write, orgId, ...)` and
   passes the `Tx` to repository methods, so the change and its event commit together.
   Per-user rows use `withUser` / `userTx`. `scripts/check-layers.ts` (in
-  `lint:boundaries`) fails when any other file under `src/modules` calls a model. Never query tenant tables with the bare client: RLS returns
+  `lint:boundaries`) fails when any other file under `src/modules` calls a model. Never
+  query tenant tables with the bare client: RLS returns
   nothing, which looks like "not found", not like a bug.
 - Inside `tenantTx`/`userTx` only database calls. No HTTP, Redis or queue awaits: the
   transaction holds a pooled connection and times out after 5s.

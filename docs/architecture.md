@@ -70,7 +70,9 @@ setups. Inbound Stripe webhooks go straight to `localhost:3004/webhooks/stripe`.
 3. The procedure pipeline (`apps/api/src/rpc/procedures.ts`) is the only one: version
    gate, session or API key, membership in the active organization, role, the rate limit
    the contract declares, and error mapping, identical for RPC and REST. Input is
-   validated by the contract's zod schema.
+   validated by the contract's zod schema. Only the endpoints listed as public in
+   `apps/api/src/rpc/router.test.ts` answer without a session; the test calls every
+   procedure signed out to prove it.
 4. The feature module (`apps/api/src/modules/<feature>`: router, service, repository)
    queries through `withTenant` / `tenantTx`, so Postgres row-level security scopes it to
    the organization, and writes its domain events to the outbox in the same transaction.
