@@ -20,7 +20,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | Every check that applies to a change | the `verify` skill |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
 | New database migration | `bun run db:migrate` |
-| Set a secret in .env (you cannot read .env) | `bun run env:set KEY=value` (`env:unset KEY` removes one) |
+| Set a secret in .env (never read or print it: the Read tool refuses, and so must you) | `bun run env:set KEY=value` (`env:unset KEY` removes one) |
 
 Run commands from the repo root. Never `cd` into a package to run tools directly; for one
 package use `bun run --filter @repo/<name> <script>` (or `bun run --cwd <dir> <script>`).
@@ -112,6 +112,13 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   (`docs/README.md` lists them). The `swap-*` skills, releases, rollbacks, secret
   rotation, opening a pull request, adding an app and removing a feature are started by
   the user (`/<name>`), never on your own.
+- `.claude/settings.json`: Bash commands run without a prompt only when listed (named
+  `bun run` scripts, the repo's tools, read-only git and gh); the Bash guard hook asks
+  before commits, pushes, GitHub changes, infrastructure, destructive scripts, new
+  dependencies and a `bunx` tool that isn't installed. Secrets files (`.env`, keys,
+  tfvars and tfstate, load-test sessions) are denied to the Read tool; a shell command
+  could still print them, so never try. There is no sandbox: Docker and the local
+  services need the socket and the network.
 - `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
   database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
   only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and

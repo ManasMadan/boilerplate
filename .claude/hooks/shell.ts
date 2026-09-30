@@ -5,10 +5,17 @@
  * (shell.test.ts); bash-guard.ts applies it.
  *
  * It reads ordinary commands (redirects, tee, sed -i, cp, mv, rm, ...). Writes from inside
- * an interpreter (`python -c "open(...)"`) can't be read from the command line: the
- * sandbox's filesystem rules (.claude/settings.json) cover those.
+ * an interpreter (`python -c "open(...)"`) can't be read from the command line, and
+ * nothing else stops them: settings.json's deny rules cover Claude's own Read and Edit
+ * tools only. That's why settings.json allows only named scripts, not `bun run *`.
  */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Verdict } from "./file-rules";
+import { ROOT } from "./lib";
+
+/** Whether `bin` is installed in the workspace (node_modules/.bin). */
+const installedBin = (bin: string) => existsSync(join(ROOT, "node_modules/.bin", bin));
 
 /** One simple command: its words, after leading `VAR=value` assignments. */
 interface Simple {
@@ -165,7 +172,7 @@ const deny = (reason: string): Verdict => ({ decision: "deny", reason });
 const ask = (reason: string): Verdict => ({ decision: "ask", reason });
 
 /** What the policy says about one simple command, or null. */
-function commandVerdict({ env, words }: Simple): Verdict {
+function commandVerdict({ env, words }: Simple, installed: (bin: string) => boolean): Verdict {
   const [program = "", sub = "", third = ""] = words;
   const has = (...flags: string[]) => words.some((word) => flags.includes(word));
   if (env.HUSKY === "0" || env.HUSKY_SKIP_HOOKS) {
@@ -219,6 +226,13 @@ function commandVerdict({ env, words }: Simple): Verdict {
   if ((program === "bun" && sub === "add") || (program === "uv" && sub === "add")) {
     return ask("Adding a dependency brings in outside code; the user decides.");
   }
+  // Without the workspace's copy, bunx downloads whatever npm package has that name, and
+  // runs it: `bunx biome` before `bun install` is someone else's "biome".
+  if (program === "bunx" && sub && !sub.startsWith("-") && !installed(sub)) {
+    return ask(
+      `${sub} isn't installed here, so bunx would download and run npm's "${sub}". Run \`bun install\` first.`,
+    );
+  }
   if (program === "tofu" && ["apply", "destroy", "import", "state"].includes(sub)) {
     return ask("This changes real infrastructure or its state.");
   }
@@ -251,9 +265,9 @@ function commandVerdict({ env, words }: Simple): Verdict {
 }
 
 /** The strictest verdict any command on the line gets (deny beats ask). */
-export function commandPolicy(line: string): Verdict {
+export function commandPolicy(line: string, installed = installedBin): Verdict {
   const verdicts = simpleCommands(line)
-    .map(commandVerdict)
+    .map((command) => commandVerdict(command, installed))
     .filter((verdict) => verdict !== null);
   return verdicts.find((verdict) => verdict.decision === "deny") ?? verdicts[0] ?? null;
 }

@@ -35,6 +35,19 @@ describe("the files a command writes", () => {
 
 describe("the command policy", () => {
   const decision = (command: string) => commandPolicy(command)?.decision ?? "allow";
+  it("asks before bunx fetches a tool the workspace doesn't have", () => {
+    const none = () => false;
+    expect(commandPolicy("bunx biome check .", none)).toEqual({
+      decision: "ask",
+      reason:
+        "biome isn't installed here, so bunx would download and run npm's \"biome\". Run `bun install` first.",
+    });
+    expect(commandPolicy("bunx --bun vite", none)).toBeNull();
+    expect(commandPolicy("bunx biome check .", (bin) => bin === "biome")).toBeNull();
+    // This checkout has its tools installed.
+    expect(decision("bunx tsc -p scripts")).toBe("allow");
+  });
+
   it.each([
     ["git commit -m 'fix: x'", "ask"],
     ["git commit --no-verify -m x", "deny"],

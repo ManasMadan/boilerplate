@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { Check } from "./checks";
 import { askedFile, type HookInput, ROOT, stopCountFile, turnFile } from "./lib";
+import { sessionEnd } from "./session-end";
 import { turnStart } from "./turn-start";
 import { runCheck, verifyTurn } from "./verify-turn";
 
@@ -26,6 +27,18 @@ const result = (check: Check, code: number, timedOut = false) => ({
   code,
   timedOut,
   log: `${check.label} said ${code}`,
+});
+
+describe("the session's end", () => {
+  it("removes its turn state", () => {
+    const input = turn({ hook_event_name: "SessionEnd" });
+    for (const file of [turnFile, stopCountFile, askedFile])
+      writeFileSync(file(input.session_id), "x");
+    expect(sessionEnd(input)).toBeUndefined();
+    for (const file of [turnFile, stopCountFile, askedFile]) {
+      expect(existsSync(file(input.session_id))).toBe(false);
+    }
+  });
 });
 
 describe("the turn's start", () => {
