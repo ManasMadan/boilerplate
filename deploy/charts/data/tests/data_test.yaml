@@ -174,6 +174,19 @@ tests:
       - equal: { path: "spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef", value: { name: valkey, key: password } }
       - equal: { path: "spec.volumeClaimTemplates[0].spec.storageClassName", value: local-path }
 
+  - it: lets the stack's services and KEDA's operator reach Valkey, nothing else
+    template: valkey.yaml
+    documentSelector: { path: kind, value: NetworkPolicy }
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - podSelector: {}
+                - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: keda } }
+                  podSelector: { matchLabels: { app.kubernetes.io/name: keda-operator } }
+              ports: [{ port: 6379 }]
+
   - it: runs the uploads server with its keys from the storage Secret
     template: storage.yaml
     documentSelector: { path: kind, value: StatefulSet }

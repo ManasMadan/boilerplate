@@ -101,7 +101,9 @@ spec:
           requests:
             storage: {{ $v.storage.size }}
 ---
-# Only pods in this namespace (the stack's services) reach Valkey.
+# Only pods in this namespace (the stack's services) reach Valkey, and KEDA's operator,
+# which scales the queue consumers on their backlog (the namespace the platform installs
+# it in, deploy/platform/addons/keda.yaml).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -117,5 +119,11 @@ spec:
   ingress:
     - from:
         - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keda-operator
       ports:
         - port: 6379

@@ -50,7 +50,9 @@ request id of the HTTP call that caused them.
 
 Every queue's Redis keys use the prefix `{<queue>}` (`queuePrefix`), a Redis Cluster
 hash tag, so moving to a cluster needs no key migration. KEDA scales workers on
-`LLEN {<queue>}:<queue>:wait`, so queues KEDA scales must not use job priorities.
+`LLEN {<queue>}:<queue>:wait`, so queues KEDA scales must not use job priorities. Its
+operator reads that from the `keda` namespace, which is why Valkey's network policy
+lets it in (`deploy/charts/data/templates/valkey.yaml`).
 
 ## Queues
 
