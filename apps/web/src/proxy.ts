@@ -9,14 +9,16 @@
  *    A present cookie can still be expired or revoked; the API rejects it and the client
  *    then signs out (packages/client). This check is only about not flashing the wrong page.
  */
+import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
 import { APP_PATHS, GUEST_PATHS, isOAuthRequest, matchesPath } from "@/lib/routes";
-import { hasSessionCookie } from "@/lib/session-cookie";
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const signedIn = hasSessionCookie(request.cookies);
+  // Only whether better-auth's session cookie is there (any of its names); the API
+  // decides whether the session is valid.
+  const signedIn = getSessionCookie(request) !== null;
 
   if (!signedIn && matchesPath(pathname, APP_PATHS)) {
     const url = new URL("/sign-in", request.url);

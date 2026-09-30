@@ -74,6 +74,13 @@ describe("ClamdScanner", () => {
     );
   });
 
+  it("fails when clamd hangs up without an answer", async () => {
+    const { port } = await fakeClamd(() => "");
+    await expect(new ClamdScanner("127.0.0.1", port).scan(Buffer.from("x"))).rejects.toThrow(
+      "clamd: no answer",
+    );
+  });
+
   it("fails when clamd doesn't answer in time", async () => {
     const { port } = await fakeClamd(() => null);
     await expect(new ClamdScanner("127.0.0.1", port, 200).scan(Buffer.from("x"))).rejects.toThrow(

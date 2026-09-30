@@ -4,7 +4,10 @@
     "@hey-api/openapi-ts": "0.99.0",
     "@repo/ai": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "typescript": "catalog:"
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -13,10 +16,13 @@
   "private": true,
   "scripts": {
     "gen": "openapi-ts",
-    "check-types": "tsc"
+    "check-types": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "type": "module",
   "dependencies": {
+    "eventsource-parser": "3.1.1",
     "jose": "^6.2.12",
     "zod": "catalog:"
   }

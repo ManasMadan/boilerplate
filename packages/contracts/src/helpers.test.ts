@@ -13,6 +13,8 @@ describe("toPage", () => {
     expect(toPage(rows, 2)).toEqual({ items: rows.slice(0, 2), nextCursor: "b" });
     expect(toPage(rows, 3)).toEqual({ items: rows, nextCursor: null });
     expect(toPage([], 20)).toEqual({ items: [], nextCursor: null });
+    // No items to point at: nothing to continue from.
+    expect(toPage(rows, 0)).toEqual({ items: [], nextCursor: null });
   });
 
   it("bounds the page size", () => {

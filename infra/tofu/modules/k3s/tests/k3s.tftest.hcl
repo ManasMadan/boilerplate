@@ -8,8 +8,10 @@ mock_provider "random" {
   }
 }
 mock_provider "tls" {
+  # Not PEM on purpose: nothing here parses the key, and a PEM-shaped fake is what secret
+  # scanners are built to find.
   mock_resource "tls_private_key" {
-    defaults = { private_key_pem = "-----BEGIN EC PRIVATE KEY-----\nkey\n-----END EC PRIVATE KEY-----\n" }
+    defaults = { private_key_pem = "mock-private-key" }
   }
   mock_resource "tls_self_signed_cert" {
     defaults = { cert_pem = "-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n" }
@@ -54,7 +56,7 @@ run "one_server" {
     error_message = "the API is on the first server"
   }
   assert {
-    condition     = yamldecode(output.kubeconfig).clusters[0].cluster.server == "https://203.0.113.10:6443" && yamldecode(output.kubeconfig).users[0].user["client-certificate-data"] == base64encode("-----BEGIN CERTIFICATE-----\nadmin\n-----END CERTIFICATE-----\n")
+    condition     = yamldecode(output.kubeconfig).clusters[0].cluster.server == "https://203.0.113.10:6443" && yamldecode(output.kubeconfig).users[0].user["client-certificate-data"] == base64encode("-----BEGIN CERTIFICATE-----\nadmin\n-----END CERTIFICATE-----\n") && yamldecode(output.kubeconfig).users[0].user["client-key-data"] == base64encode("mock-private-key")
     error_message = "the kubeconfig carries OpenTofu's admin certificate"
   }
 }
@@ -250,11 +252,19 @@ run "warns_about_two_servers" {
 }
 
 run "needs_a_key_to_install_over_ssh" {
-  command = plan
+  command = apply
   variables {
     ssh_private_key = null
   }
   expect_failures = [terraform_data.first]
+}
+
+# Pull request plans run without the SSH key (infra.yml).
+run "plans_without_the_ssh_key" {
+  command = plan
+  variables {
+    ssh_private_key = null
+  }
 }
 
 run "needs_a_server" {

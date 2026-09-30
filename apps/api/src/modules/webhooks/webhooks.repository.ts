@@ -4,10 +4,10 @@
  */
 import { Injectable } from "@nestjs/common";
 import type { PageInput } from "@repo/contracts/pagination";
-import { type Tx, withTenant } from "@repo/db";
+import { type Prisma, type Tx, withTenant } from "@repo/db";
 import { type Database, InjectDatabase } from "@repo/nest-common";
 
-export const endpointColumns = {
+const endpointColumns = {
   id: true,
   url: true,
   description: true,
@@ -34,6 +34,41 @@ export class WebhooksRepository {
 
   findEndpoint(tx: Tx, id: string) {
     return tx.webhookEndpoint.findUnique({ where: { id }, select: endpointColumns });
+  }
+
+  createEndpoint(
+    tx: Tx,
+    data: {
+      id: string;
+      orgId: string;
+      url: string;
+      description: string;
+      events: string[];
+      secret: string;
+      createdById: string;
+    },
+  ) {
+    return tx.webhookEndpoint.create({ data, select: endpointColumns });
+  }
+
+  updateEndpoint(tx: Tx, id: string, data: Prisma.WebhookEndpointUpdateInput) {
+    return tx.webhookEndpoint.update({ where: { id }, data, select: endpointColumns });
+  }
+
+  deleteEndpoint(tx: Tx, id: string) {
+    return tx.webhookEndpoint.delete({ where: { id } });
+  }
+
+  findSecret(tx: Tx, id: string) {
+    return tx.webhookEndpoint.findUnique({ where: { id }, select: { secret: true } });
+  }
+
+  setSecret(
+    tx: Tx,
+    id: string,
+    data: { secret: string; previousSecret: string; previousSecretExpiresAt: Date },
+  ) {
+    return tx.webhookEndpoint.update({ where: { id }, data });
   }
 
   endpointExists(orgId: string, id: string) {

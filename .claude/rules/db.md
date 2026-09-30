@@ -40,9 +40,18 @@ paths:
 - `SECURITY DEFINER` functions: `SET search_path = pg_catalog, pg_temp`,
   `CREATE OR REPLACE`, `REVOKE EXECUTE ... FROM PUBLIC`, then grant to the one role
   that calls it. A table such a function touches under forced RLS needs an
-  `owner_functions` policy `TO migrator` (see `20260929090000_push_devices`).
+  `owner_functions` policy `TO migrator` (see `20260929090000_push_devices`);
+  `packages/db/test/security.test.ts` fails on any that lacks one.
 - Extensions need a superuser: add them to `infra/postgres/init` and to the cloud
   setup, not to a migration.
+- Database code must keep working behind a transaction-mode pooler (PgBouncer): the
+  charts don't run one yet, but the tenancy helpers are built for it, and it's how
+  connections scale. There each transaction may run on a different server connection,
+  so session state doesn't survive: a session
+  `pg_advisory_lock` can be taken on one connection and never released, `SET` without
+  `LOCAL` leaks to other clients, and `LISTEN` hears nothing. Use
+  `pg_try_advisory_xact_lock` inside the transaction, `set_config(..., true)`, and the
+  direct URL (`*_DATABASE_DIRECT_URL`) for anything that needs a session.
 - Checks: `bun run db:lint` (Squawk on migrations changed since master; a justified
   exception is `-- squawk-ignore <rule>` with the reason above it),
   `bun run --filter @repo/db drift` (schema vs migrations), and

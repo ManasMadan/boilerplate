@@ -23,7 +23,21 @@ deploy/
 `bun run charts:check` lints every chart of ours and runs its unit tests, renders the
 application for every environment and the platform, validates all of it against
 Kubernetes and the CRDs it uses, renders every add-on at its pinned version with our
-values, and refuses any file in a `secrets/` directory that isn't SOPS-encrypted.
+values, and refuses any file in a `secrets/` directory that isn't SOPS-encrypted. The
+schemas kubeconform validates against are downloaded once into
+`node_modules/.cache/kubeconform` (CI caches that directory too).
+
+## One app per cluster
+
+The names are fixed, not derived from the project: the namespaces `boilerplate`,
+`pr-<number>` and `mail`, the ApplicationSets `envs`, `previews`, `platform` and
+`observability`, the gateway `public`, the `boilerplate.dev/*` labels and annotations on
+clusters, OpenTofu's `boilerplate-<env>` names, and kind's cluster and image builder
+(`boilerplate`, `scripts/k8s.ts`). So each cluster runs one app built from this template,
+per environment: a second app on the same cluster would share the namespaces and
+ApplicationSets with the first. Give each app its own clusters. Locally, docker compose's
+project is `boilerplate` too (`docker-compose.yml`), so one checkout's services run on a
+machine at a time.
 
 ## Two releases per environment
 
@@ -31,7 +45,35 @@ values, and refuses any file in a `secrets/` directory that isn't SOPS-encrypted
 stack's migration Job runs before its services (a Helm pre-install/pre-upgrade hook,
 an Argo CD PreSync hook), so the database must already be up. Keeping it in its own
 release is what guarantees that, and it means redeploying the application never touches
-the database.
+the database. The migration Job runs on every sync of the stack, a self-heal included,
+not only when there's a new migration: `prisma migrate deploy` with nothing new to apply
+changes nothing, so a rerun costs one short-lived pod and a line in Argo CD's history.
+
+## Network policies
+
+Each environment's namespace accepts nothing a policy doesn't allow (the data chart's
+default deny). Each service accepts connections from the gateway if it has routes, and
+from the services and namespaces its `allowFrom` and `allowFromNamespaces` name. It
+connects only to DNS, its own namespace (the other services, Postgres, Valkey, object
+storage, ClamAV), the mail server's and the telemetry namespaces
+(`networkPolicy.egressNamespaces`), ServiceLB on the gateway's and mail ports, and the
+internet outside the private ranges: so a request forged to reach something internal,
+another environment's namespace, a node or a metadata address goes nowhere. Postgres
+takes connections from its own namespace, CloudNativePG's operator and the metrics
+scraper only, so a preview can't reach staging's database. The mail server takes
+connections on its mail ports only; its management port is reachable from inside its
+pod alone. The data services' own pods and the Jobs (migration, buckets, offsite copy)
+aren't limited in where they connect.
+
+## Postgres over TLS
+
+Postgres refuses connections without TLS (`hostnossl … reject` in the data chart).
+CloudNativePG serves TLS with a certificate authority of its own, the `<cluster>-ca`
+Secret; the stack mounts it in every service with a database (`database.caSecret`) and
+adds `sslmode=verify-full` and the CA's path to the URL from the role's Secret, so the
+services check they're talking to this cluster's Postgres. The migration Job uses the
+Secret's URL as it is: Prisma's migration engine negotiates TLS, since Postgres requires
+it, but doesn't check the certificate.
 
 ## Credentials: generated, or in git encrypted
 
@@ -56,10 +98,12 @@ There are two kinds of secret, and each has one home:
 | `storage` | `bucket`, `region`, `endpoint`, `publicEndpoint`, `accessKeyId`, `secretAccessKey` | generated (data chart) |
 | `<release>-backups-storage` | `accessKeyId`, `secretAccessKey` (the backups server's) | generated (data chart) |
 | `<release>-<service>` for `api`, `notifications`, `webhooks`, `ai` (the AI worker shares `ai`'s; `web` and `worker` have none) | any of the service's variables (each app's `src/env.ts`, `app/settings.py` for ai) | `environments/<env>/secrets/<service>.sops.yaml` |
+| `offsite-storage`, where there's an offsite copy (production) | `accessKeyId`, `secretAccessKey` of the storage outside the cluster | `environments/<env>/secrets/offsite-storage.sops.yaml` |
 | `cloudflare-api-token` in `cert-manager` and in `external-dns` | `token` (Zone:DNS:Edit on the zone) | `platform/secrets/<env>/` |
 | `github-token` in `argocd`, on the cluster hosting previews | `token` (reads pull requests) | `platform/secrets/<env>/` |
 | `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
 | `grafana-admin` in `observability`, only on clusters with observability (its namespace exists nowhere else) | `admin-user`, `admin-password` | `platform/secrets/<env>/` |
+| `alertmanager-smtp` in `observability`, likewise | `password` (the mail server's `SMTP_PASSWORD`, which Alertmanager sends alerts with) | `platform/secrets/<env>/` |
 
 What each service's Secret holds, at least:
 
@@ -88,8 +132,12 @@ server decrypts with it in a sidecar that runs `sops`, the `sops` config managem
 plugin (`argocd/argo-cd-values.yaml`). Applications whose source says
 `plugin: { name: sops }` get every `*.sops.yaml` file of their path, decrypted:
 `environments/<env>/secrets/` with the stack, `platform/secrets/<env>/` with the
-platform. Staging's cluster also decrypts `environments/preview/secrets/`, the Secrets
-every preview shares (test-mode keys only).
+platform. The Secrets every preview shares (`environments/preview/secrets/`, test-mode
+keys only) have an age key of their own: the cluster hosting previews holds it as
+`preview.txt` next to its own `keys.txt`, and previews decrypt with it alone. A file
+copied from staging's directory doesn't decrypt in a preview, and `charts:check` and the
+pre-commit hook refuse any secret not encrypted to exactly the keys `.sops.yaml` names
+for its directory.
 
 `.sops.yaml` at the repository's root says who can decrypt what: per environment, the
 cluster's public key and those of the people who edit its secrets. Its keys are
@@ -99,6 +147,7 @@ Setting up an environment, once (`age` and `sops` from your package manager):
 
 ```sh
 age-keygen -o staging.agekey             # the cluster's key pair; prints its public key
+age-keygen -o preview.agekey             # the previews' own, on the cluster hosting them
 age-keygen -o ~/.config/sops/age/keys.txt   # yours, if you don't have one yet
 ```
 
@@ -133,6 +182,30 @@ their Application's, which for previews is each preview's own); platform Secrets
 theirs. `charts:check` fails on any file there that isn't an encrypted Secret, or a
 namespace where there shouldn't be one. The plain manifest must never be committed:
 encrypt it before `git add`.
+
+### Replacing a cluster's age key
+
+The cluster's private key lives in three places, and all three change together: the
+`sops-age` Secret in `argocd` (written by OpenTofu's bootstrap, which keeps it in
+neither its state nor its plans), the `SOPS_AGE_KEY` secret of the `infra-<env>` GitHub
+environment (what `infra.yml` applies with), and wherever you keep your safe copy. To
+replace it, because it leaked or someone who had it left:
+
+1. `age-keygen -o <env>.agekey`, and add its public key to the environment's rule in
+   `.sops.yaml`, next to the old one.
+2. `sops updatekeys` every file of the environment (`environments/<env>/secrets/` and
+   `platform/secrets/<env>/`), and commit: every Secret now decrypts with either key.
+3. Put the new private key in `SOPS_AGE_KEY` (`gh secret set SOPS_AGE_KEY --env
+   infra-<env> < <env>.agekey`) and in your safe copy, raise `sops_keys_version` by one
+   in the environment's tfvars, and apply (`infra.yml`, or `tofu apply` with
+   `TF_VAR_sops_age_key`): OpenTofu can't see a write-only key change, so the version is
+   what makes it write the new one.
+4. Restart the repo server (`kubectl -n argocd rollout restart deploy/argocd-repo-server`)
+   and check an Application still syncs.
+5. Remove the old public key from `.sops.yaml`, `updatekeys` again and commit. If the old
+   key leaked, every value it could decrypt leaked too: rotate those as well (the
+   rotate-secrets skill). The previews' key (`preview.txt`, `SOPS_PREVIEW_AGE_KEY`) is
+   replaced the same way, in `.sops.yaml`'s preview rule.
 
 ## Re-encrypting after a key rotation
 
@@ -174,8 +247,18 @@ archives every WAL segment as it's written and takes a base backup daily, to the
 backups server's `backups` bucket, kept for `postgres.backups.retention`. Any moment
 since the oldest base backup kept can be restored. Put the backups server on another
 node than Postgres's primary (`storage.backups.nodeSelector`) so one lost disk can't
-take both; for a copy outside the cluster, mirror the bucket (`aws s3 sync`, RustFS
-replication) to storage somewhere else.
+take both.
+
+The backups server and the uploads server are in the cluster, so on its own a lost
+cluster (or the one disk of a one-node cluster) would take the database, its backups
+and every upload with it. `offsite` in the data values copies both buckets to
+S3-compatible storage you run somewhere else, every hour: a CronJob per bucket runs
+`rclone copy`, which never deletes there, so a wiped bucket in the cluster can't wipe
+the copy (expire old objects with that bucket's lifecycle rules instead). Production
+refuses to render without it (`offsite.required`). Its keys are the
+`offsite-storage` Secret, in `environments/<env>/secrets/`. After losing the cluster,
+copy the backups back into the new cluster's backups bucket before restoring (the
+same `rclone copy`, the other way), and the uploads into its uploads bucket.
 
 Restoring (a mistake in the data, or a new cluster): CloudNativePG only bootstraps a
 cluster when it creates it, so restoring means a new cluster from the backups.
@@ -206,8 +289,30 @@ cluster when it creates it, so restoring means a new cluster from the backups.
 5. Set `restore.enabled` back to `false` (an existing cluster ignores its bootstrap
    either way) and keep the new `backups.serverName`: it's where backups go now.
 
-`bun run db:restore-drill` proves locally that a backup restores to the same data,
-grants and policies (docs/database.md).
+`bun run db:restore-drill` (docs/database.md) proves that a `pg_dump` of the database
+restores to the same data, grants and policies. It doesn't test these backups: the
+clusters' are Barman base backups and WAL, which only a CloudNativePG recovery restores,
+and kind has no backups to try (no cert-manager for the plugin). Try them in staging,
+once after setting up and then every few months: the procedure above with
+`restore.enabled` and a new `backups.serverName`, then check the recovered database
+serves the site and has yesterday's rows.
+
+## What a lost node takes down
+
+Some parts run once, on one node's disk (`local-path`), and some run twice but share a
+disk on a one-node cluster. What each one needs to survive losing a node:
+
+| Part | Now | When its node is lost | The way to more |
+|---|---|---|---|
+| Postgres | `postgres.instances` (2 in production), placed on different nodes where there are several | on one node, both instances go with the disk: restore from the backups (and the offsite copy) | three nodes or more, so the instances really are on different disks; CloudNativePG fails over by itself |
+| Valkey | one pod, append-only file on its node | it stays Pending until the node is back, and queues, sessions and rate limits stop with it | Valkey with Sentinel (a primary, two replicas, three sentinels), with the services' `REDIS_URL` pointing at the sentinels; or Valkey Cluster (every queue key already has a hash tag) |
+| RustFS (uploads, backups) | one server each | uploads stop, and are only in the offsite copy | RustFS in distributed mode (four or more drives across nodes), or any S3 outside the cluster |
+| Stalwart | one pod on the mail node, which SPF and reverse DNS name | no mail leaves: sign-in codes, resets and invitations stop | a second mail node in SPF and the MX records, or a relay (`relay`, see Mail) |
+| The services | two replicas or more, spread across nodes | nothing, on two nodes or more | more replicas and nodes |
+
+Valkey's `maxmemory` stays at 60% of its memory limit or less (the chart refuses more):
+rewriting the append-only file forks the server, and whatever is written meanwhile is
+copied, so a rewrite under load with no headroom gets it OOM-killed.
 
 ## Mail
 
@@ -226,6 +331,13 @@ recovery-mode server, before the real one starts; the administrator never works 
 server's open ports. Stalwart posts delivery failures to the webhooks service in the
 cluster, signed with `STALWART_WEBHOOK_SECRET`; a changed setting restarts the pod.
 
+Sign-in codes, password resets and invitations all go out this way, so a node that
+can't deliver (outgoing port 25 blocked, or its address on a blocklist) breaks sign-in.
+Where that's the case, set `relay` in `platform/mail/values.yaml`: Stalwart then sends
+every message for another domain through that SMTP server, with its password as
+`RELAY_PASSWORD` in the `stalwart` Secret. It still signs with our DKIM key, so DMARC
+passes on DKIM even though SPF names only the mail node.
+
 ## Observability
 
 Off unless a cluster opts in with the label `boilerplate.dev/observability: "true"` on
@@ -239,6 +351,17 @@ them: traces to Jaeger, metrics to Prometheus's OTLP receiver. Neither is public
 kubectl -n observability port-forward svc/jaeger 16686                        # traces
 kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80   # dashboards
 ```
+
+The alerts add-on (`platform/alerts`) adds what Prometheus scrapes besides the services
+(Postgres, cert-manager, the gateway's proxies, KEDA) and rules on it: WAL archiving
+failing or stalled, no recent base backup, certificates close to expiring or not ready,
+the gateway answering more than 5% errors, and a queue backing up. kube-prometheus-stack
+brings its own for pods crash-looping or not ready, nodes and disks. Alertmanager
+emails every warning and critical alert to OpenTofu's `alert_email` (the cluster's
+`boilerplate.dev/alert-email` annotation), through the cluster's mail server as its
+submission account, with that account's password in the `alertmanager-smtp` Secret.
+Production refuses to render without an address, and OpenTofu without `alert_email`.
+Mail bounces aren't alerted on yet: Stalwart's metrics aren't scraped.
 
 ## DNS
 
@@ -256,12 +379,21 @@ OpenTofu installs Argo CD on each cluster with `argocd/argo-cd-values.yaml` and 
 
 - **platform**: every add-on in `platform/addons` on every cluster with an environment:
   operators, the gateway and its certificates (`platform/config`), the mail server, the
-  add-ons' Secrets.
+  add-ons' Secrets. They roll out in the order of their `wave` (a step per wave, each
+  once the one before is healthy), so what needs a CRD comes after what installs it.
 - **observability**: `platform/addons/observability` on clusters that opt in.
 - **envs**: the data and stack releases on the staging and production clusters, data
   first, and each environment's Secrets with the stack. A merge to master deploys
   staging (CI commits the new image tag); production changes only through a promotion
   pull request.
+
+Each environment deploys from the git revision in `environments/<env>/release.yaml`
+(the ApplicationSets read that file at master's head): the charts, values, Secrets and
+platform add-ons. Staging's is `HEAD`, so it follows master. Production's is the tag of
+the release it runs, with that release's images, and only `bun run promote` changes
+it. So a merged change to a chart, values file or add-on reaches staging at once and
+production with the next promotion. Changes to `argocd/` itself (the ApplicationSets,
+projects, root) still reach every cluster on merge: review them as production changes.
 - **previews**: a preview per pull request labelled `preview`, in its own namespace,
   at `https://pr-<number>.preview.<domain>`, deleted with the label or the PR, on the
   cluster that hosts previews (staging's). Each brings its own database and Valkey.
@@ -288,3 +420,11 @@ script straight into the cluster (never written to disk or git), and Mailpit get
 certificate from an authority made for the cluster, since production settings only
 submit mail over verified TLS. No Argo CD, cert-manager, KEDA or backups. The smoke
 test checks the routes (the site and the files host) and runs re-encryption.
+
+docker compose (local development and CI's tests) runs the same images as the clusters
+for Valkey, RustFS, ClamAV, the mail server, Jaeger and Mailpit
+(`scripts/compose.test.ts` fails when one drifts). Postgres is the exception:
+CloudNativePG runs its own PostgreSQL 18 image with pgvector, which doesn't start on its
+own, so compose runs pgvector's image of the same major version. What kind leaves out
+(Argo CD and its sops plugin, KEDA, cert-manager, backups) is first exercised in
+staging.

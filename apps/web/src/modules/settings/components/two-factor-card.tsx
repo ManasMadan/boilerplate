@@ -71,11 +71,14 @@ export function TwoFactorCard() {
             label={t("confirmPassword")}
             submit={t("enable")}
             onConfirm={async (password) => {
-              const { data, error } = await authClient.twoFactor.enable({ password });
+              // The authenticator (TOTP) method, which needs a scan-and-confirm step: its
+              // answer is always the secret and backup codes.
+              const { data, error } = await authClient.twoFactor.enable({
+                password,
+                method: "totp",
+              });
               if (error) return errorMessage(error);
-              // Only the authenticator (TOTP) method needs a scan-and-confirm step.
-              if (data.method === "totp") setSetup(data);
-              else await refetch();
+              setSetup(data as Setup);
               return undefined;
             }}
           />

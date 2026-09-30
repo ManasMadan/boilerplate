@@ -2,40 +2,39 @@
  * Customer webhook endpoints: configuration rules, the signing secret, and hand-offs to
  * apps/webhooks (test events, replays). Every change is audited in the same transaction.
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import {
   WEBHOOK_ENDPOINT_LIMIT,
   WEBHOOK_SECRET_OVERLAP_HOURS,
   type WebhookEndpoint,
+  webhookDeliverySchema,
+  webhookEndpointSchema,
 } from "@repo/contracts/api";
 import type { EventPayload, WebhookEventName } from "@repo/contracts/events";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
 import { tenantTx } from "@repo/db";
 import type { Producer } from "@repo/jobs";
-import { AppError, type Database, InjectDatabase, keysFromEnv, SecretBox } from "@repo/nest-common";
+import {
+  AppError,
+  type Database,
+  InjectDatabase,
+  keysFromEnv,
+  newWebhookSecret,
+  SecretBox,
+  webhookSecretContext,
+} from "@repo/nest-common";
 import { env } from "../../env";
 import { emitEvent } from "../../outbox";
 import { BillingService } from "../billing";
 import { assertDeliverableUrl } from "./webhook-url";
-import { endpointColumns, WebhooksRepository } from "./webhooks.repository";
+import { WebhooksRepository } from "./webhooks.repository";
 
 export const WEBHOOK_DELIVERIES = Symbol("WEBHOOK_DELIVERIES");
 
 type EndpointRow = Awaited<ReturnType<WebhooksRepository["listEndpoints"]>>[number];
 
-const toEndpoint = (row: EndpointRow): WebhookEndpoint => ({
-  id: row.id,
-  url: row.url,
-  description: row.description,
-  events: row.events as WebhookEventName[],
-  createdAt: row.createdAt,
-  disabledAt: row.disabledAt,
-  disabledReason: row.disabledReason as WebhookEndpoint["disabledReason"],
-});
-
-/** Standard Webhooks secret format: whsec_ + base64 of 24 random bytes. */
-const newSecret = () => `whsec_${randomBytes(24).toString("base64")}`;
+const toEndpoint = (row: EndpointRow): WebhookEndpoint => webhookEndpointSchema.parse(row);
 
 type Changed = EventPayload<"webhook.endpoint_updated.v1">["changed"];
 
@@ -66,21 +65,21 @@ export class WebhooksService implements OnApplicationShutdown {
     // Existing endpoints keep working after a downgrade; new ones need the plan.
     await this.billing.require(orgId, "webhooks");
     await assertDeliverableUrl(input.url);
-    const secret = newSecret();
+    const secret = newWebhookSecret();
+    // Chosen here, not by the database: the secret is encrypted for its row.
+    const id = randomUUID();
     return tenantTx(this.database.write, orgId, async (tx) => {
       if ((await this.repository.countEndpoints(tx)) >= WEBHOOK_ENDPOINT_LIMIT) {
         throw new AppError("WEBHOOK_ENDPOINT_LIMIT", { params: { max: WEBHOOK_ENDPOINT_LIMIT } });
       }
-      const endpoint = await tx.webhookEndpoint.create({
-        data: {
-          orgId,
-          url: input.url,
-          description: input.description ?? "",
-          events: input.events ?? [],
-          secret: this.box.encrypt(secret),
-          createdById: userId,
-        },
-        select: endpointColumns,
+      const endpoint = await this.repository.createEndpoint(tx, {
+        id,
+        orgId,
+        url: input.url,
+        description: input.description ?? "",
+        events: input.events ?? [],
+        secret: this.box.encrypt(secret, webhookSecretContext(id)),
+        createdById: userId,
       });
       await emitEvent(tx, "webhook.endpoint_created.v1", endpoint.id, {
         endpointId: endpoint.id,
@@ -112,18 +111,14 @@ export class WebhooksService implements OnApplicationShutdown {
       if (input.enabled !== undefined && input.enabled !== (current.disabledAt === null))
         changed.push("enabled");
 
-      const endpoint = await tx.webhookEndpoint.update({
-        where: { id: input.id },
-        data: {
-          ...(input.url !== undefined && { url: input.url }),
-          ...(input.description !== undefined && { description: input.description }),
-          ...(input.events !== undefined && { events: input.events }),
-          ...(changed.includes("enabled") &&
-            (input.enabled
-              ? { disabledAt: null, disabledReason: null }
-              : { disabledAt: new Date(), disabledReason: "manual" })),
-        },
-        select: endpointColumns,
+      const endpoint = await this.repository.updateEndpoint(tx, input.id, {
+        ...(input.url !== undefined && { url: input.url }),
+        ...(input.description !== undefined && { description: input.description }),
+        ...(input.events !== undefined && { events: input.events }),
+        ...(changed.includes("enabled") &&
+          (input.enabled
+            ? { disabledAt: null, disabledReason: null }
+            : { disabledAt: new Date(), disabledReason: "manual" })),
       });
       if (changed.length > 0) {
         await emitEvent(tx, "webhook.endpoint_updated.v1", endpoint.id, {
@@ -139,7 +134,7 @@ export class WebhooksService implements OnApplicationShutdown {
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findEndpoint(tx, id);
       if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
-      await tx.webhookEndpoint.delete({ where: { id } });
+      await this.repository.deleteEndpoint(tx, id);
       await emitEvent(tx, "webhook.endpoint_deleted.v1", id, { endpointId: id, url: current.url });
     });
   }
@@ -150,20 +145,15 @@ export class WebhooksService implements OnApplicationShutdown {
    * one, since its replacement was never put to use.
    */
   rotateSecret(orgId: string, id: string) {
-    const secret = newSecret();
+    const secret = newWebhookSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {
-      const current = await tx.webhookEndpoint.findUnique({
-        where: { id },
-        select: { secret: true },
-      });
+      const current = await this.repository.findSecret(tx, id);
       if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
-      await tx.webhookEndpoint.update({
-        where: { id },
-        data: {
-          secret: this.box.encrypt(secret),
-          previousSecret: current.secret,
-          previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000),
-        },
+      await this.repository.setSecret(tx, id, {
+        secret: this.box.encrypt(secret, webhookSecretContext(id)),
+        // Same row, so the same context: the ciphertext moves as it is.
+        previousSecret: current.secret,
+        previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000),
       });
       await emitEvent(tx, "webhook.secret_rotated.v1", id, { endpointId: id });
       return { secret };
@@ -186,8 +176,16 @@ export class WebhooksService implements OnApplicationShutdown {
       throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: endpointId } });
     }
     const rows = await this.repository.listDeliveries(orgId, endpointId, page);
+    // Parsed, not cast: the columns are text. A code the contract doesn't know (a row from
+    // before the codes) reads as the nearest, a failed connection.
+    const { status, lastError } = webhookDeliverySchema.shape;
+    const knownError = lastError.catch("connection_failed");
     return toPage(
-      rows.map((row) => ({ ...row, status: row.status as "pending" | "succeeded" | "failed" })),
+      rows.map((row) => ({
+        ...row,
+        status: status.parse(row.status),
+        lastError: knownError.parse(row.lastError),
+      })),
       page.limit,
     );
   }

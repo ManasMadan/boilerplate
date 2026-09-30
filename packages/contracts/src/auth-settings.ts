@@ -16,6 +16,14 @@ export const OTP_EXPIRES_IN = 5 * 60;
  */
 export const FRESH_SESSION_AGE = 2 * 60 * 60;
 
+/**
+ * Workspaces one account may belong to (including those it created), and invitations
+ * one workspace may have waiting: each invitation is an email from our domain with a
+ * name someone else chose, so neither can be unbounded.
+ */
+export const ORGANIZATION_LIMIT = 20;
+export const PENDING_INVITATION_LIMIT = 20;
+
 /** Digits a texted code has, and how long (seconds) it stays valid. */
 export const PHONE_CODE_LENGTH = 6;
 export const PHONE_CODE_EXPIRES_IN = 10 * 60;

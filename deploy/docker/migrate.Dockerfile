@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 #
 # Database migrations: `prisma migrate deploy` as the migrator role, run once per
 # release before the services roll out (the Helm chart's pre-install/pre-upgrade Job).
@@ -9,7 +9,7 @@
 # Every migration must be safe to run while the previous release is still serving
 # (expand, deploy, then contract in a later release).
 
-ARG BUN_IMAGE=oven/bun:1.3.6-slim
+ARG BUN_IMAGE=oven/bun:1.3.6-slim@sha256:9d20d1b535596c4a021ba2087d2d303c4098e96be15f47775729cf7a259bb41e
 # renovate: datasource=npm depName=turbo
 ARG TURBO_VERSION=2.11.5
 
@@ -35,7 +35,7 @@ RUN rm -rf node_modules/@repo \
  && cd node_modules/@prisma/engines && bun scripts/postinstall.js \
  && ls schema-engine-*
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
 COPY --from=build /repo/node_modules /app/node_modules
 COPY --from=build /repo/packages/db/prisma /app/packages/db/prisma
 COPY --from=build /repo/packages/db/prisma.config.ts /app/packages/db/prisma.config.ts

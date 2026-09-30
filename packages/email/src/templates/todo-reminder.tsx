@@ -2,7 +2,8 @@ import { Heading, Text } from "@react-email/components";
 import { Layout, type LocalizedProps } from "./layout";
 
 export interface TodoReminderEmailProps extends LocalizedProps {
-  name: string;
+  /** Left out of the greeting when there's none (never "Hi ,"). */
+  name: string | null;
   title: string;
 }
 
@@ -24,7 +25,7 @@ export default function TodoReminderEmail({
       unsubscribeUrl={unsubscribeUrl}
     >
       <Heading as="h1" style={{ fontSize: 22, margin: "0 0 12px" }}>
-        {t("email.todoReminder.greeting", { name })}
+        {name ? t("email.todoReminder.greeting", { name }) : t("email.todoReminder.greetingNoName")}
       </Heading>
       <Text style={{ color: "#444", fontSize: 15 }}>{t("email.todoReminder.body", { title })}</Text>
     </Layout>

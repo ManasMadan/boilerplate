@@ -4,7 +4,9 @@
 # this zone's DNS (cert-manager's DNS-01 challenges), and the Turnstile widget.
 #
 # The provider's own token needs: Zone Settings Edit, Zone WAF Edit (for managed_waf),
-# DNS Edit, Turnstile Sites Write, and API Tokens Write (to create the scoped token).
+# DNS Edit, SSL and Certificates Edit (origin pulls), Turnstile Sites Write, and API
+# Tokens Write (to create the scoped token). A token that only plans (pull requests,
+# .github/workflows/infra.yml) needs the Read of each instead.
 
 data "cloudflare_zone" "this" {
   filter = {
@@ -27,6 +29,15 @@ resource "cloudflare_zone_setting" "this" {
   zone_id    = local.zone_id
   setting_id = each.key
   value      = each.value
+}
+
+# Cloudflare presents its origin-pull client certificate to the cluster, and the gateway
+# (deploy/platform/config) refuses the site's hosts to anything that doesn't: someone
+# who finds a node's address can't skip Cloudflare and forge X-Forwarded-For. Apply this
+# before the gateway requires it, or the site is refused in between.
+resource "cloudflare_authenticated_origin_pulls_settings" "this" {
+  zone_id = local.zone_id
+  enabled = true
 }
 
 resource "cloudflare_ruleset" "managed_waf" {

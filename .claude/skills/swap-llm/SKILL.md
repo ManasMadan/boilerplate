@@ -1,6 +1,7 @@
 ---
 name: swap-llm
-description: Change which language model the AI service uses (Anthropic, OpenAI, another provider, a local model, or an LLM gateway such as LiteLLM), or add a fallback. Use when the user wants a different or cheaper model, a gateway, or answers fail because of the provider.
+description: Change which language model the AI service uses (Anthropic, OpenAI, another provider, a local model, or an LLM gateway such as LiteLLM), or add a fallback. Use when the user decides on a different or cheaper model, or a gateway. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the model
@@ -33,3 +34,12 @@ description: Change which language model the AI service uses (Anthropic, OpenAI,
 
 `apps/ai/tests/test_units.py` and `apps/ai/tests/test_service.py` run on
 `local:extractive`; `apps/ai/tests/test_evals.py` checks the evals themselves.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too. The change is in apps/ai, so the
+   `python-reviewer` agent as well.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

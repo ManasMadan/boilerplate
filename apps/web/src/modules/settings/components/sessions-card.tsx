@@ -1,5 +1,7 @@
 "use client";
 
+import { authKeys } from "@repo/client/auth/query";
+import { useSessionsQuery } from "@repo/client/auth/sessions";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -10,14 +12,12 @@ import {
   CardTitle,
 } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "@/modules/auth";
 import { needsRecentSignIn, ReauthPrompt } from "./reauth-prompt";
-
-const SESSIONS_KEY = ["auth", "sessions"] as const;
 
 /** A readable device name from a user agent, without a parsing library. */
 function deviceName(userAgent: string | null | undefined) {
@@ -53,22 +53,13 @@ export function SessionsCard() {
   const errorMessage = useAuthErrorMessage();
   const queryClient = useQueryClient();
   const { data: current } = authClient.useSession();
-  const sessions = useQuery({
-    queryKey: SESSIONS_KEY,
-    queryFn: async () => {
-      const { data, error } = await authClient.listSessions();
-      if (error) throw error;
-      return data;
-    },
-    // A stale session (see ReauthPrompt) won't become fresh by retrying.
-    retry: false,
-  });
+  const sessions = useSessionsQuery(authClient);
 
   async function run(action: () => Promise<{ error: { code?: string | undefined } | null }>) {
     const { error } = await action();
     if (error) toast.error(errorMessage(error));
     else toast.success(t("revoked"));
-    await queryClient.invalidateQueries({ queryKey: SESSIONS_KEY });
+    await queryClient.invalidateQueries({ queryKey: authKeys.sessions() });
   }
 
   return (

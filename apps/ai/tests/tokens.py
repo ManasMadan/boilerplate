@@ -1,19 +1,20 @@
 """Tokens as apps/api signs them, for tests."""
 
+import secrets
 import time
-from typing import Any
 from uuid import UUID
 
 import jwt
 
-SECRET = "test-ai-service-secret-at-least-32-characters"
+# Fresh for every run, like the secrets the test environment fills in.
+SECRET = secrets.token_urlsafe(32)
 
 
 def service_token(
-    user_id: UUID, org_id: UUID, *, secret: str = SECRET, lifetime: int = 60, **overrides: Any
+    user_id: UUID, org_id: UUID, *, secret: str = SECRET, lifetime: int = 60, **overrides: object
 ) -> str:
     now = int(time.time())
-    claims: dict[str, Any] = {
+    claims: dict[str, object] = {
         "iss": "api",
         "aud": "ai",
         "sub": str(user_id),

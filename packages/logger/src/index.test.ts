@@ -1,7 +1,7 @@
 import { Writable } from "node:stream";
 import { pino } from "pino";
 import { describe, expect, it } from "vitest";
-import { loggerOptions, scrub } from "./index";
+import { createLogger, loggerOptions, scrub } from "./index";
 
 describe("scrub", () => {
   it("censors sensitive keys at any depth and keeps everything else", () => {
@@ -14,6 +14,29 @@ describe("scrub", () => {
       job: { data: { data: { otp: "[redacted]", purpose: "sign-in" } } },
       user: { Password: "[redacted]", name: "Ada" },
     });
+  });
+
+  it("scrubs inside arrays, keeps errors whole and stops at a depth limit", () => {
+    const error = new Error("boom");
+    let deep: unknown = { token: "deepest" };
+    for (let i = 0; i < 9; i++) deep = { inner: deep };
+    const out = scrub({ items: [{ token: "t" }, 1], error, deep }) as Record<string, unknown>;
+    expect(out.items).toEqual([{ token: "[redacted]" }, 1]);
+    expect(out.error).toBe(error);
+    expect(JSON.stringify(out.deep)).toContain("deepest");
+  });
+});
+
+describe("loggerOptions", () => {
+  it("pretty-prints only when asked", () => {
+    expect(loggerOptions({ service: "api" })).not.toHaveProperty("transport");
+    expect(loggerOptions({ service: "api", pretty: true }).transport).toMatchObject({
+      target: "pino-pretty",
+    });
+  });
+
+  it("builds a logger at the level asked for", () => {
+    expect(createLogger({ service: "api", level: "warn" }).level).toBe("warn");
   });
 });
 

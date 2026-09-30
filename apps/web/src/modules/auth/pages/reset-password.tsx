@@ -29,10 +29,11 @@ export function ResetPasswordPage() {
     if (!email) router.replace("/forgot-password");
   }, [email, router]);
   if (!email) return null;
+  // The handlers below only exist once an address is known.
+  const address = email;
 
   async function onSubmit({ otp, password }: z.infer<typeof schema>) {
-    if (!email) return;
-    const { error } = await authClient.emailOtp.resetPassword({ email, otp, password });
+    const { error } = await authClient.emailOtp.resetPassword({ email: address, otp, password });
     if (error) {
       // Clear the rejected code so the next one can be typed straight in.
       form.setValue("otp", "");

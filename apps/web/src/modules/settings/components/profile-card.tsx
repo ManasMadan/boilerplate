@@ -34,8 +34,9 @@ import { useAuthErrorMessage } from "@/modules/auth";
 
 // Browsers list canonical zones only, without "UTC", which is our default for new users.
 const TIME_ZONES = ["UTC", ...Intl.supportedValuesOf("timeZone").filter((zone) => zone !== "UTC")];
+// A language code the browser doesn't know comes back as the code itself.
 const nativeName = (locale: string) =>
-  new Intl.DisplayNames([locale], { type: "language" }).of(locale) ?? locale;
+  String(new Intl.DisplayNames([locale], { type: "language" }).of(locale));
 
 export function ProfileCard() {
   const t = useTranslations("settings.profile");

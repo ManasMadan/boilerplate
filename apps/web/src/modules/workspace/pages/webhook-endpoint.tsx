@@ -1,16 +1,13 @@
 "use client";
 
-import {
-  useRedeliverWebhookMutation,
-  useWebhookDeliveriesInfiniteQuery,
-} from "@repo/client/api/webhooks/deliveries";
-import {
-  useDeleteWebhookEndpointMutation,
-  useRotateWebhookSecretMutation,
-  useSendWebhookTestMutation,
-  useUpdateWebhookEndpointMutation,
-  useWebhookEndpointsQuery,
-} from "@repo/client/api/webhooks/endpoints";
+import { useApiErrorMessage } from "@repo/client";
+import { useDeleteWebhookEndpointMutation } from "@repo/client/api/webhooks/delete-endpoint";
+import { useWebhookDeliveriesInfiniteQuery } from "@repo/client/api/webhooks/list-deliveries";
+import { useWebhookEndpointsQuery } from "@repo/client/api/webhooks/list-endpoints";
+import { useRedeliverWebhookMutation } from "@repo/client/api/webhooks/redeliver";
+import { useRotateWebhookSecretMutation } from "@repo/client/api/webhooks/rotate-secret";
+import { useSendWebhookTestMutation } from "@repo/client/api/webhooks/send-test";
+import { useUpdateWebhookEndpointMutation } from "@repo/client/api/webhooks/update-endpoint";
 import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import {
   AlertDialog,
@@ -37,7 +34,6 @@ import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { EndpointStatus } from "../components/endpoint-status";
 import { SecretDialog } from "../components/secret-dialog";
 
@@ -185,7 +181,9 @@ function DeliveriesCard({ endpointId }: { endpointId: string }) {
                     })}{" "}
                     · {t("attempts", { count: delivery.attempts })}
                     {delivery.lastStatus ? ` · HTTP ${delivery.lastStatus}` : ""}
-                    {delivery.lastError && !delivery.lastStatus ? ` · ${delivery.lastError}` : ""}
+                    {delivery.lastError && !delivery.lastStatus
+                      ? ` · ${t(`error.${delivery.lastError}`)}`
+                      : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

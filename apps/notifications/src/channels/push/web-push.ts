@@ -6,7 +6,14 @@
  */
 import { isWebPushEndpoint } from "@repo/contracts/notifications";
 import webPush from "web-push";
+import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
+
+/** A browser's PushSubscription as it stored it (PushSubscription.toJSON()). */
+const subscriptionSchema = z.object({
+  endpoint: z.string(),
+  keys: z.object({ p256dh: z.string(), auth: z.string() }),
+});
 
 export interface WebPushConfig {
   publicKey: string;
@@ -21,13 +28,17 @@ export class WebPushTransport implements PushTransport {
   constructor(private readonly config: WebPushConfig) {}
 
   async send(token: string, message: PushMessage): Promise<PushResult> {
-    let subscription: webPush.PushSubscription;
+    let stored: unknown;
     try {
-      subscription = JSON.parse(token) as webPush.PushSubscription;
+      stored = JSON.parse(token);
     } catch {
       return { ok: false, gone: true, error: "stored subscription isn't JSON" };
     }
-    const endpoint = String(subscription.endpoint);
+    const parsed = subscriptionSchema.safeParse(stored);
+    if (!parsed.success)
+      return { ok: false, gone: true, error: "stored subscription is malformed" };
+    const subscription: webPush.PushSubscription = parsed.data;
+    const endpoint = subscription.endpoint;
     const allowed =
       isWebPushEndpoint(endpoint) ||
       (this.config.testOrigin !== undefined && endpoint.startsWith(`${this.config.testOrigin}/`));

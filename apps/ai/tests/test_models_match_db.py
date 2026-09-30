@@ -7,6 +7,7 @@ schemas exist only in the database and are skipped.
 """
 
 import os
+from typing import cast
 
 import pytest
 from alembic.autogenerate import compare_metadata
@@ -21,11 +22,12 @@ pytestmark = pytest.mark.integration
 def _include(
     obj: object, name: str | None, type_: str, reflected: bool, compare_to: object
 ) -> bool:
+    # Alembic hands over schema items untyped; getattr reads what each kind has.
     if type_ == "table":
-        return getattr(obj, "schema", None) == "ai"
+        return cast(object, getattr(obj, "schema", None)) == "ai"
     if type_ == "foreign_key_constraint":
-        referred = getattr(obj, "referred_table", None)
-        return getattr(referred, "schema", None) == "ai"
+        referred = cast(object, getattr(obj, "referred_table", None))
+        return cast(object, getattr(referred, "schema", None)) == "ai"
     return True
 
 
@@ -42,6 +44,7 @@ def test_models_match_the_migrated_database() -> None:
                 "compare_server_default": True,
             },
         )
-        differences = compare_metadata(context, Base.metadata)
+        # A list of differences, as tuples Alembic leaves untyped.
+        differences = cast(list[object], compare_metadata(context, Base.metadata))
     engine.dispose()
     assert differences == [], "\n".join(str(d) for d in differences)

@@ -12,7 +12,7 @@
  * twice, and consumers use it as the idempotency key towards providers. BullMQ's own
  * auto-increment ids restart after a Redis flush and must never be used for that.
  */
-import { type ConnectionOptions, type JobsOptions, Queue } from "bullmq";
+import { type ConnectionOptions, type JobsOptions, Queue, UnrecoverableError } from "bullmq";
 import { z } from "zod";
 import {
   type JobMeta,
@@ -98,6 +98,11 @@ export function parseJob<Q extends QueueName, J extends JobName<Q>>(
   job: J,
   data: unknown,
 ): { meta: JobMeta; payload: JobPayload<Q, J> } {
-  const envelope = z.object({ meta: jobMeta, payload: z.unknown() }).parse(data);
-  return { meta: envelope.meta, payload: schemaFor(queue, job).parse(envelope.payload) };
+  const parsed = z.object({ meta: jobMeta, payload: schemaFor(queue, job) }).safeParse(data);
+  // A payload that doesn't match its schema never will: retrying it only reaches the
+  // failed set later, with full backoff, so the job fails for good at once.
+  if (!parsed.success) {
+    throw new UnrecoverableError(`invalid ${queue}/${job} job: ${z.prettifyError(parsed.error)}`);
+  }
+  return parsed.data as { meta: JobMeta; payload: JobPayload<Q, J> };
 }

@@ -8,6 +8,7 @@
  * (the container's certificate is self-signed; production refuses that setting).
  */
 import { randomUUID } from "node:crypto";
+import { eventually } from "@repo/testing/eventually";
 import { describe, expect, it } from "vitest";
 import { SmtpTransport } from "../src/channels/email/email-transport";
 
@@ -33,16 +34,16 @@ describe.skipIf(!SMTP_URL)("SMTP submission to Stalwart", () => {
     const { providerMessageId } = await new SmtpTransport(SMTP_URL as string).send(outgoing);
     expect(providerMessageId).toBe(`<${outgoing.idempotencyKey}@notifications>`);
 
-    const deadline = Date.now() + 20_000;
-    let id: string | undefined;
-    while (!id && Date.now() < deadline) {
-      const response = await fetch(
-        `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
-      );
-      id = ((await response.json()) as { messages: { ID: string }[] }).messages[0]?.ID;
-      if (!id) await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    expect(id, `nothing delivered to ${to}`).toBeDefined();
+    const id = await eventually(
+      async () => {
+        const response = await fetch(
+          `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
+        );
+        return ((await response.json()) as { messages: { ID: string }[] }).messages[0]?.ID;
+      },
+      (found) => found !== undefined,
+      { timeout: 20_000, interval: 250 },
+    );
     const headers = (await (
       await fetch(`${MAILPIT}/api/v1/message/${id}/headers`)
     ).json()) as Record<string, string[]>;

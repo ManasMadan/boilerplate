@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const sdk = vi.hoisted(() => ({
   options: undefined as undefined | Record<string, unknown>,
   start: vi.fn(),
-  shutdown: vi.fn(async () => {}),
+  shutdown: vi.fn(async () => undefined),
 }));
 const register = vi.hoisted(() => vi.fn());
 
@@ -26,7 +26,12 @@ vi.mock("@opentelemetry/sdk-node", () => ({
 
 const { startTelemetry } = await import("./telemetry");
 
-type Http = { getConfig(): { ignoreIncomingRequestHook(request: IncomingMessage): boolean } };
+type Http = {
+  getConfig(): {
+    ignoreIncomingRequestHook(request: IncomingMessage): boolean;
+    requestHook(span: unknown): void;
+  };
+};
 /** What startTelemetry passed to the SDK; fails the test if it made none. */
 const options = () => {
   if (!sdk.options) throw new Error("startTelemetry created no SDK");
@@ -73,7 +78,7 @@ describe("startTelemetry", () => {
       "@opentelemetry/instrumentation-ioredis",
       "@opentelemetry/instrumentation-pino",
     ]);
-    expect(options().traceExporter).toBeDefined();
+    expect(options().traceExporter?.constructor.name).toBe("OTLPTraceExporter");
     expect(options().metricReaders).toHaveLength(1);
   });
 
@@ -94,6 +99,20 @@ describe("startTelemetry", () => {
     expect(ignored("/health/ready")).toBe(true);
     expect(ignored("/rpc/todos.list")).toBe(false);
     expect(ignored(undefined)).toBe(false);
+  });
+
+  it("strips query values from the URLs on HTTP spans", async () => {
+    vi.stubEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318");
+    await startTelemetry("api");
+    const [http] = options().instrumentations as Http[];
+    const attributes: Record<string, unknown> = { "url.full": "https://x.dev/cb?code=secret" };
+    http?.getConfig().requestHook({
+      attributes,
+      setAttribute: (key: string, value: string) => {
+        attributes[key] = value;
+      },
+    });
+    expect(attributes["url.full"]).toBe("https://x.dev/cb?code=");
   });
 
   it("flushes on SIGTERM, SIGINT and a natural exit", async () => {

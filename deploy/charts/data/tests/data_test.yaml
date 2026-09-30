@@ -11,6 +11,7 @@ tests:
       - equal: { path: spec.bootstrap.initdb.owner, value: migrator }
       - equal: { path: spec.bootstrap.initdb.secret.name, value: db-migrator }
       - equal: { path: spec.enableSuperuserAccess, value: false }
+      - equal: { path: spec.postgresql.pg_hba, value: [hostnossl all all all reject] }
       - equal: { path: spec.storage.storageClass, value: local-path }
       - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE EXTENSION IF NOT EXISTS vector }
       - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE ROLE app_api NOLOGIN NOBYPASSRLS NOINHERIT }
@@ -174,6 +175,57 @@ tests:
       - equal: { path: "spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef", value: { name: valkey, key: password } }
       - equal: { path: "spec.volumeClaimTemplates[0].spec.storageClassName", value: local-path }
 
+  - it: lets the stack's services and KEDA's operator reach Valkey, nothing else
+    template: valkey.yaml
+    documentSelector: { path: kind, value: NetworkPolicy }
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - podSelector: {}
+                - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: keda } }
+                  podSelector: { matchLabels: { app.kubernetes.io/name: keda-operator } }
+              ports: [{ port: 6379 }]
+
+  - it: accepts nothing in the namespace that a policy of its own doesn't allow
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-default-deny }
+    asserts:
+      - equal: { path: spec, value: { podSelector: {}, policyTypes: [Ingress] } }
+
+  - it: lets only this namespace, the operator and the metrics scraper reach Postgres
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-postgres }
+    asserts:
+      - equal: { path: spec.podSelector, value: { matchLabels: { cnpg.io/cluster: demo-postgres } } }
+      - equal:
+          path: spec.ingress
+          value:
+            - from: [{ podSelector: {} }]
+              ports: [{ port: 5432 }]
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: cnpg-system } } }]
+              ports: [{ port: 5432 }, { port: 8000 }]
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } } }]
+              ports: [{ port: 9187 }]
+
+  - it: keeps Valkey's maxmemory to 60% of its limit, for the rewrite's fork
+    template: valkey.yaml
+    set:
+      valkey.maxmemory: 400mb
+    asserts:
+      - failedTemplate:
+          errorPattern: valkey.maxmemory \(400mb\) must be at most 60% of limits.memory \(512Mi\)
+
+  - it: takes maxmemory in any unit against a limit in any unit
+    template: valkey.yaml
+    set:
+      valkey.maxmemory: 1gb
+      valkey.resources.limits.memory: 2Gi
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].args", content: 1gb }
+
   - it: runs the uploads server with its keys from the storage Secret
     template: storage.yaml
     documentSelector: { path: kind, value: StatefulSet }
@@ -212,7 +264,7 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: BUCKET, value: uploads }
 
-  - it: lets only Postgres and the bucket Job reach the backups server
+  - it: lets only Postgres, the bucket Job and the offsite copy reach the backups server
     template: storage.yaml
     set:
       postgres.backups.enabled: true
@@ -225,7 +277,50 @@ tests:
             - from:
                 - podSelector: { matchLabels: { cnpg.io/cluster: demo-postgres } }
                 - podSelector: { matchLabels: { app.kubernetes.io/name: buckets, app.kubernetes.io/instance: demo } }
+                - podSelector: { matchLabels: { app.kubernetes.io/name: offsite, app.kubernetes.io/instance: demo } }
               ports: [{ port: 9000 }]
+
+  - it: copies the backups and the uploads outside the cluster, never deleting there
+    template: offsite.yaml
+    set:
+      postgres.backups.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+    asserts:
+      - hasDocuments: { count: 2 }
+      - equal: { path: metadata.name, value: demo-offsite-backups }
+        documentIndex: 0
+      - equal:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].args"
+          value: [copy, "cluster:backups", "offsite:copies/production/backups", --s3-no-check-bucket, --stats-one-line, --stats=0, -v]
+        documentIndex: 0
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: RCLONE_CONFIG_CLUSTER_ACCESS_KEY_ID, valueFrom: { secretKeyRef: { name: demo-backups-storage, key: accessKeyId } } }
+        documentIndex: 0
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: RCLONE_CONFIG_OFFSITE_ENDPOINT, value: https://s3.elsewhere.example }
+        documentIndex: 1
+      - equal:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].args[2]"
+          value: "offsite:copies/production/uploads"
+        documentIndex: 1
+      - equal: { path: spec.concurrencyPolicy, value: Forbid }
+
+  - it: refuses to render without an offsite copy where one is required
+    template: offsite.yaml
+    set:
+      offsite.required: true
+    asserts:
+      - failedTemplate:
+          errorPattern: offsite.endpoint is required here
+
+  - it: makes no offsite copy until it has somewhere to go
+    template: offsite.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
 
   - it: runs no backups server and no public route for backups
     template: storage.yaml
@@ -264,6 +359,27 @@ tests:
         documentSelector: { path: kind, value: Namespace }
       - equal: { path: 'spec.hard["requests.memory"]', value: 8Gi }
         documentSelector: { path: kind, value: ResourceQuota }
+
+  - it: catches a preview's mail in a Mailpit of its own, over TLS from its own authority
+    template: preview-mail.yaml
+    set:
+      preview.enabled: true
+      preview.namespace: pr-1
+    asserts:
+      - hasDocuments: { count: 7 }
+      - equal: { path: spec.dnsNames, value: [mailpit] }
+        documentIndex: 3
+      - equal: { path: spec.issuerRef, value: { name: mailpit-ca, kind: Issuer } }
+        documentIndex: 3
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: MP_SMTP_REQUIRE_TLS, value: "true" }
+        documentIndex: 4
+
+  - it: runs no Mailpit outside a preview
+    template: preview-mail.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
 
   - it: needs a namespace for a preview
     template: preview.yaml

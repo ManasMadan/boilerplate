@@ -1,11 +1,10 @@
 "use client";
 
-import {
-  useBillingOverviewQuery,
-  useCheckoutMutation,
-  useInvoicesQuery,
-  usePortalMutation,
-} from "@repo/client/api/billing";
+import { useApiErrorMessage } from "@repo/client";
+import { useCheckoutMutation } from "@repo/client/api/billing/checkout";
+import { useInvoicesQuery } from "@repo/client/api/billing/invoices";
+import { useBillingOverviewQuery } from "@repo/client/api/billing/overview";
+import { usePortalMutation } from "@repo/client/api/billing/portal";
 import type { BillingOverview } from "@repo/contracts/api";
 import { formatMoney } from "@repo/contracts/money";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
@@ -22,7 +21,6 @@ import { Skeleton } from "@repo/ui/components/skeleton";
 import { useSearchParams } from "next/navigation";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { useActiveWorkspace } from "@/modules/workspace";
 
 /** The workspace's plan, subscription and invoices (owners and admins). */

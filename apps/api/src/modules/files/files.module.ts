@@ -2,6 +2,7 @@ import { Inject, Module, type OnApplicationShutdown } from "@nestjs/common";
 import { createProducer, type Producer } from "@repo/jobs";
 import { createStorage, REDIS, type Redis, STORAGE } from "@repo/nest-common";
 import { env } from "../../env";
+import { FilesRepository } from "./files.repository";
 import { FILES_QUEUE, FilesService } from "./files.service";
 
 class QueueLifecycle implements OnApplicationShutdown {
@@ -21,6 +22,7 @@ class QueueLifecycle implements OnApplicationShutdown {
       useFactory: (redis: Redis) => createProducer("files", redis),
     },
     QueueLifecycle,
+    FilesRepository,
     FilesService,
   ],
   exports: [FilesService],

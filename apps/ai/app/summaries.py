@@ -1,6 +1,3 @@
-# LangGraph ships without stubs and with partly unknown generics; it's used only in this
-# module, so these two strict checks are relaxed here and nowhere else.
-# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
 """Document summaries, as a LangGraph workflow: summarize each passage, then combine.
 
     START → summarize_passages → combine → END
@@ -9,6 +6,8 @@ A graph because it's the pattern for multi-step AI work here: each step is a nod
 typed state, steps can be added (a quality check, a translation) without rewriting the
 rest, and a checkpointer can be attached when a workflow needs to pause for a person.
 This one doesn't pause: it runs inside one job, and a failed job simply runs it again.
+Every step spends from one usage counter, capped by the limits the caller passes in (what
+it reserved from the workspace's budget, see app/usage.py).
 
 Each step calls the model through a Pydantic AI agent, so budgets and providers work
 exactly as they do for the assistant. With "local:extractive", summaries are the
@@ -17,15 +16,18 @@ opening sentences of the text, for development and tests.
 
 import asyncio
 import re
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from langgraph.graph import END, START, StateGraph
-from langgraph.graph.state import CompiledStateGraph
+# LangGraph ships without type stubs (and leaves some generics unknown); it's used only here.
+from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
+from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RunUsage, UsageLimits
+
+from app.messages import user_prompt
 
 MAX_PASSAGES = 20
 PARALLEL = 4
@@ -42,20 +44,11 @@ COMBINE = (
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 
 
-def _prompt(messages: list[ModelMessage]) -> str:
-    for message in messages:
-        if isinstance(message, ModelRequest):
-            for part in message.parts:
-                if part.part_kind == "user-prompt" and isinstance(part.content, str):
-                    return part.content
-    return ""
-
-
 def local_summarizer() -> Model:
     """Opening sentences instead of a model: one per passage, up to three when combining."""
 
     async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        text = " ".join(_prompt(messages).split())
+        text = " ".join(user_prompt(messages).split())
         sentences = [s for s in _SENTENCE.split(text) if s]
         keep = 3 if info.instructions == COMBINE else 1
         return ModelResponse(parts=[TextPart(" ".join(sentences[:keep]))])
@@ -68,17 +61,15 @@ class SummaryState(TypedDict):
     summaries: list[str]
     summary: str
     usage: RunUsage
+    limits: UsageLimits
 
 
-def build_summary_graph(
-    model: Model | str, tokens_per_run: int
-) -> CompiledStateGraph[SummaryState]:
+def build_summary_graph(model: Model | str) -> CompiledStateGraph[SummaryState]:
     summarizer = Agent(model, instructions=SUMMARIZE, defer_model_check=True)
     combiner = Agent(model, instructions=COMBINE, defer_model_check=True)
-    limits = UsageLimits(total_tokens_limit=tokens_per_run)
 
     async def summarize_passages(state: SummaryState) -> dict[str, object]:
-        usage = state["usage"]
+        usage, limits = state["usage"], state["limits"]
         gate = asyncio.Semaphore(PARALLEL)
 
         async def one(passage: str) -> str:
@@ -93,26 +84,32 @@ def build_summary_graph(
         if len(state["summaries"]) == 1:
             return {"summary": state["summaries"][0]}
         result = await combiner.run(
-            "\n".join(state["summaries"]), usage=state["usage"], usage_limits=limits
+            "\n".join(state["summaries"]), usage=state["usage"], usage_limits=state["limits"]
         )
         return {"summary": result.output.strip()}
 
     graph = StateGraph(SummaryState)
-    graph.add_node("summarize_passages", summarize_passages)
-    graph.add_node("combine", combine)
+    # add_node's overloads leave the node's input type unknown.
+    graph.add_node("summarize_passages", summarize_passages)  # pyright: ignore[reportUnknownMemberType]  # see above
+    graph.add_node("combine", combine)  # pyright: ignore[reportUnknownMemberType]  # see above
     graph.add_edge(START, "summarize_passages")
     graph.add_edge("summarize_passages", "combine")
     graph.add_edge("combine", END)
-    return graph.compile()
+    return graph.compile()  # pyright: ignore[reportUnknownMemberType]  # its checkpointer and cache types are unknown
 
 
 async def summarize(
-    graph: CompiledStateGraph[SummaryState], passages: list[str]
-) -> tuple[str, RunUsage]:
+    graph: CompiledStateGraph[SummaryState],
+    passages: list[str],
+    usage: RunUsage,
+    limits: UsageLimits,
+) -> str:
+    """The summary; `usage` counts what it spent, also when it raises (UsageLimitExceeded
+    once `limits` are reached)."""
     if not passages:
-        return "", RunUsage()
-    usage = RunUsage()
-    final = await graph.ainvoke(
-        {"passages": passages, "summaries": [], "summary": "", "usage": usage}
+        return ""
+    final = await graph.ainvoke(  # pyright: ignore[reportUnknownMemberType]  # its config types are unknown
+        {"passages": passages, "summaries": [], "summary": "", "usage": usage, "limits": limits}
     )
-    return str(final["summary"]), usage
+    # ainvoke returns the final state as a plain dict of Any.
+    return cast(str, final["summary"])

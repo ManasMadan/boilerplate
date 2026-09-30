@@ -62,9 +62,11 @@ spec:
                   mountPath: /etc/ssl/extra
                   readOnly: true
                 {{- end }}
+                {{- include "stack.dbCaMount" (list $ $svc) | nindent 16 }}
           volumes:
             - name: tmp
               emptyDir: {}
+            {{- include "stack.dbCaVolume" (list $ $svc) | nindent 12 }}
             {{- with $svc.caBundle }}
             - name: ca-bundle
               secret:

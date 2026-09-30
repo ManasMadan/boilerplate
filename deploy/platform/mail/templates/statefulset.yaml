@@ -177,6 +177,12 @@ spec:
             - name: STALWART_WEBHOOK_SECRET
               valueFrom:
                 secretKeyRef: { name: {{ .Values.secretName }}, key: STALWART_WEBHOOK_SECRET }
+            {{- if and .Values.relay.host .Values.relay.username }}
+            # The smarthost's password (the relay route reads it from here).
+            - name: RELAY_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secretName }}, key: RELAY_PASSWORD }
+            {{- end }}
           ports:
             - { name: smtp, containerPort: 25 }
             - { name: submissions, containerPort: 465 }

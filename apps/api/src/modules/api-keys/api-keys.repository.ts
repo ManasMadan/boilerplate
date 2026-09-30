@@ -32,7 +32,7 @@ export class ApiKeysRepository {
 
   /** From the primary: a key just created must be found at once. */
   find(orgId: string, id: string) {
-    return this.database.write.apikey.findFirst({
+    return this.database.write.apikey.findFirstOrThrow({
       where: { id, referenceId: orgId },
       select: fields,
     });

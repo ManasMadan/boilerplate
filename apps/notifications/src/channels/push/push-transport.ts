@@ -22,6 +22,8 @@ export type PushResult =
 
 export interface PushTransport {
   send(token: string, message: PushMessage): Promise<PushResult>;
+  /** Closes what it holds open (APNs keeps an HTTP/2 session), at shutdown. */
+  close?(): void | Promise<void>;
 }
 
 export const PUSH_TRANSPORTS = Symbol("PUSH_TRANSPORTS");

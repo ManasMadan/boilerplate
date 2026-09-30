@@ -23,7 +23,7 @@ export class InAppChannel {
         orgId: message.orgId ?? null,
         template: message.type,
         data: message.data,
-        link: message.link ?? null,
+        link: message.link,
       },
       select: { id: true },
     });

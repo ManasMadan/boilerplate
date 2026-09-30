@@ -6,13 +6,10 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone, getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
-import { env } from "@/env";
+import { textDirection } from "@/i18n/request";
 import { PushSync } from "@/modules/notifications";
 import { LiveUpdates, PreferenceSync, SiteHeader } from "@/modules/shell";
 import { Providers } from "./providers";
-
-// Right-to-left languages; extend when adding e.g. Arabic or Hebrew to packages/i18n.
-const RTL = new Set(["ar", "he", "fa", "ur"]);
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("meta");
@@ -41,18 +38,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     // next-themes sets the class attribute before hydration; suppress that expected mismatch.
     <html
       lang={locale}
-      dir={RTL.has(locale) ? "rtl" : "ltr"}
+      dir={textDirection(locale)}
       suppressHydrationWarning
       className={cn(GeistSans.variable, GeistMono.variable)}
     >
       <body className="min-h-dvh font-sans antialiased">
-        <Providers
-          locale={locale}
-          timeZone={timeZone}
-          messages={messages}
-          nonce={nonce}
-          appVersion={env.RELEASE}
-        >
+        <Providers locale={locale} timeZone={timeZone} messages={messages} nonce={nonce}>
           <PreferenceSync timeZone={timeZone} />
           <LiveUpdates />
           <PushSync />

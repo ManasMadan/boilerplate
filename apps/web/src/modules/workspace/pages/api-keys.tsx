@@ -1,11 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  useApiKeysQuery,
-  useCreateApiKeyMutation,
-  useRevokeApiKeyMutation,
-} from "@repo/client/api/api-keys/keys";
+import { useApiErrorMessage } from "@repo/client";
+import { useCreateApiKeyMutation } from "@repo/client/api/api-keys/create";
+import { useApiKeysQuery } from "@repo/client/api/api-keys/list";
+import { useRevokeApiKeyMutation } from "@repo/client/api/api-keys/revoke";
 import {
   API_KEY_EXPIRY_DAYS,
   API_KEY_SCOPES,
@@ -55,7 +54,6 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { TextField } from "@/components/form-fields";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { SecretDialog } from "../components/secret-dialog";
 
 export function WorkspaceApiKeysPage() {
@@ -182,8 +180,6 @@ function KeyRow({ apiKey }: { apiKey: ApiKey }) {
   );
 }
 
-const NEVER = "never";
-
 function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
   const t = useTranslations("workspace.apiKeys");
   const errorMessage = useApiErrorMessage();
@@ -192,13 +188,11 @@ function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
     resolver: zodResolver(createApiKeyInput),
     defaultValues: { name: "", scopes: [], expiresInDays: 90 },
   });
-  const expiryItems = [
-    ...API_KEY_EXPIRY_DAYS.map((days) => ({
-      value: String(days),
-      label: t("expiryDays", { days }),
-    })),
-    { value: NEVER, label: t("never") },
-  ];
+  // Every key expires (a stolen session can't leave one behind for good).
+  const expiryItems = API_KEY_EXPIRY_DAYS.map((days) => ({
+    value: String(days),
+    label: t("expiryDays", { days }),
+  }));
 
   return (
     <Card>
@@ -260,10 +254,8 @@ function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
                 <Field>
                   <FieldLabel htmlFor="api-key-expiry">{t("expiry")}</FieldLabel>
                   <Select
-                    value={field.value === null ? NEVER : String(field.value)}
-                    onValueChange={(value) =>
-                      value && field.onChange(value === NEVER ? null : Number(value))
-                    }
+                    value={String(field.value)}
+                    onValueChange={(value) => value && field.onChange(Number(value))}
                     items={expiryItems}
                   >
                     <SelectTrigger id="api-key-expiry" className="w-full sm:w-48">

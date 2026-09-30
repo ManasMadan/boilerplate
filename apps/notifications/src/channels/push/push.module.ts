@@ -6,48 +6,43 @@ import { PushChannel } from "./push.channel";
 import { PUSH_TRANSPORTS, type PushTransports } from "./push-transport";
 import { WebPushTransport } from "./web-push";
 
+// A platform is on only when all of its variables are set (checked at boot in env.ts).
 function createTransports(): PushTransports {
   const transports: PushTransports = {};
-  if (pushPlatforms.android && env.FCM_PROJECT_ID && env.FCM_CLIENT_EMAIL && env.FCM_PRIVATE_KEY) {
+  if (pushPlatforms.android) {
     transports.android = new FcmTransport({
-      projectId: env.FCM_PROJECT_ID,
-      clientEmail: env.FCM_CLIENT_EMAIL,
+      projectId: env.FCM_PROJECT_ID as string,
+      clientEmail: env.FCM_CLIENT_EMAIL as string,
       // Keys pasted into env files carry literal "\\n"s.
-      privateKey: env.FCM_PRIVATE_KEY.replaceAll("\\n", "\n"),
+      privateKey: (env.FCM_PRIVATE_KEY as string).replaceAll("\\n", "\n"),
       ...(env.FCM_TOKEN_URL && { tokenUrl: env.FCM_TOKEN_URL }),
       ...(env.FCM_API_URL && { apiUrl: env.FCM_API_URL }),
     });
   }
-  if (
-    pushPlatforms.ios &&
-    env.APNS_KEY_ID &&
-    env.APNS_TEAM_ID &&
-    env.APNS_PRIVATE_KEY &&
-    env.APNS_BUNDLE_ID
-  ) {
+  if (pushPlatforms.ios) {
     transports.ios = new ApnsTransport({
-      keyId: env.APNS_KEY_ID,
-      teamId: env.APNS_TEAM_ID,
-      privateKey: env.APNS_PRIVATE_KEY.replaceAll("\\n", "\n"),
-      bundleId: env.APNS_BUNDLE_ID,
+      keyId: env.APNS_KEY_ID as string,
+      teamId: env.APNS_TEAM_ID as string,
+      privateKey: (env.APNS_PRIVATE_KEY as string).replaceAll("\\n", "\n"),
+      bundleId: env.APNS_BUNDLE_ID as string,
       url: env.APNS_URL,
     });
   }
-  if (pushPlatforms.web && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT) {
+  if (pushPlatforms.web) {
     transports.web = new WebPushTransport({
-      publicKey: env.VAPID_PUBLIC_KEY,
-      privateKey: env.VAPID_PRIVATE_KEY,
-      subject: env.VAPID_SUBJECT,
+      publicKey: env.VAPID_PUBLIC_KEY as string,
+      privateKey: env.VAPID_PRIVATE_KEY as string,
+      subject: env.VAPID_SUBJECT as string,
       testOrigin: env.WEB_PUSH_TEST_ORIGIN,
     });
   }
   return transports;
 }
 
-class TransportsLifecycle implements OnApplicationShutdown {
+export class TransportsLifecycle implements OnApplicationShutdown {
   constructor(@Inject(PUSH_TRANSPORTS) private readonly transports: PushTransports) {}
-  onApplicationShutdown() {
-    (this.transports.ios as ApnsTransport | undefined)?.close();
+  async onApplicationShutdown() {
+    await Promise.all(Object.values(this.transports).map((transport) => transport?.close?.()));
   }
 }
 

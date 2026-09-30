@@ -33,6 +33,10 @@ run "hardens_the_zone" {
     error_message = "the zone must use strict TLS and HTTPS only"
   }
   assert {
+    condition     = cloudflare_authenticated_origin_pulls_settings.this.enabled
+    error_message = "Cloudflare must present its client certificate, which the gateway requires"
+  }
+  assert {
     condition     = length(cloudflare_ruleset.managed_waf) == 0
     error_message = "the managed WAF needs a paid plan, so it's opt-in"
   }

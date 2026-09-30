@@ -1,10 +1,8 @@
 "use client";
 
-import {
-  useMarkAllNotificationsReadMutation,
-  useMarkNotificationsReadMutation,
-  useNotificationsInfiniteQuery,
-} from "@repo/client/api/notifications/inbox";
+import { useNotificationsInfiniteQuery } from "@repo/client/api/notifications/list";
+import { useMarkAllNotificationsReadMutation } from "@repo/client/api/notifications/mark-all-read";
+import { useMarkNotificationsReadMutation } from "@repo/client/api/notifications/mark-read";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";

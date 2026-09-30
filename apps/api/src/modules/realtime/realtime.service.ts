@@ -8,7 +8,7 @@
  */
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import { realtimeChannel } from "@repo/contracts/realtime";
-import { AppError, InjectRedis, type Redis } from "@repo/nest-common";
+import { AppError, InjectPinoLogger, InjectRedis, PinoLogger, type Redis } from "@repo/nest-common";
 import { RealtimeHub } from "../../realtime";
 
 const STREAM_LIFETIME_MS = 10 * 60_000;
@@ -19,8 +19,13 @@ export class RealtimeService implements OnApplicationShutdown {
   private readonly hub: InstanceType<typeof RealtimeHub>;
   private readonly open = new Map<string, number>();
 
-  constructor(@InjectRedis() redis: Redis) {
-    this.hub = new RealtimeHub(redis);
+  constructor(
+    @InjectRedis() redis: Redis,
+    @InjectPinoLogger(RealtimeService.name) log: PinoLogger,
+  ) {
+    this.hub = new RealtimeHub(redis, (channel) =>
+      log.warn({ channel }, "dropped a realtime message outside the contract"),
+    );
   }
 
   /**
@@ -28,7 +33,10 @@ export class RealtimeService implements OnApplicationShutdown {
    * errors from the handler, not ones thrown while iterating).
    */
   stream(userId: string, orgId: string, signal: AbortSignal | undefined) {
-    if ((this.open.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) throw new AppError("RATE_LIMITED");
+    if ((this.open.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) {
+      // A slot frees as soon as another tab closes its stream: worth trying again soon.
+      throw new AppError("RATE_LIMITED", { params: { retryAfterSeconds: 5 } });
+    }
     return this.messages(userId, orgId, signal);
   }
 
@@ -39,7 +47,8 @@ export class RealtimeService implements OnApplicationShutdown {
     try {
       yield* this.hub.stream([realtimeChannel.user(userId), realtimeChannel.org(orgId)], done);
     } finally {
-      const remaining = (this.open.get(userId) ?? 1) - 1;
+      // Counted up when this stream started.
+      const remaining = (this.open.get(userId) as number) - 1;
       if (remaining > 0) this.open.set(userId, remaining);
       else this.open.delete(userId);
     }

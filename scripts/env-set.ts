@@ -9,20 +9,33 @@
  */
 import { ENV_PATH, ok, writeEnvValue } from "./lib";
 
-const [arg] = process.argv.slice(2);
-if (!arg) {
-  console.error(
-    "Usage: bun run env:set KEY=value   (or pipe the value on stdin: bun run env:set KEY)",
-  );
-  process.exit(1);
+/** Sets `KEY=value` (or KEY to what `stdin` holds) in the file at `path`; the exit code. */
+export async function envSet(
+  argv = process.argv.slice(2),
+  path = ENV_PATH,
+  stdin: { text(): Promise<string> } = Bun.stdin,
+): Promise<number> {
+  const [arg] = argv;
+  if (!arg) {
+    console.error(
+      "Usage: bun run env:set KEY=value   (or pipe the value on stdin: bun run env:set KEY)",
+    );
+    return 1;
+  }
+  const [key, ...rest] = arg.split("=");
+  if (!key || !/^[A-Z][A-Z0-9_]*$/.test(key)) {
+    console.error(`Invalid variable name "${key}". Use UPPER_SNAKE_CASE.`);
+    return 1;
+  }
+  const value = rest.length > 0 ? rest.join("=") : (await stdin.text()).trim();
+  try {
+    writeEnvValue(path, key, value);
+  } catch (error) {
+    console.error((error as Error).message);
+    return 1;
+  }
+  ok(`${key} updated in .env`);
+  return 0;
 }
 
-const [key, ...rest] = arg.split("=");
-if (!key || !/^[A-Z][A-Z0-9_]*$/.test(key)) {
-  console.error(`Invalid variable name "${key}". Use UPPER_SNAKE_CASE.`);
-  process.exit(1);
-}
-
-const value = rest.length > 0 ? rest.join("=") : (await Bun.stdin.text()).trim();
-writeEnvValue(ENV_PATH, key, value);
-ok(`${key} updated in .env`);
+if (import.meta.main) process.exit(await envSet());

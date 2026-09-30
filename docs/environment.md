@@ -37,12 +37,20 @@ To set one value without opening `.env`:
 ```sh
 bun run env:set STRIPE_SECRET_KEY=sk_test_...
 echo "sk_test_..." | bun run env:set STRIPE_SECRET_KEY   # value from stdin, not argv
+bun run env:unset OLD_VARIABLE
 ```
+
+It quotes the value as needed so the services (Node's `--env-file`) and the AI service's
+dev commands (Bun's) read it the same. A value with `$` is refused: Bun expands it even
+in quotes and Node never does, so no spelling works for both.
 
 `bun run doctor` reports `.env` drift against `.env.example`.
 
-A new variable goes in the service's `src/env.ts`, `.env.example` and this file, in the
-same change.
+A new variable goes in the service's `src/env.ts` (or `apps/ai/app/settings.py`),
+`.env.example` (set, or commented out with its default) and this file, in the same
+change. The unit tests fail otherwise (`scripts/env-docs.test.ts`, and
+`apps/ai/tests/test_settings_documented.py`), and a change to a service's variables runs
+the kind deploy, which fails if the charts don't provide one it requires.
 
 In the tables, "req." means the service won't start without it; a default in the second
 column applies when it's unset.
@@ -57,7 +65,7 @@ Read by api, worker, notifications and webhooks (`coreEnv`).
 | `LOG_LEVEL` | `info` | pino level: `fatal` … `trace`, or `silent`. |
 | `TRUSTED_PROXIES` | `loopback` | Comma-separated CIDRs or `loopback`, `linklocal`, `uniquelocal`: who may set `X-Forwarded-For` and `x-request-id`. The client IP drives rate limits, lockout and audit logs. The stack chart sets `uniquelocal`. |
 | `LOAD_SHEDDING` | `on` | `off` stops answering 503 under pressure. Only for many instances on one machine (the integration tests). |
-| `RELEASE` | `dev` | Build id (image tag), stamped by CI. The web app sends it to the API as `x-app-version`. |
+| `RELEASE` | `dev` | Build id (image tag), stamped by CI. |
 | `PORT` | per service | api 3001, worker 3002, notifications 3003, webhooks 3004. |
 
 The AI service reads `NODE_ENV`, `LOG_LEVEL` (`debug`, `info`, `warning` or `error`
@@ -67,7 +75,7 @@ there) and `RELEASE` too; it listens on 8000 (its package scripts pass `--port 8
 
 | Variable | Default | What it does |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | An OTLP/HTTP collector, e.g. `http://otel-collector:4318`. Set, every service exports traces and metrics there and log lines carry `trace_id`; unset, nothing starts. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | An OTLP/HTTP collector, e.g. `http://otel-collector:4318`, or locally Jaeger at `http://localhost:54318` (in the `full` profile). Set, every service exports traces and metrics there and log lines carry `trace_id`; unset, nothing starts. |
 | `OTEL_SERVICE_NAME` | the service (`api`, `worker`, …, `ai`, `ai-worker`) | Overrides the name traces are reported under. |
 
 The other standard `OTEL_*` variables work as OpenTelemetry documents them (sampling,
@@ -89,7 +97,7 @@ Each service connects as its own Postgres role (see [database.md](database.md)).
 | `NOTIFICATIONS_DATABASE_URL` | notifications (req.) | `postgresql://app_notifications:…/app` | |
 | `WEBHOOKS_DATABASE_URL` | webhooks (req.) | `postgresql://app_webhooks:…/app` | |
 | `AI_DATABASE_URL` | ai (req.) | `postgresql://app_ai:…/app` | |
-| `<SERVICE>_DATABASE_POOL_MAX` | each service | 10 (ai: 5) | Connections per process. The sum over all replicas must fit the server's limit. |
+| `API_DATABASE_POOL_MAX`, `WORKER_DATABASE_POOL_MAX`, `NOTIFICATIONS_DATABASE_POOL_MAX`, `WEBHOOKS_DATABASE_POOL_MAX`, `AI_DATABASE_POOL_MAX` | each service | 10 (ai: 5) | Connections per process. The sum over all replicas must fit the server's limit. |
 
 ## Redis (Valkey)
 
@@ -104,25 +112,28 @@ that uses it.
 
 | Variable | Default | Service |
 |---|---|---|
+| `DOCKER_BIND_ADDRESS` | 127.0.0.1 | The address every local service listens on. `0.0.0.0` opens them to your network (for a phone, with `S3_ENDPOINT` at your LAN address); their passwords are well known, so only on a network you trust. |
 | `POSTGRES_PORT` | 55432 | Postgres (pgvector) |
 | `VALKEY_PORT` | 56379 | Valkey |
 | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT` | 51025, 58025 | Mailpit |
 | `S3_PORT`, `S3_CONSOLE_PORT` | 59000, 59001 | RustFS (`files` profile) |
 | `CLAMAV_PORT` | 53310 | ClamAV (`files` profile) |
 | `STALWART_SMTPS_PORT`, `STALWART_HTTP_PORT` | 51465, 58080 | Stalwart (`mail` profile): submission over implicit TLS, management API |
+| `JAEGER_OTLP_PORT`, `JAEGER_UI_PORT` | 54318, 56686 | Jaeger (`telemetry` profile, and part of `full`): OTLP/HTTP in, traces at http://localhost:56686 |
 
 ## Auth and the API (apps/api)
 
 | Variable | Read by | Default / example | What it does |
 |---|---|---|---|
 | `BETTER_AUTH_SECRET` | api (req.) | generated | At least 32 characters. Signs sessions and encrypts what better-auth stores (OAuth tokens, 2FA secrets and backup codes, JWT signing keys). |
-| `BETTER_AUTH_SECRETS` | api | unset | Rotating the one above: `2:<secret>,1:<secret>`, newest first (each at least 32 characters). The newest signs and encrypts; the rest, and `BETTER_AUTH_SECRET`, still decrypt. Then `bun run secrets:reencrypt`. See the rotate-secrets skill. |
+| `BETTER_AUTH_SECRETS` | api | unset | Rotating the one above: `2:<secret>,1:<secret>`, newest first (each at least 32 characters). The newest signs and encrypts; the rest, and `BETTER_AUTH_SECRET`, still decrypt. Then `bun run secrets:reencrypt`. See the rotate-secrets runbook (`.claude/skills/rotate-secrets/SKILL.md`). |
 | `BETTER_AUTH_URL` | api (req.), ai | `http://localhost:3000` | The site's public origin. The API is served on it (`/rpc`, `/api`), so cookies are first-party; OAuth callbacks, the OAuth issuer and MCP resource URLs are built from it. The AI service needs it (with `API_URL`) for its MCP server. |
 | `WEB_URL` | api (req.), web (req.), notifications | `http://localhost:3000` | The web app's origin: the API's CORS and trusted origin, links in messages, canonical URLs. Notifications: required in production. |
 | `APP_ORIGINS` | api | `http://localhost:3100` | Other origins allowed to sign users in, comma-separated (the mobile app's web build). Native apps need nothing here. |
-| `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | Clients sending an older `x-app-version` get `CLIENT_OUTDATED` (mobile shows its update screen). |
+| `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | major.minor.patch. The mobile app sends its version as `x-app-version`; one below this (a pre-release comes before its release) or one that isn't a version at all gets `CLIENT_OUTDATED`, and the app shows its update screen. The web app sends none. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | api | empty | Both set: "Sign in with Google" (`google` feature). Redirect URI: `${BETTER_AUTH_URL}/api/auth/callback/google`. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | api | empty | Both set: Cloudflare Turnstile on sign-up, emailed codes and password reset (`captcha` feature). The site key reaches browsers through `system.info`. Cloudflare's always-pass test keys are in `.env.example`. |
+| `PASSWORD_BREACH_CHECK` | api | `on` in production, `off` otherwise | `on`: sign-ups and password changes refuse a password found in public breaches (Have I Been Pwned; only the first five characters of its SHA-1 hash are sent). Fails closed: while HIBP is unreachable they fail with a server error rather than let a password through unchecked. |
 | `ENCRYPTION_KEYS` | api (req.), webhooks (req.) | generated | `id:base64key[,id:base64key…]`, 32-byte keys. The first encrypts, any listed key decrypts; prepend a new one to rotate. Encrypts webhook signing secrets at rest. |
 | `UNSUBSCRIBE_SECRET` | api (req.), notifications (req.) | generated | At least 32 characters. Notifications signs one-click unsubscribe links, the API checks them. |
 
@@ -221,7 +232,7 @@ both `AI_URL` and `AI_SERVICE_SECRET` are set.
 |---|---|---|---|
 | `AI_URL` | api, web | `http://localhost:8000` | Where the API calls the AI service. The web app forwards `/ai/mcp` there in local development. |
 | `AI_SERVICE_SECRET` | ai (req.), api | generated | At least 32 characters. The API signs a 60-second token for every call with it; the service verifies it. |
-| `API_URL` | web, ai, `apps/mobile/scripts/serve-web.ts` | `http://localhost:3001` | Web: where `/rpc`, `/api` and `/docs` are forwarded in local development (the gateway does it when deployed). AI: where its MCP server fetches the API's JWKS. |
+| `API_URL` | web, ai, `apps/mobile/scripts/serve-web.ts` | `http://localhost:3001` | Web: where `/rpc`, `/api` and `/docs` are forwarded in local development and e2e (the gateway does it when deployed). Read when the web app is built, not when it starts: the image keeps the default, which clusters never use. AI: where its MCP server fetches the API's JWKS. |
 | `AI_MODEL` | ai | unset (`local:extractive` in `.env.example`) | A Pydantic AI model name (`anthropic:claude-sonnet-5`, `openai:gpt-5`). Unset: the assistant is off. `local:extractive` quotes the best passage with no model (refused in production). |
 | `AI_FALLBACK_MODEL` | ai | unset | Used when the main model fails. |
 | `AI_EMBEDDINGS` | ai | `hashing` | An embedding model name (`openai:text-embedding-3-small`) giving 1536 dimensions, or `hashing` (lexical, refused in production). |

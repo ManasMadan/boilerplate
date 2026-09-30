@@ -123,6 +123,16 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
           {{- end }}
+          {{- else if $svc.livenessCommand }}
+          {{- /* A worker without a port proves it's alive with a command. */}}
+          startupProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 30
+            timeoutSeconds: 10
           {{- end }}
           {{- if $svc.routes }}
           lifecycle:
@@ -143,9 +153,11 @@ spec:
               mountPath: /etc/ssl/extra
               readOnly: true
             {{- end }}
+            {{- include "stack.dbCaMount" (list $ $svc) | nindent 12 }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- include "stack.dbCaVolume" (list $ $svc) | nindent 8 }}
         {{- with $svc.caBundle }}
         - name: ca-bundle
           secret:

@@ -38,7 +38,7 @@ function Checkbox({
         <Icon
           as={Check}
           size={12}
-          strokeWidth={Platform.OS === "web" ? 2.5 : 3.5}
+          strokeWidth={Platform.select({ web: 2.5, default: 3.5 })}
           className={cn("text-primary-foreground", iconClassName)}
         />
       </CheckboxPrimitive.Indicator>

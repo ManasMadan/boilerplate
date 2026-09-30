@@ -159,7 +159,8 @@ spec:
       ports:
         - port: 9000
     {{- else }}
-    # Postgres's instances (the Barman Cloud plugin runs in them) and the bucket Job.
+    # Postgres's instances (the Barman Cloud plugin runs in them), the bucket Job and
+    # the offsite copy (offsite.yaml).
     - from:
         - podSelector:
             matchLabels:
@@ -167,6 +168,10 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: buckets
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: offsite
               app.kubernetes.io/instance: {{ $.Release.Name }}
       ports:
         - port: 9000

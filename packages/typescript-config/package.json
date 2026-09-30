@@ -8,5 +8,8 @@
     "./nextjs.json": "./nextjs.json",
     "./react-library.json": "./react-library.json",
     "./nest.json": "./nest.json"
+  },
+  "devDependencies": {
+    "@total-typescript/ts-reset": "0.6.1"
   }
 }

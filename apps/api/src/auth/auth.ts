@@ -14,6 +14,7 @@
  *
  * After adding or removing a plugin, regenerate the auth tables (db-change skill).
  */
+
 import { randomUUID } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
 import { cimd } from "@better-auth/cimd";
@@ -31,13 +32,16 @@ import {
 import {
   FRESH_SESSION_AGE,
   NAME_MAX_LENGTH,
+  ORGANIZATION_LIMIT,
   OTP_EXPIRES_IN,
   OTP_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PENDING_INVITATION_LIMIT,
   userAdditionalFields,
 } from "@repo/contracts/auth";
 import type { Entitlements } from "@repo/contracts/billing";
+import type { AuthErrorCode } from "@repo/contracts/errors";
 import type { EventName, EventPayload } from "@repo/contracts/events";
 import {
   AI_MCP_PATH,
@@ -49,13 +53,14 @@ import {
   mcpResource,
   ORG_CLAIM,
 } from "@repo/contracts/mcp";
+import { parseOrgRole } from "@repo/contracts/roles";
 import { type Db, transaction } from "@repo/db";
-import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
-import type { JobMeta, Producer } from "@repo/jobs";
-import { currentContext } from "@repo/nest-common";
+import { isLocale, isTimeZone, type Locale, negotiateLocale } from "@repo/i18n";
+import type { Producer } from "@repo/jobs";
+import { currentContext, jobMetaFromContext } from "@repo/nest-common";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
 import { admin } from "better-auth/plugins/admin";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -66,17 +71,60 @@ import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Redis } from "ioredis";
 import type { Env } from "../env";
 import { features } from "../features";
+import { requestNotification } from "../notifications";
 import { type EventOrigin, emitAnyEvent, emitEvent } from "../outbox";
+import { createAccountLimits, createEmailLimits } from "./account-limits";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import type { Memberships } from "./memberships";
 import { orgAccess, orgRoles } from "./org-access";
 import { securityAlertFor } from "./security-alerts";
 
+/** Refuses a client's attempt to mark a workspace as someone's personal one. */
+function refusePersonal(org: { slug?: string; metadata?: Record<string, unknown> }) {
+  if (org.slug?.startsWith("personal-") || (org.metadata && "personal" in org.metadata)) {
+    throw new APIError("BAD_REQUEST", { code: "VALIDATION_FAILED" });
+  }
+}
+
+/** The paths that create an account from a social provider's profile (Google's). */
+const SOCIAL_SIGN_UP = /^\/(callback\/|sign-in\/social$)/;
+
+/**
+ * A new account's row, its client-supplied preferences normalised instead of trusted.
+ * Without an explicit locale, the browser's language decides (so the verification email
+ * sent right after sign-up is already in the right language).
+ */
+export function newUserFields<
+  T extends {
+    name: unknown;
+    image?: string | null | undefined;
+    locale?: unknown;
+    timezone?: unknown;
+  },
+>(user: T, ctx: { path?: string; headers?: Headers | undefined } | null | undefined) {
+  return {
+    ...user,
+    // A picture comes only from a social provider's profile at sign-up; sign-up's body
+    // would take any string, and the avatar flow owns it after that.
+    image: SOCIAL_SIGN_UP.test(ctx?.path ?? "") ? (user.image ?? null) : null,
+    name: String(user.name).trim().slice(0, NAME_MAX_LENGTH),
+    locale: negotiateLocale(
+      typeof user.locale === "string" && user.locale
+        ? user.locale
+        : (ctx?.headers?.get("x-locale") ?? ctx?.headers?.get("accept-language")),
+    ),
+    timezone: isTimeZone(user.timezone) ? user.timezone : "UTC",
+  };
+}
+
+/** Where the mobile sign-in redirect (/expo-authorization-proxy) may send people. */
+const PROVIDER_ORIGINS = new Set(["https://accounts.google.com"]);
+
 export interface AuthDependencies {
   env: Env;
   db: Db;
   redis: Redis;
-  notifications: Producer<"notifications-critical">;
+  notifications: Pick<Producer<"notifications-critical">, "add">;
   memberships: Memberships;
   /** Plan limits and cancelling a deleted organization's subscription (modules/billing). */
   billing: {
@@ -101,14 +149,11 @@ const MOBILE_SCHEME = "boilerplate";
 const DAY = 24 * 60 * MINUTE;
 const INVITATION_DAYS = 7;
 
-/** Request metadata copied onto queued emails so their logs share the request id. */
-function jobMeta(): JobMeta {
-  const context = currentContext();
-  return {
-    ...(context?.requestId && { requestId: context.requestId }),
-    ...(context?.userId && { userId: context.userId }),
-  };
-}
+/** A hook's request body and query: better-auth types them `any`; read them as unknown. */
+const requestOf = (ctx: { body?: unknown; query?: unknown }) => ({
+  body: ctx.body,
+  query: ctx.query,
+});
 
 export function createAuth({
   env,
@@ -120,6 +165,8 @@ export function createAuth({
   database = prismaAdapter(db, { provider: "postgresql" }),
 }: AuthDependencies) {
   const webOrigin = new URL(env.WEB_URL);
+  const accountLimits = createAccountLimits(redis);
+  const emailLimits = createEmailLimits(redis);
 
   /** Records an audit event for auth activity (see auth-events.ts for why it's separate). */
   function record<N extends EventName>(
@@ -132,6 +179,30 @@ export function createAuth({
   }
   /** The signed-in user performing an auth action, when there is one. */
   const actor = (fallback: string) => currentContext()?.userId ?? fallback;
+
+  interface RemovedMember {
+    id: string;
+    userId: string;
+    role: string;
+    organizationId: string;
+  }
+  /**
+   * A membership ended: removed by an admin, left, or gone with the account. The cached
+   * role is forgotten so access ends on the next request, and the event audits it and
+   * resyncs the plan's seats. better-auth runs afterRemoveMember only for removals, so
+   * leaving (the after hook) and account deletion (afterDelete) call this too.
+   */
+  async function memberRemoved(member: RemovedMember, actorId: string) {
+    await memberships.forget(member.organizationId, member.userId);
+    await record(
+      "org.member_removed.v1",
+      member.id,
+      { organizationId: member.organizationId, userId: member.userId, role: member.role },
+      { actorId, orgId: member.organizationId },
+    );
+  }
+  /** Shared workspaces an account being deleted belonged to, from beforeDelete to afterDelete. */
+  const leavingWithAccount = new Map<string, RemovedMember[]>();
 
   /** Language for an email address: the account's saved locale, else the browser's. */
   async function localeFor(email: string, headers: Headers | undefined): Promise<Locale> {
@@ -234,14 +305,21 @@ export function createAuth({
           for (const { organizationId, organization } of owned) {
             const others = organization.members.filter((member) => member.userId !== user.id);
             if (others.length === 0) soleMember.push(organizationId);
-            else if (!others.some((member) => member.role === "owner")) {
+            else if (!others.some((member) => parseOrgRole(member.role) === "owner")) {
               throw new APIError("BAD_REQUEST", {
-                code: "ORGANIZATION_NEEDS_OWNER",
+                code: "ORGANIZATION_NEEDS_OWNER" satisfies AuthErrorCode,
                 message:
                   "Transfer ownership of your shared workspaces before deleting your account.",
               });
             }
           }
+          leavingWithAccount.set(
+            user.id,
+            await db.member.findMany({
+              where: { userId: user.id, organizationId: { notIn: soleMember } },
+              select: { id: true, userId: true, role: true, organizationId: true },
+            }),
+          );
           // Nothing may keep charging for a workspace that's going away.
           for (const organizationId of soleMember) await billing.cancelFor(organizationId);
           await transaction(db, async (tx) => {
@@ -256,6 +334,14 @@ export function createAuth({
               );
             }
           });
+        },
+        // The memberships went with the account (the rows cascade), past the organization
+        // hooks: end them the same way a removal does.
+        afterDelete: async (user) => {
+          // beforeDelete ran first, in the same request.
+          const left = leavingWithAccount.get(user.id) as RemovedMember[];
+          leavingWithAccount.delete(user.id);
+          for (const member of left) await memberRemoved(member, user.id);
         },
       },
       // Email changes go only through the code-based flow in emailOTP below; the
@@ -280,61 +366,94 @@ export function createAuth({
     // takeover (or a mistake) never goes unnoticed. Runs after the endpoint, only when
     // it succeeded, and never fails the request: the email is queued with retries.
     hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        // The mobile app's sign-in goes through this redirect; left alone it sends anyone
+        // anywhere over https from our own domain (phishing, planted OAuth state).
+        if (ctx.path === "/expo-authorization-proxy") {
+          const { query } = requestOf(ctx);
+          const target = String(
+            (query as { authorizationURL?: unknown } | undefined)?.authorizationURL ?? "",
+          );
+          if (!URL.canParse(target) || !PROVIDER_ORIGINS.has(new URL(target).origin)) {
+            throw new APIError("BAD_REQUEST", {
+              message: "Not a sign-in provider's address.",
+              code: "INVALID_REDIRECT",
+            });
+          }
+        }
+        // Invitation emails go out in the background, too late to refuse; so the limit is
+        // taken here, for new invitations and resends alike.
+        if (ctx.path === "/organization/invite-member") {
+          const session = await getSessionFromCtx(ctx);
+          const email = (requestOf(ctx).body as { email?: unknown } | undefined)?.email;
+          if (session && typeof email === "string")
+            await emailLimits.invitation(session.user.id, email);
+        }
+        // Per account, on top of the per-address limits above (account-limits.ts).
+        await accountLimits({
+          path: ctx.path,
+          body: requestOf(ctx).body,
+          secondFactor: ctx.getCookie(ctx.context.createAuthCookie("two_factor").name) ?? undefined,
+        });
+      }),
       after: createAuthMiddleware(async (ctx) => {
         if (isAPIError(ctx.context.returned)) return;
+        // Hooks get no session; the member who left is the one returned.
+        if (ctx.path === "/organization/leave") {
+          const member = ctx.context.returned as RemovedMember;
+          await memberRemoved(member, member.userId);
+          return;
+        }
         const alert = securityAlertFor(ctx);
         if (!alert) return;
-        const account = await db.user.findUnique({
-          where: ctx.context.session ? { id: ctx.context.session.user.id } : { email: alert.email },
-          select: { id: true, phoneNumber: true },
-        });
-        const userId = account?.id;
-        if (userId) {
-          await transaction(db, (tx) =>
-            emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
+        // better-auth has committed the change by now: whatever fails here is logged, and
+        // never turns a change that happened into an error for the user.
+        try {
+          // The change succeeded, so its account exists.
+          const account = await db.user.findUniqueOrThrow({
+            where: ctx.context.session
+              ? { id: ctx.context.session.user.id }
+              : { email: alert.email },
+            select: { id: true, phoneNumber: true },
+          });
+          const userId = account.id;
+          const locale = await localeFor(alert.email, ctx.headers);
+          // The audit entry and the alert in one transaction: both or neither, and the
+          // alert leaves through the outbox, so Redis being down delays it, never loses it.
+          await transaction(db, async (tx) => {
+            await emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
               actorId: userId,
               orgId: null,
-            }),
-          );
+            });
+            await requestNotification(
+              tx,
+              userId,
+              {
+                template: "auth.security-alert",
+                to: {
+                  email: alert.email,
+                  locale,
+                  ...(account.phoneNumber && { phone: account.phoneNumber }),
+                },
+                data: {
+                  event: alert.event,
+                  ...("newEmail" in alert && alert.newEmail && { newEmail: alert.newEmail }),
+                  securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
+                },
+              },
+              { actorId: userId, orgId: null },
+            );
+          });
+        } catch (error) {
+          ctx.context.logger.error("security alert not recorded", error);
         }
-        await notifications.add(
-          "send",
-          {
-            template: "auth.security-alert",
-            to: {
-              email: alert.email,
-              locale: await localeFor(alert.email, ctx.headers),
-              ...(account?.phoneNumber && { phone: account.phoneNumber }),
-            },
-            data: {
-              event: alert.event,
-              ...("newEmail" in alert && alert.newEmail && { newEmail: alert.newEmail }),
-              securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
-            },
-          },
-          { jobId: randomUUID(), meta: jobMeta() },
-        );
       }),
     },
 
     databaseHooks: {
       user: {
         create: {
-          // Normalise client-supplied preferences instead of trusting them. Without an
-          // explicit locale, the browser's language decides (so the verification email
-          // sent right after sign-up is already in the right language).
-          before: async (user, ctx) => ({
-            data: {
-              ...user,
-              name: String(user.name).trim().slice(0, NAME_MAX_LENGTH),
-              locale: negotiateLocale(
-                typeof user.locale === "string" && user.locale
-                  ? user.locale
-                  : (ctx?.headers?.get("x-locale") ?? ctx?.headers?.get("accept-language")),
-              ),
-              timezone: isTimeZone(user.timezone) ? user.timezone : "UTC",
-            },
-          }),
+          before: async (user, ctx) => ({ data: newUserFields(user, ctx) }),
           // Every user gets a personal workspace, so tenant-scoped features work from
           // the first sign-in, for solo users and teams alike.
           after: async (user) => {
@@ -451,6 +570,10 @@ export function createAuth({
         // address, so a hijacked session alone can't move the account elsewhere.
         changeEmail: { enabled: true, verifyCurrentEmail: true },
         sendVerificationOTP: async ({ email, otp, type }, ctx) => {
+          // better-auth sends codes in the background and answers the same either way (so
+          // nobody learns which addresses have accounts): past the limit the code is
+          // dropped, and better-auth logs why.
+          await emailLimits.code(email);
           await notifications.add(
             "send",
             {
@@ -458,7 +581,7 @@ export function createAuth({
               to: { email, locale: await localeFor(email, ctx?.headers) },
               data: { otp, purpose: type, expiresInMinutes: Math.round(OTP_EXPIRES_IN / MINUTE) },
             },
-            { jobId: randomUUID(), meta: jobMeta() },
+            { jobId: randomUUID(), meta: jobMetaFromContext() },
           );
         },
       }),
@@ -470,18 +593,25 @@ export function createAuth({
       }),
       passkey({ rpID: webOrigin.hostname, rpName: "Boilerplate", origin: env.WEB_URL }),
       // Rejects passwords found in public breaches (k-anonymity: only a hash prefix is sent).
-      haveIBeenPwned(),
+      haveIBeenPwned({ enabled: env.PASSWORD_BREACH_CHECK === "on" }),
       organization({
         creatorRole: "owner",
         ac: orgAccess,
         roles: orgRoles,
         invitationExpiresIn: INVITATION_DAYS * DAY,
+        organizationLimit: ORGANIZATION_LIMIT,
+        invitationLimit: PENDING_INVITATION_LIMIT,
         // The plan's member limit (packages/contracts billing); null means none.
         membershipLimit: async (_user, org) =>
           (await billing.entitlements(org.id)).members ?? Number.MAX_SAFE_INTEGER,
         // Every membership change is audited (in the organization's own log, so its
         // admins see it) and forgets the cached role, so access follows immediately.
         organizationHooks: {
+          // Only the sign-up hook makes the personal workspace (slug personal-<user id>,
+          // metadata.personal); a client claiming either could pass any workspace off as
+          // someone's own, on the consent page too.
+          beforeCreateOrganization: async ({ organization: org }) => refusePersonal(org),
+          beforeUpdateOrganization: async ({ organization: org }) => refusePersonal(org),
           afterCreateOrganization: async ({ organization: org, user }) => {
             await memberships.forget(org.id, user.id);
             await record(
@@ -537,13 +667,7 @@ export function createAuth({
             );
           },
           afterRemoveMember: async ({ member, organization: org }) => {
-            await memberships.forget(org.id, member.userId);
-            await record(
-              "org.member_removed.v1",
-              member.id,
-              { organizationId: org.id, userId: member.userId, role: member.role },
-              { actorId: actor(member.userId), orgId: org.id },
-            );
+            await memberRemoved({ ...member, organizationId: org.id }, actor(member.userId));
           },
           afterUpdateMemberRole: async ({ member, previousRole, organization: org }) => {
             await memberships.forget(org.id, member.userId);
@@ -581,7 +705,7 @@ export function createAuth({
                 expiresInDays: INVITATION_DAYS,
               },
             },
-            { jobId: randomUUID(), meta: jobMeta() },
+            { jobId: randomUUID(), meta: jobMetaFromContext() },
           );
         },
       }),
@@ -686,13 +810,3 @@ export function createAuth({
 }
 
 export type Auth = ReturnType<typeof createAuth>;
-
-function isTimeZone(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}

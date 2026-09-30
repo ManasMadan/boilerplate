@@ -1,3 +1,4 @@
+import { UnrecoverableError } from "bullmq";
 import { describe, expect, it } from "vitest";
 import { createProducer, parseJob } from "./producer";
 import { queues, WEBHOOK_RETRY_DELAYS_MS } from "./queues";
@@ -18,14 +19,21 @@ describe("parseJob", () => {
     expect(parsed.template).toBe("auth.otp");
   });
 
+  it("refuses a job its queue doesn't have", () => {
+    expect(() =>
+      parseJob("notifications-critical", "nope" as never, { meta: {}, payload }),
+    ).toThrow('Unknown job "nope" on queue "notifications-critical"');
+  });
+
   it("rejects payloads that break the contract, and data without the envelope", () => {
     expect(() =>
       parseJob("notifications-critical", "send", {
         meta: {},
         payload: { ...payload, to: { email: "nope", locale: "en" } },
       }),
-    ).toThrow();
-    expect(() => parseJob("notifications-critical", "send", payload)).toThrow();
+    ).toThrow(UnrecoverableError);
+    // Retrying can't fix it, so the job fails at once rather than with full backoff.
+    expect(() => parseJob("notifications-critical", "send", payload)).toThrow(UnrecoverableError);
   });
 });
 

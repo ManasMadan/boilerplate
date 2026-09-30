@@ -37,6 +37,16 @@ describe("factories", () => {
     expect(visible).toEqual([{ title: "Ours" }]);
   });
 
+  it("make a shared workspace and a todo with defaults when nothing is overridden", async () => {
+    const make = factories(db);
+    const owner = await make.user();
+    const org = await make.organization(owner.id);
+    expect(org).toMatchObject({ name: expect.stringMatching(/^Org /), metadata: null });
+    expect(org.slug).toMatch(/^org-/);
+    const todo = await make.todo(org.id, owner.id);
+    expect(todo).toMatchObject({ title: expect.stringMatching(/^Todo /), completed: false });
+  });
+
   it("never collide between calls", async () => {
     const make = factories(db);
     const [a, b] = await Promise.all([make.user(), make.user()]);

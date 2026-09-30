@@ -1,6 +1,7 @@
 "use client";
 
-import { useUnsubscribeMutation } from "@repo/client/api/notifications/preferences";
+import { useApiErrorMessage } from "@repo/client";
+import { useUnsubscribeMutation } from "@repo/client/api/notifications/unsubscribe";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import {
   Card,
@@ -12,7 +13,6 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /** Where an email's "Unsubscribe" link lands. Works signed out; the token says who. */
 export function UnsubscribePage() {

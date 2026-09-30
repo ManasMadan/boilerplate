@@ -46,3 +46,10 @@ rollout and after a rollback. Every migration must work with both:
 4. Drop the old column in a later release, once nothing running uses it.
 
 Never edit a migration that is on `master`; write a new one.
+
+## Finish
+
+1. The verify skill (it runs `db:lint`, the drift check and the integration tests for a
+   migration).
+2. The `migration-reviewer` agent on the migration, and fix what it reports. Then the
+   `reviewer` agent on the code that uses the new shape.

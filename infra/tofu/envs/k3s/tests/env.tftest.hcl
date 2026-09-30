@@ -36,6 +36,7 @@ variables {
   previews              = true
   install_over_ssh      = false
   sops_age_key          = "AGE-SECRET-KEY-1QQQQ"
+  sops_preview_age_key  = "AGE-SECRET-KEY-1PPPP"
   state_passphrase      = "correct horse battery staple"
   nodes = {
     staging-1 = { address = "203.0.113.10" }
@@ -54,8 +55,8 @@ run "one_node_staging" {
     error_message = "staging hosts previews, without the observability add-ons"
   }
   assert {
-    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "false" && module.bootstrap.cluster_annotations["boilerplate.dev/domain"] == "example.com" && module.bootstrap.cluster_annotations["boilerplate.dev/dns01"] == "cloudflare"
-    error_message = "staging admits unsigned images; the platform config gets the domain and DNS-01 provider"
+    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "false" && module.bootstrap.cluster_annotations["boilerplate.dev/domain"] == "example.com"
+    error_message = "staging admits unsigned images; the platform config gets the domain"
   }
   assert {
     condition     = !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-host") && !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-domain")
@@ -77,6 +78,7 @@ run "one_node_staging" {
 run "production_with_ha_and_mail" {
   command = apply
   variables {
+    alert_email   = "ops@example.com"
     environment   = "production"
     site_host     = "app.example.com"
     previews      = false
@@ -101,6 +103,10 @@ run "production_with_ha_and_mail" {
   assert {
     condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "true" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-host"] == "mail.example.com" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-domain"] == "example.com"
     error_message = "production only runs signed images; the mail server learns its host name and email domain"
+  }
+  assert {
+    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/alert-email"] == "ops@example.com"
+    error_message = "the alerts add-on emails the address OpenTofu is given"
   }
   assert {
     condition     = length([for record in output.dns_records : record if record.name == "app.example.com" && record.proxied]) == 4
@@ -147,4 +153,25 @@ run "mail_needs_one_of_the_nodes" {
     }
   }
   expect_failures = [var.mail]
+}
+
+# What a pull request's plan gets (infra.yml): no SSH key and no age keys, which only an
+# apply needs.
+run "plans_without_the_apply_only_keys" {
+  command = plan
+  variables {
+    install_over_ssh     = true
+    ssh_private_key      = null
+    sops_age_key         = null
+    sops_preview_age_key = null
+  }
+}
+
+run "production_needs_somewhere_to_send_alerts" {
+  command = plan
+  variables {
+    environment = "production"
+    previews    = false
+  }
+  expect_failures = [var.alert_email]
 }

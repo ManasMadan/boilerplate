@@ -1,6 +1,7 @@
 ---
 name: swap-sms-provider
-description: Add or switch the SMS provider (Vonage, MessageBird, AWS SNS, …). Use when the user wants texts sent through a different service or in another region.
+description: Add or switch the SMS provider (Vonage, MessageBird, AWS SNS, …). Use when the user wants texts sent through a different service or in another region. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the SMS provider
@@ -33,3 +34,11 @@ the provider, including its error cases. Write one for the new provider and cove
 success, opt-out and invalid numbers in
 `apps/notifications/test/notifications.integration.test.ts`.
 `apps/notifications/src/channels/sms/email-sink.test.ts` covers the local sink.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

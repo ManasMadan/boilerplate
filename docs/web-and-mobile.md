@@ -50,9 +50,12 @@ Every call goes through `packages/client`:
   contract in `packages/contracts` and its TanStack Query utilities, sending
   `x-app-version` and `x-locale` with every request.
 - Hooks live one per procedure and are imported by exact path:
-  `import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list"`.
-- `@repo/client/auth` is the better-auth client (with its plugins), `@repo/client/auth/forms`
-  the shared form schemas, `useLiveUpdates` the realtime stream that invalidates queries,
+  `import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list"`. Each file
+  exports one hook, which `lint:boundaries` checks.
+- `@repo/client/auth` is the better-auth client (with its plugins), and
+  `@repo/client/auth/<thing>` the queries on it (workspaces, the active workspace,
+  invitations, sessions, passkeys), which take the app's auth client and build their keys
+  with `authKeys`. `@repo/client/auth/forms` holds the shared form schemas, `useLiveUpdates` the realtime stream that invalidates queries,
   and `errorMessageKey`/`fieldErrors` turn API error codes into translated messages.
 
 A new procedure gets its hook in `packages/client/src/api/<feature>/`; apps never call
@@ -71,8 +74,12 @@ code to `locales` and `catalogs` in `packages/i18n/src/index.ts`.
 
 `bun run --cwd apps/web budget` (after `next build`) fails when a route's first-load
 JavaScript, gzipped, passes its budget, or the part every route shares grows past its
-own (`scripts/bundle-budget.ts`). CI runs it after the end-to-end suite. Raise a budget
-only on purpose, in the change that needs it.
+own (`scripts/bundle-budget.ts`). CI runs it after the end-to-end suite. Raise a
+budget only on purpose, in the change that needs it.
+
+Pages with forms are the heaviest: they validate with the contract's schemas, and zod's
+classic API (`import * as z from "zod"`) doesn't tree-shake, so each of them ships most of
+zod. Writing the contract with `zod/mini` is what would shrink them.
 
 ## packages/ui
 
@@ -106,6 +113,8 @@ screenshots are identical on every machine and in CI.
 - **i18n**: use-intl with the same catalogs.
 - **Push**: `expo-notifications` gets the native FCM or APNs token and registers the device
   with the API (`src/lib/push.ts`).
+- **Not there yet**: passkeys (web only for now), and https links that open the app (see
+  "Universal links and App Links" below; today only `boilerplate://` links do).
 - Native projects (`ios/`, `android/`) come from `expo prebuild` and aren't committed.
 
 | Command (`bun run --cwd apps/mobile …`) | What it does |
@@ -130,11 +139,11 @@ bundle id, so all three install side by side:
 
 `.github/workflows/mobile.yml` moves the app like the other services:
 
-- a push to `master` touching the app or the packages it uses publishes an over-the-air
-  update to the `preview` channel;
-- a release tag (`v1.4.0`, docs/deploy.md) builds both platforms with the `production`
-  profile and submits them to the App Store and Google Play; the release check makes sure
-  `version` in `app.config.ts` is that version;
+- once CI has passed on a merge to `master` that touched the app or the packages it uses,
+  an over-the-air update goes to the `preview` channel;
+- once a release tag (`v1.4.0`, docs/deploy.md) has passed its check, both platforms build
+  with the `production` profile and are submitted to the App Store and Google Play; the
+  check makes sure `version` in `app.config.ts` is that version;
 - a manual run publishes an update to `preview` or `production` (a hotfix).
 
 Updates reach only builds of the same app version (`runtimeVersion: appVersion`), so
@@ -142,6 +151,52 @@ native changes always ship through a store release. The workflow is skipped unti
 `EAS_PROJECT_ID` repository variable is set; it also needs the `EXPO_TOKEN` secret,
 `EXPO_PUBLIC_API_URL` per EAS environment and store credentials in EAS (`bunx eas-cli
 credentials`). See [repository-settings.md](repository-settings.md).
+
+### Universal links and App Links
+
+Today the app opens only for `boilerplate://` links (the `scheme` in `app.config.ts`):
+sign-in callbacks and invitations. A custom scheme isn't verified, so any other app can
+register the same one, and a link sent by email opens the browser rather than the app.
+Verified https links fix both; each platform checks a file on the site's own host.
+Opening an invitation link only shows the invitation, whoever opened it: joining takes a
+tap on Accept.
+
+One case they don't cover: after social sign-in, better-auth's Expo plugin hands the
+session to the app in the `boilerplate://` redirect (`?cookie=`), and it only does so
+for a custom scheme, never an https link. On iOS the sign-in sheet
+(`ASWebAuthenticationSession`) returns that URL to the app that opened it; on Android
+the redirect goes through the OS, so another app claiming the scheme could catch it.
+Closing that needs the redirect to carry a one-time code the app exchanges with a
+verifier it kept, instead of the cookie; until then, prefer email codes and passkeys
+on Android.
+
+
+| Platform | File | What goes in it |
+|---|---|---|
+| iOS | `apps/web/public/.well-known/apple-app-site-association` (no extension) | your Apple Developer team id in place of `APPLE_TEAM_ID`, before each bundle id (`com.boilerplate.app` and its `.preview` and `.development` variants) |
+| Android | `apps/web/public/.well-known/assetlinks.json` | the package name, and the SHA-256 fingerprints of the Play app signing key (Play Console, Test and release, App integrity) and of the EAS upload key (`bunx eas-cli credentials`, Android, Keystore). Add a statement per variant you install (`com.boilerplate.app.preview`, ...), with that build's key |
+
+The web app serves both as static files (render-only still holds: nothing runs), and the
+proxy and the gateway leave `/.well-known/` paths other than the OAuth ones to it. To
+turn them on:
+
+1. Fill in the placeholders (the files are JSON, so there is no comment in them: the
+   placeholder names say what goes there). Use the bundle ids and package names your
+   rename gave the app.
+2. Apple requires `Content-Type: application/json` for the extensionless file, and Next
+   serves unknown extensions as `application/octet-stream`, so `apps/web/next.config.ts`
+   sets that header for `/.well-known/apple-app-site-association`.
+3. In `apps/mobile/app.config.ts`: `ios.associatedDomains` with `applinks:<site host>`
+   (and `webcredentials:<site host>` for passkeys), and `android.intentFilters` with
+   `autoVerify: true`, scheme `https`, your host and the paths the app handles
+   (`/invitations`). Then a new store build: associated domains are native settings.
+4. Check them: `curl -i https://<site host>/.well-known/apple-app-site-association`
+   (200, `application/json`, no redirect), Google's
+   [Statement List tester](https://developers.google.com/digital-asset-links/tools/generator)
+   for `assetlinks.json`, and on a device, a link to `/invitations/<id>` opening the app.
+
+The sign-in callback still uses the scheme (better-auth's Expo plugin builds it), so
+moving it to a verified link is a code change in `src/lib/auth-client.ts` as well.
 
 ### Native flows (Maestro)
 

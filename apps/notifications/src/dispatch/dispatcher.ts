@@ -109,29 +109,44 @@ export class Dispatcher implements OnApplicationShutdown {
     const failures: unknown[] = [];
 
     for (const channel of channels) {
+      // From here on, the template renders to the channel and the recipient is on it.
       if (!renders(template, channel) || !reaches(recipient, channel)) continue;
       const key = `${idempotencyKey}:${channel}:${recipient.userId ?? recipient.email ?? recipient.phone}`;
-      if (channel === "push" && recipient.userId && template.push) {
-        failures.push(
-          ...(await this.deliverPush(recipient, name, template, context, policy, key, false)),
-        );
+      if (channel === "push") {
+        // Caught like every other channel: a push that throws must not skip the rest.
+        try {
+          failures.push(
+            ...(await this.deliverPush(
+              // reaches() has checked it: push goes only to a recipient with an account.
+              recipient.userId as string,
+              recipient,
+              name,
+              template,
+              context,
+              policy,
+              key,
+              false,
+            )),
+          );
+        } catch (error) {
+          failures.push(error);
+        }
         continue;
       }
       if (!(await this.log.claim(key, channel, name, recipient.userId))) continue;
       try {
         await this.send(channel, key, recipient, template, context, policy);
       } catch (error) {
-        await this.log.finish(key, "failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
+        await this.log.finish(key, "failed", { error: (error as Error).message });
         failures.push(error);
       }
     }
     return failures;
   }
 
+  /** One channel other than push; `renders` and `reaches` have checked it applies. */
   private async send(
-    channel: NotificationChannel,
+    channel: Exclude<NotificationChannel, "push">,
     key: string,
     recipient: Recipient,
     template: BoundTemplate,
@@ -143,41 +158,47 @@ export class Dispatcher implements OnApplicationShutdown {
       return;
     }
     const { userId } = recipient;
-    if (channel === "in_app" && template.inApp && userId) {
-      const id = await this.inApp.send(userId, template.inApp(context));
-      await this.log.finish(key, "sent", { providerMessageId: id });
-      return;
-    }
-    if (channel === "sms" && template.sms && recipient.phone) {
-      await this.sendSms(key, recipient.phone, template.sms(context));
-      return;
-    }
-    if (channel === "email" && template.email && recipient.email) {
-      if (await this.policy.isSuppressed("email", recipient.email)) {
-        await this.log.finish(key, "suppressed");
+    switch (channel) {
+      case "in_app": {
+        const inApp = template.inApp as NonNullable<BoundTemplate["inApp"]>;
+        const id = await this.inApp.send(userId as string, inApp(context));
+        await this.log.finish(key, "sent", { providerMessageId: id });
         return;
       }
-      // Daily-digest users get opt-out-able email in their next digest instead.
-      if (policy?.dailyDigest && context.unsubscribeUrl && template.inApp && userId) {
-        const message = template.inApp(context);
-        await withUser(this.database.write, userId).notificationDigestItem.create({
-          data: { userId, template: message.type, data: message.data },
-        });
-        await this.log.finish(key, "skipped", { error: "queued for the daily digest" });
+      case "sms": {
+        const sms = template.sms as NonNullable<BoundTemplate["sms"]>;
+        await this.sendSms(key, recipient.phone as string, sms(context));
         return;
       }
-      const providerMessageId = await this.email.send(
-        recipient.email,
-        await template.email(context),
-        key,
-        context.unsubscribeUrl && userId
-          ? this.listUnsubscribeHeaders(userId, template.category)
-          : undefined,
-      );
-      await this.log.finish(key, "sent", { providerMessageId });
-      return;
+      case "email": {
+        const email = recipient.email as string;
+        const render = template.email as NonNullable<BoundTemplate["email"]>;
+        if (await this.policy.isSuppressed("email", email)) {
+          await this.log.finish(key, "suppressed");
+          return;
+        }
+        // Daily-digest users get opt-out-able email in their next digest instead. An
+        // unsubscribe link means a known user (see deliverTo).
+        if (policy?.dailyDigest && context.unsubscribeUrl && template.inApp) {
+          const message = template.inApp(context);
+          await withUser(this.database.write, userId as string).notificationDigestItem.create({
+            data: { userId: userId as string, template: message.type, data: message.data },
+          });
+          await this.log.finish(key, "skipped", { error: "queued for the daily digest" });
+          return;
+        }
+        const providerMessageId = await this.email.send(
+          email,
+          await render(context),
+          key,
+          context.unsubscribeUrl
+            ? this.listUnsubscribeHeaders(userId as string, template.category)
+            : undefined,
+        );
+        await this.log.finish(key, "sent", { providerMessageId });
+        return;
+      }
     }
-    await this.log.finish(key, "skipped", { error: `no ${channel} channel configured` });
   }
 
   /** A transient failure throws (the job retries it); a permanent one is recorded. */
@@ -209,6 +230,7 @@ export class Dispatcher implements OnApplicationShutdown {
    * runs this again when they end.
    */
   private async deliverPush(
+    userId: string,
     recipient: Recipient,
     name: string,
     template: BoundTemplate,
@@ -217,22 +239,31 @@ export class Dispatcher implements OnApplicationShutdown {
     key: string,
     deferred: boolean,
   ) {
-    const userId = recipient.userId as string;
     if (policy && !policy.allows(template.category, "push")) return [];
     const devices = await this.push.devices(userId);
-    if (devices.length === 0 || !template.push) return [];
+    if (devices.length === 0) return [];
 
     const delay = deferred ? 0 : quietDelayMs(policy?.quietHours ?? null, recipient.timeZone);
     if (delay > 0) {
       await this.defer(context.payload, "push", userId, key, delay);
       return [];
     }
-    const message = { ...template.push(context), collapseKey: name };
+    // Only templates that push get here (renders(), or a deferred push).
+    const push = template.push as NonNullable<BoundTemplate["push"]>;
+    const message = { ...push(context), collapseKey: name };
     const failures: unknown[] = [];
     for (const device of devices) {
       const deviceKey = `${key}:${device.id}`;
       if (!(await this.log.claim(deviceKey, "push", name, userId))) continue;
-      const result = await this.push.send(userId, device, message);
+      let result: Awaited<ReturnType<typeof this.push.send>>;
+      try {
+        result = await this.push.send(userId, device, message);
+      } catch (error) {
+        // A provider that throws (network) fails this device only; the others still go.
+        await this.log.finish(deviceKey, "failed", { error: (error as Error).message });
+        failures.push(error);
+        continue;
+      }
       if (result.ok) {
         await this.log.finish(
           deviceKey,
@@ -272,7 +303,8 @@ export class Dispatcher implements OnApplicationShutdown {
   /** Runs a deferred channel delivery (quiet hours are over). */
   async deliverDeferred(
     payload: NotificationPayload,
-    channel: "push",
+    // Push is the only channel that waits (for quiet hours) today.
+    _channel: "push",
     userId: string,
     key: string,
   ) {
@@ -282,10 +314,16 @@ export class Dispatcher implements OnApplicationShutdown {
     const policy = await this.policy.forUser(userId);
     const t = await this.i18n.getTranslator(recipient.locale, recipient.timeZone);
     const context: RenderContext = { recipient, t, payload };
-    const failures =
-      channel === "push"
-        ? await this.deliverPush(recipient, payload.template, template, context, policy, key, true)
-        : [];
+    const failures = await this.deliverPush(
+      userId,
+      recipient,
+      payload.template,
+      template,
+      context,
+      policy,
+      key,
+      true,
+    );
     if (failures.length > 0)
       throw new AggregateError(failures, "deferred delivery failed; retrying");
   }

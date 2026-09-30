@@ -138,7 +138,43 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "namespace": { "type": "string" },
-        "quota": { "type": "object", "additionalProperties": { "type": "string" } }
+        "quota": { "type": "object", "additionalProperties": { "type": "string" } },
+        "mailpit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "image", "tlsSecret"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "image": { "type": "string", "minLength": 1 },
+            "tlsSecret": { "type": "string", "minLength": 1 },
+            "resources": { "$ref": "#/$defs/resources" }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operatorNamespace", "metricsNamespace"],
+      "properties": {
+        "operatorNamespace": { "type": "string", "minLength": 1 },
+        "metricsNamespace": { "type": "string", "minLength": 1 }
+      }
+    },
+    "offsite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "schedule", "secretName"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "endpoint": { "type": "string", "pattern": "^(https?://.+)?$" },
+        "region": { "type": "string" },
+        "bucket": { "anyOf": [{ "const": "" }, { "$ref": "#/$defs/bucket" }] },
+        "prefix": { "type": "string", "pattern": "^([a-z0-9][a-z0-9._-]*)?$" },
+        "secretName": { "type": "string", "minLength": 1 },
+        "schedule": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "resources": { "$ref": "#/$defs/resources" }
       }
     }
   },

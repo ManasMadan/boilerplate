@@ -36,6 +36,7 @@ passwords equal the role names.
 |---|---|---|
 | `migrator` | `prisma migrate`, test setup | Owns every schema and table. `NOBYPASSRLS`. |
 | `app_api`, `app_worker`, `app_notifications`, `app_webhooks`, `app_ai` | one service each | `NOBYPASSRLS NOINHERIT`, only the grants in migrations. |
+| `app_readonly` | Claude Code's Postgres MCP server, **local database only** (`02-readonly-role.sql`, reapplied by `bun run db:up`) | `BYPASSRLS`, read-only transactions, `SELECT` on everything the migrator owns. Never in CI or a cluster. |
 
 Extensions need a superuser, so the bootstrap script creates them, not migrations.
 Because the services run with production's privileges locally and in tests, a missing
@@ -44,7 +45,17 @@ grant fails there first.
 When a service needs something outside its grants (creating audit partitions, purging
 another schema's history, registering a device), a migration adds a narrow
 `SECURITY DEFINER` function and grants `EXECUTE` on it (see the
-`audit_log_and_retention` and `push_devices` migrations).
+`audit_log_and_retention` and `push_devices` migrations). Forced row-level security
+applies to the function's owner too, so every table it reads or writes under FORCE needs
+an `owner_functions` policy for `migrator`, or it silently sees no rows; the database's
+security tests fail on any that lacks one.
+
+Prisma's errors that mean something to a client become catalog errors wherever they
+surface (`fromPrismaError` in `packages/nest-common`, applied to procedures and to the
+HTTP error filter): a unique constraint lost to a concurrent write or a write conflict is
+`CONFLICT`, a row gone between reading and writing is `NOT_FOUND`, and a pool or
+transaction timeout is `SERVICE_UNAVAILABLE`. Anything else stays `INTERNAL`. A call that
+means something more specific (`PHONE_NUMBER_TAKEN`) still catches its own.
 
 ## Row-level security
 
@@ -168,8 +179,10 @@ Running it again changes nothing; it refuses to run in production.
 
 ## Restore drill
 
-`bun run db:restore-drill` (`scripts/restore-drill.ts`) proves a backup restores: it
-dumps the database with `pg_dump` (custom format), restores it into a scratch database
+`bun run db:restore-drill` (`scripts/restore-drill.ts`) proves a logical backup restores
+(the clusters' own backups are Barman base backups and WAL: deploy/README.md, "Backups
+and restore", says how to try those in staging): it dumps the database with `pg_dump`
+(custom format), restores it into a scratch database
 and requires an identical fingerprint: each table's row count and content hash,
 row-level security flags and policies, grants, default privileges, functions, triggers,
 extensions and sequence positions. The scratch database and dump are removed either

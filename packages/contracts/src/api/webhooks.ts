@@ -5,7 +5,19 @@
 import * as z from "zod";
 import { webhookEvents } from "../events";
 import { page, pageInput } from "../pagination";
-import { base } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  ...WORKSPACE_ERRORS,
+  "FRESH_SESSION_REQUIRED",
+  "ENTITLEMENT_REQUIRED",
+  "UPSTREAM_UNAVAILABLE",
+  "WEBHOOK_ENDPOINT_NOT_FOUND",
+  "WEBHOOK_DELIVERY_NOT_FOUND",
+  "WEBHOOK_ENDPOINT_LIMIT",
+  "WEBHOOK_URL_NOT_ALLOWED",
+);
 
 export const WEBHOOK_ENDPOINT_LIMIT = 20;
 /**
@@ -27,13 +39,26 @@ export const webhookEndpointSchema = z.object({
 });
 export type WebhookEndpoint = z.infer<typeof webhookEndpointSchema>;
 
+/**
+ * Why an attempt failed without an HTTP status, as a code (the apps translate it), never
+ * our own error message. A response with a status records the status instead.
+ */
+export const WEBHOOK_DELIVERY_ERRORS = [
+  "timeout",
+  "connection_failed",
+  "destination_not_allowed",
+  "response_too_large",
+  "endpoint_disabled",
+] as const;
+export type WebhookDeliveryError = (typeof WEBHOOK_DELIVERY_ERRORS)[number];
+
 export const webhookDeliverySchema = z.object({
   id: z.uuid(),
   eventName: z.string(),
   status: z.enum(["pending", "succeeded", "failed"]),
   attempts: z.number().int(),
   lastStatus: z.number().int().nullable(),
-  lastError: z.string().nullable(),
+  lastError: z.enum(WEBHOOK_DELIVERY_ERRORS).nullable(),
   lastAttemptAt: z.date().nullable(),
   createdAt: z.date(),
 });
@@ -48,16 +73,18 @@ const endpointId = z.object({ id: z.uuid() });
 const withSecret = z.object({ secret: z.string().startsWith("whsec_") });
 
 const route = (method: "GET" | "POST" | "PATCH" | "DELETE", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Webhooks"], summary });
+  base.errors(errors).route({ method, path, tags: ["Webhooks"], summary });
 
 export const webhooksContract = {
   listEndpoints: route("GET", "/webhooks/endpoints", "List webhook endpoints").output(
     z.array(webhookEndpointSchema),
   ),
   createEndpoint: route("POST", "/webhooks/endpoints", "Add a webhook endpoint")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ url: endpointUrl, ...endpointFields }))
     .output(z.object({ endpoint: webhookEndpointSchema }).extend(withSecret.shape)),
   updateEndpoint: route("PATCH", "/webhooks/endpoints/{id}", "Change or turn an endpoint on/off")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(
       endpointId.extend({
         url: endpointUrl.optional(),
@@ -67,6 +94,7 @@ export const webhooksContract = {
     )
     .output(webhookEndpointSchema),
   deleteEndpoint: route("DELETE", "/webhooks/endpoints/{id}", "Delete an endpoint")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(endpointId)
     .output(z.void()),
   rotateSecret: route(
@@ -74,9 +102,13 @@ export const webhooksContract = {
     "/webhooks/endpoints/{id}/rotate-secret",
     "Replace the signing secret",
   )
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(endpointId)
     .output(withSecret),
+  // Each of these two sends a request to the customer's URL: without a limit, our servers
+  // could be pointed at someone's endpoint as a flood.
   sendTest: route("POST", "/webhooks/endpoints/{id}/test", "Send a test event")
+    .meta({ rateLimit: { name: "webhook-tests", points: 10, windowSeconds: 60, per: "org" } })
     .input(endpointId)
     .output(z.void()),
   listDeliveries: route(
@@ -87,6 +119,9 @@ export const webhooksContract = {
     .input(endpointId.extend(pageInput.shape))
     .output(page(webhookDeliverySchema)),
   redeliver: route("POST", "/webhooks/deliveries/{id}/redeliver", "Send a delivery again")
+    .meta({
+      rateLimit: { name: "webhook-redeliveries", points: 60, windowSeconds: 60, per: "org" },
+    })
     .input(endpointId)
     .output(z.void()),
 };

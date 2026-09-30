@@ -1,35 +1,63 @@
 /**
- * Coverage for a package's own source, with thresholds that fail the run when coverage
- * drops (`bun run test:coverage`, and CI). Each package passes the floor it currently
- * meets, rounded down and less a point for paths that only run sometimes (retries,
- * timing): raise it as tests are added; lowering it needs a reason in review. Shared
- * packages score low on their own tests where the services' and apps' suites exercise
- * them (contracts, client hooks, the fake Stripe).
- * The numbers count unit and integration tests together, since most behaviour here is
- * proved against real services.
+ * Coverage every vitest package shares. Each run reports, as LCOV, every source file its
+ * tests load, in any workspace package (`allowExternal`), so a shared package gets credit
+ * from the apps that really exercise it. There are no per-package thresholds: the rule is
+ * 100% of every file across all suites together, which `bun scripts/coverage.ts` checks
+ * on the merged reports (after `bun run test:coverage`), and which a package's own tests
+ * alone couldn't judge.
  */
 import type { CoverageOptions } from "vitest/node";
 
-export interface Thresholds {
-  lines: number;
-  functions: number;
-  branches: number;
-  statements: number;
-}
+/**
+ * Tags an integration project declares (`test: { tags }`). A suite tagged `files` needs
+ * the files profile, RustFS and ClamAV, which Docker's default memory can't fit next to
+ * the core: `bun run test:integration` leaves those out (`--tags-filter=!files`) and
+ * `bun run test:integration:files` runs only them. Coverage, locally and in CI, runs all.
+ */
+export const tags = [{ name: "files", description: "needs RustFS and ClamAV: the files profile" }];
 
-export function coverage(thresholds: Thresholds): CoverageOptions {
+export function coverage(): CoverageOptions {
   return {
     provider: "v8",
-    include: ["src/**/*.{ts,tsx}"],
+    // No `include`: only the files the tests load are reported, wherever they are. A file
+    // no test loads is caught by scripts/coverage.ts, from the list of tracked files.
+    allowExternal: true,
     exclude: [
-      "src/**/*.test.{ts,tsx}",
-      "src/**/*.d.ts",
-      // Generated code, and entry points that only start a process.
-      "src/generated/**",
-      "src/**/*.gen.ts",
-      "src/main.ts",
+      "**/node_modules/**",
+      "**/*.test.{ts,tsx}",
+      "**/*.spec.{ts,tsx}",
+      "**/*.d.ts",
+      "**/test/**",
+      "**/e2e/**",
+      // Generated code and configs.
+      "**/generated/**",
+      "**/*.gen.ts",
+      "**/*.config.{ts,mts}",
     ],
     reporter: ["text-summary", "lcov"],
-    thresholds,
+    // Written even when a test fails, so the merge still shows what the rest covered.
+    reportOnFailure: true,
+  };
+}
+
+/**
+ * For NestJS packages (`plugins: [decoratorMetadata()]`). oxc compiles the type of each
+ * injected constructor parameter to `typeof X === "undefined" ? Object : X`, a guard for
+ * a class still undefined in an import cycle. That branch is in no source line and no
+ * test can take it, so coverage would count it against every service; vitest already
+ * leaves out SWC's decorator code the same way. It's compiled to plain `X` here (padded
+ * to the same length, so the source map still holds). An import cycle then fails Nest's
+ * injection with Nest's own error, as it would anyway with `Object`.
+ */
+export function decoratorMetadata() {
+  const guard = /typeof ([\w$]+) === "undefined" \? Object : \1\b/g;
+  return {
+    name: "repo:decorator-metadata",
+    enforce: "post" as const,
+    transform(code: string) {
+      if (!code.includes('=== "undefined" ? Object : ')) return undefined;
+      const replaced = code.replace(guard, (match, name: string) => name.padEnd(match.length));
+      return { code: replaced, map: null };
+    },
   };
 }

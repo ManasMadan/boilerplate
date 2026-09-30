@@ -1,6 +1,7 @@
 ---
 name: swap-document-search
-description: Change how the assistant retrieves passages (a dedicated vector database, hybrid keyword and vector search, a search service). Use when retrieval needs to scale past Postgres or needs ranking pgvector doesn't give.
+description: Change how the assistant retrieves passages (a dedicated vector database, hybrid keyword and vector search, a search service). Use when the user decides retrieval must scale past Postgres or needs ranking pgvector doesn't give. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap document search
@@ -33,3 +34,12 @@ the worker) and deletion live in `Documents` too.
 `apps/ai/tests/test_service.py` covers indexing, retrieval and tenancy; add a case that
 one organization can't retrieve another's passages from the new store. Compare quality
 with `bun run --cwd apps/ai evals`.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too. The change is in apps/ai, so the
+   `python-reviewer` agent as well.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

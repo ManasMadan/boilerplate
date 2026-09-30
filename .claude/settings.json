@@ -2,9 +2,88 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Bash(bun run *)",
+      "Bash(bun run build)",
+      "Bash(bun run charts:check)",
+      "Bash(bun run check-types)",
+      "Bash(bun run db:deploy)",
+      "Bash(bun run db:lint)",
+      "Bash(bun run db:migrate)",
+      "Bash(bun run db:seed)",
+      "Bash(bun run db:studio)",
+      "Bash(bun run db:up)",
+      "Bash(bun run db:up:full)",
+      "Bash(bun run db:up:mail)",
+      "Bash(bun run db:down)",
+      "Bash(bun run db:restore-drill)",
+      "Bash(bun run dev)",
+      "Bash(bun run dev:full)",
+      "Bash(bun run doctor)",
+      "Bash(bun run env:set)",
+      "Bash(bun run env:unset)",
+      "Bash(bun run format)",
+      "Bash(bun run gen)",
+      "Bash(bun run gen:new)",
+      "Bash(bun run infra:check)",
+      "Bash(bun run jobs)",
+      "Bash(bun run k8s:smoke)",
+      "Bash(bun run k8s:up)",
+      "Bash(bun run lint)",
+      "Bash(bun run lint:boundaries)",
+      "Bash(bun run lint:markers)",
+      "Bash(bun run lint:suppressions)",
+      "Bash(bun run lint:unused)",
+      "Bash(bun run rename)",
+      "Bash(bun run setup)",
+      "Bash(bun run stripe:fake)",
+      "Bash(bun run test)",
+      "Bash(bun run test:coverage)",
+      "Bash(bun run test:e2e)",
+      "Bash(bun run test:integration)",
+      "Bash(bun run test:integration:files)",
+      "Bash(bun run test:integration:files *)",
+      "Bash(bun run test:load)",
+      "Bash(bun run build *)",
+      "Bash(bun run charts:check *)",
+      "Bash(bun run check-types *)",
+      "Bash(bun run db:deploy *)",
+      "Bash(bun run db:lint *)",
+      "Bash(bun run db:migrate *)",
+      "Bash(bun run db:seed *)",
+      "Bash(bun run db:studio *)",
+      "Bash(bun run db:up *)",
+      "Bash(bun run db:up:full *)",
+      "Bash(bun run db:up:mail *)",
+      "Bash(bun run db:down *)",
+      "Bash(bun run db:restore-drill *)",
+      "Bash(bun run dev *)",
+      "Bash(bun run dev:full *)",
+      "Bash(bun run doctor *)",
+      "Bash(bun run env:set *)",
+      "Bash(bun run env:unset *)",
+      "Bash(bun run format *)",
+      "Bash(bun run gen *)",
+      "Bash(bun run gen:new *)",
+      "Bash(bun run infra:check *)",
+      "Bash(bun run jobs *)",
+      "Bash(bun run k8s:smoke *)",
+      "Bash(bun run k8s:up *)",
+      "Bash(bun run lint *)",
+      "Bash(bun run lint:boundaries *)",
+      "Bash(bun run lint:markers *)",
+      "Bash(bun run lint:suppressions *)",
+      "Bash(bun run lint:unused *)",
+      "Bash(bun run rename *)",
+      "Bash(bun run setup *)",
+      "Bash(bun run stripe:fake *)",
+      "Bash(bun run test *)",
+      "Bash(bun run test:coverage *)",
+      "Bash(bun run test:e2e *)",
+      "Bash(bun run test:integration *)",
+      "Bash(bun run test:load *)",
+      "Bash(bun run --filter *)",
+      "Bash(bun run --cwd *)",
+      "Bash(bun test*)",
       "Bash(bun install*)",
-      "Bash(bun add *)",
       "Bash(bun remove *)",
       "Bash(bunx biome *)",
       "Bash(bunx turbo *)",
@@ -13,13 +92,21 @@
       "Bash(bunx playwright *)",
       "Bash(bunx prisma *)",
       "Bash(bunx depcruise *)",
+      "Bash(bunx knip*)",
       "Bash(bun scripts/*)",
-      "Bash(uv run *)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run basedpyright*)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run python -m evals*)",
       "Bash(uv sync*)",
-      "Bash(uv add *)",
       "Bash(docker compose ps*)",
       "Bash(docker compose logs*)",
       "Bash(docker compose up*)",
+      "Bash(wt list*)",
+      "Bash(wt switch*)",
+      "Bash(wt step diff*)",
+      "Bash(wt step copy-ignored*)",
+      "Bash(wt --version)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -41,24 +128,51 @@
       "Bash(gh workflow run*)",
       "Bash(kubectl *)",
       "Bash(helm *)",
-      "Bash(tofu apply*)"
+      "Bash(tofu apply*)",
+      "Bash(bun run docker:clean*)",
+      "Bash(bun run promote*)",
+      "Bash(bun run k8s:down*)",
+      "Bash(bun run secrets:reencrypt*)",
+      "Bash(bun add *)",
+      "Bash(uv add *)",
+      "Bash(git commit*)",
+      "Bash(gh pr create*)",
+      "Bash(gh api *)",
+      "Bash(gh release *)",
+      "Bash(tofu destroy*)"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.local)",
-      "Read(./.env.production)",
-      "Read(./.env.staging)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Read(./**/.env.development)",
+      "Read(./**/.env.production)",
+      "Read(./**/.env.staging)",
+      "Read(./**/.env.test)",
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
+      "Read(./**/*.agekey)",
+      "Read(./**/*.tfvars)",
+      "Read(./**/*.tfstate*)",
+      "Read(./load/.sessions.json)",
+      "Read(~/.config/sops/**)",
       "Bash(cat .env*)",
       "Bash(git push --force*)",
-      "Bash(git push -f*)"
+      "Bash(git push -f*)",
+      "Bash(sops -d*)",
+      "Bash(sops decrypt*)"
     ]
   },
+  "env": {
+    "MCP_TIMEOUT": "10000",
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "BASH_MAX_TIMEOUT_MS": "1200000"
+  },
+  "outputStyle": "Engineering",
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume",
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
@@ -89,6 +203,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/bash-guard.ts\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -99,6 +223,11 @@
             "type": "command",
             "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-file.ts\"",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/suppressions.ts\"",
+            "timeout": 5
           }
         ]
       }
@@ -113,6 +242,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "attribution": {
@@ -123,5 +263,16 @@
   "statusLine": {
     "type": "command",
     "command": "bun \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/statusline.ts\""
+  },
+  "extraKnownMarketplaces": {
+    "worktrunk": {
+      "source": {
+        "source": "github",
+        "repo": "max-sixty/worktrunk"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "worktrunk@worktrunk": true
   }
 }

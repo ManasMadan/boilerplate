@@ -10,6 +10,7 @@ import {
   type PushMessage,
   type PushPlatform,
   type PushResult,
+  type PushTransport,
   type PushTransports,
 } from "./push-transport";
 
@@ -37,9 +38,8 @@ export class PushChannel {
   }
 
   async send(userId: string, device: PushDevice, message: PushMessage): Promise<PushResult> {
-    const transport = this.transports[device.platform];
-    if (!transport)
-      return { ok: false, gone: false, error: `${device.platform} push isn't configured` };
+    // devices() only returns devices on platforms that have a transport.
+    const transport = this.transports[device.platform] as PushTransport;
     const result = await transport.send(device.token, message);
     if (!result.ok && result.gone) {
       await withUser(this.database.write, userId).notificationDevice.deleteMany({

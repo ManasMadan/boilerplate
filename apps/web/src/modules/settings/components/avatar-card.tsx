@@ -1,15 +1,18 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
+import { useFileQuery } from "@repo/client/api/files/get";
 import {
   checkUpload,
   UploadFailedError,
-  useFileQuery,
+  uploadRuleParams,
   useUploadFileMutation,
 } from "@repo/client/api/files/upload";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { useSetAvatarMutation } from "@repo/client/api/user/avatar";
 import { useMeQuery } from "@repo/client/api/user/me";
 import { uploadPurposes } from "@repo/contracts/files";
+import { loosely } from "@repo/i18n";
 import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -24,7 +27,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /**
  * The profile picture. A chosen image is uploaded, checked by the worker (virus scan,
@@ -48,7 +50,13 @@ export function AvatarCard() {
   useEffect(() => {
     if (!fileId || !file.data) return;
     if (file.data.status === "rejected") {
-      setProblem(tAll(`errors.${file.data.rejectReason ?? "FILE_UNREADABLE"}`));
+      // The worker's reason, with the limits its message names (too large, wrong type).
+      setProblem(
+        loosely(tAll)(
+          `errors.${file.data.rejectReason ?? "FILE_UNREADABLE"}`,
+          uploadRuleParams("avatar"),
+        ),
+      );
       setFileId(null);
     } else if (file.data.status === "ready") {
       setFileId(null);
@@ -67,13 +75,15 @@ export function AvatarCard() {
 
   if (!system?.features.files || !me) return null;
 
-  async function choose(chosen: File | undefined) {
-    if (input.current) input.current.value = "";
+  async function choose(picker: HTMLInputElement) {
+    const chosen = picker.files?.[0];
+    // Cleared, so choosing the same file again still counts as a change.
+    picker.value = "";
     if (!chosen) return;
     setProblem(null);
     const refused = checkUpload("avatar", chosen);
     if (refused) {
-      setProblem(tAll(`errors.${refused.code}`, refused.params));
+      setProblem(loosely(tAll)(`errors.${refused.code}`, refused.params));
       return;
     }
     try {
@@ -107,7 +117,7 @@ export function AvatarCard() {
               hidden
               accept={uploadPurposes.avatar.types.join(",")}
               disabled={busy}
-              onChange={(event) => void choose(event.target.files?.[0])}
+              onChange={(event) => void choose(event.currentTarget)}
             />
             <Button
               variant="outline"

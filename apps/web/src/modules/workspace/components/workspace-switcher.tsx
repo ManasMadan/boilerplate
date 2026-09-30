@@ -60,7 +60,7 @@ export function WorkspaceSwitcher() {
             <DropdownMenuLabel>{t("label")}</DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={activeId ?? ""}
-              onValueChange={(id) => {
+              onValueChange={(id: string) => {
                 if (id && id !== activeId)
                   switchTo(id).catch((error: unknown) => toast.error(errorMessage(error)));
               }}

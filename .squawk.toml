@@ -4,6 +4,10 @@
 #
 # A flagged statement that is safe in context (an index on a table created in the same
 # migration, say) gets `-- squawk-ignore <rule>` above it, with the reason.
+#
+# Migrations older than this lint (20260929100000_phone_numbers,
+# 20260929170000_api_key_organization) break some of its rules. They have shipped, so
+# they stay as they are and the lint only checks new or changed ones; don't copy them.
 pg_version = "18"
 excluded_rules = [
   # Prisma applies each migration once and records it; re-runnable IF NOT EXISTS

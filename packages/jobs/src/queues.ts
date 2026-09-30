@@ -15,7 +15,12 @@
  * Python consumers (apps/ai) read the same queues; their Pydantic models are generated
  * from these schemas (see docs/jobs-and-events.md).
  */
-import { type EventName, eventEnvelope, webhookEvents } from "@repo/contracts/events";
+import {
+  type EventName,
+  eventEnvelope,
+  unauditedEvents,
+  webhookEvents,
+} from "@repo/contracts/events";
 import { locales } from "@repo/i18n";
 import type { JobsOptions } from "bullmq";
 import { z } from "zod";
@@ -108,6 +113,17 @@ export const notificationPayload = z.discriminatedUnion("template", [
     }),
   }),
   z.object({
+    // Someone created a way into the workspace that outlives their session: its owners
+    // and admins hear about it, so a stolen session can't leave one behind unseen.
+    template: z.literal("workspace.access-created"),
+    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
+    data: z.object({
+      kind: z.enum(["api-key", "webhook-endpoint"]),
+      /** The key's name or the endpoint's URL. */
+      label: z.string(),
+    }),
+  }),
+  z.object({
     template: z.literal("webhooks.endpoint-disabled"),
     // Everyone in the organization with one of these roles.
     to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
@@ -161,10 +177,17 @@ export const WEBHOOK_RETRY_DELAYS_MS = [
   10 * 3_600_000,
 ];
 
-/** Retries with exponential backoff; the defaults every queue starts from. */
 const aiDocumentJob = z.object({ documentId: z.uuid(), orgId: z.uuid() });
 
-const retrying: JobsOptions = { attempts: 5, backoff: { type: "exponential", delay: 2_000 } };
+/**
+ * Retries with exponential backoff; the defaults every queue starts from. The jitter
+ * spreads retries out, so jobs that failed together (a provider's outage) don't all come
+ * back at the same moment.
+ */
+const retrying: JobsOptions = {
+  attempts: 5,
+  backoff: { type: "exponential", delay: 2_000, jitter: 0.5 },
+};
 
 export const queues = {
   /**
@@ -276,7 +299,7 @@ export const queues = {
     },
     options: {
       attempts: 3,
-      backoff: { type: "exponential", delay: 60_000 },
+      backoff: { type: "exponential", delay: 60_000, jitter: 0.5 },
       removeOnComplete: { count: 100 },
       removeOnFail: { age: 30 * DAY },
     },
@@ -290,6 +313,7 @@ export const notificationQueue = {
   "org.invitation": "notifications-critical",
   "auth.security-alert": "notifications-critical",
   "webhooks.endpoint-disabled": "notifications-critical",
+  "workspace.access-created": "notifications-critical",
   "billing.payment-failed": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
@@ -306,18 +330,38 @@ export type JobPayload<Q extends QueueName, J extends JobName<Q>> = z.infer<
  * filter accepts it. A new consumer gets a queue above and a line here; it sees events
  * from the moment it's added (older ones can be replayed from the outbox's retention).
  */
-const customerFacing: ReadonlySet<string> = new Set<EventName>(webhookEvents);
 export const eventSubscribers = {
-  "events-audit": () => true,
-  "events-webhooks": (name: string) => customerFacing.has(name),
+  "events-audit": (name: string) => !unauditedEvents.has(name),
+  "events-webhooks": only(webhookEvents),
   // Stripe's events, and membership changes (paid plans are billed per seat).
-  "events-billing": (name: string) =>
-    name === "stripe.event_received.v1" ||
-    name === "org.member_added.v1" ||
-    name === "org.member_removed.v1",
+  "events-billing": only([
+    "stripe.event_received.v1",
+    "org.member_added.v1",
+    "org.member_removed.v1",
+  ]),
   // Events that notify someone, and email feedback (bounces, complaints) to suppress.
-  "events-notifications": (name: string) =>
-    name === "webhook.endpoint_disabled.v1" || name === "email.feedback_received.v1",
+  "events-notifications": only([
+    "webhook.endpoint_disabled.v1",
+    "org.api_key_created.v1",
+    "webhook.endpoint_created.v1",
+    "notification.requested.v1",
+    "email.feedback_received.v1",
+  ]),
   "events-realtime": (name: string) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: string) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;
+
+/**
+ * A filter passing exactly these events. It narrows the name, so a consumer that checks
+ * it can only handle events routed to it: handling `todo.completed.v2` while the route
+ * still names v1 fails to compile instead of never arriving.
+ */
+function only<const Name extends EventName>(names: readonly Name[]) {
+  const routed: ReadonlySet<string> = new Set(names);
+  return (name: string): name is Name => routed.has(name);
+}
+
+/** The event names a queue's filter passes, when it lists them. */
+type Filter<Name extends string> = (name: string) => name is Name;
+export type RoutedEvent<Q extends EventQueue> =
+  (typeof eventSubscribers)[Q] extends Filter<infer Name> ? Name : string;

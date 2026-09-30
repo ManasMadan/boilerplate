@@ -5,11 +5,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
-import { API_KEY_LIMIT, type ApiKeyScope } from "@repo/contracts/api";
+import { API_KEY_LIMIT, type ApiKeyScope, MAX_API_KEY_DAYS } from "@repo/contracts/api";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createSession,
+  editSession,
   type Harness,
   newEmail,
   newPassword,
@@ -168,6 +169,24 @@ describe("managing keys", () => {
     }
   });
 
+  it("needs a recent sign-in to create one, so a stolen session can't leave a key behind", async () => {
+    const { session } = await signedInUser();
+    await editSession(harness, session, (stored) => {
+      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    });
+    await expectError(newKey({ session } as User), "FRESH_SESSION_REQUIRED");
+    // Managing existing ones doesn't.
+    await expect(session.rpc.apiKeys.list()).resolves.toEqual([]);
+  });
+
+  it("expires every key: the old null means the longest lifetime", async () => {
+    const { session } = await signedInUser();
+    const { apiKey } = await newKey({ session } as User);
+    const days = ((apiKey.expiresAt?.getTime() ?? 0) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(MAX_API_KEY_DAYS - 1);
+    expect(days).toBeLessThanOrEqual(MAX_API_KEY_DAYS);
+  });
+
   it("is for owners and admins only", async () => {
     const { member } = await team();
     await expectError(member.session.rpc.apiKeys.list(), "FORBIDDEN");
@@ -192,6 +211,46 @@ describe("managing keys", () => {
       [apiKey.id],
     );
     expect(event?.payload).toEqual({ apiKeyId: apiKey.id, name: "CI" });
+  });
+
+  it("reads what's stored about a key defensively: nothing malformed grants anything", async () => {
+    const user = await signedInUser();
+    const { apiKey, key } = await newKey(user);
+    // A row edited by hand, or written by an older version: no name or prefix, permissions
+    // that aren't JSON, and a creator that isn't there.
+    await query(
+      `UPDATE auth.api_key SET name = NULL, start = NULL, permissions = 'not json',
+         metadata = $2 WHERE id = $1`,
+      [apiKey.id, JSON.stringify({ createdBy: randomUUID() })],
+    );
+    const [listed] = await user.session.rpc.apiKeys.list();
+    expect(listed).toMatchObject({
+      id: apiKey.id,
+      name: "",
+      start: "",
+      scopes: [],
+      createdBy: null,
+    });
+    // Its creator isn't a member anywhere, so it acts as nobody.
+    expect((await rest(key, "GET", "/todos")).status).toBe(401);
+
+    // Permissions of the wrong shape, and metadata that names no creator.
+    await query("UPDATE auth.api_key SET permissions = $2, metadata = '{}' WHERE id = $1", [
+      apiKey.id,
+      JSON.stringify({ todos: "read" }),
+    ]);
+    expect((await user.session.rpc.apiKeys.list())[0]).toMatchObject({
+      scopes: [],
+      createdBy: null,
+    });
+    expect((await rest(key, "GET", "/todos")).status).toBe(401);
+
+    await user.session.rpc.apiKeys.revoke({ id: apiKey.id });
+    const [event] = await query<{ payload: unknown }>(
+      "SELECT payload FROM app.outbox_event WHERE key = $1 AND name = 'org.api_key_revoked.v1'",
+      [apiKey.id],
+    );
+    expect(event?.payload).toEqual({ apiKeyId: apiKey.id, name: "" });
   });
 
   it(`stops at ${API_KEY_LIMIT} keys per workspace`, async () => {

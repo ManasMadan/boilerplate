@@ -17,8 +17,11 @@ on:
     branches: [master]
   workflow_dispatch:
 
+# One run per commit, never cancelled: one group for all of them would keep only the
+# latest pending run, so a commit merged in between would never get images (and couldn't
+# be released). Only moving staging is one at a time (the staging job).
 concurrency:
-  group: deploy
+  group: deploy-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: false
 
 permissions: {}
@@ -28,15 +31,20 @@ env:
   IMAGES: api worker notifications webhooks web ai migrate
 
 jobs:
+  # One job per image and architecture: all seven on one runner ran it out of disk.
   build:
-    name: Images (${{ matrix.arch }})
+    name: Image ${{ matrix.image }} (${{ matrix.arch }})
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions: { contents: read, packages: write }
     strategy:
+      fail-fast: false
       matrix:
+        image: [api, worker, notifications, webhooks, web, ai, migrate]
+        arch: [amd64, arm64]
         include:
-          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: amd64, runner: ubuntu-24.04 }
           - { arch: arm64, runner: ubuntu-24.04-arm }
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -45,6 +53,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false, ref: "${{ env.SHA }}" }
+      - uses: ./.github/actions/free-disk
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -58,16 +67,20 @@ jobs:
           RELEASE: ${{ env.SHA }}
         with:
           source: .
+          targets: ${{ matrix.image }}
           push: true
+          # A cache scope per image and architecture: one shared scope had every build
+          # overwrite the others' layers. CI, preview and kind read these.
           set: |
             *.platform=linux/${{ matrix.arch }}
-            *.cache-from=type=gha,scope=${{ matrix.arch }}
-            *.cache-to=type=gha,mode=max,scope=${{ matrix.arch }}
+            *.cache-from=type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+            *.cache-to=type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
   publish:
     name: Publish, attest and sign
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions: { contents: read, packages: write, id-token: write, attestations: write }
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -86,13 +99,21 @@ jobs:
       # One multi-arch tag per image, from the two single-arch builds.
       - name: Merge the architectures
         id: merge
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
           for image in $IMAGES; do
             docker buildx imagetools create -t "$REGISTRY/$image:sha-$SHA" \
               "$REGISTRY/$image:sha-$SHA-amd64" "$REGISTRY/$image:sha-$SHA-arm64"
             digest=$(docker buildx imagetools inspect "$REGISTRY/$image:sha-$SHA" --format '{{json .Manifest}}' | jq -r .digest)
             echo "$image=$digest" >> "$GITHUB_OUTPUT"
-            cosign sign --yes "$REGISTRY/$image@$digest"
+            if [[ -n "$COSIGN_PRIVATE_KEY" ]]; then
+              # With a key pair (imagePolicy.publicKey): nothing public is involved.
+              cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "$REGISTRY/$image@$digest"
+            else
+              cosign sign --yes "$REGISTRY/$image@$digest"
+            fi
           done
       - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
@@ -128,8 +149,12 @@ jobs:
   staging:
     name: Deploy to staging
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     permissions: { contents: write }
     env:
       TAG: ${{ needs.publish.outputs.tag }}
@@ -145,14 +170,29 @@ jobs:
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           fallback-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { ref: master, token: "${{ steps.bot.outputs.token }}" }
+        # All of master's history: whether staging's commit comes before this one.
+        with: { ref: master, token: "${{ steps.bot.outputs.token }}", fetch-depth: 0 }
+      # Runs finish out of order: a commit whose images come last must not move staging
+      # back past a newer one. The push retries on top of whatever landed meanwhile.
       - name: Point staging at the new images
         run: |
           file=deploy/environments/staging/stack.yaml
-          sed -i -E '/^image:/,/^[^ ]/ s/^  tag: .*/  tag: "'"$TAG"'"/' "$file"
-          if git diff --quiet; then
-            echo "Staging already runs $TAG."
-            exit 0
-          fi
-          git commit -am "chore(infra): deploy $TAG to staging [skip ci]"
-          git push origin HEAD:master
+          for attempt in 1 2 3; do
+            git fetch --quiet origin master
+            git reset --quiet --hard origin/master
+            current=$(sed -n -E '/^image:/,/^[^ ]/ s/^  tag: "?sha-([0-9a-f]+)"?.*/\1/p' "$file")
+            if [[ -n "$current" ]] && git cat-file -e "$current^{commit}" 2>/dev/null \
+              && ! git merge-base --is-ancestor "$current" "${TAG#sha-}"; then
+              echo "Staging runs sha-$current, newer than $TAG: leaving it."
+              exit 0
+            fi
+            sed -i -E '/^image:/,/^[^ ]/ s/^  tag: .*/  tag: "'"$TAG"'"/' "$file"
+            if git diff --quiet; then
+              echo "Staging already runs $TAG."
+              exit 0
+            fi
+            git commit -qam "chore(infra): deploy $TAG to staging [skip ci]"
+            if git push origin HEAD:master; then exit 0; fi
+            echo "master moved while pushing (attempt $attempt): trying again on top of it."
+          done
+          exit 1

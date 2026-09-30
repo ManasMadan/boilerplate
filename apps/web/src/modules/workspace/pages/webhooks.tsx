@@ -1,10 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  useCreateWebhookEndpointMutation,
-  useWebhookEndpointsQuery,
-} from "@repo/client/api/webhooks/endpoints";
+import { useApiErrorMessage } from "@repo/client";
+import { useCreateWebhookEndpointMutation } from "@repo/client/api/webhooks/create-endpoint";
+import { useWebhookEndpointsQuery } from "@repo/client/api/webhooks/list-endpoints";
 import { webhookEvents } from "@repo/contracts/events";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -32,7 +31,6 @@ import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 import { TextField } from "@/components/form-fields";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { UpgradeHint, useHasWebhooks } from "@/modules/billing";
 import { EndpointStatus } from "../components/endpoint-status";
 import { SecretDialog } from "../components/secret-dialog";

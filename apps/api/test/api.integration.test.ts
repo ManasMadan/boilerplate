@@ -2,15 +2,19 @@
  * The API's security and behaviour guarantees, against the real app, database and Redis.
  */
 import { randomUUID } from "node:crypto";
+import http from "node:http";
 import { ORPCError } from "@orpc/client";
 import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
+import { ORGANIZATION_LIMIT, PENDING_INVITATION_LIMIT } from "@repo/contracts/auth";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
-import { createSignedTokens, S3Storage } from "@repo/nest-common";
+import { AppError, createSignedTokens, S3Storage } from "@repo/nest-common";
+import { eventually } from "@repo/testing/eventually";
 import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { PhoneService } from "../src/modules/user/phone.service";
 import { publishRealtime } from "../src/realtime";
 import {
   createSession,
@@ -20,15 +24,19 @@ import {
   LOCAL_STORAGE,
   newEmail,
   newPassword,
+  queuedNotification,
   startApi,
   takeNotification,
   takeOtp,
 } from "./harness";
 
 let harness: Harness;
+const GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com";
 
 beforeAll(async () => {
   harness = await startApi(13, {
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: "test-google-secret",
     MINIMUM_CLIENT_VERSION: "2.0.0",
     // The test receiver below runs on loopback.
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
@@ -60,7 +68,252 @@ async function expectError(promise: Promise<unknown>, code: string) {
   return orpcError;
 }
 
+describe("error responses", () => {
+  const send = (path: string, init: RequestInit = {}) => fetch(`${harness.baseUrl}${path}`, init);
+  const json = (body: string, type = "application/json") => ({
+    method: "POST",
+    headers: { "content-type": type },
+    body,
+  });
+
+  it.each([
+    ["a malformed JSON body", "/api/v1/todos", json("{bad"), 400, "BAD_REQUEST"],
+    ["an unknown route under /api/v1", "/api/v1/nope", {}, 404, "NOT_FOUND"],
+    ["an unknown route anywhere else", "/v1/todos", {}, 404, "NOT_FOUND"],
+    [
+      "the wrong media type",
+      "/api/v1/todos",
+      json("x", "text/plain"),
+      415,
+      "UNSUPPORTED_MEDIA_TYPE",
+    ],
+    [
+      "a raw route without a session",
+      `/api/v1/files/${randomUUID()}/content`,
+      {},
+      401,
+      "UNAUTHENTICATED",
+    ],
+    ["no session on a procedure", "/api/v1/todos", {}, 401, "UNAUTHENTICATED"],
+  ])("answers %s in the contract's shape", async (_case, path, init, status, code) => {
+    const response = await send(path, init as RequestInit);
+    expect(response.status).toBe(status);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.json()).toMatchObject({
+      code,
+      status,
+      message: expect.any(String),
+      data: { params: {}, requestId: expect.any(String) },
+    });
+  });
+
+  it("tells a REST caller how to authenticate, and an outdated app to update, with fitting statuses", async () => {
+    const unauthenticated = await send("/api/v1/todos");
+    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.headers.get("www-authenticate")).toBe('ApiKey header="x-api-key"');
+    const outdated = await send("/api/v1/todos", { headers: { "x-app-version": "1.0.0" } });
+    expect(outdated.status).toBe(400);
+    expect(((await outdated.json()) as { code: string }).code).toBe("CLIENT_OUTDATED");
+  });
+
+  it("refuses, outside production, to answer a code the procedure's contract doesn't declare", async () => {
+    const { session } = await signedInUser();
+    const { TodoService } = await import("../src/modules/todo");
+    const todos = harness.app.get(TodoService);
+    // A code the todo contract has no business returning.
+    const list = vi.spyOn(todos, "list").mockRejectedValueOnce(new AppError("PHONE_CODE_INVALID"));
+    await expectError(session.rpc.todo.list({ limit: 1 }), "INTERNAL");
+    list.mockRestore();
+  });
+
+  it("gives better-auth's errors the same envelope, keeping their codes", async () => {
+    const response = await send("/api/auth/sign-in/email", json(JSON.stringify({ email: "x" })));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: expect.any(String),
+      status: 400,
+      message: expect.any(String),
+      data: { params: {}, requestId: expect.any(String) },
+    });
+  });
+});
+
+describe("request bodies", () => {
+  const post = (path: string, type: string, body: BodyInit) =>
+    fetch(`${harness.baseUrl}${path}`, { method: "POST", headers: { "content-type": type }, body });
+
+  /**
+   * The status for a request announcing a body of `bytes`: sends only the headers and
+   * waits, so a refusal by length alone shows (nothing is read or parsed).
+   */
+  function statusFor(path: string, bytes: number, type = "application/json") {
+    return new Promise<number>((resolve, reject) => {
+      const request = http.request(`${harness.baseUrl}${path}`, {
+        method: "POST",
+        headers: { "content-type": type, "content-length": bytes },
+      });
+      request.on("response", (response) => {
+        resolve(response.statusCode ?? 0);
+        request.destroy();
+      });
+      request.on("error", reject);
+      request.flushHeaders();
+    });
+  }
+
+  it("refuses an oversized body before any procedure or auth check runs", async () => {
+    const big = 2 * 1024 * 1024;
+    expect(await statusFor("/rpc/todo/create", big)).toBe(413);
+    expect(await statusFor("/api/v1/todos", big)).toBe(413);
+    // 100 MB of text, unauthenticated: refused from the headers, never read.
+    expect(await statusFor("/rpc/todo/create", 100 * 1024 * 1024, "text/plain")).toBe(415);
+  });
+
+  it("accepts only JSON on the API routes", async () => {
+    for (const type of [
+      "text/plain",
+      "application/octet-stream",
+      "multipart/form-data; boundary=x",
+    ]) {
+      expect((await post("/rpc/todo/create", type, "x".repeat(1024))).status, type).toBe(415);
+      expect((await post("/api/v1/todos", type, "x".repeat(1024))).status, type).toBe(415);
+    }
+  });
+
+  it("still serves JSON calls", async () => {
+    const response = await post(
+      "/rpc/todo/list",
+      "application/json",
+      JSON.stringify({ json: { limit: 1 } }),
+    );
+    // Unauthenticated, but parsed and routed: the procedure answered.
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("the mobile sign-in redirect", () => {
+  const proxy = (target: string) =>
+    fetch(
+      `${harness.baseUrl}/api/auth/expo-authorization-proxy?${new URLSearchParams({ authorizationURL: target })}`,
+      { redirect: "manual" },
+    );
+
+  it("sends people only to a sign-in provider", async () => {
+    const google = await proxy("https://accounts.google.com/o/oauth2/v2/auth?state=abc");
+    expect(google.status).toBe(302);
+    expect(google.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com\//);
+  });
+
+  it("refuses a request without an address", async () => {
+    const response = await fetch(`${harness.baseUrl}/api/auth/expo-authorization-proxy`, {
+      redirect: "manual",
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it("refuses any other address", async () => {
+    for (const target of [
+      "https://evil.example/login?state=abc",
+      "https://accounts.google.com.evil.example/?state=abc",
+      "not a url",
+    ]) {
+      const response = await proxy(target);
+      expect(response.status, target).toBe(400);
+      expect(response.headers.get("location")).toBeNull();
+    }
+  });
+});
+
+describe("Google sign-in", () => {
+  it("is on when configured, and sends the browser to Google", async () => {
+    const session = createSession(harness);
+    expect((await session.rpc.system.info()).features.google).toBe(true);
+    const started = await session.auth<{ url: string; redirect: boolean }>("/sign-in/social", {
+      provider: "google",
+      callbackURL: process.env.WEB_URL,
+    });
+    expect(started.status).toBe(200);
+    expect(new URL(started.body.url).origin).toBe("https://accounts.google.com");
+    expect(new URL(started.body.url).searchParams.get("client_id")).toBe(GOOGLE_CLIENT_ID);
+  });
+});
+
+describe("profile settings", () => {
+  it("saves a known language and time zone, and refuses anything else", async () => {
+    const { session } = await signedInUser();
+    expect(
+      (await session.auth("/update-user", { locale: "es", timezone: "Asia/Tokyo" })).status,
+    ).toBe(200);
+    expect(await session.rpc.user.me()).toMatchObject({ locale: "es", timezone: "Asia/Tokyo" });
+    for (const change of [{ locale: "xx" }, { timezone: "Mars/Olympus" }]) {
+      const refused = await session.auth<{ code?: string }>("/update-user", change);
+      expect(refused.status, JSON.stringify(change)).toBe(400);
+      expect(refused.body.code).toBe("VALIDATION_FAILED");
+    }
+    expect(await session.rpc.user.me()).toMatchObject({ locale: "es", timezone: "Asia/Tokyo" });
+  });
+});
+
+describe("an account without a workspace", () => {
+  it("can still sign in, and is told to pick one for workspace data", async () => {
+    const { session, email, password } = await signedInUser();
+    const { activeOrganizationId } = await session.rpc.user.me();
+    expect(
+      (await session.auth("/organization/delete", { organizationId: activeOrganizationId })).status,
+    ).toBe(200);
+    await session.auth("/sign-out");
+    expect((await session.auth("/sign-in/email", { email, password })).status).toBe(200);
+    expect((await session.rpc.user.me()).activeOrganizationId).toBeNull();
+    await expectError(session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+  });
+});
+
+describe("a session cookie that names no session", () => {
+  it("is treated as signed out, on auth routes as on the API", async () => {
+    const session = createSession(harness);
+    session.useCookies(new Map([["better-auth.session_token", "not-a-session.signature"]]));
+    expect((await session.authGet<unknown>("/get-session")) ?? null).toBeNull();
+    await expectError(session.rpc.user.me(), "UNAUTHENTICATED");
+  });
+});
+
 describe("sign-up and verification", () => {
+  it("ignores a picture sent with sign-up: only the avatar upload sets one", async () => {
+    const session = createSession(harness);
+    const email = newEmail();
+    await session.auth("/sign-up/email", {
+      email,
+      password: newPassword(),
+      name: "Pic",
+      image: "https://evil.example/tracker.png",
+    });
+    const { otp } = await takeOtp(harness, email);
+    await session.auth("/email-otp/verify-email", { email, otp });
+    expect((await session.rpc.user.me()).image).toBeNull();
+  });
+
+  it("sends one address at most ten codes an hour, whichever endpoint asks", async () => {
+    const session = createSession(harness);
+    const email = newEmail();
+    const password = newPassword();
+    await session.auth("/sign-up/email", { email, password, name: "Codes" });
+    // Eleven requests for a code, within each endpoint's per-address limit: the sign-up,
+    // three resets, five verification codes and two sign-ins to the unverified account.
+    for (let i = 0; i < 3; i++) await session.auth("/forget-password/email-otp", { email });
+    for (let i = 0; i < 5; i++) {
+      await session.auth("/email-otp/send-verification-otp", { email, type: "email-verification" });
+    }
+    for (let i = 0; i < 2; i++) await session.auth("/sign-in/email", { email, password });
+    // Codes go out in the background: once the limit has counted all eleven (the last
+    // one refused), every code that will be queued has been.
+    await eventually(
+      () => harness.redis.get(`{rl:email:codesPerRecipient}:${email.toLowerCase()}`),
+      (count) => count === "11",
+    );
+    for (let i = 0; i < 10; i++) await takeOtp(harness, email);
+    expect(await queuedNotification(harness, "auth.otp", email)).toBeUndefined();
+  });
+
   it("issues no session until the email is verified, and queues the code in the browser's language", async () => {
     const session = createSession(harness, { locale: "es-ES,es;q=0.9" });
     const email = newEmail();
@@ -80,17 +333,12 @@ describe("sign-up and verification", () => {
     await session.auth("/email-otp/verify-email", { email, otp: code.otp });
     const me = await session.rpc.user.me();
     expect(me).toMatchObject({ email, locale: "es" });
-    expect(me.activeOrganizationId).toBeTruthy();
-  });
-
-  it("rejects passwords found in public breaches", async () => {
-    const session = createSession(harness);
-    const result = await session.auth<{ code: string }>("/sign-up/email", {
-      email: newEmail(),
-      password: "password123",
-      name: "X",
-    });
-    expect(result.body.code).toBe("PASSWORD_COMPROMISED");
+    // Their personal workspace, made at sign-up.
+    const [personal, ...others] =
+      await session.authGet<{ id: string; slug: string }[]>("/organization/list");
+    expect(others).toEqual([]);
+    expect(personal?.slug).toBe(`personal-${me.id}`);
+    expect(me.activeOrganizationId).toBe(personal?.id);
   });
 });
 
@@ -143,6 +391,30 @@ describe("session revocation", () => {
     expect(statuses.slice(0, 5).every((status) => status !== 429)).toBe(true);
     expect(statuses.at(-1)).toBe(429);
   });
+
+  it("limits password attempts per account, however many addresses they come from", async () => {
+    const { email, password } = await signedInUser();
+    // Each attempt from a new session: a new client address, as a forged or rotated
+    // X-Forwarded-For would give, so the per-address limit never applies.
+    const attempt = (guess: string) =>
+      createSession(harness).auth("/sign-in/email", { email, password: guess });
+    const statuses: number[] = [];
+    for (let i = 0; i < 10; i++) statuses.push((await attempt(`wrong-password-${i}`)).status);
+    expect(statuses.every((status) => status === 401)).toBe(true);
+    const locked = await attempt(password);
+    expect(locked.status).toBe(429);
+    expect(locked.body).toMatchObject({ code: "RATE_LIMITED" });
+    // Other accounts are untouched.
+    const other = await signedInUser();
+    expect(
+      (
+        await createSession(harness).auth("/sign-in/email", {
+          email: other.email,
+          password: other.password,
+        })
+      ).status,
+    ).toBe(200);
+  });
 });
 
 describe("account security", () => {
@@ -168,7 +440,7 @@ describe("account security", () => {
       )
       .finally(() => db.end());
     const [code, ...others] = enabled.body.backupCodes;
-    expect(code).toBeDefined();
+    expect(code).toMatch(/^[\w-]{11}$/);
     for (const backup of enabled.body.backupCodes)
       expect(stored.rows[0]?.backup_codes).not.toContain(backup);
 
@@ -201,6 +473,62 @@ describe("account security", () => {
     });
   });
 
+  it("writes the alert with the audit entry, not straight to Redis, so it can't be lost", async () => {
+    const { session, email, password } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    await session.auth("/change-password", {
+      currentPassword: password,
+      newPassword: newPassword(),
+    });
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client
+      .query<{ name: string; payload: { notification?: { to: { email: string } } } }>(
+        `SELECT name, payload FROM app.outbox_event
+          WHERE actor_id = $1::uuid AND name IN ('auth.password_changed.v1', 'notification.requested.v1')
+          ORDER BY id`,
+        [userId],
+      )
+      .finally(() => client.end());
+    expect(rows.map((row) => row.name)).toEqual([
+      "auth.password_changed.v1",
+      "notification.requested.v1",
+    ]);
+    expect(rows[1]?.payload.notification?.to.email).toBe(email);
+    // Nothing went to the queue directly.
+    const queue = new Queue("notifications-critical", {
+      connection: harness.redis,
+      prefix: queuePrefix("notifications-critical"),
+    });
+    const queued = (await queue.getJobs(["waiting", "delayed", "prioritized"])).filter(
+      (job) =>
+        job.data.payload.template === "auth.security-alert" && job.data.payload.to.email === email,
+    );
+    await queue.close();
+    expect(queued).toEqual([]);
+  });
+
+  it("a change still succeeds when its alert can't be recorded", async () => {
+    const { session, password } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    // Another transaction holds the outbox, so the alert's transaction times out.
+    const holder = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await holder.connect();
+    await holder.query("BEGIN");
+    await holder.query("LOCK TABLE app.outbox_event IN SHARE MODE");
+    const changed = await session
+      .auth("/change-password", { currentPassword: password, newPassword: newPassword() })
+      .finally(() => holder.query("ROLLBACK"));
+    const { rows } = await holder
+      .query(
+        "SELECT 1 FROM app.outbox_event WHERE actor_id = $1::uuid AND name = 'auth.password_changed.v1'",
+        [userId],
+      )
+      .finally(() => holder.end());
+    expect(changed.status).toBe(200);
+    expect(rows).toEqual([]);
+  });
+
   it("a failed change sends no alert", async () => {
     const { session, email } = await signedInUser();
     const failed = await session.auth("/change-password", {
@@ -208,9 +536,8 @@ describe("account security", () => {
       newPassword: newPassword(),
     });
     expect(failed.status).toBe(400);
-    await expect(takeNotification(harness, "auth.security-alert", email)).rejects.toThrow(
-      /No auth.security-alert/,
-    );
+    // An alert is recorded before the request answers: there's nothing to wait for.
+    expect(await queuedNotification(harness, "auth.security-alert", email)).toBeUndefined();
   });
 
   it("changing the email needs codes from both addresses and alerts the old one", async () => {
@@ -271,7 +598,7 @@ describe("time limits", () => {
   });
 
   it("a session older than the fresh window can't list devices or add passkeys", async () => {
-    const { session } = await signedInUser();
+    const { session, email } = await signedInUser();
     expect((await session.authGet<unknown[]>("/list-sessions")).length).toBe(1);
     await editSession(harness, session, (stored) => {
       stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
@@ -282,7 +609,7 @@ describe("time limits", () => {
     const passkey = await session.authGet<{ code: string }>("/passkey/generate-register-options");
     expect(passkey.code).toBe("SESSION_NOT_FRESH");
     // Everyday use is unaffected.
-    expect((await session.rpc.user.me()).email).toBeDefined();
+    expect((await session.rpc.user.me()).email).toBe(email);
   });
 
   it("a session past its expiry is rejected", async () => {
@@ -383,6 +710,105 @@ describe("organizations and the audit trail", () => {
     });
   });
 
+  it("limits invitations, per address and per workspace, so our domain can't be used to spam", async () => {
+    const { owner, orgId } = await team();
+    const invite = (email: string, resend = false) =>
+      owner.session.auth<{ code?: string }>("/organization/invite-member", {
+        email,
+        role: "member",
+        organizationId: orgId,
+        resend,
+      });
+    // One address: three emails a day, however they're asked for.
+    const target = newEmail();
+    expect((await invite(target)).status).toBe(200);
+    expect((await invite(target, true)).status).toBe(200);
+    expect((await invite(target, true)).status).toBe(200);
+    expect((await invite(target, true)).status).toBe(429);
+    // One workspace: PENDING_INVITATION_LIMIT waiting at once (the team already has one,
+    // its member's accepted one doesn't count, and the one above does).
+    let sent = 1;
+    while (sent < PENDING_INVITATION_LIMIT) {
+      expect((await invite(newEmail())).status).toBe(200);
+      sent++;
+    }
+    const over = await invite(newEmail());
+    expect(over.status).toBe(403);
+    expect(over.body.code).toBe("INVITATION_LIMIT_REACHED");
+  });
+
+  it("limits the invitations one person sends in an hour, across workspaces", async () => {
+    const { session } = await signedInUser();
+    const workspace = async () => {
+      const org = await session.auth<{ id: string }>("/organization/create", {
+        name: "Team",
+        slug: `team-${randomUUID().slice(0, 8)}`,
+      });
+      return org.body.id;
+    };
+    const invite = (organizationId: string) =>
+      session.auth<{ code?: string }>("/organization/invite-member", {
+        email: newEmail(),
+        role: "member",
+        organizationId,
+      });
+    // Two workspaces, so the per-workspace limit on waiting invitations isn't what stops it.
+    const [first, second] = [await workspace(), await workspace()];
+    for (let i = 0; i < PENDING_INVITATION_LIMIT; i++)
+      expect((await invite(first)).status).toBe(200);
+    for (let i = PENDING_INVITATION_LIMIT; i < 30; i++)
+      expect((await invite(second)).status).toBe(200);
+    const over = await invite(second);
+    expect(over.status).toBe(429);
+    expect(over.body.code).toBe("RATE_LIMITED");
+  });
+
+  it("refuses an invitation without a session, or without an address", async () => {
+    const { session } = await signedInUser();
+    const anonymous = createSession(harness);
+    expect(
+      (await anonymous.auth("/organization/invite-member", { email: newEmail(), role: "member" }))
+        .status,
+    ).toBe(401);
+    const noAddress = await session.auth("/organization/invite-member", {
+      email: 42,
+      role: "member",
+    });
+    expect(noAddress.status).toBe(400);
+  });
+
+  it("won't let a client mark a workspace as someone's personal one", async () => {
+    const { session } = await signedInUser();
+    const slug = `team-${randomUUID().slice(0, 8)}`;
+    for (const body of [
+      { name: "Fake", slug, metadata: { personal: true } },
+      { name: "Fake", slug: `personal-${randomUUID()}` },
+    ]) {
+      expect((await session.auth("/organization/create", body)).status).toBe(400);
+    }
+    const team = await session.auth<{ id: string }>("/organization/create", { name: "Team", slug });
+    const update = await session.auth("/organization/update", {
+      organizationId: team.body.id,
+      data: { metadata: { personal: true } },
+    });
+    expect(update.status).toBe(400);
+  });
+
+  it(`caps the workspaces one account belongs to at ${ORGANIZATION_LIMIT}`, async () => {
+    const { session } = await signedInUser();
+    const create = () =>
+      session.auth<{ code?: string }>("/organization/create", {
+        name: "Many",
+        slug: `many-${randomUUID().slice(0, 8)}`,
+      });
+    // The personal workspace is the first.
+    for (let count = 1; count < ORGANIZATION_LIMIT; count++)
+      expect((await create()).status).toBe(200);
+    const over = await create();
+    expect(over.status).toBe(403);
+    expect(over.body.code).toBe("YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS");
+  });
+
   it("a removed member loses access on their very next request", async () => {
     const { owner, member, orgId } = await team();
     await member.session.rpc.todo.create({ title: "Mine for now" });
@@ -396,6 +822,41 @@ describe("organizations and the audit trail", () => {
       member.session.rpc.todo.create({ title: "Sneaky" }),
       "NO_ACTIVE_ORGANIZATION",
     );
+  });
+
+  it("a member who leaves loses access everywhere at once, and the leave is recorded", async () => {
+    const { member, orgId, memberId } = await team();
+    // A second session (another device), already holding the cached role.
+    const elsewhere = createSession(harness);
+    await elsewhere.auth("/sign-in/email", { email: member.email, password: member.password });
+    await elsewhere.auth("/organization/set-active", { organizationId: orgId });
+    await elsewhere.rpc.todo.list({ limit: 20 });
+
+    expect(
+      (await member.session.auth("/organization/leave", { organizationId: orgId })).status,
+    ).toBe(200);
+    await expectError(elsewhere.rpc.todo.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
+    const removed = await outbox("org_id = $1::uuid AND name = 'org.member_removed.v1'", [orgId]);
+    expect(removed).toEqual([
+      expect.objectContaining({
+        actor_id: memberId,
+        payload: expect.objectContaining({ userId: memberId }),
+      }),
+    ]);
+  });
+
+  it("records a member's departure when they delete their account", async () => {
+    const { member, orgId, memberId } = await team();
+    expect((await member.session.auth("/delete-user", { password: member.password })).status).toBe(
+      200,
+    );
+    const removed = await outbox("org_id = $1::uuid AND name = 'org.member_removed.v1'", [orgId]);
+    expect(removed).toEqual([
+      expect.objectContaining({
+        actor_id: memberId,
+        payload: expect.objectContaining({ userId: memberId }),
+      }),
+    ]);
   });
 
   it("only owners and admins read the audit log, and only their organization's", async () => {
@@ -416,10 +877,113 @@ describe("organizations and the audit trail", () => {
     expect(log.items.map((entry) => entry.payload.title)).toEqual(["Audited"]);
     await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
   });
+
+  it("names who did each thing in the audit log, newest first, a page at a time", async () => {
+    const { owner, orgId } = await team();
+    const { id: ownerId } = await owner.session.rpc.user.me();
+    const admin = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await admin.connect();
+    await admin.query("SELECT audit.ensure_partitions(1, 1)");
+    // Oldest first: by the owner, by an account deleted since, and by the system (a job).
+    for (const [actor, payload] of [
+      [ownerId, '{"title":"By the owner"}'],
+      [randomUUID(), "null"],
+      [null, '{"title":"By a job"}'],
+    ]) {
+      await admin.query(
+        `INSERT INTO audit.audit_log (id, occurred_at, name, key, payload, org_id, actor_id, source)
+         VALUES (uuidv7(), now(), 'todo.created.v1', 'k', $1::jsonb, $2, $3, 'app')`,
+        [payload, orgId, actor],
+      );
+    }
+    await admin.end();
+
+    const first = await owner.session.rpc.audit.list({ limit: 2 });
+    expect(first.items.map((entry) => [entry.actor, entry.payload])).toEqual([
+      [null, { title: "By a job" }],
+      [null, {}],
+    ]);
+    const rest = await owner.session.rpc.audit.list({
+      limit: 2,
+      cursor: first.nextCursor as string,
+    });
+    expect(rest.items.find((entry) => entry.payload.title === "By the owner")?.actor).toMatchObject(
+      { id: ownerId },
+    );
+  });
+
+  it("reads a stored role by an allow-list: an unknown one grants nothing, a compound one its strongest part", async () => {
+    const { member, orgId, memberId } = await team();
+    const setRole = async (role: string) => {
+      const admin = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+      await admin.connect();
+      await admin
+        .query("UPDATE auth.member SET role = $1 WHERE organization_id = $2 AND user_id = $3", [
+          role,
+          orgId,
+          memberId,
+        ])
+        .finally(() => admin.end());
+      // As a membership change through better-auth would, forget the cached role.
+      const cached = await harness.redis.keys(`cache:membership:*${orgId}:${memberId}`);
+      if (cached.length) await harness.redis.del(...cached);
+    };
+
+    // better-auth joins several roles with commas: the strongest one counts.
+    await setRole("member,admin");
+    expect((await member.session.rpc.audit.list({ limit: 20 })).items).toEqual([]);
+    // A role the API doesn't know (a future "viewer", a typo, a hand edit) isn't an admin,
+    // nor a member: it grants nothing at all.
+    await setRole("viewer");
+    await expectError(member.session.rpc.audit.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
+    await expectError(member.session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+    await setRole("member,viewer");
+    await expectError(member.session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+    await setRole("member");
+    await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
+    expect((await member.session.rpc.todo.list({})).items).toEqual([]);
+  });
 });
 
 describe("webhook endpoints", () => {
   const url = "http://127.0.0.1:9/hook";
+
+  it("limits test sends per workspace, so our servers can't flood an endpoint", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({
+      url,
+      events: ["todo.created.v1"],
+    });
+    for (let i = 0; i < 10; i++) await session.rpc.webhooks.sendTest({ id: endpoint.id });
+    const limited = await expectError(
+      session.rpc.webhooks.sendTest({ id: endpoint.id }),
+      "RATE_LIMITED",
+    );
+    expect(limited.data.params).toMatchObject({ retryAfterSeconds: expect.any(Number) });
+  });
+
+  it("needs a recent sign-in to add one or point it elsewhere", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({
+      url,
+      events: ["todo.created.v1"],
+    });
+    await editSession(harness, session, (stored) => {
+      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    });
+    await expectError(
+      session.rpc.webhooks.createEndpoint({ url, events: ["todo.created.v1"] }),
+      "FRESH_SESSION_REQUIRED",
+    );
+    await expectError(
+      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url: "http://127.0.0.1:9/other" }),
+      "FRESH_SESSION_REQUIRED",
+    );
+    // Anything else about it doesn't.
+    await expect(
+      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, enabled: false }),
+    ).resolves.toMatchObject({ url });
+  });
 
   it("returns the signing secret once and keeps it encrypted at rest", async () => {
     const { session } = await signedInUser();
@@ -440,7 +1004,7 @@ describe("webhook endpoints", () => {
     ]);
     await client.end();
     expect(rows[0].secret).not.toContain(created.secret.slice(6));
-    expect(rows[0].secret).toMatch(/^v1\./);
+    expect(rows[0].secret).toMatch(/^v2\./);
     expect(events.rows.map((row) => row.name)).toEqual(["webhook.endpoint_created.v1"]);
 
     const rotated = await session.rpc.webhooks.rotateSecret({ id: created.endpoint.id });
@@ -519,6 +1083,116 @@ describe("webhook endpoints", () => {
     );
   });
 
+  it("records only what an update really changed", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    const changes = async () => {
+      const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+      await client.connect();
+      const { rows } = await client
+        .query<{ payload: { changed: string[] } }>(
+          "SELECT payload FROM app.outbox_event WHERE key = $1 AND name = 'webhook.endpoint_updated.v1' ORDER BY id",
+          [endpoint.id],
+        )
+        .finally(() => client.end());
+      return rows.map((row) => row.payload.changed);
+    };
+    // The same URL, description and state again: nothing to record.
+    await session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url, enabled: true });
+    expect(await changes()).toEqual([]);
+    const updated = await session.rpc.webhooks.updateEndpoint({
+      id: endpoint.id,
+      url: "http://127.0.0.1:9/moved",
+      events: ["todo.completed.v1"],
+    });
+    expect(updated).toMatchObject({
+      url: "http://127.0.0.1:9/moved",
+      events: ["todo.completed.v1"],
+    });
+    expect(await changes()).toEqual([["url", "events"]]);
+    await expectError(
+      session.rpc.webhooks.updateEndpoint({ id: randomUUID(), enabled: false }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+  });
+
+  it("deletes an endpoint, once", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    await session.rpc.webhooks.deleteEndpoint({ id: endpoint.id });
+    expect(await session.rpc.webhooks.listEndpoints()).toEqual([]);
+    await expectError(
+      session.rpc.webhooks.deleteEndpoint({ id: endpoint.id }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+  });
+
+  it("can't rotate the secret of, or test, an endpoint that isn't there", async () => {
+    const { session } = await signedInUser();
+    await expectError(
+      session.rpc.webhooks.rotateSecret({ id: randomUUID() }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+    await expectError(
+      session.rpc.webhooks.sendTest({ id: randomUUID() }),
+      "WEBHOOK_ENDPOINT_NOT_FOUND",
+    );
+  });
+
+  it("lists an endpoint's deliveries newest first, and sends one again", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    const { activeOrganizationId: orgId } = await session.rpc.user.me();
+    // apps/webhooks records deliveries; here they're written as it would, oldest first.
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const ids: string[] = [];
+    for (const [status, lastError] of [
+      ["succeeded", null],
+      ["failed", "timeout"],
+      // A code from before the current list reads as a failed connection.
+      ["failed", "socket hang up"],
+    ]) {
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO webhooks.delivery (endpoint_id, org_id, event_id, event_name, body, status, attempts, last_error)
+         VALUES ($1, $2, $3, 'todo.created.v1', '{}', $4, 1, $5) RETURNING id`,
+        [endpoint.id, orgId, randomUUID(), status, lastError],
+      );
+      ids.push((rows[0] as { id: string }).id);
+    }
+    await client.end();
+
+    const first = await session.rpc.webhooks.listDeliveries({ id: endpoint.id, limit: 2 });
+    expect(first.items.map((delivery) => [delivery.status, delivery.lastError])).toEqual([
+      ["failed", "connection_failed"],
+      ["failed", "timeout"],
+    ]);
+    const rest = await session.rpc.webhooks.listDeliveries({
+      id: endpoint.id,
+      limit: 2,
+      cursor: first.nextCursor as string,
+    });
+    expect(rest).toMatchObject({ items: [{ id: ids[0], status: "succeeded" }], nextCursor: null });
+
+    await session.rpc.webhooks.redeliver({ id: ids[1] as string });
+    const queue = new Queue("webhook-deliveries", {
+      connection: harness.redis,
+      prefix: queuePrefix("webhook-deliveries"),
+    });
+    const jobs = await queue.getJobs(["waiting"]);
+    await queue.close();
+    expect(
+      jobs.some((job) => job.name === "redeliver" && job.data.payload.deliveryId === ids[1]),
+    ).toBe(true);
+
+    // Another workspace's delivery, or none at all, isn't found.
+    const stranger = await signedInUser();
+    await expectError(
+      stranger.session.rpc.webhooks.redeliver({ id: ids[1] as string }),
+      "WEBHOOK_DELIVERY_NOT_FOUND",
+    );
+  });
+
   it("limits endpoints per organization", async () => {
     const { session } = await signedInUser();
     for (let i = 0; i < 20; i++) await session.rpc.webhooks.createEndpoint({ url });
@@ -531,21 +1205,40 @@ describe("webhook endpoints", () => {
 });
 
 describe("realtime", () => {
-  /** Reads a stream until `count` messages arrive (or 3 s pass). */
+  /** Reads a stream until `count` messages arrive. */
   async function read(stream: AsyncIterable<unknown>, count: number) {
     const received: unknown[] = [];
-    const reading = (async () => {
-      for await (const message of stream) {
-        received.push(message);
-        if (received.length === count) return;
-      }
-    })();
-    await Promise.race([reading, new Promise((resolve) => setTimeout(resolve, 3_000))]);
+    for await (const message of stream) {
+      received.push(message);
+      if (received.length === count) break;
+    }
     return received;
+  }
+
+  /** Waits until Redis has this process subscribed to each of the channels. */
+  async function subscribed(...channels: string[]) {
+    for (const channel of channels) {
+      await eventually(
+        async () => (await harness.redis.pubsub("NUMSUB", `realtime:${channel}`))[1],
+        (subscribers) => Number(subscribers) > 0,
+      );
+    }
   }
 
   it("refuses an eleventh stream for one user with a typed error, and frees slots on close", async () => {
     const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const { RealtimeService } = await import("../src/modules/realtime");
+    const realtime = harness.app.get(RealtimeService);
+    /** Whether the server would open another stream for this user now (opening none). */
+    const full = () => {
+      try {
+        realtime.stream(me.id, me.activeOrganizationId as string, undefined);
+        return false;
+      } catch {
+        return true;
+      }
+    };
     const controllers = Array.from({ length: 10 }, () => new AbortController());
     const streams = await Promise.all(
       controllers.map((controller) =>
@@ -554,7 +1247,7 @@ describe("realtime", () => {
     );
     // Iterating is what opens each stream on the server.
     const readers = streams.map((stream) => read(stream, 1));
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await eventually(full, (isFull) => isFull);
     await expectError(
       (async () => {
         const extra = await session.rpc.realtime.subscribe();
@@ -565,38 +1258,58 @@ describe("realtime", () => {
     for (const controller of controllers) controller.abort();
     // Aborting ends each reader with an AbortError: expected.
     await Promise.allSettled(readers);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    // Closed streams give their slots back.
-    const controller = new AbortController();
-    const again = await session.rpc.realtime.subscribe(undefined, { signal: controller.signal });
-    let refused: unknown;
-    const reading = read(again, 1).catch((error: unknown) => {
-      refused = error;
+    // Closed streams give their slots back: a new one opens and delivers.
+    await eventually(full, (isFull) => !isFull);
+    const again = await session.rpc.realtime.subscribe();
+    const reading = read(again, 1);
+    await subscribed(realtimeChannel.user(me.id));
+    await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
+      type: "notifications.changed",
     });
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(refused).toBeUndefined();
-    controller.abort();
-    await reading;
+    expect(await reading).toEqual([{ type: "notifications.changed" }]);
   });
 
   it("streams messages for the user and their active workspace only", async () => {
     const { session } = await signedInUser();
     const me = await session.rpc.user.me();
+    const orgId = me.activeOrganizationId as string;
     const controller = new AbortController();
     const stream = await session.rpc.realtime.subscribe(undefined, { signal: controller.signal });
-    await new Promise((resolve) => setTimeout(resolve, 200)); // subscribed
+    const reading = read(stream, 2);
+    await subscribed(realtimeChannel.user(me.id), realtimeChannel.org(orgId));
     await publishRealtime(harness.redis, realtimeChannel.org(randomUUID()), {
       type: "todos.changed",
     });
-    await publishRealtime(harness.redis, realtimeChannel.org(me.activeOrganizationId as string), {
+    await publishRealtime(harness.redis, realtimeChannel.org(orgId), {
       type: "todos.changed",
     });
     await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
       type: "notifications.changed",
     });
-    const received = await read(stream, 2);
+    const received = await reading;
     controller.abort();
     expect(received).toEqual([{ type: "todos.changed" }, { type: "notifications.changed" }]);
+  });
+
+  it("drops a message outside the contract and keeps streaming", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const { RealtimeService } = await import("../src/modules/realtime");
+    // In-process, without a signal: the stream ends when its reader stops.
+    const stream = harness.app
+      .get(RealtimeService)
+      .stream(me.id, me.activeOrganizationId as string, undefined);
+    const first = stream.next();
+    await subscribed(realtimeChannel.user(me.id));
+    await harness.redis.publish(
+      `realtime:${realtimeChannel.user(me.id)}`,
+      JSON.stringify({ type: "not.in.the.contract" }),
+    );
+    await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
+      type: "notifications.changed",
+    });
+    expect((await first).value).toEqual({ type: "notifications.changed" });
+    await stream.return(undefined);
   });
 
   it("needs a session", async () => {
@@ -629,13 +1342,34 @@ describe("notifications", () => {
     await deliver(me.id, ["first", "second", "third"]);
     const page = await session.rpc.notifications.list({ limit: 2 });
     expect(page.items.map((item) => item.data.title)).toEqual(["third", "second"]);
-    expect(page.nextCursor).not.toBeNull();
+    expect(page.nextCursor).toEqual(expect.any(String));
     expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 3 });
+
+    const rest = await session.rpc.notifications.list({
+      limit: 2,
+      cursor: page.nextCursor as string,
+    });
+    expect(rest).toMatchObject({ items: [{ data: { title: "first" } }], nextCursor: null });
 
     await session.rpc.notifications.markRead({ ids: [page.items[0]?.id as string] });
     expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 2 });
     await session.rpc.notifications.markAllRead();
     expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 0 });
+  });
+
+  it("lists a notification that carries no data", async () => {
+    const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    await client
+      .query(
+        `INSERT INTO notifications.notification (user_id, template, data, link) VALUES ($1, 'todo.reminder', 'null', '/dashboard')`,
+        [me.id],
+      )
+      .finally(() => client.end());
+    const { items } = await session.rpc.notifications.list({ limit: 20 });
+    expect(items.map((item) => item.data)).toEqual([{}]);
   });
 
   it("keeps each inbox private", async () => {
@@ -662,12 +1396,33 @@ describe("notifications", () => {
     });
     expect(updated).toMatchObject({ dailyDigest: true, quietHours: { start: 1320, end: 420 } });
 
+    // Changing only the digest, then clearing quiet hours, keeps everything else.
+    expect(await session.rpc.notifications.updatePreferences({ dailyDigest: false })).toMatchObject(
+      { dailyDigest: false, quietHours: { start: 1320, end: 420 } },
+    );
+    const cleared = await session.rpc.notifications.updatePreferences({ quietHours: null });
+    expect(cleared).toMatchObject({ dailyDigest: false, quietHours: null });
+    expect(cleared.categories.find((c) => c.name === "activity")?.channels).toContainEqual({
+      channel: "email",
+      enabled: false,
+    });
+
     await expectError(
       session.rpc.notifications.updatePreferences({
         channels: [{ category: "security", channel: "email", enabled: false }],
       }),
       "VALIDATION_FAILED",
     );
+  });
+
+  it("answers a one-click unsubscribe without a token as an invalid link", async () => {
+    const response = await fetch(`${harness.baseUrl}/api/v1/notifications/unsubscribe`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "List-Unsubscribe=One-Click",
+    });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { code: string }).code).toBe("UNSUBSCRIBE_LINK_INVALID");
   });
 
   it("unsubscribes from a signed link, one-click included, and rejects forgeries", async () => {
@@ -774,6 +1529,28 @@ describe("phone number", () => {
     expect((await session.rpc.user.me()).phoneNumber).toBeNull();
   });
 
+  it("counts parallel guesses too: no more than five are ever compared", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    const wrong = data.code === "000000" ? "111111" : "000000";
+    // In-process, so the guesses really interleave at every Redis round trip. Imported
+    // only now: it loads the API's configuration, which startApi sets up first.
+    const phone = harness.app.get<PhoneService>(
+      (await import("../src/modules/user/phone.service")).PhoneService,
+    );
+    const guesses = await Promise.allSettled(
+      Array.from({ length: 15 }, () => phone.verify(userId, phoneNumber, wrong)),
+    );
+    expect(guesses.every((guess) => guess.status === "rejected")).toBe(true);
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "PHONE_CODE_INVALID",
+    );
+  });
+
   it("a code only verifies the number it was sent to, and only once", async () => {
     const { session } = await signedInUser();
     const phoneNumber = newPhone();
@@ -803,11 +1580,18 @@ describe("phone number", () => {
     );
   });
 
-  it("a number can be on one account only", async () => {
+  it("a number can be on one account only, which shows only when verifying it", async () => {
     const owner = await signedInUser();
     const { phoneNumber } = await addPhone(owner.session);
     const other = await signedInUser();
-    await expectError(other.session.rpc.user.sendPhoneCode({ phoneNumber }), "PHONE_NUMBER_TAKEN");
+    // Asking for a code says nothing about whose number it is...
+    await other.session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    // ...only proving you receive its texts does.
+    await expectError(
+      other.session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "PHONE_NUMBER_TAKEN",
+    );
     // Its own number again: nothing to verify.
     await expectError(owner.session.rpc.user.sendPhoneCode({ phoneNumber }), "PHONE_NUMBER_TAKEN");
   });
@@ -827,6 +1611,72 @@ describe("phone number", () => {
       "PHONE_NUMBER_TAKEN",
     );
     expect((await second.session.rpc.user.me()).phoneNumber).toBeNull();
+  });
+
+  it("of two requests with the right code at once, only one adds the number", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    // In-process, so both pass the attempt count before either claims the code.
+    const phone = harness.app.get<PhoneService>(
+      (await import("../src/modules/user/phone.service")).PhoneService,
+    );
+    const results = await Promise.allSettled([
+      phone.verify(userId, phoneNumber, data.code),
+      phone.verify(userId, phoneNumber, data.code),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      reason: { code: "PHONE_CODE_INVALID" },
+    });
+    expect((await session.rpc.user.me()).phoneNumber).toBe(phoneNumber);
+  });
+
+  it("texts and alerts in English when the account's language is no longer offered", async () => {
+    const { session, email, password } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    await client
+      .query("UPDATE auth.user SET locale = 'fr' WHERE id = $1", [userId])
+      .finally(() => client.end());
+    // A new session reads the account as it's stored now.
+    await session.auth("/sign-in/email", { email, password });
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const text = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    expect(text.to.locale).toBe("en");
+    await session.rpc.user.verifyPhone({ phoneNumber, code: text.data.code });
+    expect((await takeNotification(harness, "auth.security-alert", email)).to.locale).toBe("en");
+  });
+
+  it("removing a number when there is none changes nothing and alerts nobody", async () => {
+    const { session, email } = await signedInUser();
+    const me = await session.rpc.user.me();
+    expect((await session.rpc.user.removePhone()).phoneNumber).toBeNull();
+    expect(await outboxEvents(me.id)).toEqual([]);
+    // An alert is recorded before the request answers: there's nothing to wait for.
+    expect(await queuedNotification(harness, "auth.security-alert", email)).toBeUndefined();
+  });
+
+  it("a number that can't be saved fails as INTERNAL, not as taken", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    // Another transaction holds the account's row, so the change times out.
+    const holder = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await holder.connect();
+    await holder.query("BEGIN");
+    await holder.query("SELECT 1 FROM auth.user WHERE id = $1 FOR UPDATE", [userId]);
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "INTERNAL",
+    ).finally(() => holder.query("ROLLBACK").then(() => holder.end()));
+    expect((await session.rpc.user.me()).phoneNumber).toBeNull();
   });
 
   it("limits texts per account and per number", async () => {
@@ -911,7 +1761,7 @@ describe("phone number", () => {
   });
 });
 
-describe("uploads and the profile picture", () => {
+describe("uploads and the profile picture", { tags: ["files"] }, () => {
   const storage = new S3Storage({
     bucket: LOCAL_STORAGE.S3_BUCKET,
     region: "us-east-1",
@@ -1017,6 +1867,43 @@ describe("uploads and the profile picture", () => {
     );
     await queue.close();
     expect(jobs.map((job) => job.id)).toEqual([done.id]);
+  });
+
+  it("completing a file that's already been checked just returns it", async () => {
+    const { session } = await signedInUser();
+    const file = await uploaded(session);
+    await markReady(file.id);
+    expect(await session.rpc.files.completeUpload({ fileId: file.id })).toMatchObject({
+      id: file.id,
+      status: "ready",
+    });
+  });
+
+  it("a file kept for another purpose can't be the picture, and downloads under its name", async () => {
+    const { session } = await signedInUser();
+    const file = await uploaded(session);
+    await markReady(file.id);
+    await sql("UPDATE files.file SET purpose = 'document', filename = 'notes.txt' WHERE id = $1", [
+      file.id,
+    ]);
+    await expectError(session.rpc.user.setAvatar({ fileId: file.id }), "FILE_NOT_FOUND");
+    const content = await fetch(`${harness.baseUrl}/api/v1/files/${file.id}/content`, {
+      headers: { cookie: [...session.cookies()].map(([k, v]) => `${k}=${v}`).join("; ") },
+      redirect: "manual",
+    });
+    expect(content.status).toBe(302);
+    const download = await fetch(content.headers.get("location") as string);
+    expect(download.headers.get("content-disposition")).toContain("notes.txt");
+  });
+
+  it("answers an id that isn't a file id as not found", async () => {
+    const { session } = await signedInUser();
+    const response = await fetch(`${harness.baseUrl}/api/v1/files/not-an-id/content`, {
+      headers: { cookie: [...session.cookies()].map(([k, v]) => `${k}=${v}`).join("; ") },
+      redirect: "manual",
+    });
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { code: string }).code).toBe("FILE_NOT_FOUND");
   });
 
   it("keeps each user's uploads private", async () => {
@@ -1409,6 +2296,27 @@ describe("account deletion", () => {
   });
 });
 
+describe("events outside a request", () => {
+  it("name the workspace the change happened in, from a job, script or seed as from a request", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const [personal] = await session.authGet<{ id: string }[]>("/organization/list");
+    const orgId = personal?.id as string;
+    const { TodoService } = await import("../src/modules/todo");
+    // Called directly: no request, so no organization in the request context.
+    const todo = await harness.app.get(TodoService).create(orgId, userId, "From a job");
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client
+      .query<{ org_id: string | null }>(
+        "SELECT org_id FROM app.outbox_event WHERE name = 'todo.created.v1' AND key = $1",
+        [todo.id],
+      )
+      .finally(() => client.end());
+    expect(rows).toEqual([{ org_id: orgId }]);
+  });
+});
+
 describe("todos", () => {
   it("creates, pages, completes and deletes, with typed errors", async () => {
     const { session } = await signedInUser();
@@ -1419,7 +2327,7 @@ describe("todos", () => {
 
     const first = await session.rpc.todo.list({ limit: 2 });
     expect(first.items.map((todo) => todo.title)).toEqual(["three", "two"]);
-    expect(first.nextCursor).toBeTruthy();
+    expect(first.nextCursor).toEqual(expect.any(String));
     const second = await session.rpc.todo.list({ limit: 2, cursor: first.nextCursor ?? undefined });
     expect(second.items.map((todo) => todo.title)).toEqual(["one"]);
     expect(second.nextCursor).toBeNull();
@@ -1474,7 +2382,40 @@ describe("todos", () => {
     const events = await migrator.appOutboxEvent.findMany({ where: { key: todo.id } });
     await migrator.$disconnect();
     expect(events.map((event) => event.name)).toEqual(["todo.created.v1"]);
-    expect(events[0]?.requestId).toBeTruthy();
+    // The request's own id (a new UUID: the test's client isn't a trusted proxy).
+    expect(events[0]?.requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
+  it("records completing a todo, not reopening it", async () => {
+    const { session } = await signedInUser();
+    const todo = await session.rpc.todo.create({ title: "back and forth" });
+    const done = await session.rpc.todo.setCompleted({
+      id: todo.id,
+      completed: true,
+      version: todo.version,
+    });
+    await session.rpc.todo.setCompleted({ id: todo.id, completed: false, version: done.version });
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client
+      .query("SELECT name FROM app.outbox_event WHERE key = $1 ORDER BY id", [todo.id])
+      .finally(() => client.end());
+    expect(rows.map((row) => row.name)).toEqual(["todo.created.v1", "todo.completed.v1"]);
+  });
+});
+
+describe("the REST API's reference", () => {
+  it("serves the OpenAPI document, and a page to read it outside production", async () => {
+    const spec = await fetch(`${harness.baseUrl}/api/v1/openapi.json`);
+    expect(spec.status).toBe(200);
+    expect(((await spec.json()) as { info: object }).info).toMatchObject({
+      title: "Boilerplate API",
+    });
+    const docs = await fetch(`${harness.baseUrl}/docs`);
+    expect(docs.headers.get("content-type")).toContain("text/html");
+    expect(await docs.text()).toContain('data-url="/api/v1/openapi.json"');
   });
 });
 
@@ -1486,5 +2427,17 @@ describe("clients", () => {
     await expect(current.rpc.system.info()).resolves.toMatchObject({
       minimumClientVersion: "2.0.0",
     });
+  });
+
+  it("counts a version it can't read as outdated, so the gate can't be skipped", async () => {
+    for (const appVersion of ["2.0.0-rc.1", "garbage", "3", "2.0", "v2.1.0", "NaN.NaN.NaN"]) {
+      const session = createSession(harness, { appVersion });
+      await expectError(session.rpc.system.info(), "CLIENT_OUTDATED");
+    }
+    for (const appVersion of ["2.0.1", "2.1.0-beta", "10.0.0"]) {
+      await expect(createSession(harness, { appVersion }).rpc.system.info()).resolves.toMatchObject(
+        { minimumClientVersion: "2.0.0" },
+      );
+    }
   });
 });

@@ -1,7 +1,9 @@
 /** Integration tests for the Redis-backed helpers. Requires `bun run db:up`. */
 import { randomUUID } from "node:crypto";
+import { Logger } from "@nestjs/common";
 import { Redis } from "ioredis";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { CacheService } from "../src/cache";
 import { AppError } from "../src/errors";
 import { IdempotencyStore } from "../src/idempotency";
@@ -19,15 +21,32 @@ describe("CacheService", () => {
     let loads = 0;
     const load = async () => {
       loads += 1;
+      // A slow load on purpose, so the other nine ask while it's still running.
       await new Promise((resolve) => setTimeout(resolve, 50));
       return { plan: "pro" };
     };
-    const results = await Promise.all(Array.from({ length: 10 }, () => cache.wrap("k", 60, load)));
+    const plan = z.object({ plan: z.string() });
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => cache.wrap("k", 60, plan, load)),
+    );
     expect(results.every((r) => r.plan === "pro")).toBe(true);
-    expect(await cache.wrap("k", 60, load)).toEqual({ plan: "pro" });
+    expect(await cache.wrap("k", 60, plan, load)).toEqual({ plan: "pro" });
     expect(loads).toBe(1);
     await cache.invalidate("k");
-    expect(await cache.get("k")).toBeUndefined();
+    expect(await cache.get("k", plan)).toBeUndefined();
+  });
+
+  it("treats an entry in another shape as a miss, and a Date as its schema reads it", async () => {
+    const cache = new CacheService(redis, `test-${randomUUID()}`);
+    await cache.set("k", { plan: 3 }, 60);
+    const plan = z.object({ plan: z.string() });
+    expect(await cache.get("k", plan)).toBeUndefined();
+    expect(await cache.wrap("k", 60, plan, async () => ({ plan: "free" }))).toEqual({
+      plan: "free",
+    });
+    const at = new Date("2026-09-30T12:00:00Z");
+    await cache.set("when", { at }, 60);
+    expect(await cache.get("when", z.object({ at: z.coerce.date() }))).toEqual({ at });
   });
 });
 
@@ -43,6 +62,33 @@ describe("rate limiter", () => {
     expect(results.map((r) => r.allowed)).toEqual([true, true, true, false]);
     expect(results[3]?.retryAfterSeconds).toBeGreaterThan(0);
     expect((await limiter.consume("ip-2")).allowed).toBe(true);
+  });
+
+  it("forgets what a key used once it's reset", async () => {
+    const limiter = createRateLimiter(redis, {
+      name: `test-reset-${randomUUID()}`,
+      points: 1,
+      windowSeconds: 60,
+    });
+    expect((await limiter.consume("k")).allowed).toBe(true);
+    expect((await limiter.consume("k")).allowed).toBe(false);
+    await limiter.reset("k");
+    expect((await limiter.consume("k")).allowed).toBe(true);
+  });
+
+  it("take() throws RATE_LIMITED with when to retry, past the limit", async () => {
+    const limiter = createRateLimiter(redis, {
+      name: `test-take-${randomUUID()}`,
+      points: 1,
+      windowSeconds: 60,
+    });
+    await limiter.take("k");
+    const error = await limiter.take("k").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      code: "RATE_LIMITED",
+      params: { retryAfterSeconds: expect.any(Number) },
+    });
   });
 
   it("fails closed or open when Redis is unavailable, as configured", async () => {
@@ -63,8 +109,17 @@ describe("rate limiter", () => {
       windowSeconds: 60,
       onRedisError: "allow",
     });
+    const logged = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
     expect((await closed.consume("x")).allowed).toBe(false);
     expect((await open.consume("x")).allowed).toBe(true);
+    // Said, not silent, and once per limiter however many requests hit the outage.
+    for (let i = 0; i < 5; i++) await closed.consume("x");
+    expect(logged).toHaveBeenCalledTimes(2);
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({ limiter: "c", failing: "closed" }),
+      "rate limiter can't reach Redis",
+    );
+    logged.mockRestore();
     dead.disconnect();
   });
 });
@@ -75,25 +130,41 @@ describe("IdempotencyStore", () => {
     const key = randomUUID();
     let runs = 0;
     const op = async () => ({ charged: ++runs });
-    expect(await store.run(key, op)).toEqual({ charged: 1 });
-    expect(await store.run(key, op)).toEqual({ charged: 1 });
+    const charge = z.object({ charged: z.number() });
+    expect(await store.run(key, charge, op)).toEqual({ charged: 1 });
+    expect(await store.run(key, charge, op)).toEqual({ charged: 1 });
     expect(runs).toBe(1);
   });
 
   it("rejects a concurrent duplicate and allows a retry after a failure", async () => {
     const store = new IdempotencyStore(redis);
     const key = randomUUID();
+    // A slow operation on purpose, still running when the duplicate arrives.
     const slow = store.run(
       key,
-      () => new Promise((resolve) => setTimeout(() => resolve("ok"), 100)),
+      z.string(),
+      () => new Promise<string>((resolve) => setTimeout(() => resolve("ok"), 100)),
     );
-    await expect(store.run(key, async () => "dup")).rejects.toBeInstanceOf(AppError);
+    await expect(store.run(key, z.string(), async () => "dup")).rejects.toBeInstanceOf(AppError);
     await slow;
 
     const failing = randomUUID();
-    await expect(store.run(failing, () => Promise.reject(new Error("boom")))).rejects.toThrow(
-      "boom",
-    );
-    expect(await store.run(failing, async () => "second try")).toBe("second try");
+    await expect(
+      store.run(failing, z.string(), () => Promise.reject(new Error("boom"))),
+    ).rejects.toThrow("boom");
+    expect(await store.run(failing, z.string(), async () => "second try")).toBe("second try");
+  });
+});
+
+describe("IdempotencyStore's replay", () => {
+  it("refuses a stored result that no longer matches, rather than run the operation again", async () => {
+    const store = new IdempotencyStore(redis);
+    const key = randomUUID();
+    let runs = 0;
+    await store.run(key, z.object({ charged: z.number() }), async () => ({ charged: ++runs }));
+    await expect(
+      store.run(key, z.object({ receipt: z.string() }), async () => ({ receipt: "r" })),
+    ).rejects.toThrow();
+    expect(runs).toBe(1);
   });
 });

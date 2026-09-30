@@ -50,13 +50,17 @@ export async function forgetBrowserPush() {
   }
 }
 
+/** The device to register; throws for a subscription without keys (it can't be sent to). */
 export function toDevice(subscription: PushSubscription): PushDeviceInput {
   const { endpoint, keys } = subscription.toJSON();
+  if (!keys?.p256dh || !keys.auth) {
+    throw new Error("This browser's push subscription has no encryption keys.");
+  }
   return {
     platform: "web",
     subscription: {
       endpoint: endpoint ?? subscription.endpoint,
-      keys: { p256dh: keys?.p256dh ?? "", auth: keys?.auth ?? "" },
+      keys: { p256dh: keys.p256dh, auth: keys.auth },
     },
   };
 }

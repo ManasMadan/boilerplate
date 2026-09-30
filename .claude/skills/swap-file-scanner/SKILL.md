@@ -1,6 +1,7 @@
 ---
 name: swap-file-scanner
-description: Replace the upload virus scanner (ClamAV) with a scanning API or cloud malware scanning. Use when the user wants a different scanner, or ClamAV is too heavy for the environment.
+description: Replace the upload virus scanner (ClamAV) with a scanning API or cloud malware scanning. Use when the user decides on a different scanner. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the file scanner
@@ -29,3 +30,11 @@ description: Replace the upload virus scanner (ClamAV) with a scanning API or cl
 `apps/worker/src/files/file-scanner.test.ts` (unit, a fake clamd), and the `uploads`
 tests in `apps/worker/test/worker.integration.test.ts`, which scan real files with
 ClamAV (EICAR). Add the same cases for the new scanner.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

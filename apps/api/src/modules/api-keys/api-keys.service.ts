@@ -15,12 +15,13 @@ import {
   type ApiKey,
   type ApiKeyScope,
   type createApiKeyInput,
+  MAX_API_KEY_DAYS,
 } from "@repo/contracts/api";
+import type { OrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
 import { AppError, type Database, InjectDatabase } from "@repo/nest-common";
 import { z } from "zod";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "../../auth/auth.module";
-import type { OrgRole } from "../../auth/memberships";
 import { emitEvent } from "../../outbox";
 import { type ApiKeyRow, ApiKeysRepository } from "./api-keys.repository";
 
@@ -32,6 +33,8 @@ export interface ApiKeyCaller {
   orgId: string;
   userId: string;
   role: OrgRole;
+  /** A key never counts as a fresh sign-in. */
+  signedInAt: null;
 }
 
 const metadataSchema = z.object({ createdBy: z.uuid() });
@@ -91,7 +94,9 @@ export class ApiKeysService {
   }
 
   async create(orgId: string, userId: string, input: z.infer<typeof createApiKeyInput>) {
-    // ponytail: a count check, not a lock; concurrent creates can pass the limit by a few.
+    // A count, not a lock: two admins creating keys at the same moment can both pass it
+    // and end a key or two over the limit, which is harmless for a cap this size. A hard
+    // cap would need a lock on the organization's row for the duration of the create.
     if ((await this.keys.count(orgId)) >= API_KEY_LIMIT) {
       throw new AppError("API_KEY_LIMIT_REACHED", { params: { limit: API_KEY_LIMIT } });
     }
@@ -101,7 +106,8 @@ export class ApiKeysService {
         organizationId: orgId,
         userId,
         name: input.name,
-        expiresIn: input.expiresInDays === null ? null : input.expiresInDays * DAY_SECONDS,
+        // Every key expires: null (the contract's old "never") means the longest.
+        expiresIn: (input.expiresInDays ?? MAX_API_KEY_DAYS) * DAY_SECONDS,
         permissions: toPermissions(input.scopes),
         metadata: { createdBy: userId },
       },
@@ -117,10 +123,7 @@ export class ApiKeysService {
         { actorId: userId, orgId },
       ),
     );
-    const row = await this.keys.find(orgId, created.id);
-    if (!row) throw new Error("The API key just created wasn't found");
-    const [apiKey] = await this.present([row]);
-    if (!apiKey) throw new Error("The API key just created couldn't be listed");
+    const [apiKey] = (await this.present([await this.keys.find(orgId, created.id)])) as [ApiKey];
     return { apiKey, key: created.key };
   }
 
@@ -147,8 +150,8 @@ export class ApiKeysService {
     const result = await this.auth.api.verifyApiKey({ body: { key } });
     if (!result.valid || !result.key) {
       if (result.error?.code === "RATE_LIMITED") {
-        const details = rateLimitDetails.safeParse(result.error);
-        const retryAfterMs = details.success ? details.data.details.tryAgainIn : 60_000;
+        // The plugin's rate limit always says when to try again.
+        const retryAfterMs = rateLimitDetails.parse(result.error).details.tryAgainIn;
         throw new AppError("RATE_LIMITED", {
           params: { retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)) },
         });
@@ -162,14 +165,12 @@ export class ApiKeysService {
     if (!toScopes(result.key.permissions).includes(scope)) {
       throw new AppError("API_KEY_SCOPE_MISSING", { params: { scope } });
     }
-    return { apiKeyId: result.key.id, orgId, userId, role };
+    return { apiKeyId: result.key.id, orgId, userId, role, signedInAt: null };
   }
 
   private async present(rows: ApiKeyRow[]): Promise<ApiKey[]> {
-    const creators = [...new Set(rows.map((row) => createdBy(row.metadata)).filter((id) => id))];
-    const users = new Map(
-      (await this.keys.users(creators as string[])).map((user) => [user.id, user]),
-    );
+    const creators = [...new Set(rows.flatMap((row) => createdBy(row.metadata) ?? []))];
+    const users = new Map((await this.keys.users(creators)).map((user) => [user.id, user]));
     return rows.map((row) => {
       const creator = createdBy(row.metadata);
       return {

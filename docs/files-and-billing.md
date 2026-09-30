@@ -21,9 +21,12 @@ check before anyone can see it:
    it was given.
 3. **Complete.** `files.completeUpload` queues a `files` job with the file id as job id,
    so completing twice checks once.
-4. **Check** (`apps/worker/src/files/files.processor.ts`): the stored size matches what was
-   declared and is within the limit; ClamAV finds nothing (before anything parses the
-   bytes); the real type, sniffed from the bytes, is allowed.
+4. **Check** (`apps/worker/src/files/files.processor.ts`): the stored size is within the
+   limit (`FILE_TOO_LARGE`) and matches what was declared (`FILE_SIZE_MISMATCH`); ClamAV
+   finds nothing (before anything parses the bytes); the real type, sniffed from the
+   bytes, is allowed. The checked file is stored, then its row updated, then the
+   quarantined original removed, so a retry after a crash either checks the original
+   again or only cleans up.
 5. **Re-encode.** Per purpose: avatars are decoded and re-encoded as a 512 px WebP (at
    most 50 megapixels in), which drops everything but pixels (EXIF, GPS, embedded
    payloads).
@@ -35,6 +38,9 @@ check before anyone can see it:
 Pages link to `/api/v1/files/<id>/content`, which checks the session and redirects to a
 presigned download valid for 5 minutes, so links never expire. Row-level security keeps
 files private to their uploader, except ready avatars, which anyone signed in may read.
+A user's picture (`user.image`) is only ever such an avatar, or the profile picture a
+social provider gave at sign-up: sign-up and profile updates ignore or refuse a picture
+a client sends.
 
 The worker's `files-cleanup` task (hourly) forgets uploads never completed or rejected
 after a day, and deletes objects whose row is gone (a trigger queues them in
@@ -77,6 +83,10 @@ its first start to download signatures. `FILE_SCANNER=none` skips scanning while
 on something else (refused in production). The RustFS console is at
 http://localhost:59001.
 
+The local ClamAV can stop answering after running for some hours: uploads then stay
+`pending` and the worker's logs show `clamd timed out`. `docker compose restart clamav`
+brings it back (it keeps its signatures, so it's quick).
+
 ## Billing
 
 Billing is per organization, on Stripe (`apps/api/src/modules/billing`). Stripe is the
@@ -110,7 +120,13 @@ is used, and hide or badge it in the clients.
 - Every `billing.*` procedure is for owners and admins (`orgAdmin`).
 - `billing.checkout` creates the Stripe customer the first time, with
   the organization id in its metadata, and returns a Checkout URL. The first subscription
-  gets a `STRIPE_TRIAL_DAYS` trial. `billing.portal` opens Stripe's billing portal;
+  gets a `STRIPE_TRIAL_DAYS` trial. A workspace has one checkout open at a time: asking
+  again within the hour for the same interval returns the same session (an idempotency
+  key), and a new session expires the one before, so two admins or two tabs can't end up
+  paying for two subscriptions. If two live subscriptions appear anyway, sync logs an
+  error naming both, for someone to refund one. The trial is per workspace, so a new
+  workspace gets a new one; tying it to a card would take Stripe Radar rules or card
+  fingerprints. `billing.portal` opens Stripe's billing portal;
   `billing.invoices` lists past invoices.
 - Stripe's events arrive at apps/webhooks, `POST /webhooks/stripe`: the signature is
   checked against `STRIPE_WEBHOOK_SECRET`, the event is stored once in

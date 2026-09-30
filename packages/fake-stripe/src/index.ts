@@ -7,7 +7,7 @@
  *
  * Hosted pages: `/checkout/<session>` (pay, pay with a declined card, or go back) and
  * `/portal/<session>` (cancel or resume the plan, then return). Test hooks under
- * `/__fake/` make a renewal fail or a subscription lapse.
+ * `/__fake/` make a renewal fail, a subscription lapse, or add an invoice in any status.
  *
  * Only what the app calls is implemented; anything else answers 404 like an unknown
  * Stripe route, so a new Stripe call fails loudly in tests until it's added here.
@@ -29,40 +29,49 @@ export interface FakeStripeOptions {
 
 type Form = Record<string, unknown>;
 
-interface Subscription {
-  id: string;
-  object: "subscription";
+// The fake's objects hold only what the app reads. Each field it shares with Stripe's own
+// types takes its type from them, so a field Stripe renames or retypes in an SDK upgrade
+// fails to compile here instead of the fake quietly answering the old shape.
+interface Subscription
+  extends Pick<
+    Stripe.Subscription,
+    "id" | "object" | "metadata" | "cancel_at_period_end" | "trial_end" | "canceled_at" | "created"
+  > {
   customer: string;
-  status: string;
-  metadata: Record<string, string>;
-  cancel_at_period_end: boolean;
-  trial_end: number | null;
-  canceled_at: number | null;
-  created: number;
+  status: Stripe.Subscription.Status;
   items: { object: "list"; data: SubscriptionItem[] };
 }
 
-interface SubscriptionItem {
-  id: string;
-  object: "subscription_item";
+interface SubscriptionItem
+  extends Pick<
+    Stripe.SubscriptionItem,
+    "id" | "object" | "current_period_start" | "current_period_end"
+  > {
+  // Optional and nullable in Stripe's types; the fake always sets them.
   quantity: number;
-  current_period_start: number;
-  current_period_end: number;
-  price: { id: string; object: "price"; recurring: { interval: string }; unit_amount: number };
+  price: Pick<Stripe.Price, "id" | "object"> & {
+    unit_amount: number;
+    recurring: Pick<Stripe.Price.Recurring, "interval">;
+  };
 }
 
-interface Invoice {
-  id: string;
-  object: "invoice";
+interface Invoice
+  extends Pick<
+    Stripe.Invoice,
+    "id" | "object" | "number" | "amount_due" | "created" | "hosted_invoice_url"
+  > {
   customer: string;
   /** Where this API version puts an invoice's subscription. */
-  parent: { type: "subscription_details"; subscription_details: { subscription: string } };
-  number: string;
-  status: "paid" | "open";
-  amount_due: number;
+  parent: {
+    type: Stripe.Invoice.Parent["type"];
+    subscription_details: { subscription: string };
+  };
+  /**
+   * A draft has no number or hosted page until it's finalized. Any status: tests set ones
+   * Stripe doesn't document, as a newer API version could.
+   */
+  status: string;
   currency: "usd";
-  created: number;
-  hosted_invoice_url: string;
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -131,8 +140,9 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     if (!response.ok) throw new Error(`webhook ${type} was refused: ${response.status}`);
   }
 
-  function invoiceFor(subscription: Subscription, status: Invoice["status"]) {
+  function invoiceFor(subscription: Subscription, status: string) {
     const item = subscription.items.data[0] as SubscriptionItem;
+    const draft = status === "draft";
     const invoice: Invoice = {
       id: id("in"),
       object: "invoice",
@@ -141,12 +151,12 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         type: "subscription_details",
         subscription_details: { subscription: subscription.id },
       },
-      number: `FAKE-${String(invoices.length + 1).padStart(4, "0")}`,
+      number: draft ? null : `FAKE-${String(invoices.length + 1).padStart(4, "0")}`,
       status,
       amount_due: subscription.status === "trialing" ? 0 : item.price.unit_amount * item.quantity,
       currency: "usd",
       created: now(),
-      hosted_invoice_url: `${baseUrl}/invoices/${invoices.length + 1}`,
+      hosted_invoice_url: draft ? null : `${baseUrl}/invoices/${invoices.length + 1}`,
     };
     invoices.push(invoice);
     return invoice;
@@ -212,6 +222,24 @@ export async function startFakeStripe(options: FakeStripeOptions) {
       const session = { ...form, id: id("cs"), object: "checkout.session", status: "open" };
       sessions.set(session.id, session);
       return { ...session, url: `${baseUrl}/checkout/${session.id}` };
+    }
+    const expire = /^\/v1\/checkout\/sessions\/(cs_\w+)\/expire$/.exec(path);
+    if (method === "POST" && expire) {
+      const session = sessions.get(expire[1] as string);
+      if (!session) return notFound("checkout session");
+      if (session.status !== "open") {
+        return {
+          status: 400,
+          body: {
+            error: {
+              type: "invalid_request_error",
+              message: "Only Checkout Sessions with a status of open can be expired.",
+            },
+          },
+        };
+      }
+      session.status = "expired";
+      return session;
     }
     if (method === "POST" && path === "/v1/billing_portal/sessions") {
       if (!customers.has(form.customer as string)) return notFound("customer");
@@ -286,6 +314,9 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     if (checkout) {
       const session = sessions.get(checkout[1] as string);
       if (!session) return html(404, page("Not found", ""));
+      if (session.status === "expired") {
+        return html(410, page("Fake Stripe Checkout", "<p>This checkout session has expired.</p>"));
+      }
       if (request.method === "POST" && checkout[2]) {
         if (form.card === "declined") {
           return html(
@@ -352,12 +383,19 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     return html(404, page("Not found", ""));
   }
 
-  /** Test hooks: things only time or a bank would do. */
-  async function hooks(path: string) {
+  /**
+   * Test hooks: things only time or a bank would do, and invoices in any status
+   * (`/invoice?status=draft`), as Stripe's dashboard can leave them.
+   */
+  async function hooks(path: string, query: URLSearchParams) {
     const failed = /^\/__fake\/subscriptions\/(sub_\w+)\/payment-failed$/.exec(path);
     const lapsed = /^\/__fake\/subscriptions\/(sub_\w+)\/lapse$/.exec(path);
-    const subscription = subscriptions.get((failed ?? lapsed)?.[1] ?? "");
+    // An invoice in any status (`?status=draft`: the next renewal's, as Stripe drafts it
+    // an hour before it's due), without an event, as Stripe's dashboard can leave one.
+    const invoice = /^\/__fake\/subscriptions\/(sub_\w+)\/invoice$/.exec(path);
+    const subscription = subscriptions.get((failed ?? lapsed ?? invoice)?.[1] ?? "");
     if (!subscription) return undefined;
+    if (invoice) return invoiceFor(subscription, String(query.get("status")));
     if (failed) {
       subscription.status = "past_due";
       const invoice = invoiceFor(subscription, "open");
@@ -372,9 +410,10 @@ export async function startFakeStripe(options: FakeStripeOptions) {
   }
 
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? "/", "http://fake");
+    // A server's requests always have a URL and a method.
+    const url = new URL(request.url as string, "http://fake");
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk as Buffer);
+    for await (const chunk of request as AsyncIterable<Buffer>) chunks.push(chunk);
     const form = parseForm(Buffer.concat(chunks).toString());
     const json = (status: number, body: unknown) => {
       response.writeHead(status, { "content-type": "application/json" });
@@ -392,7 +431,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
           typeof key === "string" ? `${request.method} ${url.pathname} ${key}` : null;
         const cached = cacheKey ? idempotent.get(cacheKey) : undefined;
         if (cached) return json(cached.status, cached.body);
-        const result = await api(request.method ?? "GET", url.pathname, form, url.searchParams);
+        const result = await api(request.method as string, url.pathname, form, url.searchParams);
         const answer =
           result === undefined
             ? {
@@ -414,7 +453,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         const result =
           url.pathname === "/__fake/state"
             ? { subscriptions: [...subscriptions.values()], events }
-            : await hooks(url.pathname);
+            : await hooks(url.pathname, url.searchParams);
         return result ? json(200, result) : json(404, { error: "not found" });
       }
       return await hosted(request, response, url.pathname, form);

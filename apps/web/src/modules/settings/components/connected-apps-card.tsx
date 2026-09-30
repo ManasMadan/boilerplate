@@ -1,6 +1,8 @@
 "use client";
 
-import { useConnectedAppsQuery, useDisconnectAppMutation } from "@repo/client/api/apps/connected";
+import { useApiErrorMessage } from "@repo/client";
+import { useDisconnectAppMutation } from "@repo/client/api/apps/disconnect";
+import { useConnectedAppsQuery } from "@repo/client/api/apps/list";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -12,7 +14,6 @@ import {
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /**
  * Apps (MCP clients) the user connected over OAuth, one row per app and workspace.

@@ -18,13 +18,25 @@ builds in the field all depend on it.
 - API keys: a procedure callable with a key sets `base.meta({ apiKeyScope: "..." })`
   with a scope from `API_KEY_SCOPES` in `src/api/scopes.ts`. No scope means keys get
   `FORBIDDEN`. Add a scope only for data a third party should reach.
+- Rate limits: every procedure that changes something (any method but GET) sets
+  `meta({ rateLimit })`: a `RateLimit` (`name`, `points`, `windowSeconds`, `per: "user"`
+  or `"org"`) or `{ exempt: "why" }`. Everyday changes use `EVERYDAY_WRITES` from
+  `src/api/base.ts`; anything that costs money, sends messages or calls out gets its own,
+  failing closed. The API applies the declared limit (`apps/api/src/rpc/procedures.ts`),
+  so a service never creates its own for a procedure; `src/api/rate-limits.test.ts`
+  fails on a mutation with neither.
 - Error codes: add to `ERROR_CODES` in `src/errors.ts` with the HTTP status, and add
   `errors.<CODE>` to every catalog in `packages/i18n` in the same change. `params` are
-  ICU arguments: strings and numbers only.
+  ICU arguments: strings and numbers only. A module declares only codes its code can
+  throw (`apps/api/src/rpc/router.test.ts` checks). Auth failures users see a sentence
+  for are `AUTH_ERROR_CODES` (and `AUTH_ERROR_ALIASES`) in the same file, translated as
+  `authErrors.<CODE>`.
 - Events (`src/events.ts`): names are versioned (`todo.completed.v1`). Adding an
   optional field is compatible; anything else is a new `.v2` published alongside the old
-  one. Consumers must be idempotent and order-independent. Only events in
-  `webhookEvents` reach customers.
+  one. The `api-compat` CI job refuses anything else (`scripts/events-compat.ts`,
+  against the base branch's `packages/jobs/generated/events.json`). Consumers must be
+  idempotent and order-independent. Only events in `webhookEvents` reach customers, and
+  the OpenAPI document's `webhooks` section describes what they receive.
 - Never break `/api/v1`. Removing a field, renaming, narrowing a type or adding a
   required input fails the `api-compat` CI job (oasdiff against the base branch's
   `apps/api/openapi.json`). Add instead: new optional fields, new procedures. A real

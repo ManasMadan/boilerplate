@@ -46,6 +46,13 @@ gh api -X PUT "repos/$REPO/environments/infra-production" --input - <<JSON
 {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true},
  "reviewers": [{"type": "User", "id": $(gh api user --jq .id)}]}
 JSON
+# Pull request plans run the pull request's OpenTofu code with the state's passphrase,
+# from any branch, so each one waits for your approval.
+for env in infra-staging-plan infra-production-plan; do
+  gh api -X PUT "repos/$REPO/environments/$env" --input - <<JSON
+{"reviewers": [{"type": "User", "id": $(gh api user --jq .id)}]}
+JSON
+done
 
 # master: pull requests only, squash-merged, with CI, the security checks and CodeQL
 # passing. APPROVALS is 0 for a single maintainer (GitHub doesn't let you approve your
@@ -117,22 +124,28 @@ To check: `gh api "repos/$REPO/rulesets" --jq '.[].name'` prints `master` and
 
 **Settings → General → Pull Requests**
 
-- Allow **squash merging** only, with the default message set to **pull request title**:
-  the title is checked against Conventional Commits (the `pr-title` job), and it becomes
-  the commit the release notes are built from.
+- Allow **squash merging** only, with the default message set to **pull request title
+  and description** (`pr-title-description` in the command above): the title is checked
+  against Conventional Commits (the `pr-title` job), and it becomes the commit title the
+  release notes are built from; the description becomes its body.
 - Enable **Automatically delete head branches**.
 
 **Settings → Rules → Rulesets → New branch ruleset** for `master` (the default branch):
 
 - Restrict deletions; block force pushes.
-- Require a pull request before merging, with 1 approval, **Require review from Code
-  Owners** (`.github/CODEOWNERS`), and dismissal of stale approvals on new commits.
+- Require a pull request before merging, with dismissal of stale approvals on new
+  commits. With a single maintainer, 0 approvals and no code owner review (GitHub doesn't
+  let you approve your own pull request; that's what the command above sets). Once
+  there's a team, raise it here to 1 approval with **Require review from Code Owners**
+  (`.github/CODEOWNERS`).
 - Require status checks to pass: **CI passed**, which succeeds only when every CI job
   does (see `ci.yml`), so adding a CI job never needs a change here; and from
   `security.yml`, **Secrets in the history**, **Dependency review** and **Known
   vulnerabilities (OSV)**.
 - Require code scanning results: **CodeQL**, blocking on high or higher.
-- Optional: **Require merge queue** (CI already runs on `merge_group`).
+- Optional: **Require merge queue** (CI and the Security workflow run on `merge_group`;
+  there the secrets scan and dependency review are skipped, which the ruleset counts as
+  passing, since the pull request's own run already did them).
 - Bypass list: the repository's GitHub App (below), so the staging bump can reach
   `master` without a pull request. Nobody else.
 
@@ -155,8 +168,8 @@ App runs Renovate (`renovate.yml`, configured in `renovate.json5`).
    `BOT_APP_PRIVATE_KEY` (the key file's contents).
 4. Add the App to the `master` ruleset's bypass list.
 
-Without the App the deploy workflow falls back to `GITHUB_TOKEN` and say
-so in a warning, and Renovate doesn't run.
+Without the App the deploy workflow falls back to `GITHUB_TOKEN` and says so in a
+warning, and Renovate doesn't run.
 
 ## Environments
 
@@ -165,7 +178,8 @@ so in a warning, and Renovate doesn't run.
 | Environment | Used by | Protection |
 |---|---|---|
 | `staging` | `deploy.yml` (the staging bump) | deployment branch `master` |
-| `infra-staging`, `infra-production` | `infra.yml` (plan and apply) | required reviewers on production; deployment branch `master` for apply |
+| `infra-staging`, `infra-production` | `infra.yml` (apply, and plans run by hand) | required reviewers on production; deployment branch `master` |
+| `infra-staging-plan`, `infra-production-plan` | `infra.yml` (plans on pull requests) | required reviewers; any branch |
 
 Production itself has no GitHub environment: it changes only by merging the promotion
 pull request, which the ruleset already gates.
@@ -184,6 +198,7 @@ skipped until its values exist.
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | secrets | the providers those models use |
 | `EAS_PROJECT_ID`, `EXPO_TOKEN` | variable, secret | mobile builds and over-the-air updates on EAS (`mobile.yml`; the project id from `bunx eas-cli init`, a robot token from expo.dev) |
 | `LOAD_TARGET_RPS` | variable | the nightly load test's target (default 50 requests a second) |
+| `COSIGN_PRIVATE_KEY`, `COSIGN_PASSWORD` | secrets | signing images with a key pair instead of keyless, so production's admission doesn't depend on Sigstore's public services (docs/deploy.md) |
 | `TOFU_TARGETS` | variable | which environments get a plan on infrastructure pull requests, e.g. `["staging", "production"]` |
 
 Per `infra-<env>` environment, for `infra.yml` (see the header of that workflow and
@@ -196,7 +211,17 @@ Per `infra-<env>` environment, for `infra.yml` (see the header of that workflow 
 | `SSH_PRIVATE_KEY` | the key the environment's machines accept |
 | `CLOUDFLARE_API_TOKEN` | the zone's token (permissions in `infra/tofu/modules/cloudflare`) |
 | `SOPS_AGE_KEY` | the environment's age private key, installed for Argo CD |
+| `SOPS_PREVIEW_AGE_KEY` | on the environment hosting previews only: their own age private key |
 | `TF_VAR_state_passphrase` | encrypts the state and plans |
+
+A pull request's plan runs that pull request's OpenTofu code, so its environment,
+`infra-<env>-plan`, holds only what a plan reads: `TOFU_TFVARS` and
+`TF_VAR_state_passphrase` as above, a `TOFU_BACKEND` whose bucket keys can only read,
+and a `CLOUDFLARE_API_TOKEN` with the read permissions of the ones listed in
+`infra/tofu/modules/cloudflare`. Never the SSH key or an age key: only an apply uses
+them. The passphrase still decrypts the state, which holds the cluster's admin key,
+which is why each plan waits for a reviewer: read the pull request's changes to
+`infra/tofu` before approving it. Pull requests from forks get no plan.
 
 The runner connects to the machines over SSH and to the Kubernetes API (ports 22 and
 6443): allow GitHub's runner addresses in the machines' firewall, or give the

@@ -13,14 +13,18 @@ Auth never sends email itself: codes, invitations and alerts are queued on
 
 | Method | Web | Mobile | Notes |
 |---|---|---|---|
-| Email and password | yes | yes | 8 to 128 characters. Passwords found in public breaches are refused (Have I Been Pwned, k-anonymity). No session until the email is verified. |
+| Email and password | yes | yes | 8 to 128 characters. Passwords found in public breaches are refused (Have I Been Pwned, k-anonymity; `PASSWORD_BREACH_CHECK`, on in production). No session until the email is verified. |
 | Emailed codes | yes | yes | 6 digits, 5 minutes, stored hashed. They verify the address after sign-up (and sign the user in), reset a forgotten password, and change the email (a code from the current and one from the new address). Signing in unverified sends a fresh code. |
 | Passkeys | yes | no | WebAuthn, relying party = the `WEB_URL` host. |
 | Google | yes | yes | On when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. Google accounts link to an existing account with the same verified email; OAuth tokens are encrypted at rest. |
 | Two-factor (TOTP) | yes | yes | A second step after the password, with 10 backup codes and an option to trust the device. |
 
 Phone numbers are not a sign-in method. A user can add one (verified by a texted code,
-`apps/api/src/modules/user/phone.service.ts`) to receive security alerts by text.
+`apps/api/src/modules/user/phone.service.ts`) to receive security alerts by text. A
+code allows five guesses, counted atomically before each comparison, and verifying is
+limited per user. Whether a number is already on another account shows only when
+verifying it, never when asking for a code, so the send endpoint can't be used to find
+out who has which number.
 
 better-auth's admin plugin is on (impersonation sessions last an hour); no admin UI
 ships with it.
@@ -39,6 +43,9 @@ ships with it.
   deletion always ask for the password.
 - The mobile app uses better-auth's Expo plugin: the session lives in the device's secure
   storage and travels in a header; its `boilerplate://` scheme is a trusted origin.
+  Social sign-in goes through the plugin's `/expo-authorization-proxy` redirect, which
+  only sends people to a provider's sign-in page (`PROVIDER_ORIGINS` in `auth.ts`; add a
+  provider's origin there along with the provider).
 - `trustedOrigins` (CSRF) are `WEB_URL`, `APP_ORIGINS` and the mobile scheme.
 
 ## Organizations and roles
@@ -46,7 +53,9 @@ ships with it.
 Every user gets a personal workspace at sign-up, so organization-scoped features work
 from the first sign-in, and new sessions start in the user's first workspace. Users can
 create more and invite others (invitations last 7 days; the plan's member limit counts
-pending invitations).
+pending invitations). Only sign-up makes the personal workspace (slug
+`personal-<user id>`, `metadata.personal`); a client creating or updating a workspace
+with either is refused, so "Personal" shown in the apps and on the consent page is true.
 
 | Role | Can |
 |---|---|
@@ -82,6 +91,13 @@ audited (`org.api_key_created.v1`, `org.api_key_revoked.v1`).
 - The key travels in `x-api-key` and acts as the admin who created it, with their current
   role, only in its workspace. It stops working when revoked, expired or when its creator
   leaves.
+- A key outlives the session that made it, so creating one needs a recent sign-in (like
+  account changes: `FRESH_SESSION_REQUIRED` two hours after signing in), every key expires (at most
+  365 days; `expiresInDays: null` from older clients means the longest), and the
+  workspace's owners and admins get an email when one is created. Adding a webhook
+  endpoint or changing its URL follows the same rules. A password reset leaves keys
+  alone: legitimate integrations would break on every reset, and the creation email is
+  what tells owners to revoke one they don't recognise.
 - It may only call procedures whose contract names a scope it has:
 
   ```ts
@@ -93,7 +109,13 @@ audited (`org.api_key_created.v1`, `org.api_key_revoked.v1`).
   signed-in people only, so a key never reaches account settings, billing or key
   management.
 - Up to 50 keys per workspace, 600 requests a minute per key, expiring after 30, 90 or 365
-  days, or never.
+  days.
+- The per-key limit is better-auth's: it counts in the key's own row with a
+  compare-and-swap, so concurrent calls can't get past it, and a refused call writes
+  nothing. So a key causes at most 600 writes to `auth.api_key` a minute. The plugin's
+  Redis mode would take that load off Postgres, but it counts read-modify-write (not
+  atomically, as its source says), so concurrent calls could exceed the limit: raise the
+  limit a lot before trading that away.
 
 ## OAuth for MCP clients
 
@@ -135,7 +157,7 @@ and MCP tokens. The key is `BETTER_AUTH_SECRET`; rotating it means adding versio
 secrets (`BETTER_AUTH_SECRETS`, `apps/api/src/auth/secrets.ts`) and then running
 `bun run secrets:reencrypt`, which moves every stored value, and the webhook signing
 secrets under `ENCRYPTION_KEYS`, to the newest key (`apps/api/src/secrets/reencrypt.ts`).
-The rotate-secrets skill has the steps.
+The rotate-secrets runbook (`.claude/skills/rotate-secrets/SKILL.md`) has the steps.
 
 ## Security alerts
 
@@ -157,14 +179,56 @@ Redis, with tighter rules on the endpoints that guess secrets:
 | `/forget-password/*` | 3 a minute |
 | `/oauth2/register` | 5 a minute |
 
-Elsewhere, `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`) limits
-assistant questions (20 a minute), AI documents and file uploads (30 an hour), phone
-codes (5 an hour per user, 3 per number, refused when Redis is down), MCP tool calls and
-API keys, all shared across replicas through Redis.
+Emails to an address someone else typed are limited where they're sent, whichever
+endpoint asked: ten codes an hour per address (past that the code is dropped; better-auth
+answers the same either way, so nobody learns which addresses have accounts), and
+invitations to three a day per address and thirty an hour per inviter (refused with
+429). An account belongs to at most 20 workspaces, and a workspace has at most 20
+invitations waiting (`ORGANIZATION_LIMIT`, `PENDING_INVITATION_LIMIT` in
+`packages/contracts/src/auth-settings.ts`). The invitation's subject names neither the
+workspace nor the inviter, which someone else chose; the body quotes both.
+
+An address can be rotated, so the endpoints that guess or send secrets are also limited
+per account (`apps/api/src/auth/account-limits.ts`), whatever address the attempts come
+from: 10 password sign-ins, reset-password or verify-email attempts and 10 second-factor
+checks per 15 minutes, and 5 codes sent. They're keyed on the normalised email, or for a
+second factor on the sign-in attempt's two-factor cookie, and refuse the attempt when
+Redis is down. The cost: someone can spend an account's attempts and lock it out of
+these endpoints for the window; a passkey or an existing session still works.
+
+Every API procedure that changes something declares its limit in its contract
+(`meta({ rateLimit })`, `ProcedureMeta` in `packages/contracts/src/api/base.ts`), or says
+why it has none, and a contract test fails on one that does neither. The procedure
+builders (`apps/api/src/rpc/procedures.ts`) apply it once they know who's calling, per
+user or per workspace, with `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`),
+shared across replicas through Redis; past it the call gets `RATE_LIMITED` with
+`retryAfterSeconds`. Declared limits: assistant questions (20 a minute), sentiment checks
+(60 a minute), AI documents and file uploads (30 an hour), phone codes (5 an hour per
+user, refused when Redis is down) and their checks (20 an hour), Stripe checkout and
+portal pages (10 a minute per workspace), and, per workspace because they make our
+servers call a customer's URL, webhook test sends (10 a minute) and redeliveries (60 a
+minute). Everyday changes (preferences, keys, endpoints, marking things read) share one
+allowance of 120 a minute per user, which lets Redis outages through.
+
+A few limits live outside the contract. Phone codes are limited to 3 an hour per number
+in `PhoneService`, since the number is input. Todo changes are limited in `TodoService`
+(600 a minute per workspace, one API key's allowance, however many keys the workspace
+spreads them over), because the MCP server's tools make them too and share it. MCP tool
+calls and API keys have their own per-token and per-key limits. The email unsubscribe
+link has none: it needs no session, and its signed token turns off one category for one
+user, so repeating it gains nothing.
+
+Phone codes can go to any country: there's no list of allowed country codes. Texts to
+some destinations cost far more than others, and SMS pumping targets exactly those, so a
+product that sends texts should add an allowlist (in `PhoneService`, before the code is
+sent) for the countries it serves.
 
 The client IP comes from `X-Forwarded-For` only when the peer is in `TRUSTED_PROXIES`;
 the API overwrites the header better-auth sees with that resolved address, so a client
-can't forge the IP limits are keyed on.
+can't forge the IP limits are keyed on. That holds because only Cloudflare can reach the
+site's hosts (the gateway requires its origin-pull certificate; see
+`infra/tofu/README.md`), so the rightmost address the gateway trusts is the one
+Cloudflare saw.
 
 ## Captcha
 

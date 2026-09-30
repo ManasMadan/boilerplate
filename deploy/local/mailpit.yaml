@@ -56,3 +56,21 @@ spec:
   ports:
     - { name: smtp, port: 1025, targetPort: smtp }
     - { name: http, port: 8025, targetPort: http }
+---
+# The namespace accepts nothing a policy doesn't allow (the data chart's default deny):
+# the services send mail to it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mailpit
+  namespace: boilerplate
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: mailpit }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 1025
+        - port: 8025

@@ -13,6 +13,9 @@ gateway:
     - name: public
       namespace: gateway-system
       sectionName: http
+# The data release is boilerplate-data here (scripts/k8s.ts), so its Postgres is too.
+database:
+  caSecret: boilerplate-data-postgres-ca
 env:
   LOG_LEVEL: debug
 defaults:

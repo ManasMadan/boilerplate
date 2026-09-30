@@ -15,12 +15,14 @@ Which kind goes where:
 
 | Kind | Location | Runs with | Needs |
 |---|---|---|---|
-| Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached, Stop hook) | nothing |
-| Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` | Docker (the command starts it) |
+| Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached; the Stop hook runs it for affected packages) | nothing |
+| Scripts and hooks | `scripts/*.test.ts`, `.claude/hooks/*.test.ts` (Bun's runner) | `bun test ./scripts/ ./.claude/hooks/` | nothing |
+| Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` (the core services); suites tagged `files` (RustFS, ClamAV) with `bun run test:integration:files` | Docker (the command starts it) |
+| Web pages and components | `apps/web/test/**/*.test.tsx`, in Chromium against the real API | `bun run --filter @repo/web test:integration` | Docker, Chromium |
 | E2E (web) | `apps/web/e2e/*.spec.ts` | `bun run test:e2e --app web` | full stack |
 | E2E (mobile) | `apps/mobile/e2e/*.spec.ts` (react-native-web); native flows in `apps/mobile/maestro/` | `bun run test:e2e --app mobile` | full stack |
 | Python | `apps/ai/tests/test_*.py`, `pytest.mark.integration` for DB/Redis | `bun run test` / `bun run test:integration` | Docker for integration |
-| Components | `packages/ui/src/components/*.stories.tsx` with `play` | `bun run --cwd packages/ui test:stories` | Playwright browser |
+| Components | `packages/ui/src/components/*.stories.tsx` with `play`, plain `*.test.tsx` beside them | `bun run --cwd packages/ui test:stories` | Playwright browser |
 
 - Unit tests are pure: no network, no database, no clock you don't control. They are
   cached by turbo, so a hidden dependency gives stale results.
@@ -34,8 +36,18 @@ Which kind goes where:
   `packages/fake-stripe`, `apps/notifications/test/fake-twilio.ts` and `fake-push.ts`,
   Mailpit for email, the `local:extractive` model and `hashing` embeddings for AI. New
   providers get a fake like these, not `vi.mock`.
-- Coverage floors are per package in its `vitest.config.ts` (unit and integration
-  counted together). Raise a floor when you add tests; lowering one needs a reason in
-  the PR.
+- `packages/client`'s hooks run against the contract implemented in memory
+  (`standIn` and `renderHook` in `packages/client/test/stand-in.tsx`), never a mocked
+  `fetch`; each test implements only the procedures it calls.
+- Every source file is at 100% (lines, branches, functions), every suite merged.
+  `bun run test:coverage` runs them all and names what each file misses (it needs the
+  full Docker profile and takes minutes: run it in the background); `bun run --filter
+  @repo/<name> coverage && bun scripts/coverage.ts` rechecks after one package's run. A
+  file below 100% is either tested, trimmed, or listed with its reason in "Coverage
+  exceptions" in docs/testing.md. No coverage pragmas. The `test-writer` agent writes
+  missing tests.
+- No fixed sleeps. Wait for the condition with `eventually` (`@repo/testing/eventually`),
+  `vi.waitFor` or `expect.poll`; to prove something didn't happen, wait for a signal that
+  the work finished (job completed, row written, `PUBSUB NUMSUB`), then check once.
 - A bug fix starts with a test that fails without the fix.
 - Tenancy changes need a test that a second organization cannot see or change the row.

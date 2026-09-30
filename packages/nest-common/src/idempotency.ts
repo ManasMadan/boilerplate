@@ -1,7 +1,9 @@
 /**
  * Idempotency for mutations that must not run twice (payments, sends, expensive jobs).
  *
- *   const result = await idempotency.run(`${userId}:${idempotencyKey}`, () => billing.charge(...));
+ *   const result = await idempotency.run(`${userId}:${idempotencyKey}`, chargeSchema, () =>
+ *     billing.charge(...),
+ *   );
  *
  * The first call runs the operation and stores its result for 24 hours; a retry with
  * the same key (the client lost the response, a proxy retried) gets the stored result
@@ -10,12 +12,20 @@
  * so a failed attempt can be retried with the same key.
  *
  * Keys must be scoped to the caller (user or org) so one tenant cannot replay another's.
+ * A replayed result is parsed with the caller's schema: one that no longer matches fails
+ * the request rather than run the operation twice or return the wrong type.
  */
 import type { Redis } from "ioredis";
+import { z } from "zod";
 import { AppError } from "./errors";
 
 const TTL_SECONDS = 24 * 60 * 60;
 const LOCK_SECONDS = 60;
+
+/** What the store keeps under a key: the claim, then the result. Null once it's expired. */
+const stored = z
+  .object({ state: z.enum(["running", "done"]), result: z.unknown().optional() })
+  .nullable();
 
 export class IdempotencyStore {
   constructor(private readonly redis: Redis) {}
@@ -24,7 +34,7 @@ export class IdempotencyStore {
     return `idem:${key}`;
   }
 
-  async run<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  async run<T>(key: string, schema: z.ZodType<T>, operation: () => Promise<T>): Promise<T> {
     const redisKey = this.key(key);
     const claimed = await this.redis.set(
       redisKey,
@@ -34,9 +44,9 @@ export class IdempotencyStore {
       "NX",
     );
     if (!claimed) {
-      const existing = await this.redis.get(redisKey);
-      const record = existing ? (JSON.parse(existing) as { state: string; result?: T }) : undefined;
-      if (record?.state === "done") return record.result as T;
+      // A lock that expired just now reads as null: still no result to replay.
+      const record = stored.parse(JSON.parse(String(await this.redis.get(redisKey))));
+      if (record?.state === "done") return schema.parse(record.result);
       throw new AppError("IDEMPOTENCY_IN_PROGRESS");
     }
     try {

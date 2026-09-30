@@ -7,16 +7,15 @@ module.exports = {
   // e2e/ is Playwright's (bun run test:e2e).
   roots: ["<rootDir>/src"],
   setupFiles: ["./jest.setup.ts"],
-  moduleNameMapper: { "^@/(.*)$": "<rootDir>/src/$1" },
+  moduleNameMapper: { "^@/(.*)$": "<rootDir>/src/$1", "\\.css$": "<rootDir>/test/style.js" },
   // Several dependencies ship only ES modules as .mjs (oRPC); Babel compiles them too.
   transform: { "\\.mjs$": "babel-jest" },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "mjs", "cjs", "json"],
   // Compile every dependency: more and more ship only ES modules (oRPC, use-intl's
   // formatters), and an allowlist would break each time one does. Babel caches the result.
   transformIgnorePatterns: [],
-  // Unit tests cover the app's logic (src/lib); the screens are proved end to end
-  // (e2e/). The floor is what the suite meets, less a point; raise it with new tests.
-  collectCoverageFrom: ["src/lib/**/*.{ts,tsx}", "!src/lib/**/*.test.{ts,tsx}"],
+  // Every source file, screens included. No threshold here: the rule is 100% of every
+  // file across all suites, checked on the merged reports (scripts/coverage.ts).
+  collectCoverageFrom: ["src/**/*.{ts,tsx}", "!src/**/*.test.{ts,tsx}"],
   coverageReporters: ["text-summary", "lcov"],
-  coverageThreshold: { global: { lines: 90, functions: 82, branches: 77, statements: 88 } },
 };

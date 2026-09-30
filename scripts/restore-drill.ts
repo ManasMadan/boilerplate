@@ -17,27 +17,12 @@
  * cluster-wide and never part of a dump: a restore into a new cluster creates them first
  * (infra/postgres/init locally, the data chart's managed roles in Kubernetes).
  */
-import { spawnSync } from "node:child_process";
-import { fail, ok, ROOT } from "./lib";
-
-const SOURCE = process.argv[2] ?? "app";
-const SCRATCH = `${SOURCE}_restore_drill`;
-const DUMP = `/tmp/${SCRATCH}.dump`;
-const exec = process.env.PG_CONTAINER
-  ? ["exec", "-i", process.env.PG_CONTAINER]
-  : ["compose", "exec", "-T", "postgres"];
-
-function pg(command: string[]) {
-  const result = spawnSync("docker", [...exec, ...command], { cwd: ROOT, encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(`${command.join(" ")} failed:\n${result.stderr || result.stdout}`);
-  }
-  return result.stdout;
-}
+import { fail, ok, ROOT, runSync } from "./lib";
 
 // One line per fact about the database; a faithful restore yields exactly the same lines.
-// ponytail: row hashes are order-independent sums of 64-bit row hashes, streamed, so
-// memory stays flat on big tables; the ceiling is one full read of every table.
+// Each table's hash is the sum of its rows' 64-bit hashes, so row order doesn't matter
+// and Postgres streams it without holding the table in memory. It still reads every
+// table in full, which bounds how large a database the drill suits.
 const FINGERPRINT = `
 select format('table %s rows=%s hash=%s rls=%s forced=%s', c.oid::regclass,
     (xpath('/row/n/text()', t))[1], (xpath('/row/h/text()', t))[1],
@@ -77,48 +62,80 @@ union all
 select format('sequence %I.%I last=%s', schemaname, sequencename, last_value) from pg_sequences
 order by 1;`;
 
-const fingerprint = (database: string) =>
-  pg(["psql", "-U", "postgres", "-d", database, "-XAt", "-v", "ON_ERROR_STOP=1", "-c", FINGERPRINT])
-    .split("\n")
-    .filter(Boolean);
+/** Dumps `source`, restores it into a scratch database and compares them; the exit code. */
+export function restoreDrill(
+  source = process.argv[2] ?? "app",
+  container = process.env.PG_CONTAINER,
+  run = runSync,
+): number {
+  const scratch = `${source}_restore_drill`;
+  const dump = `/tmp/${scratch}.dump`;
+  const exec = container ? ["exec", "-i", container] : ["compose", "exec", "-T", "postgres"];
 
-function cleanUp() {
-  pg(["dropdb", "-U", "postgres", "--if-exists", "--force", SCRATCH]);
-  pg(["rm", "-f", DUMP]);
-}
-
-let passed = false;
-try {
-  cleanUp();
-  const before = fingerprint(SOURCE);
-  pg(["pg_dump", "-U", "postgres", "-d", SOURCE, "--format=custom", "-f", DUMP]);
-  ok(`backed up ${SOURCE}`);
-  pg(["createdb", "-U", "postgres", "-T", "template0", SCRATCH]);
-  pg(["pg_restore", "-U", "postgres", "-d", SCRATCH, "--exit-on-error", DUMP]);
-  ok(`restored it into ${SCRATCH}`);
-  const after = fingerprint(SCRATCH);
-
-  const restored = new Set(after);
-  const kept = new Set(before);
-  const lost = before.filter((line) => !restored.has(line));
-  const extra = after.filter((line) => !kept.has(line));
-  if (lost.length === 0 && extra.length === 0) {
-    const tables = before.filter((line) => line.startsWith("table ")).length;
-    ok(`identical: ${tables} tables with their rows, security, grants and functions`);
-    passed = true;
-  } else {
-    fail("the restore differs from the source");
-    for (const line of lost) console.log(`    - ${line}`);
-    for (const line of extra) console.log(`    + ${line}`);
+  function pg(command: string[]) {
+    const result = run("docker", [...exec, ...command], { cwd: ROOT });
+    if (result.status !== 0) {
+      throw new Error(`${command.join(" ")} failed:\n${result.stderr || result.stdout}`);
+    }
+    return result.stdout;
   }
-} catch (error) {
-  fail(error instanceof Error ? error.message : String(error));
-} finally {
+
+  const fingerprint = (database: string) =>
+    pg([
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      database,
+      "-XAt",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-c",
+      FINGERPRINT,
+    ])
+      .split("\n")
+      .filter(Boolean);
+
+  function cleanUp() {
+    pg(["dropdb", "-U", "postgres", "--if-exists", "--force", scratch]);
+    pg(["rm", "-f", dump]);
+  }
+
+  let passed = false;
   try {
     cleanUp();
+    const before = fingerprint(source);
+    pg(["pg_dump", "-U", "postgres", "-d", source, "--format=custom", "-f", dump]);
+    ok(`backed up ${source}`);
+    pg(["createdb", "-U", "postgres", "-T", "template0", scratch]);
+    pg(["pg_restore", "-U", "postgres", "-d", scratch, "--exit-on-error", dump]);
+    ok(`restored it into ${scratch}`);
+    const after = fingerprint(scratch);
+
+    const restored = new Set(after);
+    const kept = new Set(before);
+    const lost = before.filter((line) => !restored.has(line));
+    const extra = after.filter((line) => !kept.has(line));
+    if (lost.length === 0 && extra.length === 0) {
+      const tables = before.filter((line) => line.startsWith("table ")).length;
+      ok(`identical: ${tables} tables with their rows, security, grants and functions`);
+      passed = true;
+    } else {
+      fail("the restore differs from the source");
+      for (const line of lost) console.log(`    - ${line}`);
+      for (const line of extra) console.log(`    + ${line}`);
+    }
   } catch (error) {
-    fail(`couldn't remove ${SCRATCH}: ${error instanceof Error ? error.message : error}`);
-    passed = false;
+    fail(error instanceof Error ? error.message : String(error));
+  } finally {
+    try {
+      cleanUp();
+    } catch (error) {
+      fail(`couldn't remove ${scratch}: ${error instanceof Error ? error.message : error}`);
+      passed = false;
+    }
   }
+  return passed ? 0 : 1;
 }
-process.exit(passed ? 0 : 1);
+
+if (import.meta.main) process.exit(restoreDrill());

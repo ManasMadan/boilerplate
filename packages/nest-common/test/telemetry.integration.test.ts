@@ -60,7 +60,7 @@ async function runService(env: Record<string, string>) {
   return stdout
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line) as { msg?: string; trace_id?: string });
 }
 
 interface ExportedSpans {
@@ -99,6 +99,10 @@ describe("telemetry", () => {
     const traceIds = scopes.flatMap((scope) => scope.spans.map((span) => span.traceId));
     expect(line?.trace_id).toMatch(/^[0-9a-f]{32}$/);
     expect(traceIds).toContain(line?.trace_id);
+    // URLs keep their query's names, never its values (in and out).
+    const exported = JSON.stringify(traces);
+    expect(exported).toContain("code=&state=");
+    expect(exported).not.toContain("secret-code");
     // Metrics go to the same collector.
     expect(received.some((request) => request.path === "/v1/metrics")).toBe(true);
   });

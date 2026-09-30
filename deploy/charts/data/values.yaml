@@ -67,8 +67,9 @@ valkey:
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 512Mi }
-  # BullMQ needs every key kept: never evict, and persist to disk.
-  maxmemory: 400mb
+  # BullMQ needs every key kept: never evict, and persist to disk. At most 60% of the
+  # memory limit: the append-only rewrite forks, and copies what's written meanwhile.
+  maxmemory: 300mb
 
 # Object storage with RustFS (S3 API). Two separate servers: `uploads`, which the
 # browser reaches at `host` through the gateway (presigned URLs), and `backups`, which
@@ -119,6 +120,37 @@ gateway:
   namespaceSelector:
     kubernetes.io/metadata.name: envoy-gateway-system
 
+# Where CloudNativePG's operator runs (it reaches each instance's status port and
+# Postgres) and where Prometheus scrapes Postgres's metrics from: the platform's
+# (deploy/platform/addons/cloudnative-pg.yaml, the observability add-ons).
+networkPolicy:
+  operatorNamespace: cnpg-system
+  metricsNamespace: observability
+
+# A copy of the backups and the uploads outside the cluster, so losing the cluster (or
+# the one disk of a one-node cluster) doesn't take the database, its backups and every
+# upload together. Any S3-compatible storage you run somewhere else will do: a RustFS
+# or MinIO on another machine, in another place. On once `endpoint` is set: a CronJob
+# per bucket copies new objects there on `schedule` (rclone copy: nothing is deleted
+# offsite, so a wiped bucket here can't wipe the copy; expire old objects with the
+# bucket's lifecycle rules there). The keys are in the `secretName` Secret
+# (accessKeyId, secretAccessKey), from environments/<env>/secrets/. `required` refuses
+# to render without it (production).
+offsite:
+  required: false
+  # e.g. https://s3.backups.example.net
+  endpoint: ""
+  region: us-east-1
+  bucket: ""
+  # A folder of the bucket for this environment: <bucket>/<prefix>/{backups,uploads}.
+  prefix: ""
+  secretName: offsite-storage
+  schedule: "17 * * * *"
+  image: docker.io/rclone/rclone:1.75.1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+
 # A pull-request preview: this release owns its namespace (so deleting the preview
 # deletes everything in it) with quotas that keep one preview from starving others.
 preview:
@@ -129,3 +161,12 @@ preview:
     requests.memory: 8Gi
     limits.memory: 12Gi
     persistentvolumeclaims: "4"
+  # Where a preview's mail goes instead of out (templates/preview-mail.yaml).
+  mailpit:
+    enabled: true
+    image: docker.io/axllent/mailpit:v1.31.3
+    # Its certificate, with the authority the notifications service trusts (ca.crt).
+    tlsSecret: mailpit-tls
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }

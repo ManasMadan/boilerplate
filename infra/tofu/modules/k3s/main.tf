@@ -213,7 +213,7 @@ resource "terraform_data" "first" {
   }
   lifecycle {
     precondition {
-      condition     = var.ssh_private_key != null
+      condition     = !terraform.applying || var.ssh_private_key != null
       error_message = "install_over_ssh needs ssh_private_key."
     }
   }

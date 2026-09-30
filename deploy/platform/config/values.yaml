@@ -11,6 +11,10 @@ gateway:
   # Proxies in front of the gateway that add to X-Forwarded-For: 1 behind Cloudflare,
   # 0 when clients connect directly.
   trustedHops: 1
+  # Refuse the site's hosts to connections without Cloudflare's origin-pull client
+  # certificate, so nothing reaches them except through Cloudflare. Off only for a
+  # cluster with no Cloudflare in front (and then trustedHops: 0).
+  originPulls: true
 
 # Let's Encrypt certificates, validated through DNS on Cloudflare (works for wildcards
 # and before the gateway is reachable).
@@ -30,3 +34,7 @@ imagePolicy:
   namespaces: [boilerplate]
   # The workflow that signs releases, on the default branch.
   subject: "https://github.com/ManasMadan/boilerplate/.github/workflows/*@refs/heads/master"
+  # A cosign public key (PEM) to check signatures against instead: no dependency on
+  # Sigstore's public services, and any CI can sign. Its private key is deploy.yml's
+  # COSIGN_PRIVATE_KEY secret (deploy/README.md, "Image signatures").
+  publicKey: ""

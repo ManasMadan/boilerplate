@@ -56,7 +56,7 @@
       "@types/react-dom": "~19.2.0",
       "@vitest/coverage-v8": "^5.0.2",
       "better-auth": "^1.7.6",
-      "bullmq": "^6.3.9",
+      "bullmq": "6.3.9",
       "fastify": "^5.12.5",
       "ioredis": "^6.0.0",
       "lucide-react": "^1.48.0",
@@ -82,15 +82,18 @@
     "setup": "bun scripts/setup.ts",
     "doctor": "bun scripts/doctor.ts",
     "env:set": "bun scripts/env-set.ts",
-    "dev": "bun run doctor && bun scripts/services.ts up && turbo run dev --filter=@repo/web --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks",
-    "dev:full": "bun run doctor && bun scripts/services.ts up --full && turbo run dev",
+    "env:unset": "bun scripts/env-unset.ts",
+    "dev": "bun scripts/setup.ts --env && bun run doctor && bun scripts/services.ts up && turbo run dev --filter=@repo/web --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks",
+    "dev:full": "bun scripts/setup.ts --env && bun run doctor && bun scripts/services.ts up --full && turbo run dev",
     "build": "turbo run build",
-    "check-types": "turbo run check-types && tsc -p scripts",
-    "lint": "biome check . && bun run lint:boundaries && bun run lint:unused && turbo run lint",
+    "check-types": "turbo run check-types && tsc -p scripts && tsc -p .claude/hooks && tsc -p turbo/generators",
+    "lint": "bun scripts/lint.ts",
     "lint:unused": "knip",
+    "lint:markers": "bun scripts/check-markers.ts",
     "format": "biome check --write .",
     "test": "turbo run test",
-    "test:integration": "bun scripts/services.ts up --full && turbo run test:integration",
+    "test:integration": "bun scripts/services.ts up && turbo run test:integration",
+    "test:integration:files": "bun scripts/services.ts up --files && turbo run test:integration:files",
     "test:e2e": "bun scripts/e2e.ts",
     "test:load": "bun run --cwd load test:load",
     "charts:check": "bun scripts/charts.ts",
@@ -113,12 +116,15 @@
     "db:deploy": "bun run --filter @repo/db deploy",
     "db:studio": "bun run --filter @repo/db studio",
     "db:reset": "bun run --filter @repo/db reset",
-    "lint:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs && bun scripts/check-web-render-only.ts",
+    "lint:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs && bun scripts/check-web-render-only.ts && bun scripts/check-layers.ts",
     "prepare": "husky",
     "stripe:fake": "bun run --filter @repo/fake-stripe start",
     "db:seed": "turbo run seed --filter=@repo/api",
     "secrets:reencrypt": "turbo run secrets:reencrypt --filter=@repo/api",
-    "test:coverage": "turbo run coverage"
+    "test:coverage": "turbo run coverage && bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts",
+    "lint:suppressions": "bun scripts/suppressions.ts",
+    "rename": "bun scripts/rename.ts",
+    "type-coverage": "bun scripts/type-coverage.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
@@ -129,13 +135,12 @@
     "@turbo/gen": "^2.11.5",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "bullmq": "catalog:",
     "dependency-cruiser": "^18.4.0",
     "husky": "^9.1.7",
-    "ioredis": "catalog:",
     "knip": "^6.38.0",
     "lint-staged": "^17.6.0",
     "turbo": "^2.11.5",
+    "type-coverage": "2.29.7",
     "typescript": "catalog:"
   },
   "lint-staged": {
@@ -144,7 +149,10 @@
     "apps/ai/**/*.py": [
       "uv run --project apps/ai ruff check --fix",
       "uv run --project apps/ai ruff format"
-    ]
+    ],
+    "*.prisma": "bun scripts/format-prisma.ts",
+    "packages/db/prisma/migrations/**/migration.sql": "bun scripts/lint-migrations.ts",
+    "*.{tf,tftest.hcl}": "tofu fmt"
   },
   "overrides": {
     "deepmerge-ts": "8.0.0",

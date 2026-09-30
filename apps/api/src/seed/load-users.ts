@@ -30,7 +30,7 @@ export async function signInLoadUsers(
     });
     const cookie = response.headers
       .getSetCookie()
-      .map((header) => header.split(";")[0] ?? "")
+      .map((header) => header.split(";")[0] as string)
       .find((pair) => pair.includes("session_token="));
     if (!response.ok || !cookie) throw new Error(`Signing in ${email} failed (${response.status})`);
     sessions.push(cookie);

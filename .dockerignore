@@ -21,4 +21,5 @@
 logs
 load/.sessions.json
 docker-data
-LEDGER.md
+# Markdown at the root: the docs, and any notes kept next to them. No image needs them.
+*.md

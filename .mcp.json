@@ -5,11 +5,8 @@
       "args": ["@playwright/mcp@0.0.83", "--isolated"]
     },
     "postgres": {
-      "command": "uvx",
-      "args": ["--with", "mcp==1.30.0", "postgres-mcp@0.3.0", "--access-mode=restricted"],
-      "env": {
-        "DATABASE_URI": "postgresql://app_api:app_api@localhost:${POSTGRES_PORT:-55432}/app"
-      }
+      "command": "bun",
+      "args": ["scripts/mcp-postgres.ts"]
     }
   }
 }

@@ -20,7 +20,13 @@ import { EventEmitter } from "node:events";
 import type { Redis } from "ioredis";
 import type { z } from "zod";
 
-const PREFIX = "realtime:";
+/**
+ * Redis channel prefix. The Python service publishes on the same channels, named from
+ * @repo/contracts' REALTIME_REDIS_PREFIX (which plumbing can't import); apps/api's
+ * realtime-prefix.test.ts keeps the two equal.
+ */
+export const REALTIME_CHANNEL_PREFIX = "realtime:";
+const PREFIX = REALTIME_CHANNEL_PREFIX;
 /** Messages a slow stream may fall behind by before the oldest are dropped. */
 const MAX_BUFFERED = 100;
 
@@ -36,12 +42,23 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
     private readonly local = new EventEmitter().setMaxListeners(0);
     private readonly refs = new Map<string, number>();
 
-    constructor(redis: Redis) {
+    /**
+     * `onDropped` hears about messages outside the contract (or not JSON at all), which
+     * are dropped: they come from Redis, where anything can publish.
+     */
+    constructor(redis: Redis, onDropped: (channel: string, raw: string) => void = () => undefined) {
       // A connection in subscriber mode can't run other commands, so it gets its own.
       this.subscriber = redis.duplicate();
       this.subscriber.on("message", (channel: string, raw: string) => {
-        const parsed = schema.safeParse(JSON.parse(raw));
+        let json: unknown;
+        try {
+          json = JSON.parse(raw);
+        } catch {
+          return onDropped(channel, raw);
+        }
+        const parsed = schema.safeParse(json);
         if (parsed.success) this.local.emit(channel.slice(PREFIX.length), parsed.data);
+        else onDropped(channel, raw);
       });
     }
 
@@ -54,20 +71,24 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
         if (buffer.length > MAX_BUFFERED) buffer.shift();
         wake?.();
       };
+      // One listener for the stream's whole life, not one per wait.
+      const onAbort = () => wake?.();
+      signal.addEventListener("abort", onAbort, { once: true });
       for (const channel of channels) this.local.on(channel, onMessage);
-      await Promise.all(channels.map((channel) => this.retain(channel)));
       try {
+        // Inside the try: if subscribing fails, the finally still undoes the rest.
+        await Promise.all(channels.map((channel) => this.retain(channel)));
+        // The buffer is empty each time round: the inner loop drains it, and nothing
+        // arrives between that and setting `wake` (no await in between).
         while (!signal.aborted) {
-          if (buffer.length === 0) {
-            await new Promise<void>((resolve) => {
-              wake = resolve;
-              signal.addEventListener("abort", () => resolve(), { once: true });
-            });
-            wake = undefined;
-          }
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          wake = undefined;
           while (buffer.length > 0 && !signal.aborted) yield buffer.shift() as Message;
         }
       } finally {
+        signal.removeEventListener("abort", onAbort);
         for (const channel of channels) this.local.off(channel, onMessage);
         await Promise.all(channels.map((channel) => this.release(channel)));
       }
@@ -80,7 +101,8 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
     }
 
     private async release(channel: string) {
-      const count = (this.refs.get(channel) ?? 1) - 1;
+      // retain() counted it before its first await, so it's there.
+      const count = (this.refs.get(channel) as number) - 1;
       if (count > 0) {
         this.refs.set(channel, count);
         return;

@@ -7,7 +7,10 @@ import {
   notificationChannels,
 } from "../notifications";
 import { page, pageInput } from "../pagination";
-import { base } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf("UNSUBSCRIBE_LINK_INVALID");
 
 const inAppType = z.enum(
   Object.keys(inAppNotifications) as [
@@ -15,7 +18,7 @@ const inAppType = z.enum(
     ...(keyof typeof inAppNotifications)[],
   ],
 );
-const category = z.enum(
+export const notificationCategorySchema = z.enum(
   Object.keys(notificationCategories) as [
     keyof typeof notificationCategories,
     ...(keyof typeof notificationCategories)[],
@@ -41,7 +44,7 @@ export const notificationPreferencesSchema = z.object({
   /** Every category users can change, with each channel's state. */
   categories: z.array(
     z.object({
-      name: category,
+      name: notificationCategorySchema,
       channels: z.array(z.object({ channel: z.enum(notificationChannels), enabled: z.boolean() })),
     }),
   ),
@@ -74,7 +77,7 @@ export const pushDeviceSchema = z.discriminatedUnion("platform", [
 export type PushDeviceInput = z.infer<typeof pushDeviceSchema>;
 
 const route = (method: "GET" | "POST" | "PATCH", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Notifications"], summary });
+  base.errors(errors).route({ method, path, tags: ["Notifications"], summary });
 
 export const notificationsContract = {
   list: route("GET", "/notifications", "In-app notifications, newest first")
@@ -84,20 +87,26 @@ export const notificationsContract = {
     z.object({ count: z.number().int() }),
   ),
   markRead: route("POST", "/notifications/read", "Mark notifications as read")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ ids: z.array(z.uuid()).min(1).max(100) }))
     .output(z.void()),
-  markAllRead: route("POST", "/notifications/read-all", "Mark every notification as read").output(
-    z.void(),
-  ),
+  markAllRead: route("POST", "/notifications/read-all", "Mark every notification as read")
+    .meta({ rateLimit: EVERYDAY_WRITES })
+    .output(z.void()),
   preferences: route("GET", "/notifications/preferences", "What the user receives").output(
     notificationPreferencesSchema,
   ),
   updatePreferences: route("PATCH", "/notifications/preferences", "Change what the user receives")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(
       z.object({
         channels: z
           .array(
-            z.object({ category, channel: z.enum(notificationChannels), enabled: z.boolean() }),
+            z.object({
+              category: notificationCategorySchema,
+              channel: z.enum(notificationChannels),
+              enabled: z.boolean(),
+            }),
           )
           .max(50)
           .optional(),
@@ -112,6 +121,7 @@ export const notificationsContract = {
    * moves to the caller.
    */
   registerDevice: route("POST", "/notifications/devices", "Receive push on this device")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(
       z.object({
         device: pushDeviceSchema,
@@ -125,6 +135,7 @@ export const notificationsContract = {
     "/notifications/devices/remove",
     "Stop receiving push on this device",
   )
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ device: pushDeviceSchema }))
     .output(z.void()),
   /** From an email's unsubscribe link: no session, the signed token says who and what. */
@@ -133,6 +144,12 @@ export const notificationsContract = {
     "/notifications/unsubscribe-link",
     "Unsubscribe from a category's email",
   )
+    .meta({
+      rateLimit: {
+        exempt:
+          "No session to count against, and nothing to gain by repeating it: the signed token names the one category it turns off for the one user.",
+      },
+    })
     .input(z.object({ token: z.string().min(10).max(1000) }))
-    .output(z.object({ category })),
+    .output(z.object({ category: notificationCategorySchema })),
 };

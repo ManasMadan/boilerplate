@@ -28,6 +28,16 @@
       "additionalProperties": false,
       "properties": { "selector": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" } }
     },
+    "relay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "implicitTls": { "type": "boolean" },
+        "username": { "type": "string" }
+      }
+    },
     "webhook": {
       "type": "object",
       "additionalProperties": false,

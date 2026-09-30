@@ -1,13 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { errorCode } from "@repo/client";
+import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useMeQuery } from "@repo/client/api/user/me";
-import {
-  useRemovePhoneMutation,
-  useSendPhoneCodeMutation,
-  useVerifyPhoneMutation,
-} from "@repo/client/api/user/phone";
+import { useRemovePhoneMutation } from "@repo/client/api/user/remove-phone";
+import { useSendPhoneCodeMutation } from "@repo/client/api/user/send-phone-code";
+import { useVerifyPhoneMutation } from "@repo/client/api/user/verify-phone";
 import { phoneNumberSchema } from "@repo/contracts/auth";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -25,7 +23,6 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 import { OtpField, TextField } from "@/components/form-fields";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { useAuthSchemas } from "@/modules/auth";
 import { ReauthPrompt } from "./reauth-prompt";
 

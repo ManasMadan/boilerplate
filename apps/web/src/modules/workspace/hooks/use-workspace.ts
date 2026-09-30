@@ -2,27 +2,16 @@
 
 /**
  * The signed-in user's workspaces (better-auth organizations) and their role in the
- * active one, as TanStack queries, plus switching. Switching changes which workspace
- * every API call works in, so all cached data is refetched.
+ * active one, bound to the web's auth client (the queries are packages/client's), plus
+ * switching. Switching changes which workspace every API call works in, so all cached
+ * data is refetched.
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useActiveWorkspaceQuery } from "@repo/client/auth/active-workspace";
+import { authKeys } from "@repo/client/auth/query";
+import { useWorkspacesQuery } from "@repo/client/auth/workspaces";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-
-export type Role = "owner" | "admin" | "member";
-
-const keys = {
-  all: ["auth", "workspace"] as const,
-  list: ["auth", "workspace", "list"] as const,
-  active: (id: string | null | undefined) => ["auth", "workspace", "active", id] as const,
-};
-
-async function unwrap<T>(call: Promise<{ data: T | null; error: unknown }>): Promise<T> {
-  const { data, error } = await call;
-  if (error) throw error;
-  if (data === null) throw new Error("Empty response");
-  return data;
-}
 
 /** Personal workspaces (one per user, created at sign-up) can't be shared or deleted. */
 export function isPersonal(organization: { metadata?: unknown }) {
@@ -35,29 +24,18 @@ export function isPersonal(organization: { metadata?: unknown }) {
 }
 
 export function useWorkspaces() {
-  return useQuery({ queryKey: keys.list, queryFn: () => unwrap(authClient.organization.list()) });
+  return useWorkspacesQuery(authClient);
 }
 
 /** The active workspace with its members and invitations, and the user's role in it. */
 export function useActiveWorkspace() {
-  const { data: session } = authClient.useSession();
-  const activeId = session?.session.activeOrganizationId;
-  const userId = session?.user.id;
-  const query = useQuery({
-    queryKey: keys.active(activeId),
-    enabled: Boolean(activeId),
-    queryFn: () => unwrap(authClient.organization.getFullOrganization()),
-  });
-  const role = query.data?.members.find((member) => member.userId === userId)?.role as
-    | Role
-    | undefined;
-  return { ...query, role, userId, isAdmin: role === "owner" || role === "admin" };
+  return useActiveWorkspaceQuery(authClient);
 }
 
 /** Refetches workspace data (after membership or settings changes). */
 export function useRefreshWorkspaces() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: keys.all });
+  return () => queryClient.invalidateQueries({ queryKey: authKeys.workspaces() });
 }
 
 export function useSwitchWorkspace() {

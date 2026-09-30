@@ -1,7 +1,9 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useAuditLogInfiniteQuery } from "@repo/client/api/audit/list";
 import type { AuditEntry } from "@repo/contracts/api";
+import { loosely } from "@repo/i18n";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -12,7 +14,6 @@ import {
 } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useFormatter, useTranslations } from "next-intl";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /** ICU arguments from an event payload: strings and numbers as they are, the rest as text. */
 function paramsOf(payload: Record<string, unknown>) {
@@ -61,10 +62,7 @@ export function WorkspaceAuditPage() {
                 <tr key={entry.id}>
                   <td className="py-2 pe-3">
                     {tEvents.has(entry.name as Parameters<typeof tEvents>[0])
-                      ? tEvents(
-                          entry.name as Parameters<typeof tEvents>[0],
-                          paramsOf(entry.payload),
-                        )
+                      ? loosely(tEvents)(entry.name, paramsOf(entry.payload))
                       : entry.name}
                   </td>
                   <td className="py-2 pe-3 text-muted-foreground">

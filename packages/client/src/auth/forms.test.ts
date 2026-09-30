@@ -15,7 +15,16 @@ describe("authErrorKey", () => {
     expect(authErrorKey(error)).toBe(key);
   });
 
-  it.each([null, undefined, "boom", new Error("x"), {}])("nothing to show for %j", (error) => {
+  it.each([
+    null,
+    undefined,
+    "boom",
+    new Error("x"),
+    {},
+    // Codes with no sentence of their own, one that only looks like an alias included.
+    { code: "SOMETHING_NEW" },
+    { code: "toString" },
+  ])("nothing to show for %j", (error) => {
     expect(authErrorKey(error)).toBeUndefined();
   });
 });

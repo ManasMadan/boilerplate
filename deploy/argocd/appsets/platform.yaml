@@ -22,21 +22,62 @@ spec:
   generators:
     - matrix:
         generators:
-          - clusters:
-              selector:
-                matchExpressions:
-                  - key: boilerplate.dev/environment
-                    operator: Exists
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchExpressions:
+                        - key: boilerplate.dev/environment
+                          operator: Exists
+                # The revision the environment deploys from, and production's images:
+                # deploy/environments/<env>/release.yaml, read at HEAD.
+                - git:
+                    repoURL: https://github.com/ManasMadan/boilerplate.git
+                    revision: HEAD
+                    pathParamPrefix: release
+                    files:
+                      - path: 'deploy/environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/release.yaml'
           - git:
               repoURL: https://github.com/ManasMadan/boilerplate.git
-              revision: HEAD
+              revision: "{{ .revision }}"
+              # The generator's own `path` parameter (the file's location) would replace
+              # an add-on's `path` key; this moves it to `.file.path`.
+              pathParamPrefix: file
               files:
                 - path: deploy/platform/addons/*.yaml
+  # Add-ons roll out in the order of their waves, each once the one before is healthy
+  # (the CRDs an add-on needs are installed by one of an earlier wave). A sync-wave
+  # annotation on generated Applications orders nothing; progressive syncs do (OpenTofu's
+  # bootstrap turns them on). A new wave needs a step here.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-30"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-20"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-10"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave0"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave10"]
   template:
     metadata:
       name: "{{ .name }}-{{ .addon }}"
-      annotations:
-        argocd.argoproj.io/sync-wave: "{{ .wave }}"
+      labels:
+        wave: "wave{{ .wave }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
@@ -64,14 +105,14 @@ spec:
       sources:
         {{- if hasKey . "secretsPath" }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: HEAD
+          targetRevision: "{{ .revision }}"
           path: {{ .secretsPath }}/{{ index .metadata.labels "boilerplate.dev/environment" }}
           plugin:
             name: sops
         {{- else }}
         {{- if hasKey . "path" }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: HEAD
+          targetRevision: "{{ .revision }}"
           path: {{ .path }}
           helm:
             releaseName: {{ .addon }}
@@ -101,7 +142,7 @@ spec:
             {{- end }}
         {{- if not (hasKey . "path") }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: HEAD
+          targetRevision: "{{ .revision }}"
           ref: repo
         {{- end }}
         {{- end }}

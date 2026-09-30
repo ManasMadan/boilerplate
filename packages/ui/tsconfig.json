@@ -5,5 +5,5 @@
     // same specifier apps use. shadcn's CLI generates imports in this form.
     "paths": { "@repo/ui/*": ["./src/*"] }
   },
-  "include": ["src", ".storybook", "vitest.config.ts"]
+  "include": ["src", "test", ".storybook", "vitest.config.ts"]
 }

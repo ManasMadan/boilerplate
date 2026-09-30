@@ -25,21 +25,25 @@
 import type { Db } from "./client";
 import type { Prisma } from "./generated/prisma/client";
 
-const setTenant = (client: Db | Prisma.TransactionClient, orgId: string) =>
-  client.$executeRaw`SELECT set_config('app.org_id', ${orgId}, true)`;
+type Scope = "app.org_id" | "app.user_id";
 
-export function withTenant(db: Db, orgId: string) {
+/** Sets the row-level security scope for the rest of the transaction. */
+const setScope = (client: Db | Prisma.TransactionClient, scope: Scope, id: string) =>
+  client.$executeRaw`SELECT set_config(${scope}, ${id}, true)`;
+
+/** A client whose every query runs with `scope` set to `id` (see the module comment). */
+function scoped(db: Db, name: string, scope: Scope, id: string, useInstead: string) {
   return db.$extends({
-    name: "tenant",
+    name,
     client: {
       $transaction(): never {
-        throw new Error("Use tenantTx() for multi-statement units on tenant data.");
+        throw new Error(useInstead);
       },
     },
     query: {
       $allModels: {
         async $allOperations({ args, query }) {
-          const [, result] = await db.$transaction([setTenant(db, orgId), query(args)], {
+          const [, result] = await db.$transaction([setScope(db, scope, id), query(args)], {
             maxWait: 10_000,
           });
           return result;
@@ -49,41 +53,35 @@ export function withTenant(db: Db, orgId: string) {
   });
 }
 
-export type TenantDb = ReturnType<typeof withTenant>;
+export const withTenant = (db: Db, orgId: string) =>
+  scoped(
+    db,
+    "tenant",
+    "app.org_id",
+    orgId,
+    "Use tenantTx() for multi-statement units on tenant data.",
+  );
 
-const setUser = (client: Db | Prisma.TransactionClient, userId: string) =>
-  client.$executeRaw`SELECT set_config('app.user_id', ${userId}, true)`;
+export type TenantDb = ReturnType<typeof withTenant>;
 
 /**
  * Like withTenant, for rows owned by one user rather than an organization (their
  * notifications, preferences, devices): row-level security on `app.user_id` scopes
  * every query to that user.
  */
-export function withUser(db: Db, userId: string) {
-  return db.$extends({
-    name: "user",
-    client: {
-      $transaction(): never {
-        throw new Error("Use userTx() for multi-statement units on per-user data.");
-      },
-    },
-    query: {
-      $allModels: {
-        async $allOperations({ args, query }) {
-          const [, result] = await db.$transaction([setUser(db, userId), query(args)], {
-            maxWait: 10_000,
-          });
-          return result;
-        },
-      },
-    },
-  });
-}
+export const withUser = (db: Db, userId: string) =>
+  scoped(
+    db,
+    "user",
+    "app.user_id",
+    userId,
+    "Use userTx() for multi-statement units on per-user data.",
+  );
 
 /** Like tenantTx, for per-user data (see withUser). */
 export function userTx<T>(db: Db, userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction(async (tx) => {
-    await setUser(tx, userId);
+    await setScope(tx, "app.user_id", userId);
     return fn(tx as Tx);
   }, TX_OPTIONS);
 }
@@ -102,7 +100,7 @@ const TX_OPTIONS = { maxWait: 10_000, timeout: 5_000 } as const;
 
 export function tenantTx<T>(db: Db, orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction(async (tx) => {
-    await setTenant(tx, orgId);
+    await setScope(tx, "app.org_id", orgId);
     return fn(tx as Tx);
   }, TX_OPTIONS);
 }

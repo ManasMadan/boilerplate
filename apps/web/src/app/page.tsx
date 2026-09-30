@@ -1,7 +1,9 @@
-import { cookies } from "next/headers";
-import { hasSessionCookie } from "@/lib/session-cookie";
+import { getSessionCookie } from "better-auth/cookies";
+import { headers } from "next/headers";
 import { HomePage } from "@/modules/marketing";
 
 export default async function Page() {
-  return <HomePage signedIn={hasSessionCookie(await cookies())} />;
+  // Only whether a session cookie is there, to pick the call to action; the API decides
+  // whether the session is valid.
+  return <HomePage signedIn={getSessionCookie(await headers()) !== null} />;
 }

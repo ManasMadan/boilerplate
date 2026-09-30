@@ -22,6 +22,7 @@
  */
 import { type Prisma, transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";
+import { rawBodies, sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import { emitEvent } from "../outbox";
 import {
@@ -40,32 +41,29 @@ export function mountStalwart(
 ) {
   fastify.register((scope, _options, done) => {
     // Raw bytes for this route only: the signature covers the body exactly as sent.
-    scope.removeContentTypeParser("application/json");
-    scope.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) =>
-      done(null, body),
-    );
+    rawBodies(scope, "application/json");
 
     scope.post("/webhooks/stalwart", async (request, reply) => {
-      if (!secrets) return reply.status(404).send({ code: "NOT_FOUND" });
+      if (!secrets) return sendError(reply, "NOT_FOUND");
       const signature = request.headers["x-signature"];
       if (typeof signature !== "string" || !Buffer.isBuffer(request.body)) {
-        return reply.status(400).send({ code: "BAD_REQUEST" });
+        return sendError(reply, "BAD_REQUEST");
       }
       const body = request.body.toString("utf8");
       if (!verifySignature(secrets, body, signature)) {
-        return reply.status(400).send({ code: "INVALID_SIGNATURE" });
+        return sendError(reply, "INVALID_SIGNATURE");
       }
 
       let json: unknown;
       try {
         json = JSON.parse(body);
       } catch {
-        return reply.status(400).send({ code: "BAD_REQUEST" });
+        return sendError(reply, "BAD_REQUEST");
       }
       const parsed = stalwartBatch.safeParse(json);
-      if (!parsed.success) return reply.status(400).send({ code: "BAD_REQUEST" });
+      if (!parsed.success) return sendError(reply, "BAD_REQUEST");
       const { events } = parsed.data;
-      if (!isFresh(events, now())) return reply.status(400).send({ code: "INVALID_SIGNATURE" });
+      if (!isFresh(events, now())) return sendError(reply, "INVALID_SIGNATURE");
 
       const keyed = events.map((event) => ({ event, key: eventKey(event) }));
       await transaction(database.write, async (tx) => {

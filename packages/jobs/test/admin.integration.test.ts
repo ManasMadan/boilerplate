@@ -1,14 +1,15 @@
 /** Failed jobs, listed and put back, on a real Valkey. */
 import { randomUUID } from "node:crypto";
+import { eventually } from "@repo/testing/eventually";
 import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { discardFailed, failedJobs, retryFailed } from "../src/admin";
 
-// Database 12 (shared with nest-common's suite, which never flushes it) under a prefix
-// of this run's own, so nothing else's keys are touched.
+// The jobs package's own Valkey database (docs/testing.md), under a prefix of this
+// run's own, so nothing else's keys are touched.
 const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
-url.pathname = "/12";
+url.pathname = "/19";
 const connection = new Redis(url.toString(), { maxRetriesPerRequest: null });
 const prefix = `test-admin-${randomUUID()}`;
 const queue = new Queue("jobs-admin", { connection, prefix });
@@ -17,12 +18,7 @@ let succeed = false;
 const handled: string[] = [];
 let worker: Worker;
 
-async function until(check: () => Promise<boolean>) {
-  const deadline = Date.now() + 10_000;
-  while (!(await check()) && Date.now() < deadline)
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  return check();
-}
+const until = (check: () => Promise<boolean>) => eventually(check, (ok) => ok, { timeout: 10_000 });
 
 beforeAll(async () => {
   worker = new Worker(
@@ -57,6 +53,19 @@ describe("failed jobs", () => {
     expect(await failedJobs(queue, 1)).toHaveLength(1);
   });
 
+  it("lists a failed job whose finish time is missing, without inventing one", async () => {
+    await queue.add("send", { n: 4 }, { jobId: "job-4" });
+    expect(await until(async () => (await queue.getJob("job-4"))?.isFailed() ?? false)).toBe(true);
+    // As a job written by another BullMQ version, or edited by hand, may be.
+    await connection.hdel(`${prefix}:jobs-admin:job-4`, "finishedOn");
+    const listed = (await failedJobs(queue)).find((failed) => failed.id === "job-4");
+    expect(listed).toMatchObject({
+      failedAt: null,
+      failedReason: expect.stringMatching(/provider down/),
+    });
+    expect(await discardFailed(queue, ["job-4"])).toBe(1);
+  });
+
   it("discards one that should never run, and retries a chosen one with a fresh budget", async () => {
     expect(await discardFailed(queue, ["job-3", "missing"])).toBe(1);
     succeed = true;
@@ -71,5 +80,30 @@ describe("failed jobs", () => {
     expect(await until(async () => handled.includes("job-2"))).toBe(true);
     expect(await queue.getFailedCount()).toBe(0);
     expect(await queue.getJob("job-3")).toBeUndefined();
+  });
+});
+
+describe("a long failed set", () => {
+  it("retries every failed job, however many pages of them there are", async () => {
+    const many = new Queue("jobs-admin-many", { connection, prefix });
+    let failing = true;
+    const done = new Set<string>();
+    const busy = new Worker(
+      "jobs-admin-many",
+      async (job) => {
+        if (failing) throw new Error("provider down");
+        done.add(job.id as string);
+      },
+      { connection, prefix, concurrency: 100 },
+    );
+    // One more than the page retryFailed reads the failed set in.
+    await many.addBulk(Array.from({ length: 501 }, (_, n) => ({ name: "send", data: { n } })));
+    expect(await until(async () => (await many.getFailedCount()) === 501)).toBe(true);
+    failing = false;
+    expect(await retryFailed(many)).toBe(501);
+    expect(await until(async () => done.size === 501)).toBe(true);
+    await busy.close();
+    await many.obliterate({ force: true });
+    await many.close();
   });
 });

@@ -3,7 +3,10 @@
  * IDE), and disconnecting them. One entry per app and workspace the user approved.
  */
 import * as z from "zod";
-import { base } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf("APP_NOT_FOUND");
 
 export const connectedAppSchema = z.object({
   /** The approval (one per app and workspace). */
@@ -21,7 +24,7 @@ export const connectedAppSchema = z.object({
 export type ConnectedApp = z.infer<typeof connectedAppSchema>;
 
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Account"], summary });
+  base.errors(errors).route({ method, path, tags: ["Account"], summary });
 
 export const appsContract = {
   list: route("GET", "/me/apps", "Apps connected to your workspaces").output(
@@ -32,6 +35,7 @@ export const appsContract = {
    * (APP_NOT_FOUND for an id that isn't the user's).
    */
   disconnect: route("POST", "/me/apps/{id}/disconnect", "Disconnect an app")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ id: z.uuid() }))
     .output(z.void()),
 };

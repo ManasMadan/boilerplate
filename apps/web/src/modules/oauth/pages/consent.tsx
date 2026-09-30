@@ -1,5 +1,7 @@
 "use client";
 
+import type { Workspace } from "@repo/client/auth";
+import { useOAuthClientQuery } from "@repo/client/auth/oauth-client";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -17,7 +19,6 @@ import {
   SelectValue,
 } from "@repo/ui/components/select";
 import { Skeleton } from "@repo/ui/components/skeleton";
-import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useId, useState } from "react";
@@ -47,18 +48,7 @@ export function OAuthConsentPage() {
   const returnTo = hostOf(params.get("redirect_uri"));
   const { data: session } = authClient.useSession();
   const workspaces = useWorkspaces();
-  const client = useQuery({
-    queryKey: ["auth", "oauth-client", clientId],
-    enabled: Boolean(clientId),
-    retry: false,
-    queryFn: async () => {
-      const { data, error } = await authClient.oauth2.publicClient({
-        query: { client_id: clientId as string },
-      });
-      if (error) throw error;
-      return data;
-    },
-  });
+  const client = useOAuthClientQuery(authClient, clientId);
 
   if (!isOAuthRequest(params) || !clientId) {
     return <Shell title={t("title")} description={t("missing")} />;
@@ -105,7 +95,7 @@ export function OAuthConsentPage() {
               onValueChange={(id) => {
                 if (id && id !== activeId) void switchWorkspace(id);
               }}
-              items={workspaces.data.map((workspace) => ({
+              items={workspaces.data.map((workspace: Workspace) => ({
                 value: workspace.id,
                 label: workspaceName(workspace),
               }))}
@@ -114,7 +104,7 @@ export function OAuthConsentPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {workspaces.data.map((workspace) => (
+                {workspaces.data.map((workspace: Workspace) => (
                   <SelectItem key={workspace.id} value={workspace.id}>
                     {workspaceName(workspace)}
                   </SelectItem>

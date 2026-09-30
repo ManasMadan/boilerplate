@@ -1,7 +1,6 @@
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 import {
-  ClockModule,
   DatabaseModule,
   HealthModule,
   I18nModule,
@@ -44,7 +43,6 @@ import { NotificationsProducerModule } from "./notifications";
       useFactory: (redis: Redis) => ({ connection: redis }),
     }),
     HealthModule.forRoot(["db", "redis"]),
-    ClockModule,
     I18nModule.forRoot(),
     NotificationsProducerModule,
     AuthModule,

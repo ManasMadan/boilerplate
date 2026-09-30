@@ -1,5 +1,7 @@
 # Releases are version tags pushed by hand (`git tag v1.4.0 && git push origin v1.4.0`):
-# this checks the tag (a version, on master, matching the mobile app's version) and
+# this checks the tag (a version, on master, with images: a commit deploy.yml passed for
+# or the staging bump right after it, waiting while they still run; and matching the
+# mobile app's version) and
 # publishes the GitHub release with notes from the Conventional Commit titles since the
 # previous tag. Production then moves through its promotion pull request, opened with
 # `bun run promote v1.4.0` (scripts/release.ts); merging it is the deploy. The mobile
@@ -19,8 +21,10 @@ permissions: {}
 jobs:
   release:
     name: GitHub release
-    runs-on: ubuntu-latest
-    permissions: { contents: write }
+    runs-on: ubuntu-24.04
+    # Up to an hour waiting for CI and deploy.yml on a commit tagged right after its merge.
+    timeout-minutes: 75
+    permissions: { contents: write, actions: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
@@ -31,6 +35,8 @@ jobs:
         with:
           bun-version-file: package.json
       - name: Check the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: bun scripts/release.ts check "$GITHUB_REF_NAME"
       - name: Publish the release
         env:

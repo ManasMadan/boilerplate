@@ -14,7 +14,7 @@ const required = (name: string) => {
   return value;
 };
 
-const fake = await startFakeStripe({
+export const fake = await startFakeStripe({
   secretKey: required("STRIPE_SECRET_KEY"),
   webhookSecret: required("STRIPE_WEBHOOK_SECRET"),
   webhookUrl: process.env.STRIPE_FAKE_WEBHOOK_URL ?? "http://localhost:3004/webhooks/stripe",

@@ -1,6 +1,7 @@
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import type { TodoListData } from "./list";
-import { applyCreate, applyDelete, applySetCompleted } from "./optimistic";
+import { applyCreate, applyDelete, applySetCompleted, restoreTodoLists } from "./optimistic";
 
 const todo = (id: string, completed = false) => ({
   id,
@@ -35,5 +36,16 @@ describe("optimistic todo updates", () => {
 
   it("leaves an empty cache empty", () => {
     expect(applySetCompleted(undefined, "a", true)).toBeUndefined();
+  });
+});
+
+describe("restoring the lists after a failed change", () => {
+  it("puts back every list saved, and leaves the cache alone when nothing was saved", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["todos", 20], applyDelete(data, "a"));
+    restoreTodoLists(queryClient, undefined);
+    expect(queryClient.getQueryData(["todos", 20])).toEqual(applyDelete(data, "a"));
+    restoreTodoLists(queryClient, { previous: [[["todos", 20], data]] });
+    expect(queryClient.getQueryData(["todos", 20])).toEqual(data);
   });
 });

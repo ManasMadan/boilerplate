@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Python inference service. Its Pydantic models are the source of truth for the TypeScript client in packages/ai-client."
 requires-python = ">=3.14"
 dependencies = [
-  "bullmq>=3.2.8",
+  "anyio>=4.15.1",
+  # Upgraded only together with the Node package (the root package.json catalog): both
+  # run the same Lua scripts on the same queues. tests/test_bullmq_pair.py compares them.
+  "bullmq==3.2.8",
   "fastapi[standard]>=0.141.1",
   "httpx>=0.28.1",
   "langgraph>=1.2.12",
@@ -37,6 +40,7 @@ dev = [
   "ruff>=0.16.9",
   "pytest-cov>=7",
   "watchfiles>=1.3.0",
+  "python-dotenv>=1.2.3",
 ]
 
 [tool.uv]
@@ -48,8 +52,19 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-# Pyflakes, pycodestyle, isort, bugbear, pyupgrade, simplify, ruff-specific.
-select = ["F", "E", "W", "I", "B", "UP", "SIM", "RUF"]
+# Pyflakes, pycodestyle, isort, bugbear, pyupgrade, simplify, ruff-specific, and async,
+# FastAPI, timezone, pytest, pygrep, blind-except, print, bandit and annotation checks.
+select = [
+  "F", "E", "W", "I", "B", "UP", "SIM", "RUF",
+  "ASYNC", "FAST", "DTZ", "PT", "PGH", "BLE", "T20", "S", "ANN",
+]
+# structlog's logger: `log.exception(...)` in a handler counts as reporting the error.
+logger-objects = ["app.log.log"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest's assertions are plain `assert` statements; bandit's warning is about asserts that
+# guard production code, which vanish under `python -O`.
+"tests/**" = ["S101"]
 
 [tool.basedpyright]
 # Strict mode: every function signature and model field must be typed. This is what
@@ -58,12 +73,15 @@ typeCheckingMode = "strict"
 pythonVersion = "3.14"
 include = ["app", "tests", "evals"]
 reportUnusedCallResult = false
-reportAny = false
-reportExplicitAny = false
-# Tests drive untyped third-party clients (redis-py, TestClient internals) directly;
-# the application code keeps every strict rule.
+# A job or code added on the TypeScript side regenerates a Literal; every `match` over it
+# must then handle the new value.
+reportMatchNotExhaustive = true
+reportAny = true
+reportExplicitAny = true
+reportIgnoreCommentWithoutRule = true
+reportUnnecessaryTypeIgnoreComment = true
 executionEnvironments = [
-  { root = "tests", extraPaths = ["."], reportUnknownMemberType = false, reportUnknownVariableType = false, reportUnknownArgumentType = false, reportUnknownLambdaType = false, reportAttributeAccessIssue = false, reportIndexIssue = false, reportArgumentType = false, reportPrivateUsage = false },
+  { root = "tests", extraPaths = ["."] },
   { root = "app", extraPaths = ["."] },
   { root = "evals", extraPaths = ["."] },
 ]
@@ -80,17 +98,12 @@ addopts = "-m 'not integration'"
 
 [tool.coverage.run]
 source = ["app"]
+branch = true
 # The worker runs as a subprocess in the integration tests; measure it there too.
 patch = ["subprocess"]
-omit = [
-  # Generated from the JSON Schemas (bun run gen).
-  "app/contracts/*",
-  # Writes openapi.json for codegen.
-  "app/export_openapi.py",
-]
 
 [tool.coverage.report]
-# The floor the suite currently meets (unit + integration), rounded down, less a point
-# for paths that only run sometimes. Raise it as tests are added.
-fail_under = 95
+# Every line and every branch, unit and integration tests together. Nothing is excluded:
+# a line no test reaches is either tested or deleted.
+fail_under = 100
 show_missing = true

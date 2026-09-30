@@ -28,9 +28,9 @@ export function TwoFactorPage() {
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { code: "" } });
 
   async function onSubmit({ code }: z.infer<typeof schema>) {
-    const { data, error } = useBackup
-      ? await authClient.twoFactor.verifyBackupCode({ code, trustDevice })
-      : await authClient.twoFactor.verifyTotp({ code, trustDevice });
+    const { data, error } = await (useBackup
+      ? authClient.twoFactor.verifyBackupCode({ code, trustDevice })
+      : authClient.twoFactor.verifyTotp({ code, trustDevice }));
     if (error) {
       // Clear the rejected code so the next one can be typed straight in.
       form.setValue("code", "");

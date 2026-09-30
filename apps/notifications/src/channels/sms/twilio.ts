@@ -2,7 +2,17 @@
  * Twilio's Messages API (one form-encoded POST, basic auth). `from` is a sender number in
  * E.164, or a Messaging Service SID ("MG...") to let Twilio pick the sender per country.
  */
+import * as z from "zod";
 import type { SmsResult, SmsTransport } from "./sms-transport";
+
+// Twilio's answer, success or error; anything else reads as an error without details.
+const twilioResult = z
+  .object({
+    sid: z.string().optional(),
+    code: z.number().optional(),
+    message: z.string().optional(),
+  })
+  .catch({});
 
 export interface TwilioConfig {
   accountSid: string;
@@ -46,11 +56,7 @@ export class TwilioTransport implements SmsTransport {
         error: `Twilio: ${(error as Error).message}`,
       };
     }
-    const result = (await response.json().catch(() => ({}))) as {
-      sid?: string;
-      code?: number;
-      message?: string;
-    };
+    const result = twilioResult.parse(await response.json().catch(() => ({})));
     if (response.ok && result.sid) return { ok: true, providerMessageId: result.sid };
     const code = result.code ?? 0;
     return {

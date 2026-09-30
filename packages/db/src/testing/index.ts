@@ -28,6 +28,9 @@ const TEMPLATE = "app_test";
  */
 const TEMPLATE_LOCK = 482_117_001;
 
+/** How long a test database's drop waits for the services' connections to close. */
+const BACKENDS_GONE_MS = 10_000;
+
 /** Local role passwords match the role names (infra/postgres/init). */
 const ROLE_PASSWORDS: Record<string, string> = {
   migrator: "migrator",
@@ -55,15 +58,16 @@ function urlFor(database: string, role: string) {
 }
 
 /**
- * Applies all migrations to the template database. Call once per test run; concurrent
- * runs (several packages under turbo) take turns on an advisory lock.
+ * Applies all migrations to the template database (`app_test`, or the one named). Call
+ * once per test run; concurrent runs (several packages under turbo) take turns on an
+ * advisory lock.
  *
  * If a migration recorded in the template no longer matches its file (it was edited
  * before shipping, or removed), the template's schemas are rebuilt from scratch: deploy
  * alone would keep the old version. Extensions (created by a superuser at bootstrap)
  * live in `public` and stay.
  */
-export async function prepareTemplate() {
+export async function prepareTemplate(template = TEMPLATE) {
   // The lock is held from the maintenance database: Postgres refuses to clone a database
   // anyone is connected to, so nothing but the work below may touch the template.
   const lock = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
@@ -71,7 +75,7 @@ export async function prepareTemplate() {
   try {
     await lock.query("SELECT pg_advisory_lock($1)", [TEMPLATE_LOCK]);
     await dropAbandonedTestDatabases();
-    const client = new pg.Client({ connectionString: urlFor(TEMPLATE, "migrator") });
+    const client = new pg.Client({ connectionString: urlFor(template, "migrator") });
     await client.connect();
     try {
       if (await isStale(client)) {
@@ -88,7 +92,7 @@ export async function prepareTemplate() {
     }
     execFileSync("bunx", ["prisma", "migrate", "deploy"], {
       cwd: DB_PACKAGE,
-      env: { ...process.env, MIGRATOR_DATABASE_URL: urlFor(TEMPLATE, "migrator") },
+      env: { ...process.env, MIGRATOR_DATABASE_URL: urlFor(template, "migrator") },
       stdio: "pipe",
     });
   } finally {
@@ -98,7 +102,9 @@ export async function prepareTemplate() {
 }
 
 async function isStale(client: pg.Client) {
-  const table = await client.query("SELECT to_regclass('public._prisma_migrations') AS t");
+  const table = await client.query<{ t: string | null }>(
+    "SELECT to_regclass('public._prisma_migrations') AS t",
+  );
   if (!table.rows[0]?.t) return false;
   const { rows } = await client.query<{ migration_name: string; checksum: string }>(
     "SELECT migration_name, checksum FROM public._prisma_migrations WHERE finished_at IS NOT NULL",
@@ -151,7 +157,8 @@ export async function dropAbandonedTestDatabases() {
 export interface TestDatabase {
   name: string;
   urlFor(role: string): string;
-  drop(): Promise<void>;
+  /** Drops it, once the services' connections are gone (waiting up to `waitMs` for them). */
+  drop(waitMs?: number): Promise<void>;
 }
 
 /** Clones the migrated template into a fresh database for one test file. */
@@ -172,11 +179,40 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   return {
     name,
     urlFor: (role) => urlFor(name, role),
-    async drop() {
+    async drop(waitMs = BACKENDS_GONE_MS) {
       const client = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
       await client.connect();
       try {
+        // A client's disconnect ends its server backend a moment later, and FORCE can only
+        // end the migrator's own sessions: wait for the services' to go first.
+        const deadline = Date.now() + waitMs;
+        while (Date.now() < deadline) {
+          const { rows } = await client.query<{ open: number }>(
+            "SELECT count(*)::int AS open FROM pg_stat_activity WHERE datname = $1 AND usename <> current_user",
+            [name],
+          );
+          if (rows[0]?.open === 0) break;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
         await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      } catch (error) {
+        // FORCE can only end the migrator's own sessions, so a connection a test left open
+        // as another role fails the drop: name it, it's a leak in the test or the service.
+        // The migrator sees other roles' sessions but not what they run: name who holds them.
+        const { rows } = await client.query<{
+          usename: string;
+          application_name: string;
+          pid: number;
+        }>("SELECT usename, application_name, pid FROM pg_stat_activity WHERE datname = $1", [
+          name,
+        ]);
+        const open = rows
+          .map(
+            (row) =>
+              `${row.usename} (pid ${row.pid}${row.application_name ? `, ${row.application_name}` : ""})`,
+          )
+          .join(", ");
+        throw new Error(`Couldn't drop ${name}; connections still open: ${open}`, { cause: error });
       } finally {
         await client.end();
       }

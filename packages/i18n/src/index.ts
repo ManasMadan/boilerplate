@@ -15,7 +15,11 @@
  *
  * Adding a language: copy messages/en.json to messages/<code>.json, translate it, and
  * add the code to `locales` and `catalogs`. Every catalog is type-checked against
- * English, so a missing key fails `check-types` instead of rendering a raw key.
+ * English's shape, so a missing key fails `check-types` instead of rendering a raw key,
+ * and a test checks each translation takes the same ICU arguments as English.
+ *
+ * English is typed with each message's literal text (messages/en.d.json.ts, from
+ * `bun run gen`), so `t("key", args)` checks the arguments the message names.
  */
 import { createTranslator } from "use-intl/core";
 import en from "../messages/en.json" with { type: "json" };
@@ -27,18 +31,32 @@ export * from "./locales";
 
 export type Messages = typeof en;
 
+/** A catalog with English's keys, any text: what every translation is. */
+export type Catalog = CatalogOf<Messages>;
+type CatalogOf<T> = { [K in keyof T]: T[K] extends string ? string : CatalogOf<T[K]> };
+
 /** Where translations are loaded from. See the module comment for the database variant. */
 export interface MessageSource {
   load(locale: Locale): Promise<Messages>;
 }
 
 // `satisfies` makes every non-English catalog prove it has exactly English's shape.
-const catalogs = { en, es: es satisfies Messages } satisfies Record<Locale, Messages>;
+const catalogs = { en, es: es satisfies Catalog } satisfies Record<Locale, Catalog>;
 
 /** Messages shipped in this package. */
 export const bundledMessages: MessageSource = {
-  load: async (locale) => catalogs[locale],
+  // Typed as English, whose literal text gives each key's arguments: every catalog has
+  // English's keys (Catalog, above) and the same arguments (index.test.ts), in its words.
+  load: async (locale) => catalogs[locale] as Messages,
 };
+
+/**
+ * `t` for a key known only at run time (an error code, a notification or audit event)
+ * whose arguments arrive with it. The compiler can't pair those, so the ICU test checks
+ * every message's arguments against English instead. Everywhere else, call `t` itself.
+ */
+export type LooseTranslate = (key: string, values?: Record<string, string | number>) => string;
+export const loosely = (t: object) => t as LooseTranslate;
 
 export type Translator = ReturnType<typeof createTranslator<Messages>>;
 

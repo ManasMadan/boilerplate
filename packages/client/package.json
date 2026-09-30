@@ -8,12 +8,11 @@
     ".": "./src/index.ts",
     "./auth": "./src/auth/client.ts",
     "./api/*": "./src/api/*.ts",
-    "./auth/forms": "./src/auth/forms.ts",
-    "./auth/errors": "./src/auth/errors.ts"
+    "./auth/*": "./src/auth/*.ts"
   },
   "scripts": {
     "check-types": "tsc",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
@@ -24,7 +23,9 @@
     "@orpc/contract": "catalog:",
     "@orpc/tanstack-query": "catalog:",
     "@repo/contracts": "workspace:*",
+    "@repo/i18n": "workspace:*",
     "better-auth": "catalog:",
+    "use-intl": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
@@ -32,9 +33,13 @@
     "react": "catalog:"
   },
   "devDependencies": {
+    "@orpc/server": "catalog:",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "@types/react-test-renderer": "19.3.0",
+    "react-test-renderer": "19.2.3",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

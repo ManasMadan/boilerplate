@@ -4,11 +4,11 @@
  * `runWithContext(contextFor(request), ...)`; the user and organization are added once
  * the session is resolved.
  */
-import { negotiateLocale } from "@repo/i18n";
+import { type Locale, negotiateLocale } from "@repo/i18n";
 import type { RequestContext } from "@repo/nest-common";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
-export function contextFor(request: FastifyRequest): RequestContext {
+export function contextFor(request: FastifyRequest): RequestContext & { locale: Locale } {
   const header = (name: string) => {
     const value = request.headers[name];
     return typeof value === "string" ? value : undefined;
@@ -28,4 +28,28 @@ export function toHeaders(request: FastifyRequest) {
       headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
   }
   return headers;
+}
+
+/**
+ * The Fastify request as a Web Request, for handlers written against the Fetch API
+ * (better-auth, the MCP transport). The body is the raw one `rawBodies` keeps.
+ */
+export function toWebRequest(request: FastifyRequest, url: URL, headers = toHeaders(request)) {
+  const body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : undefined;
+  return new Request(url, { method: request.method, headers, ...(body && { body }) });
+}
+
+/**
+ * Copies a Web Response's status and headers onto the reply and returns its body. Each
+ * Set-Cookie stays its own header: joined into one, as iterating the headers gives them,
+ * browsers would read a single broken cookie.
+ */
+export async function fromWebResponse(reply: FastifyReply, response: Response) {
+  reply.status(response.status);
+  for (const [key, value] of response.headers) {
+    if (key !== "set-cookie") reply.header(key, value);
+  }
+  const cookies = response.headers.getSetCookie();
+  if (cookies.length > 0) reply.header("set-cookie", cookies);
+  return response.body ? Buffer.from(await response.arrayBuffer()) : null;
 }

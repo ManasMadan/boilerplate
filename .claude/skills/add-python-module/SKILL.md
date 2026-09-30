@@ -32,3 +32,6 @@ client in `packages/ai-client`. `docs/python-services.md` describes the service.
    `bun run lint` runs ruff and `bun run check-types` runs basedpyright on it.
 
 Background work for the service: the add-job skill (Python section).
+
+Finish with the verify skill, then the `python-reviewer` agent, the `security-reviewer`
+agent for a new route (a new entry point), and the `reviewer` agent for the API side.

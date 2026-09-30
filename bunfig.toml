@@ -10,3 +10,18 @@ linker = "hoisted"
 # which for React Native pulls native modules the Expo SDK wasn't built against.
 # Every dependency, peer or not, is declared explicitly (and checked by knip).
 peer = false
+# A version must have been out three days before `bun add` or `bun update` picks it, like
+# Renovate's minimumReleaseAge: most malicious or broken releases are pulled within days.
+# Any package.json change re-checks the whole lockfile against it, so a version locked
+# less than three days ago (a dependency bumped by hand) blocks every install until it
+# ages. Only then, and only to keep what bun.lock already has, run
+# `bun install --minimum-release-age=0` and check that the lockfile diff holds just your
+# change; never with `bun add`.
+minimumReleaseAge = 259200
+
+[test]
+# `bun test --coverage` (bun run test:coverage) writes LCOV for scripts/ and the Claude
+# Code hooks, merged with every other suite's by scripts/coverage.ts.
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage/bun"
+coverageSkipTestFiles = true

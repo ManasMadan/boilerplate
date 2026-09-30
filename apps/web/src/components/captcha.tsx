@@ -8,8 +8,8 @@
  *   await authClient.signUp.email(values, { headers: captcha.headers() });
  *   captcha.reset(); // tokens are single-use
  *
- * With captcha off, `widget` is null, `ready` is true and `headers()` is empty, so forms
- * are written once for both setups. The script loads from Cloudflare under the page's
+ * With captcha off, `widget` is null, `ready` is true once that's known and `headers()`
+ * is empty, so forms are written once for both setups. The script loads from Cloudflare under the page's
  * nonce CSP ('strict-dynamic' trusts scripts our own bundle adds).
  */
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
@@ -49,7 +49,7 @@ function loadTurnstile(): Promise<TurnstileApi> {
 export interface Captcha {
   /** The widget to place in the form, or null when captcha is off. */
   widget: ReactNode;
-  /** True once a submit can go through (always, when captcha is off). */
+  /** True once a submit can go through (as soon as the page knows, when captcha is off). */
   ready: boolean;
   /** Headers carrying the token, for better-auth's captcha plugin. */
   headers(): Record<string, string>;
@@ -113,7 +113,8 @@ export function useCaptcha(): Captcha {
         ) : null}
       </div>
     ) : null,
-    ready: !siteKey || token !== null,
+    // Until system.info answers, a submit might lack the token the API then requires.
+    ready: system !== undefined && (!siteKey || token !== null),
     headers: (): Record<string, string> =>
       siteKey && token ? { "x-captcha-response": token } : {},
     reset,

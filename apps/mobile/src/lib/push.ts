@@ -42,6 +42,6 @@ export async function devicePushToken(): Promise<{
   }
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== "granted") return null;
-  const { data } = await Notifications.getDevicePushTokenAsync();
+  const { data }: { data: unknown } = await Notifications.getDevicePushTokenAsync();
   return { platform: Platform.OS === "ios" ? "ios" : "android", token: String(data) };
 }

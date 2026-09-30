@@ -30,7 +30,7 @@ because producer and consumer can be different versions during a rolling deploy:
 
 ```ts
 @Processor("files", { concurrency: env.FILES_CONCURRENCY, prefix: queuePrefix("files") })
-export class FilesProcessor extends WorkerHost {
+export class FilesProcessor extends JobProcessor {
   async process(job: Job) {
     const { meta, payload } = parseJob("files", "process", job.data);
     ...
@@ -38,13 +38,21 @@ export class FilesProcessor extends WorkerHost {
 }
 ```
 
+`JobProcessor` (`@repo/nest-common`) is `WorkerHost` plus logging: every failed job is
+logged with its queue, id, attempt and the error's causes, as "job failed; it will be
+retried" or "job failed for good", and worker errors too. A test fails any processor
+that extends `WorkerHost` directly. `parseJob` throws BullMQ's `UnrecoverableError` for
+a payload that doesn't match its schema, so that job fails at once instead of retrying.
+
 Jobs are stored as `{ meta, payload }`. `meta` carries the producer's request id, user
 and organization; consumers restore it with `runWithContext`, so their logs share the
 request id of the HTTP call that caused them.
 
 Every queue's Redis keys use the prefix `{<queue>}` (`queuePrefix`), a Redis Cluster
 hash tag, so moving to a cluster needs no key migration. KEDA scales workers on
-`LLEN {<queue>}:<queue>:wait`, so queues KEDA scales must not use job priorities.
+`LLEN {<queue>}:<queue>:wait`, so queues KEDA scales must not use job priorities. Its
+operator reads that from the `keda` namespace, which is why Valkey's network policy
+lets it in (`deploy/charts/data/templates/valkey.yaml`).
 
 ## Queues
 
@@ -54,7 +62,7 @@ hash tag, so moving to a cluster needs no key migration. KEDA scales workers on
 | `notifications-bulk` | `send`, `deferred`, `digests`, `digest` | notifications (hourly digest scheduler) | notifications |
 | `events-audit` | `event` | the outbox relay | worker (audit log) |
 | `events-webhooks` | `event` | the outbox relay | webhooks (fan-out to endpoints) |
-| `events-notifications` | `event` | the outbox relay | notifications (notify someone, or suppress an address that bounced or complained) |
+| `events-notifications` | `event` | the outbox relay | notifications (notify someone, or suppress an address that hard-bounced) |
 | `events-realtime` | `event` | the outbox relay | worker (live UI nudges) |
 | `events-billing` | `event` | the outbox relay | api (billing) |
 | `webhook-deliveries` | `deliver`, `redeliver`, `send-test` | webhooks (fan-out, retries), api (replay and test from settings) | webhooks |
@@ -67,14 +75,23 @@ Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.process
 
 ## Retries and failed jobs
 
-Most queues retry 5 times with exponential backoff from 2 s. `events-realtime` retries 3
+Most queues retry 5 times with exponential backoff from 2 s, with jitter (each delay
+somewhere in its upper half) so jobs that failed together don't all return at once. `events-realtime` retries 3
 times, 1 s apart (a nudge is worthless later). `webhook-deliveries` retries 8 times on
 the Standard Webhooks schedule (`WEBHOOK_RETRY_DELAYS_MS`: 5 s, 5 min, 30 min, 2 h,
-5 h, 10 h, 10 h), about a day in all. `maintenance` retries 3 times from a minute.
+5 h, 10 h, 10 h), about a day in all; a delivery answered with a redirect counts as
+failed and isn't followed, since that would send the signed body somewhere the customer
+didn't register. An attempt that got no HTTP answer records why as a code tenants see
+(`WEBHOOK_DELIVERY_ERRORS`: timeout, connection failed, destination not allowed,
+response too large), never our own error message. A failure on our side, like a
+secret that no longer decrypts, fails the job instead (logged and retried) and never
+counts against the endpoint or disables it. `maintenance` retries 3 times from a
+minute.
 
 A job that fails validation or runs out of attempts stays in BullMQ's failed set for
 its queue's `removeOnFail` age: an hour on `notifications-critical` (its payloads can
-hold one-time codes), 7 days for most queues, 30 days for the event queues. There is no
+hold one-time codes), a day on `events-realtime` (a stale nudge is worthless), 30 days
+on the other event queues and `maintenance`, and 7 days on the rest. There is no
 separate dead-letter queue; the failed set is it. `bun run jobs` shows every queue's
 counts, `bun run jobs failed <queue>` lists failed jobs and why, and `retry` or
 `discard` put them back or drop them (`scripts/jobs.ts`, on `packages/jobs/src/admin.ts`;
@@ -93,8 +110,10 @@ await tenantTx(database.write, orgId, async (tx) => {
 
 `emitEvent` (from `createOutbox` in `packages/nest-common/src/outbox.ts`, bound per
 service in its `src/outbox.ts`) validates the payload against the catalog, inserts a row
-into the service's `<schema>.outbox_event` with the actor, organization and request id
-from the request context, and sends `pg_notify('outbox', …)`, delivered on commit. It
+into the service's `<schema>.outbox_event` with the actor and request id from the
+request context and the organization the transaction runs as (`tenantTx`, else the
+request's, unless an origin says otherwise; so a job, script or seed gets it right too),
+and sends `pg_notify('outbox', …)`, delivered on commit. It
 only accepts a `Tx`, so an event outside a transaction doesn't compile: the change and
 its event commit together or not at all.
 
@@ -134,6 +153,12 @@ At least once, unordered. Consumers are idempotent:
 Each outbox schema also has `processed_event (event_id, consumer)` for a consumer that
 can't be idempotent by construction; the current consumers don't need it.
 
+An outbox row that isn't a valid event (a bad name, say) would fail its batch, and every
+batch after it, forever: the relay logs it ("outbox row isn't a valid event; set
+aside") and marks it published, so it stays in the table for someone to look at until
+retention removes it. A webhook test send creates its delivery once per job, however
+often the job runs.
+
 An event's name is accepted by the relay even if that build doesn't know it (a newer
 service can emit it mid-deploy); each consumer ignores names it doesn't handle.
 
@@ -145,7 +170,13 @@ for 24 hours.
 
 Names are versioned (`todo.completed.v1`). Adding an optional field is compatible;
 anything else is a new version, published alongside the old one until every consumer
-has moved. The audit log records every event.
+has moved. CI holds this: `bun run gen` writes every event's schema to
+`packages/jobs/generated/events.json`, and on a pull request `scripts/events-compat.ts`
+compares it with the base branch's, failing on a removed event or a field removed,
+retyped, made required or made optional. The events customers can subscribe to are also
+in the `webhooks` section of `apps/api/openapi.json`, with the body they receive. The audit log records every event except `notification.requested.v1`
+(`unauditedEvents`): its payload is a whole notification, addresses included, and the
+change it's about has its own event.
 
 | Events | Emitted by | Also consumed by |
 |---|---|---|
@@ -157,6 +188,7 @@ has moved. The audit log records every event.
 | `webhook.endpoint_created.v1`, `webhook.endpoint_updated.v1`, `webhook.endpoint_deleted.v1`, `webhook.secret_rotated.v1` | api (webhook settings) | |
 | `webhook.endpoint_disabled.v1` | webhooks (endpoint failing for `WEBHOOK_AUTO_DISABLE_HOURS`) | notifications |
 | `stripe.event_received.v1` | webhooks (`/webhooks/stripe`) | billing |
+| `email.feedback_received.v1` | webhooks (`/webhooks/stalwart`: a hard bounce from our mail server) | notifications (suppresses the address) |
 
 Customers can subscribe their endpoints to the events in `webhookEvents`; the rest stay
 internal.
@@ -164,8 +196,8 @@ internal.
 ## The Python worker
 
 `apps/ai` produces and consumes `ai-ingest` with the Python `bullmq` package. Its job
-payload is the Pydantic model generated from the zod schema
-(`app/contracts/ai_ingest_job.py`), and its prefix and retry options come from
+payloads are the Pydantic models generated from the zod schemas, one per job
+(`app/contracts/ai_ingest_ingest_job.py`, `ai_ingest_summarize_job.py`), and its prefix and retry options come from
 `app/contracts/queue_settings.json`, generated from `queues` (see
 [codegen.md](codegen.md)). Job ids are the document id (`ingest`) and
 `<document id>-summary` (`summarize`). It publishes live nudges on the same Redis

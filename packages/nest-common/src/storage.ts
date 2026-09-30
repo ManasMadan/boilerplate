@@ -65,6 +65,8 @@ export interface S3StorageOptions {
   secretAccessKey?: string;
   /** Needed by RustFS/MinIO-style servers without virtual-hosted buckets. */
   forcePathStyle?: boolean;
+  /** How long one request may take, connecting included (default 30 s). */
+  timeoutMs?: number;
 }
 
 export class S3Storage implements Storage {
@@ -75,6 +77,13 @@ export class S3Storage implements Storage {
       region: options.region,
       ...(options.endpoint && { endpoint: options.endpoint }),
       forcePathStyle: options.forcePathStyle ?? false,
+      // The SDK's own default waits forever on a server that stops answering, and its
+      // requestTimeout only logs a warning unless told to throw.
+      requestHandler: {
+        connectionTimeout: Math.min(5_000, options.timeoutMs ?? 30_000),
+        requestTimeout: options.timeoutMs ?? 30_000,
+        throwOnRequestTimeout: true,
+      },
       ...(options.accessKeyId &&
         options.secretAccessKey && {
           credentials: {
@@ -130,7 +139,8 @@ export class S3Storage implements Storage {
       const result = await this.client.send(
         new HeadObjectCommand({ Bucket: this.options.bucket, Key: key }),
       );
-      return { size: result.ContentLength ?? 0, contentType: result.ContentType };
+      // S3 always sends Content-Length for an object; the SDK's types just allow none.
+      return { size: result.ContentLength as number, contentType: result.ContentType };
     } catch (error) {
       if ((error as { name?: string }).name === "NotFound") return null;
       throw error;
@@ -141,11 +151,11 @@ export class S3Storage implements Storage {
     const result = await this.client.send(
       new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
     );
-    if ((result.ContentLength ?? 0) > maxBytes)
+    if ((result.ContentLength as number) > maxBytes)
       throw new Error(`${key} is larger than ${maxBytes} bytes`);
-    const bytes = await result.Body?.transformToByteArray();
-    if (!bytes) throw new Error(`${key} has no body`);
-    return Buffer.from(bytes);
+    // A GetObject that succeeded always has a body (possibly empty).
+    const body = result.Body as NonNullable<typeof result.Body>;
+    return Buffer.from(await body.transformToByteArray());
   }
 
   async write(key: string, body: Buffer, contentType: string) {

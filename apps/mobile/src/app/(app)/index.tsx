@@ -1,4 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useApiErrorMessage } from "@repo/client";
 import { useTodoCreateMutation } from "@repo/client/api/todo/create";
 import { useTodoDeleteMutation } from "@repo/client/api/todo/delete";
 import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list";
@@ -16,7 +17,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
-import { useApiErrorMessage } from "@/hooks/use-api-error";
 
 /** The workspace's todos: the same data, rules and hooks as the web dashboard. */
 export default function Todos() {
@@ -49,7 +49,8 @@ export default function Todos() {
         refreshControl={
           <RefreshControl refreshing={todos.isRefetching} onRefresh={() => todos.refetch()} />
         }
-        onEndReached={() => todos.hasNextPage && !todos.isFetchingNextPage && todos.fetchNextPage()}
+        // A page already loading is reused, not cancelled and asked for again.
+        onEndReached={() => todos.hasNextPage && todos.fetchNextPage({ cancelRefetch: false })}
         ListHeaderComponent={
           <View className="gap-4 pb-2">
             <Text role="heading" variant="h3">
@@ -97,7 +98,7 @@ export default function Todos() {
             <Checkbox
               accessibilityLabel={todo.title}
               checked={todo.completed}
-              onCheckedChange={(checked) =>
+              onCheckedChange={(checked: boolean) =>
                 setCompleted.mutate(
                   { id: todo.id, completed: checked, version: todo.version },
                   { onError },

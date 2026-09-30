@@ -7,14 +7,27 @@
  * deploying is all it takes). BullMQ runs each occurrence once, whatever the replica
  * count, so there's no separate cron or leader election.
  */
-import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq";
+import { InjectQueue, Processor } from "@nestjs/bullmq";
 import type { OnApplicationBootstrap } from "@nestjs/common";
 import { type JobName, parseJob, queuePrefix } from "@repo/jobs";
-import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import {
+  type Database,
+  InjectDatabase,
+  InjectPinoLogger,
+  JobProcessor,
+  PinoLogger,
+  row,
+  runJob,
+} from "@repo/nest-common";
 import type { Job, Queue } from "bullmq";
+import * as z from "zod";
 import { env } from "../env";
 import { FilesCleanup } from "../files/files.cleanup";
 import { OUTBOX_SOURCES } from "../outbox/sources";
+
+// What the retention functions return: how many they made, dropped or deleted.
+const int = z.object({ n: z.number().int() });
+const count = z.object({ n: z.bigint() });
 
 type Task = JobName<"maintenance">;
 
@@ -31,7 +44,7 @@ const PARTITIONS_BACK = 1;
 const PARTITIONS_AHEAD = 3;
 
 @Processor("maintenance", { concurrency: 1, prefix: queuePrefix("maintenance") })
-export class MaintenanceProcessor extends WorkerHost implements OnApplicationBootstrap {
+export class MaintenanceProcessor extends JobProcessor implements OnApplicationBootstrap {
   constructor(
     @InjectDatabase() private readonly database: Database,
     @InjectQueue("maintenance") private readonly queue: Queue,
@@ -53,9 +66,9 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
     }
   }
 
-  async process(job: Job) {
-    parseJob("maintenance", job.name as Task, job.data);
-    await this.run(job.name as Task);
+  async process(job: Job<unknown>) {
+    const { meta } = parseJob("maintenance", job.name as Task, job.data);
+    await runJob(meta, `job:${job.id}`, () => this.run(job.name as Task));
   }
 
   /** Runs one task now; also used by tests and the ops scripts. */
@@ -66,33 +79,50 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
       case "audit-partitions": {
         const cutoff = new Date();
         cutoff.setUTCMonth(cutoff.getUTCMonth() - env.AUDIT_RETENTION_MONTHS);
-        const [created] = await db.$queryRaw<[{ n: number }]>`
-          SELECT audit.ensure_partitions(${PARTITIONS_BACK}::int, ${PARTITIONS_AHEAD}::int) AS n`;
-        const [dropped] = await db.$queryRaw<[{ n: number }]>`
-          SELECT audit.drop_partitions_before(${cutoff}::timestamptz) AS n`;
+        const created = await row(
+          int,
+          db.$queryRaw`
+            SELECT audit.ensure_partitions(${PARTITIONS_BACK}::int, ${PARTITIONS_AHEAD}::int) AS n`,
+        );
+        const dropped = await row(
+          int,
+          db.$queryRaw`SELECT audit.drop_partitions_before(${cutoff}::timestamptz) AS n`,
+        );
         result.created = created.n;
         result.dropped = dropped.n;
         break;
       }
       case "outbox-retention":
         for (const source of OUTBOX_SOURCES) {
-          const [outbox] = await db.$queryRawUnsafe<[{ n: bigint }]>(
-            `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
-            env.OUTBOX_RETENTION_DAYS,
+          const outbox = await row(
+            count,
+            db.$queryRawUnsafe(
+              `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
+              env.OUTBOX_RETENTION_DAYS,
+            ),
           );
-          const [processed] = await db.$queryRawUnsafe<[{ n: bigint }]>(
-            `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
-            env.PROCESSED_EVENT_RETENTION_DAYS,
+          const processed = await row(
+            count,
+            db.$queryRawUnsafe(
+              `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
+              env.PROCESSED_EVENT_RETENTION_DAYS,
+            ),
           );
           result[`${source}.outbox`] = Number(outbox.n);
           result[`${source}.processed`] = Number(processed.n);
         }
         {
-          const [history] = await db.$queryRaw<[{ n: bigint }]>`
-            SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`;
+          const history = await row(
+            count,
+            db.$queryRaw`
+              SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`,
+          );
           result["webhooks.history"] = Number(history.n);
-          const [notifications] = await db.$queryRaw<[{ n: bigint }]>`
-            SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`;
+          const notifications = await row(
+            count,
+            db.$queryRaw`
+              SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`,
+          );
           result["notifications.history"] = Number(notifications.n);
         }
         break;
@@ -100,7 +130,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
         Object.assign(result, await this.files.run());
         break;
       case "session-retention": {
-        const [purged] = await db.$queryRaw<[{ n: bigint }]>`SELECT auth.purge_expired() AS n`;
+        const purged = await row(count, db.$queryRaw`SELECT auth.purge_expired() AS n`);
         result.expired = Number(purged.n);
         break;
       }

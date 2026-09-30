@@ -12,6 +12,11 @@
 #   mail     Stalwart  localhost:51465  the mail server production uses (submission over
 #                                       TLS; admin API :58080), `bun run db:up:mail`
 #
+# Every port listens on 127.0.0.1 only: the databases have well-known passwords (or
+# none) and Mailpit shows every sign-in code, so nobody else on the network may reach
+# them. To test uploads from a phone, set DOCKER_BIND_ADDRESS=0.0.0.0 (on a network you
+# trust) and S3_ENDPOINT to this machine's LAN address.
+#
 # Sharing a machine with other projects: host ports are in the 5xxxx range, so the usual
 # 5432/6379 stay free for them, and every container has a memory limit, so one that
 # grows is stopped on its own instead of starving everything else in Docker. Start them
@@ -19,6 +24,8 @@
 # remove everything with `bun run docker:clean`.
 #
 # Images are pinned; Renovate proposes upgrades. Ports can be overridden in .env.
+# The project is named, so every worktree of this repository (.config/wt.toml) shares
+# these containers and volumes instead of starting its own.
 name: boilerplate
 
 services:
@@ -30,7 +37,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: app
-    ports: ["${POSTGRES_PORT:-55432}:5432"]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-55432}:5432"]
     mem_limit: 512m
     volumes:
       - postgres:/var/lib/postgresql
@@ -46,10 +53,21 @@ services:
     image: valkey/valkey:9.1.2-alpine
     # Queued jobs live here: never evict keys (noeviction) and persist with AOF.
     # A memory ceiling below the container's limit: when full, writes fail with an error
-    # instead of the container being killed.
+    # instead of the container being killed. 32 logical databases: the test suites each
+    # take one (docs/testing.md).
     command:
-      ["valkey-server", "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction"]
-    ports: ["${VALKEY_PORT:-56379}:6379"]
+      [
+        "valkey-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "200mb",
+        "--maxmemory-policy",
+        "noeviction",
+        "--databases",
+        "32",
+      ]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${VALKEY_PORT:-56379}:6379"]
     mem_limit: 256m
     volumes: [valkey:/data]
     healthcheck:
@@ -66,7 +84,7 @@ services:
       RUSTFS_ACCESS_KEY: rustfs
       RUSTFS_SECRET_KEY: rustfs-secret
       RUSTFS_CONSOLE_ENABLE: "true"
-    ports: ["${S3_PORT:-59000}:9000", "${S3_CONSOLE_PORT:-59001}:9001"]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${S3_PORT:-59000}:9000", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${S3_CONSOLE_PORT:-59001}:9001"]
     mem_limit: 384m
     volumes: [rustfs:/data]
     healthcheck:
@@ -101,7 +119,7 @@ services:
   clamav:
     image: clamav/clamav-debian:1.5
     profiles: [files, full]
-    ports: ["${CLAMAV_PORT:-53310}:3310"]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${CLAMAV_PORT:-53310}:3310"]
     # Signatures take about 1 GB in memory. Loading the new set before dropping the old
     # one (the default) doubles that during every update; one copy at a time instead,
     # at the cost of a pause in scanning while it reloads.
@@ -118,7 +136,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:v1.31.3
-    ports: ["${MAILPIT_SMTP_PORT:-51025}:1025", "${MAILPIT_UI_PORT:-58025}:8025"]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_SMTP_PORT:-51025}:1025", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_UI_PORT:-58025}:8025"]
     mem_limit: 128m
     # Keeps more than the default 500: a full e2e run sends hundreds of emails.
     environment: { MP_MAX_MESSAGES: "5000" }
@@ -144,7 +162,7 @@ services:
   # address that doesn't exist, so bounces work offline. Delivery failures are posted to the webhooks
   # service on the host (/webhooks/stalwart), signed with STALWART_WEBHOOK_SECRET.
   stalwart:
-    image: stalwartlabs/stalwart:v0.16.24-alpine
+    image: stalwartlabs/stalwart:v0.16.24
     profiles: [mail, full]
     environment:
       # Signs in to the management API (the init service below and the tests use it).
@@ -152,7 +170,7 @@ services:
       STALWART_RECOVERY_ADMIN: admin:${STALWART_ADMIN_PASSWORD:-stalwart-admin}
       # Read by the webhook's signatureKey (EnvironmentVariable) in the plan below.
       STALWART_WEBHOOK_SECRET: ${STALWART_WEBHOOK_SECRET:-change-me}
-    ports: ["${STALWART_SMTPS_PORT:-51465}:465", "${STALWART_HTTP_PORT:-58080}:8080"]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${STALWART_SMTPS_PORT:-51465}:465", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${STALWART_HTTP_PORT:-58080}:8080"]
     # The webhooks service runs on the host (bun dev); Linux needs the name mapped.
     extra_hosts: ["host.docker.internal:host-gateway"]
     mem_limit: 256m
@@ -191,7 +209,7 @@ services:
   jaeger:
     image: jaegertracing/jaeger:2.21.0
     profiles: [telemetry, full]
-    ports: ["${JAEGER_OTLP_PORT:-54318}:4318", "${JAEGER_UI_PORT:-56686}:16686"]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${JAEGER_OTLP_PORT:-54318}:4318", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${JAEGER_UI_PORT:-56686}:16686"]
     mem_limit: 256m
 
 

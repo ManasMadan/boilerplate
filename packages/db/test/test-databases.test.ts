@@ -39,3 +39,35 @@ describe("abandoned test databases", () => {
     }
   });
 });
+
+describe("dropping a test database", () => {
+  it("waits for a service's connection that's closing", async () => {
+    const testDb = await createTestDatabase();
+    const service = new pg.Client({ connectionString: testDb.urlFor("app_api") });
+    await service.connect();
+    // FORCE can't end another role's session: without the wait this drop fails. The
+    // delay is on purpose: the connection closes while the drop is already waiting.
+    const closing = new Promise((resolve) => setTimeout(resolve, 300)).then(() => service.end());
+    await testDb.drop();
+    await closing;
+    expect(await exists(testDb.name)).toBe(false);
+  });
+
+  it("names a connection a test left open", async () => {
+    const testDb = await createTestDatabase();
+    const leak = new pg.Client({ connectionString: testDb.urlFor("app_api") });
+    const named = new pg.Client({
+      connectionString: testDb.urlFor("app_worker"),
+      application_name: "leaky-service",
+    });
+    await Promise.all([leak.connect(), named.connect()]);
+    try {
+      const drop = testDb.drop(200);
+      await expect(drop).rejects.toThrow(/connections still open: .*app_api \(pid \d+\)/);
+      await expect(drop).rejects.toThrow(/app_worker \(pid \d+, leaky-service\)/);
+    } finally {
+      await Promise.all([leak.end(), named.end()]);
+      await testDb.drop();
+    }
+  });
+});

@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppError } from "./errors";
-import { isPublicAddress, safeFetch } from "./safe-fetch";
+import { guardedLookup, isPublicAddress, safeFetch } from "./safe-fetch";
 
 describe("isPublicAddress", () => {
   it.each([
@@ -29,18 +29,33 @@ describe("isPublicAddress", () => {
 describe("safeFetch", () => {
   let server: Server;
   let base: string;
+  let hitElsewhere = 0;
 
   beforeAll(async () => {
     server = createServer((req, res) => {
       if (req.url === "/redirect-internal") {
         res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data" }).end();
+      } else if (req.url === "/redirect-home") {
+        res.writeHead(307, { location: "/elsewhere" }).end();
+      } else if (req.url === "/elsewhere") {
+        hitElsewhere++;
+        res.end("followed");
+      } else if (req.url === "/echo") {
+        let body = "";
+        req.on("data", (chunk) => {
+          body += chunk;
+        });
+        req.on("end", () => res.end(`${req.method} ${req.headers["x-test"]} ${body}`));
+      } else if (req.url === "/loop") {
+        res.writeHead(302, { location: "/loop" }).end();
       } else if (req.url === "/big") {
         res.end("x".repeat(2_000));
       } else {
         res.end("ok");
       }
     });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    // Both loopbacks: `localhost` may resolve to either, or both.
+    await new Promise<void>((resolve) => server.listen(0, "::", resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -50,13 +65,40 @@ describe("safeFetch", () => {
     await expect(safeFetch("http://169.254.169.254/", { allowHttp: true })).rejects.toBeInstanceOf(
       AppError,
     );
-    await expect(safeFetch("http://localhost:1/", { allowHttp: true })).rejects.toThrow();
+  });
+
+  it("checks the addresses a hostname resolves to, and connects to the one it checked", async () => {
+    const named = base.replace("127.0.0.1", "localhost");
+    await expect(safeFetch(`${named}/`, { allowHttp: true })).rejects.toMatchObject({
+      code: "DESTINATION_NOT_ALLOWED",
+      params: { hostname: "localhost" },
+    });
+    await expect(
+      safeFetch(`${named}/`, { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1", "::1"] }),
+    ).resolves.toMatchObject({ status: 200, body: "ok" });
+    // A name that doesn't resolve fails as the lookup did.
+    await expect(safeFetch("http://unknown-host.invalid/", { allowHttp: true })).rejects.toThrow(
+      /fetch failed/,
+    );
   });
 
   it("requires https unless http is explicitly allowed", async () => {
     await expect(safeFetch("http://example.com/")).rejects.toMatchObject({
       code: "DESTINATION_NOT_ALLOWED",
     });
+  });
+
+  it("answers with the redirect itself when told not to follow it", async () => {
+    const local = { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1"] };
+    const stopped = await safeFetch(`${base}/redirect-home`, {
+      ...local,
+      method: "POST",
+      body: "signed",
+      followRedirects: false,
+    });
+    expect(stopped.status).toBe(307);
+    expect(hitElsewhere).toBe(0);
+    expect((await safeFetch(`${base}/redirect-home`, local)).body).toBe("followed");
   });
 
   it("re-checks every redirect hop", async () => {
@@ -73,6 +115,23 @@ describe("safeFetch", () => {
     });
   });
 
+  it("sends the method, headers and body it's given", async () => {
+    const response = await safeFetch(`${base}/echo`, {
+      allowHttp: true,
+      allowedPrivateAddresses: ["127.0.0.1"],
+      method: "PUT",
+      headers: { "x-test": "yes" },
+      body: "payload",
+    });
+    expect(response.body).toBe("PUT yes payload");
+  });
+
+  it("gives up on an endpoint that keeps redirecting", async () => {
+    await expect(
+      safeFetch(`${base}/loop`, { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1"] }),
+    ).rejects.toMatchObject({ code: "TOO_MANY_REDIRECTS" });
+  });
+
   it("caps the response size", async () => {
     await expect(
       safeFetch(`${base}/big`, {
@@ -87,5 +146,39 @@ describe("safeFetch", () => {
       status: 200,
       body: "ok",
     });
+  });
+});
+
+describe("guardedLookup", () => {
+  const both = async () => [
+    { address: "127.0.0.1", family: 4 },
+    { address: "::1", family: 6 },
+  ];
+  const resolve = (all: boolean, allowlist: string[] = []) =>
+    new Promise<unknown[]>((done) => {
+      guardedLookup(allowlist, both)("localhost", { all }, (...args: unknown[]) => done(args));
+    });
+
+  it("answers in the shape it was asked for, with the first address", async () => {
+    const allowlist = ["127.0.0.1", "::1"];
+    expect(await resolve(true, allowlist)).toEqual([null, [{ address: "127.0.0.1", family: 4 }]]);
+    expect(await resolve(false, allowlist)).toEqual([null, "127.0.0.1", 4]);
+  });
+
+  it("refuses a name unless every address it answers with is permitted", async () => {
+    expect((await resolve(false))[0]).toMatchObject({ code: "DESTINATION_NOT_ALLOWED" });
+    // One public-or-allowed address isn't enough: the other is where it could go next.
+    expect((await resolve(false, ["127.0.0.1"]))[0]).toMatchObject({
+      code: "DESTINATION_NOT_ALLOWED",
+    });
+  });
+
+  it("refuses a name with no addresses at all", async () => {
+    const [error] = await new Promise<unknown[]>((done) => {
+      guardedLookup([], async () => [])("nothing.test", { all: false }, (...args: unknown[]) =>
+        done(args),
+      );
+    });
+    expect(error).toMatchObject({ code: "DESTINATION_NOT_ALLOWED" });
   });
 });

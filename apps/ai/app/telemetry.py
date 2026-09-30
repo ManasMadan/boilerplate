@@ -1,5 +1,3 @@
-# The Postgres and Redis instrumentations ship no type stubs and take untyped options.
-# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
 """OpenTelemetry for the Python service, like the Node services': traces and metrics,
 off unless OTEL_EXPORTER_OTLP_ENDPOINT is set (any OTLP/HTTP collector; the standard
 OTEL_* variables apply). Instrumented: FastAPI (health probes left out), Postgres,
@@ -25,7 +23,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from structlog.typing import EventDict, WrappedLogger
+from structlog.typing import EventDict
 
 
 def start_telemetry(
@@ -49,16 +47,18 @@ def start_telemetry(
     # Postgres at the driver (psycopg, under SQLAlchemy): it patches connections as they
     # open, whatever imported them first.
     PsycopgInstrumentor().instrument(tracer_provider=tracer_provider)
-    RedisInstrumentor().instrument(tracer_provider=tracer_provider)
+    RedisInstrumentor().instrument(tracer_provider=tracer_provider)  # pyright: ignore[reportUnknownMemberType]  # its instrument() is untyped
     HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
     if app is not None:
         FastAPIInstrumentor.instrument_app(
-            app, tracer_provider=tracer_provider, excluded_urls="health/live,health/ready"
+            app,
+            tracer_provider=tracer_provider,
+            excluded_urls="health/live,health/ready,health/dependencies",
         )
     return True
 
 
-def add_trace_ids(_logger: WrappedLogger, _method: str, event: EventDict) -> EventDict:
+def add_trace_ids(_logger: object, _method: str, event: EventDict) -> EventDict:
     """structlog processor: the active span's ids, so logs and traces join up."""
     context = trace.get_current_span().get_span_context()
     if context.is_valid:

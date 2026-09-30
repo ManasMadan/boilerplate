@@ -6,7 +6,17 @@
  */
 import * as z from "zod";
 import { fileRejections, fileStatuses, uploadPurposeNames } from "../files";
-import { base } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  "FEATURE_DISABLED",
+  "FILE_NOT_FOUND",
+  "FILE_NOT_READY",
+  "FILE_NOT_UPLOADED",
+  "FILE_TOO_LARGE",
+  "FILE_TYPE_NOT_ALLOWED",
+);
 
 export const fileSchema = z.object({
   id: z.uuid(),
@@ -22,10 +32,11 @@ export const fileSchema = z.object({
 export type FileInfo = z.infer<typeof fileSchema>;
 
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Files"], summary });
+  base.errors(errors).route({ method, path, tags: ["Files"], summary });
 
 export const filesContract = {
   createUpload: route("POST", "/files/uploads", "Start an upload")
+    .meta({ rateLimit: { name: "file-uploads", points: 30, windowSeconds: 60 * 60, per: "user" } })
     .input(
       z.object({
         purpose: z.enum(uploadPurposeNames),
@@ -47,6 +58,7 @@ export const filesContract = {
     ),
   /** After the PUT succeeded: the file is checked and becomes ready (or rejected). */
   completeUpload: route("POST", "/files/{fileId}/complete", "Finish an upload")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ fileId: z.uuid() }))
     .output(fileSchema),
   get: route("GET", "/files/{fileId}", "A file's status")

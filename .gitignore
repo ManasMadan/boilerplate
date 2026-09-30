@@ -26,6 +26,8 @@ coverage
 playwright-report
 storybook-static
 test-results
+# vitest's browser mode: screenshots of failed tests.
+.vitest
 logs
 __pycache__
 .pytest_cache

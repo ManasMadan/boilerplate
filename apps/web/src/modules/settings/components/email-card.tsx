@@ -101,7 +101,7 @@ function RequestChange({
   const schema = z.object({
     otp: schemas.otp,
     newEmail: schemas.email.refine(
-      (value) => value.toLowerCase() !== currentEmail.toLowerCase(),
+      (value: string) => value.toLowerCase() !== currentEmail.toLowerCase(),
       t("sameEmail"),
     ),
   });

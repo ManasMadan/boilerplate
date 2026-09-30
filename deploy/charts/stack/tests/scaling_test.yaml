@@ -45,3 +45,12 @@ tests:
     asserts:
       - equal: { path: spec.maxUnavailable, value: 1 }
       - equal: { path: spec.unhealthyPodEvictionPolicy, value: AlwaysAllow }
+
+  # Inbound provider webhooks (Stripe) are routed to webhooks: in production never fewer
+  # than two pods, however short its queues.
+  - it: keeps two webhooks pods in production
+    template: keda.yaml
+    values: [../../../environments/production/stack.yaml]
+    documentSelector: { path: metadata.name, value: demo-webhooks }
+    asserts:
+      - equal: { path: spec.minReplicaCount, value: 2 }

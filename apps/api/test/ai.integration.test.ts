@@ -39,12 +39,20 @@ let ai: Server;
 const documents: Doc[] = [];
 const calls: { path: string; org: string; user: string; requestId: string | undefined }[] = [];
 /** Per organization: what the next answer does. */
-const behaviour = new Map<string, "answer" | "budget" | "stream-error" | "down">();
+const behaviour = new Map<
+  string,
+  "answer" | "budget" | "off" | "stream-error" | "down" | "drop" | "hang"
+>();
+/** Organizations whose hanging answer the API stopped reading (the connection closed). */
+const closed = new Set<string>();
 
-async function body(request: IncomingMessage) {
+/** A request's JSON body, as far as the stand-in reads it. */
+async function body(request: IncomingMessage): Promise<{ title?: string } | undefined> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(chunk as Buffer);
-  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+  return chunks.length
+    ? (JSON.parse(Buffer.concat(chunks).toString()) as { title?: string })
+    : undefined;
 }
 
 beforeAll(async () => {
@@ -53,6 +61,9 @@ beforeAll(async () => {
       response.writeHead(status, { "content-type": "application/json" });
       response.end(payload === undefined ? undefined : JSON.stringify(payload));
     };
+    // The service's error body: the contract's shape (packages/contracts errorResponse).
+    const fail = (status: number, code: string, params: Record<string, string> = {}) =>
+      reply(status, { defined: true, code, status, message: code, data: { params } });
     let claims: { sub?: string; org?: unknown };
     try {
       const token = String(request.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -62,7 +73,7 @@ beforeAll(async () => {
         maxTokenAge: 120,
       }));
     } catch {
-      return reply(401, { code: "UNAUTHENTICATED", status: 401, params: {} });
+      return fail(401, "UNAUTHENTICATED");
     }
     const org = String(claims.org);
     const user = String(claims.sub);
@@ -88,7 +99,7 @@ beforeAll(async () => {
       const doc: Doc = {
         id: randomUUID(),
         org,
-        title: input.title,
+        title: input?.title ?? "",
         status: "pending",
         error: null,
         chunkCount: 0,
@@ -102,18 +113,27 @@ beforeAll(async () => {
     const remove = /^\/v1\/documents\/([0-9a-f-]{36})$/.exec(path);
     if (request.method === "DELETE" && remove) {
       const index = documents.findIndex((d) => d.id === remove[1] && d.org === org);
-      if (index === -1) return reply(404, { code: "DOCUMENT_NOT_FOUND", status: 404, params: {} });
+      if (index === -1) return fail(404, "DOCUMENT_NOT_FOUND");
       documents.splice(index, 1);
       return reply(204);
     }
     if (request.method === "POST" && path === "/v1/assistant/answers") {
       const mode = behaviour.get(org) ?? "answer";
-      if (mode === "budget")
-        return reply(429, { code: "AI_BUDGET_EXCEEDED", status: 429, params: {} });
-      if (mode === "down") return reply(500, { code: "INTERNAL", status: 500, params: {} });
+      if (mode === "budget") return fail(429, "AI_BUDGET_EXCEEDED");
+      if (mode === "off") return fail(404, "FEATURE_DISABLED", { feature: "assistant" });
+      if (mode === "down") return fail(500, "INTERNAL");
       response.writeHead(200, { "content-type": "text/event-stream" });
       const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
+      // The connection breaks midway (closed without ending the response), or the answer
+      // never ends.
+      if (mode === "drop") {
+        return response.write(
+          `data: ${JSON.stringify({ event: { type: "text", text: "Refunds take " } })}\n\n`,
+          () => response.socket?.end(),
+        );
+      }
       send({ type: "text", text: "Refunds take " });
+      if (mode === "hang") return response.on("close", () => closed.add(org));
       send({ type: "text", text: "five days." });
       if (mode === "stream-error") {
         send({ type: "error", code: "AI_RUN_LIMIT" });
@@ -123,7 +143,7 @@ beforeAll(async () => {
       send({ type: "done", usage: { inputTokens: 10, outputTokens: 5 } });
       return response.end();
     }
-    reply(404, { code: "NOT_FOUND", status: 404, params: {} });
+    fail(404, "NOT_FOUND");
   });
   await new Promise<void>((resolve) => ai.listen(0, "127.0.0.1", resolve));
   harness = await startApi(5, {
@@ -268,6 +288,10 @@ describe("AI features", () => {
       member.session.rpc.ai.removeDocument({ documentId: ownersDoc.id }),
       "FORBIDDEN",
     );
+    await expectError(
+      member.session.rpc.ai.removeDocument({ documentId: randomUUID() }),
+      "DOCUMENT_NOT_FOUND",
+    );
     await member.session.rpc.ai.removeDocument({ documentId: membersDoc.id });
     const again = await member.session.rpc.ai.addDocument({
       title: "Member's again",
@@ -298,10 +322,54 @@ describe("AI features", () => {
     expect(events.at(-1)).toEqual({ type: "error", code: "AI_RUN_LIMIT" });
   });
 
+  it("ends an answer whose connection breaks with an error event", async () => {
+    const { session, me } = await signedIn();
+    behaviour.set(me.activeOrganizationId as string, "drop");
+    expect(await collect(session.rpc.ai.ask({ question: "Hi?" }))).toEqual([
+      { type: "text", text: "Refunds take " },
+      { type: "error", code: "UPSTREAM_UNAVAILABLE" },
+    ]);
+  });
+
+  it("stops reading the service's answer when the client goes away", async () => {
+    const { session, me } = await signedIn();
+    const org = me.activeOrganizationId as string;
+    behaviour.set(org, "hang");
+    const controller = new AbortController();
+    const stream = await session.rpc.ai.ask({ question: "Hi?" }, { signal: controller.signal });
+    for await (const event of stream) {
+      expect(event).toEqual({ type: "text", text: "Refunds take " });
+      break;
+    }
+    controller.abort();
+    await expect.poll(() => closed.has(org), { timeout: 5_000 }).toBe(true);
+  });
+
+  it("passes on what the service's error says, params included", async () => {
+    const { session, me } = await signedIn();
+    behaviour.set(me.activeOrganizationId as string, "off");
+    const error = await collect(session.rpc.ai.ask({ question: "Hi?" })).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ORPCError);
+    expect(error).toMatchObject({
+      code: "FEATURE_DISABLED",
+      defined: true,
+      data: { params: { feature: "assistant" } },
+    });
+  });
+
   it("hides the service's own failures behind UPSTREAM_UNAVAILABLE", async () => {
     const { session, me } = await signedIn();
     behaviour.set(me.activeOrganizationId as string, "down");
     await expectError(collect(session.rpc.ai.ask({ question: "Hi?" })), "UPSTREAM_UNAVAILABLE");
+  });
+
+  it("limits sentiment checks per user", async () => {
+    const { session } = await signedIn();
+    for (let i = 0; i < 60; i++) await session.rpc.ai.sentiment({ text: "great" });
+    await expectError(session.rpc.ai.sentiment({ text: "great" }), "RATE_LIMITED");
   });
 
   it("limits questions per user", async () => {

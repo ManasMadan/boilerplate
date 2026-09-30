@@ -7,11 +7,11 @@
  * the events that affect it to events-realtime (eventSubscribers), map them below, and
  * refetch on the client in useLiveUpdates.
  */
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import type { EventEnvelope } from "@repo/contracts/events";
 import { type RealtimeMessage, realtimeChannel } from "@repo/contracts/realtime";
 import { parseJob, queuePrefix } from "@repo/jobs";
-import { InjectRedis, type Redis } from "@repo/nest-common";
+import { InjectRedis, JobProcessor, type Redis, runJob } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { publishRealtime } from "./publish";
 
@@ -26,14 +26,17 @@ export function realtimeFor(
 }
 
 @Processor("events-realtime", { concurrency: 20, prefix: queuePrefix("events-realtime") })
-export class RealtimeProcessor extends WorkerHost {
+export class RealtimeProcessor extends JobProcessor {
   constructor(@InjectRedis() private readonly redis: Redis) {
     super();
   }
 
-  async process(job: Job) {
-    const { payload: event } = parseJob("events-realtime", "event", job.data);
+  async process(job: Job<unknown>) {
+    const { meta, payload: event } = parseJob("events-realtime", "event", job.data);
     const target = realtimeFor(event);
-    if (target) await publishRealtime(this.redis, target.channel, target.message);
+    if (!target) return;
+    await runJob(meta, `event:${event.id}`, () =>
+      publishRealtime(this.redis, target.channel, target.message),
+    );
   }
 }

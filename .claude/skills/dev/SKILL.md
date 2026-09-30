@@ -24,6 +24,22 @@ description: Start, stop or troubleshoot the local development stack. Use when t
 - Every host port comes from `.env.example` (`POSTGRES_PORT`, `S3_CONSOLE_PORT`, …); if
   one is taken, see the setup skill.
 
+`bun dev` and `bun dev:full` are long-running terminal UIs: in an agent session, start
+them with the Bash tool's `run_in_background` and read their output from there, never
+in the foreground (the call would hang until its timeout). On a first `dev:full`, ClamAV
+starts in the background while it downloads its virus signatures (several minutes):
+uploads stay pending until then.
+
+## Several branches at once
+
+`wt switch --create <branch>` (Worktrunk, `.config/wt.toml`) makes a worktree next to
+this checkout, copies `.env`, installs and generates; `wt switch <branch>` moves between
+them and `wt list` shows each one's state. They all use this machine's Docker services
+(docker-compose.yml names the project), so tests and builds run side by side, but the
+app ports are fixed: stop `bun dev` in one before starting it in another. `wt remove`
+(which asks first) deletes a worktree and its merged branch. Without Worktrunk
+(`bun run doctor` says so), `brew install worktrunk && wt config shell install`.
+
 ## Troubleshooting
 
 1. `bun run doctor`. It lists the exact fix for tools, `.env` drift and services.
@@ -33,4 +49,7 @@ description: Start, stop or troubleshoot the local development stack. Use when t
 4. After changing the Prisma schema, Pydantic models or the API contract, run `bun run gen`.
 5. Stale state: `bun run db:down` then `bun dev` (keeps data). Wiping data
    (`bun run docker:clean`, which deletes every container, volume and image this repo
-   created) needs the user's confirmation.
+   created) needs the user's confirmation: the Bash guard asks before it runs.
+6. Uploads stay pending after the stack has run for hours: the local ClamAV stopped
+   answering (the worker logs `clamd timed out`). `docker compose restart clamav`.
+7. A port is taken: `lsof -nP -iTCP:<port> -sTCP:LISTEN`, then the setup skill.

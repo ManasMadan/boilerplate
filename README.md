@@ -9,9 +9,13 @@ mobile app, a REST API with keys, and the infrastructure to ship all of it.
 Everything is in the repo and off by default. The core profile starts in minutes on a
 laptop; each optional feature switches on when its settings are present.
 
-## Quickstart
+## Day 1: a demo or a hackathon
 
-You need Node 24 (`nvm use`), Bun 1.3, Docker, and uv for the AI service.
+You need Node 24 (`nvm use`), Bun 1.3, Docker, and [uv](https://docs.astral.sh/uv/):
+code generation runs the Python service's exporter, so setup, `bun dev`, types and tests
+need it even if you never touch Python. `bun run doctor` checks all of it. Nothing to
+install: with VS Code or Codespaces, the devcontainer (`.devcontainer/`) has Node, Bun,
+uv, OpenTofu, Helm and Docker, and runs setup when it's created.
 
 ```sh
 bun run setup     # once: .env with fresh secrets, dependencies, local services, migrations
@@ -21,13 +25,29 @@ bun run db:seed   # optional: demo users, workspaces and data
 
 Open http://localhost:3000 and sign up. Verification codes and every other email land
 in Mailpit at http://localhost:58025. `bun dev:full` adds the AI service (:8000) and its
-worker, file uploads (RustFS and ClamAV) and the rest; `bun run --cwd apps/mobile dev`
-starts the mobile app. When something is off, `bun run doctor` says what and how to fix
-it.
+worker, RustFS and ClamAV, the Stalwart mail server, Jaeger, the Expo bundler for the
+mobile app and the email previews (:3030). Uploads switch on with
+`bun run env:set S3_BUCKET=uploads`, and billing with the Stripe variables or the fake
+Stripe ([docs/files-and-billing.md](docs/files-and-billing.md)).
 
-Local services run in Docker with small memory limits on their own ports (55432 for
-Postgres, 56379 for Valkey, 5xxxx for the rest), so they sit beside other projects.
-`bun run docker:clean` removes everything this repo created in Docker.
+Local services run in Docker with memory limits on their own ports (55432 for
+Postgres, 56379 for Valkey, 5xxxx for the rest), so they sit beside other projects. The
+core needs about 1.4 GB of Docker's memory free, the full profile about 3.9 GB; the start
+refuses when they don't fit. `bun run docker:clean` removes everything this repo created
+in Docker.
+
+When something is off, `bun run doctor` says what and how to fix it, and
+[docs/troubleshooting.md](docs/troubleshooting.md) covers the rest. Then
+[CONTRIBUTING.md](CONTRIBUTING.md) has the conventions and
+[docs/README.md](docs/README.md) the rest of the docs.
+
+## Going to production
+
+[docs/new-project.md](docs/new-project.md) is the checklist from the first clone to the
+first production release, in order: making it yours, the GitHub settings, secrets per
+environment, machines and DNS, the first deploy and what only a real cluster shows, and
+the first release. [docs/deploy.md](docs/deploy.md) explains how changes then flow to
+staging and production.
 
 ## What's inside
 
@@ -71,7 +91,7 @@ a transactional outbox, so nothing is lost between a commit and a queue.
 | Types | `bun run check-types` |
 | Unit tests | `bun run test` |
 | Integration tests (real Postgres, Valkey, Mailpit) | `bun run test:integration` |
-| End-to-end (web, mobile, load smoke) | `bun run test:e2e` |
+| End-to-end (web, mobile, load smoke); stop `bun dev` first, it refuses busy ports | `bun run test:e2e` |
 | Regenerate code after a schema or contract change | `bun run gen` |
 | New migration | `bun run db:migrate` |
 | Set a secret in `.env` | `bun run env:set KEY=value` |
@@ -116,17 +136,19 @@ search feature yet (start with Postgres full-text search).
 Every merge to `master` builds signed, attested images for amd64 and arm64 and deploys
 them to staging. A version tag you push (`git tag v1.4.0`) publishes a release with
 notes from the commits, and `bun run promote v1.4.0` opens the pull request that points
-production at it. Labelled pull
-requests get a preview environment of their own. See [docs/deploy.md](docs/deploy.md),
-[deploy/README.md](deploy/README.md), [infra/tofu/README.md](infra/tofu/README.md) and,
-for the one-time GitHub setup, [docs/repository-settings.md](docs/repository-settings.md).
+production at it. Pull requests labelled `preview` get an environment of their own.
+See [docs/deploy.md](docs/deploy.md), [deploy/README.md](deploy/README.md),
+[infra/tofu/README.md](infra/tofu/README.md) and, for the one-time GitHub setup,
+[docs/repository-settings.md](docs/repository-settings.md).
 
 ## Working with Claude Code
 
 The repo is set up for Claude Code: `CLAUDE.md` and path-scoped rules, skills for every
 lifecycle task (setup, dev, add a feature, change the database, deploy, release, roll
 back, swap a seam), review agents, and hooks that format on edit, guard generated files
-and secrets, and run the affected tests before a turn ends.
+and secrets, and run the affected tests before a turn ends. The skills in
+`.claude/skills/` are plain step-by-step runbooks, readable without Claude too
+([docs/README.md](docs/README.md#runbooks) lists them).
 
 ## Contributing and license
 

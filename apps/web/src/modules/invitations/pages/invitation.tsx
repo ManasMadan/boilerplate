@@ -1,9 +1,10 @@
 "use client";
 
+import { useInvitationQuery } from "@repo/client/auth/invitation";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -16,17 +17,11 @@ export function InvitationPage({ id }: { id: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const errorMessage = useAuthErrorMessage();
-  const invitation = useQuery({
-    queryKey: ["auth", "invitation", id],
-    queryFn: async () => {
-      const { data, error } = await authClient.organization.getInvitation({ query: { id } });
-      if (error) throw error;
-      return data;
-    },
-    retry: false,
-  });
+  const invitation = useInvitationQuery(authClient, id);
 
-  async function accept() {
+  const data = invitation.data;
+
+  async function accept(organizationName: string) {
     const { data, error } = await authClient.organization.acceptInvitation({ invitationId: id });
     if (error) {
       toast.error(errorMessage(error));
@@ -35,7 +30,7 @@ export function InvitationPage({ id }: { id: string }) {
     // Work in the organization just joined; everything cached belonged to the previous one.
     await authClient.organization.setActive({ organizationId: data.invitation.organizationId });
     queryClient.clear();
-    toast.success(t("accepted", { organizationName: invitation.data?.organizationName ?? "" }));
+    toast.success(t("accepted", { organizationName }));
     router.replace("/dashboard");
   }
 
@@ -53,16 +48,16 @@ export function InvitationPage({ id }: { id: string }) {
           <CardDescription>
             {invitation.isPending ? (
               <Skeleton className="h-4 w-48" />
-            ) : invitation.data ? (
-              t("description", { organizationName: invitation.data.organizationName })
+            ) : data ? (
+              t("description", { organizationName: data.organizationName })
             ) : (
               t("invalid")
             )}
           </CardDescription>
         </CardHeader>
-        {invitation.data ? (
+        {data ? (
           <CardFooter className="gap-2">
-            <Button onClick={accept}>{t("accept")}</Button>
+            <Button onClick={() => accept(data.organizationName)}>{t("accept")}</Button>
             <Button variant="ghost" onClick={decline}>
               {t("decline")}
             </Button>

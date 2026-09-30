@@ -3,8 +3,10 @@
  * OAuth token exchange (RS256 JWT) and send API, APNs over h2c (ES256 JWT, topic header)
  * and a Web Push service that decrypts the payload (RFC 8291) and checks the VAPID header.
  *
- * Tokens select the outcome: "dead" tokens are reported unregistered, "flaky" ones fail
- * with a 500 until `recover()` is called.
+ * Tokens select the outcome: "dead" tokens are reported unregistered, "malformed" ones
+ * refused as an invalid token (FCM's INVALID_ARGUMENT on message.token), "flaky" ones
+ * fail with a 500 until `recover()` is called. `whileDelivering`, when set, runs while an
+ * FCM send is in flight, before it's answered.
  */
 import {
   createECDH,
@@ -21,15 +23,11 @@ import {
   type ServerHttp2Stream,
 } from "node:http2";
 import type { AddressInfo } from "node:net";
-// http_ece ships no types; this is the one function the fake needs.
-// @ts-expect-error untyped CommonJS module
+// Typed by ./http_ece.d.ts (the package ships none).
 import ece from "http_ece";
 import webPush from "web-push";
 
-const decrypt = ece.decrypt as (
-  body: Buffer,
-  options: { version: "aes128gcm"; privateKey: ECDH; authSecret: string },
-) => Buffer;
+const { decrypt } = ece;
 
 interface Delivered {
   provider: "fcm" | "apns" | "web";
@@ -42,6 +40,12 @@ interface Delivered {
 
 export const DEAD_APNS_TOKEN = "0".repeat(64);
 export const FLAKY_APNS_TOKEN = "f".repeat(64);
+/** Refused with ExpiredProviderToken for the first provider token used, then delivered. */
+export const EXPIRING_APNS_TOKEN = "e".repeat(64);
+/** Refused as a token that was never valid (400 BadDeviceToken). */
+export const BAD_APNS_TOKEN = "b".repeat(64);
+/** Delivered, then the connection is closed with GOAWAY, as Apple does for maintenance. */
+export const GOAWAY_APNS_TOKEN = "a0".repeat(32);
 
 function verifyJwt(jwt: string, key: KeyObject, algorithm: "RSA-SHA256" | "SHA256") {
   const [header, claims, signature] = jwt.split(".");
@@ -69,8 +73,9 @@ export async function startFakePush() {
   const vapid = webPush.generateVAPIDKeys();
   const accessToken = randomBytes(16).toString("hex");
   const delivered: Delivered[] = [];
-  const subscribers = new Map<string, { ecdh: ECDH; auth: string }>();
+  const subscribers = new Map<string, { ecdh: ECDH; auth: string; location: boolean }>();
   let healthy = false;
+  const hooks: { whileDelivering?: (() => Promise<unknown>) | undefined } = {};
 
   // FCM (OAuth + send) and Web Push share one HTTP/1.1 server.
   const http: Server = createServer(async (request: IncomingMessage, response) => {
@@ -99,12 +104,29 @@ export async function startFakePush() {
           data: { link?: string };
         };
       };
+      // A provider that drops the connection: the transport's fetch throws.
+      if (message.token.startsWith("crash")) return request.socket.destroy();
       if (message.token.startsWith("dead"))
         return reply(404, {
           error: { status: "NOT_FOUND", details: [{ errorCode: "UNREGISTERED" }] },
         });
+      if (message.token.startsWith("malformed"))
+        return reply(400, {
+          error: {
+            status: "INVALID_ARGUMENT",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.BadRequest",
+                fieldViolations: [
+                  { field: "message.token", description: "Invalid registration token" },
+                ],
+              },
+            ],
+          },
+        });
       if (message.token.startsWith("flaky") && !healthy)
         return reply(500, { error: { status: "INTERNAL" } });
+      await hooks.whileDelivering?.();
       delivered.push({
         provider: "fcm",
         token: message.token,
@@ -144,7 +166,11 @@ export async function startFakePush() {
         link: payload.link,
         headers: request.headers,
       });
-      response.writeHead(201, { location: `/messages/${randomBytes(4).toString("hex")}` });
+      // RFC 8030 says to name the message; not every push service does.
+      response.writeHead(
+        201,
+        subscriber.location ? { location: `/messages/${randomBytes(4).toString("hex")}` } : {},
+      );
       return response.end();
     }
     reply(404, {});
@@ -152,6 +178,7 @@ export async function startFakePush() {
 
   // APNs: HTTP/2 only (h2c here; TLS in production).
   const h2c: Http2Server = createH2cServer();
+  const expired = new Set<string>();
   h2c.on("stream", async (stream: ServerHttp2Stream, headers) => {
     const raw = await readBody(stream);
     const reply = (status: number, body?: unknown) => {
@@ -166,6 +193,12 @@ export async function startFakePush() {
     if (headers["apns-topic"] !== "dev.boilerplate.app")
       return reply(400, { reason: "TopicDisallowed" });
     if (token === DEAD_APNS_TOKEN) return reply(410, { reason: "Unregistered" });
+    if (token === BAD_APNS_TOKEN) return reply(400, { reason: "BadDeviceToken" });
+    // The first provider token that sends to it expires; a newly signed one works.
+    if (token === EXPIRING_APNS_TOKEN && (expired.size === 0 || expired.has(jwt))) {
+      expired.add(jwt);
+      return reply(403, { reason: "ExpiredProviderToken" });
+    }
     if (token === FLAKY_APNS_TOKEN && !healthy)
       return reply(500, { reason: "InternalServerError" });
     const { aps, link } = JSON.parse(raw.toString()) as {
@@ -174,6 +207,7 @@ export async function startFakePush() {
     };
     delivered.push({ provider: "apns", token, ...aps.alert, link, headers });
     reply(200);
+    if (token === GOAWAY_APNS_TOKEN) stream.session?.goaway();
   });
 
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
@@ -184,6 +218,7 @@ export async function startFakePush() {
 
   return {
     delivered,
+    hooks,
     env: {
       FCM_PROJECT_ID: "test-project",
       FCM_CLIENT_EMAIL: "push@test-project.iam.gserviceaccount.com",
@@ -200,13 +235,16 @@ export async function startFakePush() {
       VAPID_SUBJECT: "mailto:push@boilerplate.dev",
       WEB_PUSH_TEST_ORIGIN: httpUrl,
     },
-    /** A browser subscription on the fake push service, as stored in the device table. */
-    webSubscription(endpoint?: string) {
+    /**
+     * A browser subscription on the fake push service, as stored in the device table.
+     * `location: false`: its push service accepts messages without naming them.
+     */
+    webSubscription(endpoint?: string, { location = true } = {}) {
       const id = randomBytes(8).toString("hex");
       const ecdh = createECDH("prime256v1");
       ecdh.generateKeys();
       const auth = randomBytes(16).toString("base64url");
-      subscribers.set(id, { ecdh, auth });
+      subscribers.set(id, { ecdh, auth, location });
       return {
         id,
         token: JSON.stringify({

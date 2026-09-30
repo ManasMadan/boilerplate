@@ -11,10 +11,34 @@
  * joining them with commas (what a plain header copy does) corrupts cookie attributes.
  */
 
-import { runWithContext, updateContext } from "@repo/nest-common";
+import { rawBodies, runWithContext, updateContext } from "@repo/nest-common";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { contextFor, toHeaders } from "../http-context";
+import { contextFor, fromWebResponse, toHeaders, toWebRequest } from "../http-context";
 import type { Auth } from "./auth";
+
+/**
+ * better-auth's error, in the envelope every other error has (status, request id,
+ * params), keeping its own code and message, which its clients read. OAuth errors
+ * (`{ error, error_description }`, RFC 6749) stay as the spec has them.
+ */
+export function authErrorBody(body: Buffer, status: number, requestId: string) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || "error" in parsed) return null;
+  const { code, message } = parsed as { code?: unknown; message?: unknown };
+  if (typeof code !== "string") return null;
+  return {
+    defined: false,
+    code,
+    status,
+    message: typeof message === "string" ? message : code,
+    data: { params: {}, requestId },
+  };
+}
 
 /** Authorization-server metadata sits under the issuer's path (RFC 8414 §3). */
 const DISCOVERY_PATHS = [
@@ -38,29 +62,21 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
         const session = await auth.api.getSession({ headers });
         if (session) updateContext({ userId: session.user.id });
       }
-      const body = Buffer.isBuffer(request.body) ? request.body : undefined;
-      const response = await auth.handler(
-        new Request(url, {
-          method: request.method,
-          headers,
-          ...(body !== undefined && { body: new Uint8Array(body) }),
-        }),
-      );
-
-      reply.status(response.status);
-      for (const [key, value] of response.headers) {
-        if (key.toLowerCase() !== "set-cookie") reply.header(key, value);
+      const response = await auth.handler(toWebRequest(request, url, headers));
+      const answer = await fromWebResponse(reply, response);
+      const error =
+        answer && response.status >= 400
+          ? authErrorBody(answer, response.status, request.id)
+          : null;
+      if (error) {
+        reply.removeHeader("content-length");
+        return reply.type("application/json").send(error);
       }
-      const cookies = response.headers.getSetCookie();
-      if (cookies.length) reply.header("set-cookie", cookies);
-      return reply.send(response.body ? Buffer.from(await response.arrayBuffer()) : null);
+      return reply.send(answer);
     });
 
   fastify.register((scope, _options, done) => {
-    scope.removeAllContentTypeParsers();
-    scope.addContentTypeParser("*", { parseAs: "buffer" }, (_request, body, next) =>
-      next(null, body),
-    );
+    rawBodies(scope);
     scope.route({ method: ["GET", "POST"], url: "/api/auth/*", handler: handle });
     for (const url of DISCOVERY_PATHS)
       scope.route({ method: ["GET", "HEAD"], url, handler: handle });

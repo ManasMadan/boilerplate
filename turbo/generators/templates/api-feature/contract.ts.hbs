@@ -1,7 +1,13 @@
-/** The {{lowerCase (sentenceCase name)}} procedures. Add writes the way todo.ts does (input schema, scope, errors). */
-import { z } from "zod";
+/** The {{lowerCase (sentenceCase name)}} procedures. Add the other writes the way todo.ts does (input schema, scope, errors). */
+import * as z from "zod";
 import { page, pageInput } from "../pagination";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/**
+ * The codes these procedures throw, on top of the common ones: add each one a service
+ * throws here (the API refuses, outside production, to answer an undeclared code).
+ */
+const errors = errorsOf(...WORKSPACE_ERRORS);
 
 export const {{camelCase item}}Schema = z.object({
   id: z.uuid(),
@@ -11,6 +17,7 @@ export type {{pascalCase item}} = z.infer<typeof {{camelCase item}}Schema>;
 
 export const {{camelCase name}}Contract = {
   list: base
+    .errors(errors)
     .route({
       method: "GET",
       path: "/{{kebabCase name}}",
@@ -19,4 +26,15 @@ export const {{camelCase name}}Contract = {
     })
     .input(pageInput)
     .output(page({{camelCase item}}Schema)),
+  delete: base
+    .errors(errors)
+    .route({
+      method: "DELETE",
+      path: "/{{kebabCase name}}/{id}",
+      tags: ["{{titleCase (sentenceCase name)}}"],
+      summary: "Delete a {{lowerCase (sentenceCase item)}}",
+      successStatus: 204,
+    })
+    .input(z.object({ id: z.uuid() }))
+    .output(z.void()),
 };

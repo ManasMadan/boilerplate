@@ -12,9 +12,11 @@ import type { ContractRouterClient } from "@orpc/contract";
 import type { Contract } from "@repo/contracts/api";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { type NotificationPayload, parseJob, queuePrefix } from "@repo/jobs";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
+import { eventually } from "@repo/testing/eventually";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
+import pg from "pg";
 
 export interface Harness {
   baseUrl: string;
@@ -59,8 +61,8 @@ export async function startApi(
 ): Promise<Harness> {
   const testDb = await createTestDatabase();
   Object.assign(process.env, {
-    // Optional features start off whatever the local .env says; a test turns on what it
-    // exercises, so results don't depend on the developer's configuration.
+    // Optional features start off, whatever the environment says (a shell can still export
+    // .env's values); a test turns on what it exercises.
     ...OPTIONAL_FEATURES_OFF,
     // Several test files each run an API on this machine at once.
     LOAD_SHEDDING: "off",
@@ -70,7 +72,7 @@ export async function startApi(
     ...env,
   });
   const redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: null });
-  await redis.flushdb();
+  await flushTestDatabase(redis);
   const { createApiServer } = await import("../src/server");
   const app: NestFastifyApplication = await createApiServer();
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -149,37 +151,103 @@ export function createSession(
   };
 }
 
+/** Notification requests (outbox rows) already handed to a test, by event id. */
+const takenRequests = new Set<string>();
+
+type Notification<T extends NotificationPayload["template"]> = Extract<
+  NotificationPayload,
+  { template: T }
+>;
+
 /**
- * Takes the first queued notification matching `match` (no worker runs in these tests),
- * waiting up to 5 seconds for it to be enqueued.
+ * Takes the first notification queued (no worker runs in these tests) or requested
+ * through the outbox that matches, if there is one now.
  */
-export async function takeNotification<T extends NotificationPayload["template"]>(
-  harness: Harness,
+async function findNotification<T extends NotificationPayload["template"]>(
   template: T,
   /** The email address or phone number it's sent to. */
   address: string,
-): Promise<Extract<NotificationPayload, { template: T }>> {
+  { queue, database }: { queue: Queue; database: pg.Client },
+): Promise<Notification<T> | undefined> {
+  const matches = (payload: NotificationPayload) => {
+    const to = payload.to as { email?: string; phone?: string };
+    return payload.template === template && (to.email === address || to.phone === address);
+  };
+  const jobs = await queue.getJobs(["waiting", "delayed", "prioritized"]);
+  for (const job of jobs.reverse()) {
+    const { payload } = parseJob("notifications-critical", "send", job.data);
+    if (matches(payload)) {
+      await job.remove();
+      return payload as Notification<T>;
+    }
+  }
+  // Security alerts leave through the outbox instead (notification.requested.v1), which
+  // no relay drains here: they're read from its table.
+  const { rows } = await database.query<{
+    id: string;
+    payload: { notification: NotificationPayload };
+  }>(
+    "SELECT id::text, payload FROM app.outbox_event WHERE name = 'notification.requested.v1' ORDER BY id DESC",
+  );
+  const request = rows.find(
+    (row) => !takenRequests.has(row.id) && matches(row.payload.notification),
+  );
+  if (!request) return undefined;
+  takenRequests.add(request.id);
+  return request.payload.notification as Notification<T>;
+}
+
+async function withNotifications<R>(
+  harness: Harness,
+  use: (sources: { queue: Queue; database: pg.Client }) => Promise<R>,
+) {
   const queue = new Queue("notifications-critical", {
     connection: harness.redis,
     prefix: queuePrefix("notifications-critical"),
   });
+  const database = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+  await database.connect();
   try {
-    for (let attempt = 0; attempt < 50; attempt++) {
-      const jobs = await queue.getJobs(["waiting", "delayed", "prioritized"]);
-      for (const job of jobs.reverse()) {
-        const { payload } = parseJob("notifications-critical", "send", job.data);
-        const to = payload.to as { email?: string; phone?: string };
-        if (payload.template === template && (to.email === address || to.phone === address)) {
-          await job.remove();
-          return payload as Extract<NotificationPayload, { template: T }>;
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    throw new Error(`No ${template} queued for ${address}`);
+    return await use({ queue, database });
   } finally {
     await queue.close();
+    await database.end();
   }
+}
+
+/**
+ * Takes the first queued notification to `address` from `template`, waiting for it:
+ * better-auth sends some (one-time codes) in the background, after it has answered.
+ */
+export function takeNotification<T extends NotificationPayload["template"]>(
+  harness: Harness,
+  template: T,
+  /** The email address or phone number it's sent to. */
+  address: string,
+): Promise<Notification<T>> {
+  return withNotifications(harness, async (sources) => {
+    try {
+      return await eventually(
+        () => findNotification(template, address, sources),
+        (found): found is Notification<T> => found !== undefined,
+        { timeout: 10_000 },
+      );
+    } catch (error) {
+      throw new Error(`No ${template} queued for ${address}`, { cause: error });
+    }
+  });
+}
+
+/**
+ * Takes the notification queued right now, if any, without waiting: for one that would
+ * have been written before the request answered (security alerts, in its transaction).
+ */
+export function queuedNotification<T extends NotificationPayload["template"]>(
+  harness: Harness,
+  template: T,
+  address: string,
+) {
+  return withNotifications(harness, (sources) => findNotification(template, address, sources));
 }
 
 /** Reads the one-time code queued for an email address. */

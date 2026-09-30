@@ -9,15 +9,19 @@
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
+import type { WebhookDeliveryError } from "@repo/contracts/api";
 import { tenantTx, withTenant } from "@repo/db";
 import {
   type Database,
+  describeError,
   InjectDatabase,
   InjectPinoLogger,
+  isAppError,
   keysFromEnv,
   PinoLogger,
   SecretBox,
   safeFetch,
+  webhookSecretContext,
 } from "@repo/nest-common";
 import { env } from "../env";
 import { emitEvent } from "../outbox";
@@ -39,13 +43,15 @@ export class DeliveryService {
 
   /** The endpoint's signing secrets, newest first: the previous one until its overlap ends. */
   private secretsOf(endpoint: {
+    id: string;
     secret: string;
     previousSecret: string | null;
     previousSecretExpiresAt: Date | null;
   }) {
-    const secrets = [this.box.decrypt(endpoint.secret)];
+    const context = webhookSecretContext(endpoint.id);
+    const secrets = [this.box.decrypt(endpoint.secret, context)];
     if (endpoint.previousSecret && (endpoint.previousSecretExpiresAt ?? new Date(0)) > new Date())
-      secrets.push(this.box.decrypt(endpoint.previousSecret));
+      secrets.push(this.box.decrypt(endpoint.previousSecret, context));
     return secrets;
   }
 
@@ -67,35 +73,51 @@ export class DeliveryService {
         },
       },
     });
-    if (delivery?.status !== "pending") return "skipped";
+    if (!delivery) {
+      // Under row-level security a wrong organization looks exactly like a missing row.
+      this.log.warn({ orgId, deliveryId }, "webhook delivery not found; skipped");
+      return "skipped";
+    }
+    if (delivery.status !== "pending") return "skipped";
     if (delivery.endpoint.disabledAt) {
       await tenant.webhookDelivery.update({
         where: { id: deliveryId },
-        data: { status: "failed", lastError: "endpoint disabled" },
+        data: { status: "failed", lastError: "endpoint_disabled" },
       });
       return "skipped";
     }
 
+    // Before the attempt, outside its try: failing to sign (a missing encryption key) is
+    // our fault, not the endpoint's, so it fails the job (logged, retried) and never
+    // counts against the endpoint or disables it.
+    const headers = {
+      "content-type": "application/json",
+      "user-agent": USER_AGENT,
+      ...signatureHeaders(this.secretsOf(delivery.endpoint), delivery.eventId, delivery.body),
+    };
     const started = performance.now();
     let status: number | undefined;
-    let error: string | undefined;
+    let error: WebhookDeliveryError | undefined;
     try {
       const response = await safeFetch(delivery.endpoint.url, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "user-agent": USER_AGENT,
-          ...signatureHeaders(this.secretsOf(delivery.endpoint), delivery.eventId, delivery.body),
-        },
+        headers,
         body: delivery.body,
         timeoutMs: env.WEBHOOK_TIMEOUT_MS,
         maxResponseBytes: 64 * 1024,
         allowHttp: env.NODE_ENV !== "production",
         allowedPrivateAddresses: env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES,
+        // A redirect is a failed delivery: following it would send the body and its
+        // signature to wherever it points.
+        followRedirects: false,
       });
       status = response.status;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      error = deliveryError(cause);
+      this.log.info(
+        { orgId, deliveryId, error, err: describeError(cause) },
+        "webhook attempt failed",
+      );
     }
     const succeeded = status !== undefined && status >= 200 && status < 300;
     const outcome: AttemptResult = succeeded ? "succeeded" : isLastAttempt ? "failed" : "retry";
@@ -106,7 +128,7 @@ export class DeliveryService {
         attempts: { increment: 1 },
         lastAttemptAt: new Date(),
         lastStatus: status ?? null,
-        lastError: succeeded ? null : (error ?? `HTTP ${status}`),
+        lastError: error ?? null,
         lastDurationMs: Math.round(performance.now() - started),
         ...(outcome === "succeeded" && { status: "succeeded", succeededAt: new Date() }),
         ...(outcome === "failed" && { status: "failed" }),
@@ -126,16 +148,17 @@ export class DeliveryService {
     return count === 1;
   }
 
-  /** Creates a delivery of a test event to one endpoint; returns its id. */
-  async createTest(orgId: string, endpointId: string) {
-    const eventId = randomUUID();
+  /** Creates (once per `eventId`) a delivery of a test event to one endpoint; returns its id. */
+  async createTest(orgId: string, endpointId: string, eventId: string = randomUUID()) {
     const body = JSON.stringify({
       type: "webhook.test",
       timestamp: new Date().toISOString(),
       data: { message: "This is a test event from your webhook settings." },
     });
-    const delivery = await withTenant(this.database.write, orgId).webhookDelivery.create({
-      data: { endpointId, orgId, eventId, eventName: "webhook.test", body },
+    const delivery = await withTenant(this.database.write, orgId).webhookDelivery.upsert({
+      where: { endpointId_eventId: { endpointId, eventId } },
+      create: { endpointId, orgId, eventId, eventName: "webhook.test", body },
+      update: {},
       select: { id: true },
     });
     return delivery.id;
@@ -175,4 +198,22 @@ export class DeliveryService {
       this.log.warn({ endpointId, orgId }, "webhook endpoint disabled after failing continuously");
     });
   }
+}
+
+/**
+ * What went wrong reaching the endpoint, as a code for tenants to see. Anything that
+ * isn't about the endpoint is rethrown: it's our bug, and it fails the job instead.
+ */
+export function deliveryError(cause: unknown): WebhookDeliveryError {
+  if (isAppError(cause)) {
+    if (cause.code === "DESTINATION_NOT_ALLOWED") return "destination_not_allowed";
+    if (cause.code === "RESPONSE_TOO_LARGE") return "response_too_large";
+    throw cause;
+  }
+  if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
+    return "timeout";
+  }
+  // undici: "fetch failed", with the socket's reason (refused, reset, DNS, TLS) as cause.
+  if (cause instanceof TypeError && cause.message === "fetch failed") return "connection_failed";
+  throw cause;
 }

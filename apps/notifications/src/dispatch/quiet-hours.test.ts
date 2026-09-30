@@ -23,6 +23,10 @@ describe("quietDelayMs", () => {
     expect(quietDelayMs(night, "Asia/Tokyo", at("2026-09-29T13:30:00Z"))).toBe(8.5 * 3_600_000);
   });
 
+  it("reads a zone it doesn't know as UTC instead of failing the delivery", () => {
+    expect(quietDelayMs(night, "Not/AZone", at("2026-09-29T23:30:00Z"))).toBe(7.5 * 3_600_000);
+  });
+
   it("handles a same-day window", () => {
     const lunch = { start: 12 * 60, end: 13 * 60 };
     expect(quietDelayMs(lunch, "UTC", at("2026-09-29T12:15:00Z"))).toBe(45 * 60_000);

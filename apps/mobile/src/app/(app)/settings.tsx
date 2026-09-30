@@ -1,6 +1,8 @@
-import { useRegisterDeviceMutation } from "@repo/client/api/notifications/devices";
+import { useApiErrorMessage } from "@repo/client";
+import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
+import { useWorkspacesQuery } from "@repo/client/auth/workspaces";
 import { type Locale, locales } from "@repo/i18n/locales";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
@@ -9,7 +11,6 @@ import { Screen } from "@/components/screen";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
-import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { authClient } from "@/lib/auth-client";
 import { appVersion } from "@/lib/config";
 import { devicePushToken, type PushState, pushState } from "@/lib/push";
@@ -20,10 +21,7 @@ export default function Settings() {
   const errorMessage = useApiErrorMessage();
   const queryClient = useQueryClient();
   const { data: session, refetch } = authClient.useSession();
-  const workspaces = useQuery({
-    queryKey: ["auth", "workspace", "list"],
-    queryFn: async () => (await authClient.organization.list()).data ?? [],
-  });
+  const workspaces = useWorkspacesQuery(authClient);
   const register = useRegisterDeviceMutation();
   const [push, setPush] = useState<PushState>();
   const [failure, setFailure] = useState<string>();

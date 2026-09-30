@@ -9,7 +9,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { AI_MCP_PATH } from "@repo/contracts/mcp";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { type Harness, startApi, takeNotification } from "./harness";
 import { oauthClient } from "./oauth-client";
 
@@ -165,6 +165,18 @@ describe("tools", () => {
     const missing = await mcp.callTool({ name: "delete_todo", arguments: { id: randomUUID() } });
     expect(missing.isError).toBe(true);
     expect(text(missing)).toMatch(/^TODO_NOT_FOUND: /);
+    await mcp.close();
+  });
+
+  it("answers an unexpected failure as INTERNAL, with the request id to look it up by", async () => {
+    const { mcp } = await connected();
+    const { TodoService } = await import("../src/modules/todo");
+    vi.spyOn(harness.app.get(TodoService), "list").mockRejectedValueOnce(
+      new TypeError("Cannot read properties of undefined"),
+    );
+    const failed = await mcp.callTool({ name: "list_todos", arguments: {} });
+    expect(failed.isError).toBe(true);
+    expect(text(failed)).toMatch(/^INTERNAL: the tool failed \(request id [^)]+\)\.$/);
     await mcp.close();
   });
 

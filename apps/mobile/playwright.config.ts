@@ -14,7 +14,10 @@ export default defineConfig({
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,
   forbidOnly: Boolean(process.env.CI),
+  // Retried in CI to tell a flaky test from a broken one, but a test that only passed on
+  // a retry still fails the run: retries alone would hide it.
   retries: process.env.CI ? 2 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: process.env.E2E_MOBILE_URL ?? "http://localhost:3100",

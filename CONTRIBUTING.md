@@ -2,33 +2,48 @@
 
 ## Getting started
 
-You need Node 24 (`nvm use`), Bun 1.3, Docker and, for the AI service, uv.
+You need Node 24 (`nvm use`), Bun 1.3, Docker and uv. uv isn't only for the AI service:
+code generation runs its exporter, and setup, `bun dev`, types and tests all generate
+code first, so `bun run doctor` fails without it. Or open the repository in its
+devcontainer (VS Code, Codespaces), which has the tools and runs setup itself.
 
 ```sh
-bun run setup      # once: .env with generated secrets, dependencies, database
+bun run setup      # once, and after a pull that adds variables: .env, dependencies, database
 bun dev            # the core services; `bun dev:full` for everything
 bun run doctor     # when something looks off
 ```
 
-Local services run in Docker with small memory limits and their own ports, so they sit
-beside other projects' containers. `bun run db:down` stops them; `bun run docker:clean`
-removes everything this repository created in Docker.
+Local services run in Docker with memory limits and their own ports, so they sit
+beside other projects' containers. Docker needs about 1.4 GB free for the core
+(`bun dev`, `bun run test:integration`), about 3.4 GB for the file-upload tests
+(`bun run test:integration:files`, with RustFS and ClamAV) and about 3.9 GB for the full
+profile (`bun dev:full`, `bun run test:coverage`); the start refuses when they don't fit
+([docs/testing.md](docs/testing.md#integration) has each profile). `bun run db:down` stops them; `bun run docker:clean` removes everything this
+repository created in Docker. [docs/troubleshooting.md](docs/troubleshooting.md) has the
+fixes for what usually goes wrong.
 
 ## Making a change
 
-1. Branch from `master`: `feat/<what>`, `fix/<what>`, `chore/<what>`.
+1. Branch from `master`: `<type>/<what>`, with a Conventional Commits type (`feat/`,
+   `fix/`, `chore/`, …); a team can add who owns it (`feat/ada/<what>`).
 2. Keep to the principles in `CLAUDE.md`: fix root causes, validate at every boundary,
    one implementation per concern, services never import each other, and every
    user-facing string goes through `packages/i18n`.
 3. Before pushing: `bun run lint`, `bun run check-types`, `bun run test`, and for
-   anything touching the database, queues or HTTP, `bun run test:integration`. The git
-   hooks run formatting and lint on what you commit.
+   anything touching the database, queues or HTTP, `bun run test:integration`.
+   `bun run test:e2e` builds and starts its own stack, so stop `bun dev` first. The git
+   hooks help: on commit they format and lint the staged files (Biome, ruff, Prisma,
+   `tofu fmt`, Squawk on migrations) and scan them for secrets with gitleaks (installed,
+   or through Docker); on push they run types and unit tests for the packages you
+   changed and the repo's scripts and Claude Code hooks.
 4. Open a pull request. Its title becomes the squashed commit, so it follows
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:
    `feat(api): add todo sharing`, `fix(web): keep the draft on reload`. The scopes are in
    `commitlint.config.ts`. `feat` and `fix` end up in the changelog and the next version.
 
-CI must pass (the **CI passed** check) and a code owner must approve.
+CI must pass (the **CI passed** check). With a single maintainer the ruleset asks for no
+approval (GitHub doesn't let you approve your own pull request); once there's a team, it
+asks for one from a code owner (docs/repository-settings.md).
 
 ## Database changes
 

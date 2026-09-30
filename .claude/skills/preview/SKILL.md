@@ -1,6 +1,8 @@
 ---
 name: preview
 description: Give a pull request its own running environment, or find out why a preview isn't up. Use when the user wants to try, demo or share a branch before merging, or mentions the preview label or a pr-<number> URL.
+argument-hint: <pull request number>
+allowed-tools: Bash(gh pr view *) Bash(gh run list *) Bash(gh run view *) Bash(kubectl -n pr-* get *)
 ---
 
 # Pull-request previews
@@ -15,6 +17,8 @@ description: Give a pull request its own running environment, or find out why a 
    `pr-<number>-stack` into namespace `pr-<number>`, with
    `deploy/environments/preview/*.yaml`: its own Postgres and Valkey, secrets under the
    `boilerplate-preview-` prefix. Migrations run before the services, as everywhere.
+   The charts, values and secrets come from the target branch; only the images come
+   from the pull request, so a PR's own `deploy/` changes don't show in its preview.
 4. Each push rebuilds and redeploys. Removing the label or closing the pull request
    deletes the preview and its namespace.
 

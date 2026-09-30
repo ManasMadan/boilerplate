@@ -11,6 +11,10 @@ prometheus:
     # The services push their metrics over OTLP (the stack chart sets
     # OTEL_EXPORTER_OTLP_METRICS_ENDPOINT to /api/v1/otlp/v1/metrics here).
     enableOTLPReceiver: true
+    # The alerts add-on's rules and pod monitors (deploy/platform/alerts), which aren't
+    # labelled with this release.
+    ruleSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
     otlp:
       promoteResourceAttributes: [service.name, service.instance.id]
     retention: 15d
@@ -46,6 +50,10 @@ grafana:
 
 alertmanager:
   alertmanagerSpec:
+    # The alerts add-on's receiver (an AlertmanagerConfig) takes every alert, not only
+    # those from its own namespace.
+    alertmanagerConfigMatcherStrategy:
+      type: None
     storage:
       volumeClaimTemplate:
         spec:

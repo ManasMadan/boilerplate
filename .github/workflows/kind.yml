@@ -11,6 +11,10 @@ on:
       - "docker-bake.hcl"
       - "scripts/k8s.ts"
       - "packages/db/prisma/**"
+      # What the services require at boot: a new variable the charts don't set fails here.
+      - "apps/*/src/env.ts"
+      - "packages/nest-common/src/env.ts"
+      - "apps/ai/app/settings.py"
       - ".github/workflows/kind.yml"
   schedule:
     - cron: "43 2 * * *"
@@ -25,7 +29,7 @@ permissions: {}
 jobs:
   kind:
     name: kind deploy and smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: read }
     timeout-minutes: 60
     steps:

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Separator } from "./separator";
 
 const meta = { component: Separator } satisfies Meta<typeof Separator>;
@@ -13,6 +14,9 @@ export const Horizontal: Story = {
       <p>Security</p>
     </div>
   ),
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("separator")).toHaveAttribute("aria-orientation", "horizontal");
+  },
 };
 
 export const Vertical: Story = {
@@ -23,4 +27,7 @@ export const Vertical: Story = {
       <span>Support</span>
     </div>
   ),
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("separator")).toHaveAttribute("aria-orientation", "vertical");
+  },
 };

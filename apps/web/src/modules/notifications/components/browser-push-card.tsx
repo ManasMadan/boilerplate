@@ -1,9 +1,8 @@
 "use client";
 
-import {
-  useRegisterDeviceMutation,
-  useUnregisterDeviceMutation,
-} from "@repo/client/api/notifications/devices";
+import { useApiErrorMessage } from "@repo/client";
+import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
+import { useUnregisterDeviceMutation } from "@repo/client/api/notifications/unregister-device";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
 import {
@@ -18,7 +17,6 @@ import { Field, FieldLabel } from "@repo/ui/components/field";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import {
   type BrowserPushState,
   browserPushState,
@@ -53,7 +51,13 @@ export function BrowserPushCard() {
           setState(await browserPushState());
           return;
         }
-        await register.mutateAsync({ device: toDevice(subscription) });
+        try {
+          await register.mutateAsync({ device: toDevice(subscription) });
+        } catch (error) {
+          // A subscription the API doesn't know would show push as on, with nothing sent.
+          await subscription.unsubscribe();
+          throw error;
+        }
         toast.success(t("enabled"));
       } else {
         const subscription = await currentSubscription();

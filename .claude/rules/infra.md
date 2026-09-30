@@ -20,8 +20,9 @@ a real cluster or cloud account. The checks below are offline.
 - `bun run charts:check`: lint, unit tests, every environment rendered and validated
   with kubeconform, platform add-ons at their pinned versions, Argo CD manifests. Needs
   helm with the helm-unittest plugin.
-- Image tags in `deploy/environments/` are written by CI: staging on every merge to
-  master, production through a promotion PR. Do not edit them by hand.
+- Image tags in `deploy/environments/` are written by CI: staging's in its `stack.yaml`
+  on every merge to master, production's with its revision in `release.yaml` through a
+  promotion PR. Do not edit them by hand.
 - OpenTofu: modules in `infra/tofu/modules/<name>` (k3s, cloudflare, bootstrap), one root
   in `infra/tofu/envs/k3s` used per environment through tfvars. Every module has
   `tests/*.tftest.hcl` with `mock_provider`, so tests need no credentials.
@@ -30,7 +31,8 @@ a real cluster or cloud account. The checks below are offline.
   managers or mail services. Third-party APIs (AI providers, Twilio, push, Stripe,
   Google, Turnstile) and Cloudflare in front are the exceptions; ask before adding a
   managed dependency.
-- Pin every version: images by tag, charts and providers by exact version. Anything
+- Pin every version: images by tag (the Dockerfiles' base images by tag and digest,
+  `scripts/dockerfiles.test.ts`), charts and providers by exact version. Anything
   Renovate cannot find on its own gets a comment on the line above:
   `# renovate: datasource=<docker|helm|github-releases|npm> depName=<name>` (see
   `infra/tofu/modules/bootstrap/variables.tf` and `.github/workflows/ci.yml`). A new

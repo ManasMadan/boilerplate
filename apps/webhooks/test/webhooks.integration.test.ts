@@ -10,8 +10,9 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type { EventName } from "@repo/contracts/events";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer } from "@repo/jobs";
-import { createRedis, keysFromEnv, SecretBox } from "@repo/nest-common";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { createRedis, keysFromEnv, SecretBox, webhookSecretContext } from "@repo/nest-common";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
+import { eventually } from "@repo/testing/eventually";
 import pg from "pg";
 import { Webhook } from "standardwebhooks";
 import Stripe from "stripe";
@@ -33,6 +34,7 @@ let deliveries: Deliveries;
 // ---------------------------------------------------------------------------- receiver
 
 interface Received {
+  path: string;
   headers: IncomingHttpHeaders;
   body: string;
 }
@@ -41,10 +43,13 @@ let receiverUrl: string;
 let received: Received[] = [];
 /** Status codes the receiver answers with, in order (then 200). */
 let answers: number[] = [];
+/** Runs while a request is in flight, before the receiver answers it. */
+let whileSending: (() => Promise<unknown>) | undefined;
 
 beforeEach(() => {
   received = [];
   answers = [];
+  whileSending = undefined;
 });
 
 // ---------------------------------------------------------------------------- helpers
@@ -70,30 +75,32 @@ async function endpoint(
 ) {
   const orgId = randomUUID();
   const secret = `whsec_${randomBytes(24).toString("base64")}`;
-  const id = await asRole("app_api", async (client) => {
+  const endpointId = randomUUID();
+  const context = webhookSecretContext(endpointId);
+  await asRole("app_api", async (client) => {
     await client.query(
       `INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)`,
       [orgId],
     );
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
-    const { rows } = await client.query<{ id: string }>(
+    await client.query(
       `INSERT INTO webhooks.endpoint
-         (org_id, url, events, secret, previous_secret, previous_secret_expires_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id`,
+         (id, org_id, url, events, secret, previous_secret, previous_secret_expires_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
       [
+        endpointId,
         orgId,
         options.url ?? receiverUrl,
         options.events ?? [],
-        box.encrypt(secret),
-        options.previous ? box.encrypt(options.previous.secret) : null,
+        box.encrypt(secret, context),
+        options.previous ? box.encrypt(options.previous.secret, context) : null,
         options.previous?.expiresAt ?? null,
       ],
     );
     await client.query("COMMIT");
-    return rows[0]?.id as string;
   });
-  return { orgId, endpointId: id, secret };
+  return { orgId, endpointId, secret };
 }
 
 async function delivery(deliveryId: string) {
@@ -112,7 +119,7 @@ async function delivery(deliveryId: string) {
 }
 
 /** Publishes a domain event to the webhooks consumer queue, as the relay would. */
-async function publish(orgId: string, name: EventName = "todo.created.v1") {
+async function publish(orgId: string | null, name: EventName = "todo.created.v1") {
   const producer = createProducer("events-webhooks", createRedis(process.env.REDIS_URL as string));
   const event = {
     id: randomUUID(),
@@ -130,17 +137,39 @@ async function publish(orgId: string, name: EventName = "todo.created.v1") {
   return event;
 }
 
-async function eventually<T>(
-  fn: () => Promise<T> | T,
-  done: (value: T) => boolean,
-  timeoutMs = 15_000,
+/** Waits until BullMQ has finished the job (the webhooks service processed it). */
+async function processed(queue: "events-webhooks" | "webhook-deliveries", jobId: string) {
+  const producer = createProducer(queue, createRedis(process.env.REDIS_URL as string));
+  const done = await eventually(
+    async () => (await producer.queue.getJob(jobId))?.isCompleted(),
+    (completed) => completed === true,
+  );
+  await producer.close();
+  return done;
+}
+
+/** Adds a webhook-deliveries job, as apps/api does. */
+async function enqueue(
+  name: "deliver" | "redeliver" | "send-test",
+  payload: { deliveryId: string; orgId: string } | { endpointId: string; orgId: string },
+  jobId: string = randomUUID(),
 ) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = await fn();
-    if (done(value) || Date.now() > deadline) return value;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  const producer = createProducer(
+    "webhook-deliveries",
+    createRedis(process.env.REDIS_URL as string),
+  );
+  await producer.add(name, payload as never, { jobId });
+  await producer.close();
+  return jobId;
+}
+
+/** A port nothing listens on yet (for the service main.ts starts). */
+async function freePort() {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
 }
 
 // ---------------------------------------------------------------------------- setup
@@ -151,8 +180,14 @@ beforeAll(async () => {
     request.on("data", (chunk) => {
       body += chunk;
     });
-    request.on("end", () => {
-      received.push({ headers: request.headers, body });
+    request.on("end", async () => {
+      received.push({ path: request.url ?? "", headers: request.headers, body });
+      await whileSending?.();
+      // An endpoint that moved: it points the sender somewhere else.
+      if (request.url === "/moved") {
+        response.writeHead(307, { location: "/hook" }).end();
+        return;
+      }
       response.statusCode = answers.shift() ?? 200;
       response.end("ok");
     });
@@ -170,9 +205,10 @@ beforeAll(async () => {
     STALWART_WEBHOOK_SECRET: `${STALWART_KEY}, ${STALWART_OLD_KEY}`,
     WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
     WEBHOOK_AUTO_DISABLE_HOURS: "1",
+    PORT: String(await freePort()),
   });
   const redis = createRedis(process.env.REDIS_URL as string);
-  await redis.flushdb();
+  await flushTestDatabase(redis);
   await redis.quit();
   const { createWebhooksServer } = await import("../src/server");
   const { DeliveryService } = await import("../src/outbound/delivery.service");
@@ -227,8 +263,9 @@ describe("outbound deliveries", () => {
     const [overlap] = received;
     const headers = overlap?.headers as Record<string, string>;
     // Receivers holding either secret accept it.
-    expect(new Webhook(during.secret).verify(overlap?.body ?? "", headers)).toBeTruthy();
-    expect(new Webhook(previous).verify(overlap?.body ?? "", headers)).toBeTruthy();
+    const sent = JSON.parse(overlap?.body ?? "");
+    expect(new Webhook(during.secret).verify(overlap?.body ?? "", headers)).toEqual(sent);
+    expect(new Webhook(previous).verify(overlap?.body ?? "", headers)).toEqual(sent);
 
     await publish(after.orgId);
     await eventually(
@@ -238,21 +275,33 @@ describe("outbound deliveries", () => {
     const expired = received[1];
     const expiredHeaders = expired?.headers as Record<string, string>;
     expect(expiredHeaders["webhook-signature"]?.split(" ")).toHaveLength(1);
-    expect(new Webhook(after.secret).verify(expired?.body ?? "", expiredHeaders)).toBeTruthy();
+    expect(new Webhook(after.secret).verify(expired?.body ?? "", expiredHeaders)).toEqual(
+      JSON.parse(expired?.body ?? ""),
+    );
     expect(() => new Webhook(previous).verify(expired?.body ?? "", expiredHeaders)).toThrow();
   });
 
   it("only sends subscribed events, and nothing for other organizations", async () => {
-    const { orgId } = await endpoint({ events: ["todo.deleted.v1"] });
-    await publish(orgId, "todo.created.v1");
-    await publish(randomUUID(), "todo.deleted.v1");
+    const { orgId, endpointId } = await endpoint({ events: ["todo.deleted.v1"] });
+    const created = await publish(orgId, "todo.created.v1");
+    const elsewhere = await publish(randomUUID(), "todo.deleted.v1");
     const deleted = await publish(orgId, "todo.deleted.v1");
+    for (const event of [created, elsewhere, deleted]) await processed("events-webhooks", event.id);
+    // Every event has been handled and made one delivery between them: nothing else is on
+    // its way.
+    const rows = await asRole("postgres", (client) =>
+      client.query("SELECT count(*)::int AS n FROM webhooks.delivery WHERE endpoint_id = $1", [
+        endpointId,
+      ]),
+    );
+    expect(rows.rows[0].n).toBe(1);
     await eventually(
       () => received.length,
-      (n) => n >= 1,
+      (n) => n === 1,
     );
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(received.map((r) => JSON.parse(r.body).type)).toEqual(["todo.deleted.v1"]);
+    expect(received.map((r) => (JSON.parse(r.body) as { type: string }).type)).toEqual([
+      "todo.deleted.v1",
+    ]);
     expect(received[0]?.headers["webhook-id"]).toBe(deleted.id);
   });
 
@@ -269,7 +318,7 @@ describe("outbound deliveries", () => {
     );
     await producer.add("event", { ...event }, { jobId: `${event.id}-again` });
     await producer.close();
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await processed("events-webhooks", `${event.id}-again`);
     const rows = await asRole("postgres", (client) =>
       client.query("SELECT count(*)::int AS n FROM webhooks.delivery WHERE endpoint_id = $1", [
         endpointId,
@@ -295,6 +344,62 @@ describe("outbound deliveries", () => {
       attempts: 2,
       last_status: 503,
     });
+  });
+
+  it("records why an endpoint couldn't be reached as a code, never an internal message", async () => {
+    // Nothing listens on port 9.
+    const { orgId, endpointId } = await endpoint({ url: "http://127.0.0.1:9/hook" });
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    expect(await deliveries.attempt(orgId, deliveryId, false)).toBe("retry");
+    expect(await delivery(deliveryId)).toMatchObject({
+      last_status: null,
+      last_error: "connection_failed",
+    });
+  });
+
+  it("fails the job, not the endpoint, when signing fails on our side", async () => {
+    const { orgId, endpointId } = await endpoint();
+    // A secret encrypted under a key this service doesn't have (a botched rotation).
+    await asRole("postgres", (client) =>
+      client.query("UPDATE webhooks.endpoint SET secret = 'v1.missing-key.AAAA' WHERE id = $1", [
+        endpointId,
+      ]),
+    );
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    await expect(deliveries.attempt(orgId, deliveryId, true)).rejects.toThrow();
+    // The delivery waits for the job's retry; the endpoint is neither blamed nor turned off.
+    expect(await delivery(deliveryId)).toMatchObject({
+      status: "pending",
+      attempts: 0,
+      last_error: null,
+    });
+    const [row] = await asRole(
+      "postgres",
+      async (client) =>
+        (
+          await client.query("SELECT disabled_at FROM webhooks.endpoint WHERE id = $1", [
+            endpointId,
+          ])
+        ).rows,
+    );
+    expect(row.disabled_at).toBeNull();
+    expect(received).toEqual([]);
+  });
+
+  it("creates a test delivery once per send-test job, however often the job runs", async () => {
+    const { orgId, endpointId } = await endpoint();
+    const jobEventId = randomUUID();
+    const first = await deliveries.createTest(orgId, endpointId, jobEventId);
+    const retried = await deliveries.createTest(orgId, endpointId, jobEventId);
+    expect(retried).toBe(first);
+  });
+
+  it("treats a redirect as a failed delivery, and never sends the signed body on", async () => {
+    const { orgId, endpointId } = await endpoint({ url: receiverUrl.replace("/hook", "/moved") });
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("failed");
+    expect(await delivery(deliveryId)).toMatchObject({ status: "failed", last_status: 307 });
+    expect(received.map((request) => request.path)).toEqual(["/moved"]);
   });
 
   it("disables an endpoint that has failed for longer than the limit, and says so", async () => {
@@ -331,7 +436,7 @@ describe("outbound deliveries", () => {
     const { orgId, endpointId } = await endpoint({ url: "http://10.0.0.1/hook" });
     const deliveryId = await deliveries.createTest(orgId, endpointId);
     expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("failed");
-    expect((await delivery(deliveryId)).last_error).toBe("DESTINATION_NOT_ALLOWED");
+    expect((await delivery(deliveryId)).last_error).toBe("destination_not_allowed");
   });
 
   it("replays a finished delivery with the same message id", async () => {
@@ -350,6 +455,169 @@ describe("outbound deliveries", () => {
     );
     expect(received[1]?.headers["webhook-id"]).toBe(received[0]?.headers["webhook-id"]);
     expect((await delivery(deliveryId)).status).toBe("succeeded");
+  });
+
+  it("skips a delivery asked for under another organization, or already finished", async () => {
+    const { orgId, endpointId } = await endpoint();
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    // Row-level security: from another organization the delivery isn't there.
+    expect(await deliveries.attempt(randomUUID(), deliveryId, true)).toBe("skipped");
+    expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("succeeded");
+    expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("skipped");
+    expect(received).toHaveLength(1);
+  });
+
+  it("fails a delivery to an endpoint disabled since, without calling it", async () => {
+    const { orgId, endpointId } = await endpoint();
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    await asRole("postgres", (client) =>
+      client.query(
+        "UPDATE webhooks.endpoint SET disabled_at = now(), disabled_reason = 'failing' WHERE id = $1",
+        [endpointId],
+      ),
+    );
+    expect(await deliveries.attempt(orgId, deliveryId, false)).toBe("skipped");
+    expect(await delivery(deliveryId)).toMatchObject({
+      status: "failed",
+      attempts: 0,
+      last_error: "endpoint_disabled",
+    });
+    expect(received).toEqual([]);
+  });
+
+  it("doesn't sign with a previous secret whose overlap has no end", async () => {
+    const previous = `whsec_${randomBytes(24).toString("base64")}`;
+    const { orgId, endpointId, secret } = await endpoint({
+      previous: { secret: previous, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+    // A row edited by hand: the old secret kept, its end date gone.
+    await asRole("postgres", (client) =>
+      client.query("UPDATE webhooks.endpoint SET previous_secret_expires_at = NULL WHERE id = $1", [
+        endpointId,
+      ]),
+    );
+    await deliveries.attempt(orgId, await deliveries.createTest(orgId, endpointId), true);
+    const headers = received[0]?.headers as Record<string, string>;
+    expect(headers["webhook-signature"]?.split(" ")).toHaveLength(1);
+    expect(new Webhook(secret).verify(received[0]?.body ?? "", headers)).toEqual(
+      JSON.parse(received[0]?.body ?? ""),
+    );
+  });
+
+  it("doesn't disable an endpoint that has succeeded since its failing delivery was made", async () => {
+    const { orgId, endpointId } = await endpoint();
+    // Made two hours ago and tried last; meanwhile a newer delivery went through.
+    const stale = await deliveries.createTest(orgId, endpointId);
+    await asRole("postgres", (client) =>
+      client.query(
+        "UPDATE webhooks.delivery SET created_at = now() - interval '2 hours' WHERE id = $1",
+        [stale],
+      ),
+    );
+    expect(
+      await deliveries.attempt(orgId, await deliveries.createTest(orgId, endpointId), true),
+    ).toBe("succeeded");
+    answers = [500];
+    expect(await deliveries.attempt(orgId, stale, true)).toBe("failed");
+    const [row] = await asRole(
+      "postgres",
+      async (client) =>
+        (
+          await client.query("SELECT disabled_at FROM webhooks.endpoint WHERE id = $1", [
+            endpointId,
+          ])
+        ).rows,
+    );
+    expect(row.disabled_at).toBeNull();
+  });
+
+  it("says nothing more when another attempt disabled the endpoint first", async () => {
+    const { orgId, endpointId } = await endpoint();
+    const old = await deliveries.createTest(orgId, endpointId);
+    answers = [500];
+    await deliveries.attempt(orgId, old, true);
+    await asRole("postgres", (client) =>
+      client.query(
+        "UPDATE webhooks.delivery SET created_at = now() - interval '2 hours' WHERE id = $1",
+        [old],
+      ),
+    );
+    // Another replica's last attempt disables it while this one's request is in flight.
+    answers = [500];
+    whileSending = () =>
+      asRole("postgres", (client) =>
+        client.query(
+          "UPDATE webhooks.endpoint SET disabled_at = now(), disabled_reason = 'failing' WHERE id = $1",
+          [endpointId],
+        ),
+      );
+    const latest = await deliveries.createTest(orgId, endpointId);
+    expect(await deliveries.attempt(orgId, latest, true)).toBe("failed");
+    const events = await asRole("postgres", (client) =>
+      client.query(
+        "SELECT id FROM webhooks.outbox_event WHERE key = $1 AND name = 'webhook.endpoint_disabled.v1'",
+        [endpointId],
+      ),
+    );
+    expect(events.rowCount).toBe(0);
+  });
+
+  it("sends nothing for an event that belongs to no organization", async () => {
+    await endpoint();
+    const event = await publish(null);
+    expect(await processed("events-webhooks", event.id)).toBe(true);
+    expect(received).toEqual([]);
+  });
+
+  it("retries a failed attempt through the queue, after the schedule's first delay", async () => {
+    // Nothing listens on port 9.
+    const { orgId, endpointId } = await endpoint({ url: "http://127.0.0.1:9/hook" });
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    const jobId = await enqueue("deliver", { deliveryId, orgId });
+    const producer = createProducer(
+      "webhook-deliveries",
+      createRedis(process.env.REDIS_URL as string),
+    );
+    // Waiting its retry: the attempt threw, so BullMQ scheduled the next one.
+    const state = await eventually(
+      async () => (await producer.queue.getJob(jobId))?.getState(),
+      (current) => current === "delayed",
+    );
+    expect(state).toBe("delayed");
+    expect(await delivery(deliveryId)).toMatchObject({
+      status: "pending",
+      attempts: 1,
+      last_error: "connection_failed",
+    });
+    await producer.queue.remove(jobId);
+    await producer.close();
+  });
+
+  it("replays nothing for a delivery that's still pending", async () => {
+    const { orgId, endpointId } = await endpoint({ url: "http://127.0.0.1:9/hook" });
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    expect(
+      await processed("webhook-deliveries", await enqueue("redeliver", { deliveryId, orgId })),
+    ).toBe(true);
+    expect(await delivery(deliveryId)).toMatchObject({ status: "pending", attempts: 0 });
+  });
+
+  it("sends a test event from the settings page, named after its job", async () => {
+    const { orgId, endpointId } = await endpoint();
+    const jobId = await enqueue("send-test", { endpointId, orgId });
+    await eventually(
+      () => received.length,
+      (n) => n === 1,
+    );
+    expect(received[0]?.headers["webhook-id"]).toBe(jobId);
+    expect(JSON.parse(received[0]?.body ?? "{}")).toMatchObject({ type: "webhook.test" });
+    // A job id that isn't a UUID can't name the event: it gets a new one.
+    await enqueue("send-test", { endpointId, orgId }, "settings-test-1");
+    await eventually(
+      () => received.length,
+      (n) => n === 2,
+    );
+    expect(received[1]?.headers["webhook-id"]).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("the service can't see endpoints without the organization set", async () => {
@@ -555,5 +823,17 @@ describe("inbound Stalwart feedback", () => {
     const notJson = "not json";
     const signature = createHmac("sha256", STALWART_KEY).update(notJson).digest("base64");
     expect(await post([], { body: notJson, signature })).toBe(400);
+  });
+});
+
+describe("main", () => {
+  it("starts the service on its port, answering health checks", async () => {
+    const { app: service } = await import("../src/main");
+    try {
+      const live = await fetch(`http://127.0.0.1:${process.env.PORT}/health/live`);
+      expect(live.status).toBe(200);
+    } finally {
+      await service.close();
+    }
   });
 });

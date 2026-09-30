@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { type OrgRole, orgRoleSchema, parseOrgRole } from "@repo/contracts/roles";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -30,14 +31,13 @@ import { useAuthErrorMessage, useAuthSchemas } from "@/modules/auth";
 import { UpgradeHint } from "@/modules/billing";
 import {
   isPersonal,
-  type Role,
   useActiveWorkspace,
   useRefreshWorkspaces,
   useSwitchWorkspace,
   useWorkspaces,
 } from "../hooks/use-workspace";
 
-const ROLES: Role[] = ["member", "admin", "owner"];
+const ROLES: OrgRole[] = ["member", "admin", "owner"];
 
 function RoleSelect({
   value,
@@ -45,8 +45,9 @@ function RoleSelect({
   label,
   id,
 }: {
-  value: Role;
-  onChange: (role: Role) => void;
+  /** Null when the stored role isn't one the app knows: nothing is selected. */
+  value: OrgRole | null;
+  onChange: (role: OrgRole) => void;
   label: string;
   id: string;
 }) {
@@ -54,7 +55,8 @@ function RoleSelect({
   return (
     <Select
       value={value}
-      onValueChange={(next) => next && onChange(next as Role)}
+      // Only the ROLES items can be picked.
+      onValueChange={(next) => onChange(orgRoleSchema.parse(next))}
       items={ROLES.map((role) => ({ value: role, label: t(role) }))}
     >
       <SelectTrigger id={id} aria-label={label} className="w-36">
@@ -81,7 +83,7 @@ export function WorkspaceMembersPage() {
   const router = useRouter();
   if (!active.data) return <Skeleton className="h-40" />;
   const workspace = active.data;
-  const owners = workspace.members.filter((member) => member.role === "owner").length;
+  const owners = workspace.members.filter((member) => parseOrgRole(member.role) === "owner").length;
 
   async function run(call: Promise<{ error: unknown }>, success: string) {
     const { error } = await call;
@@ -130,7 +132,7 @@ export function WorkspaceMembersPage() {
                         <RoleSelect
                           id={`role-${member.id}`}
                           label={t("roleLabel", { name: member.user.name })}
-                          value={member.role as Role}
+                          value={parseOrgRole(member.role)}
                           onChange={(role) =>
                             run(
                               authClient.organization.updateMemberRole({
@@ -159,7 +161,9 @@ export function WorkspaceMembersPage() {
                         </Button>
                       </>
                     ) : (
-                      <Badge variant="outline">{t(`role.${member.role as Role}`)}</Badge>
+                      <Badge variant="outline">
+                        {t(`role.${parseOrgRole(member.role) ?? "unknown"}`)}
+                      </Badge>
                     )}
                   </div>
                 </li>
@@ -200,7 +204,7 @@ function InviteCard({ organizationId }: { organizationId: string }) {
   });
   const form = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { email: "", role: "member" as Role },
+    defaultValues: { email: "", role: "member" as OrgRole },
   });
 
   return (
@@ -284,8 +288,10 @@ function PendingInvitations({
                 <div className="flex flex-col">
                   <span>{invitation.email}</span>
                   <span className="text-xs text-muted-foreground">
-                    {t("pending.invited", { role: t(`role.${invitation.role as Role}`) })} ·{" "}
-                    {format.dateTime(new Date(invitation.expiresAt), { dateStyle: "medium" })}
+                    {t("pending.invited", {
+                      role: t(`role.${parseOrgRole(invitation.role) ?? "unknown"}`),
+                    })}{" "}
+                    · {format.dateTime(new Date(invitation.expiresAt), { dateStyle: "medium" })}
                   </span>
                 </div>
                 <Button

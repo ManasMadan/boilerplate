@@ -22,22 +22,17 @@ export class AppsService {
     const lastUsed = new Map(
       used.map((row) => [`${row.clientId}:${row.referenceId}`, row._max.createdAt]),
     );
-    return grants.flatMap((grant) =>
-      grant.organization
-        ? [
-            {
-              id: grant.id,
-              clientId: grant.clientId,
-              name: grant.client.name,
-              uri: grant.client.uri,
-              workspace: grant.organization,
-              scopes: grant.scopes,
-              connectedAt: grant.createdAt,
-              lastUsedAt: lastUsed.get(`${grant.clientId}:${grant.referenceId}`) ?? null,
-            },
-          ]
-        : [],
-    );
+    return grants.map((grant) => ({
+      id: grant.id,
+      clientId: grant.clientId,
+      name: grant.client.name,
+      uri: grant.client.uri,
+      // Listed grants name a workspace, and deleting one deletes its grants (cascade).
+      workspace: grant.organization as NonNullable<typeof grant.organization>,
+      scopes: grant.scopes,
+      connectedAt: grant.createdAt,
+      lastUsedAt: lastUsed.get(`${grant.clientId}:${grant.referenceId}`) ?? null,
+    }));
   }
 
   disconnect(userId: string, id: string) {
