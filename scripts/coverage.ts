@@ -133,13 +133,18 @@ export function reports(root = ROOT): { path: string; base: string; owns?: RegEx
   ];
 }
 
-/** Source files the rule applies to: tracked code, not tests, generated code or configs. */
+/**
+ * Source files the rule applies to: tracked code, not tests (stories are packages/ui's),
+ * generated code or configs.
+ */
 export function isSource(path: string) {
   return (
     /^(apps\/[^/]+\/(src|app)|packages\/[^/]+\/src|scripts|\.claude\/hooks)\/.+\.(ts|tsx|py)$/.test(
       path,
     ) &&
-    !/\.(test|spec)\.(ts|tsx)$|\.d\.ts$|\/generated\/|\.gen\.ts$|(^|\/)test_[^/]+\.py$/.test(path)
+    !/\.(test|spec|stories)\.(ts|tsx)$|\.d\.ts$|\/generated\/|\.gen\.ts$|(^|\/)test_[^/]+\.py$/.test(
+      path,
+    )
   );
 }
 

@@ -86,6 +86,7 @@ describe("which files the rule applies to", () => {
     [".claude/hooks/lib.ts", true],
     ["apps/api/src/server.test.ts", false],
     ["apps/web/e2e/auth.spec.ts", false],
+    ["packages/ui/src/components/button.stories.tsx", false],
     ["apps/api/src/generated/client.ts", false],
     ["packages/ai-client/src/generated/types.gen.ts", false],
     ["apps/ai/tests/test_errors.py", false],
