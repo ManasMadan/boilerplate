@@ -55,8 +55,8 @@ import {
 import { parseOrgRole } from "@repo/contracts/roles";
 import { type Db, transaction } from "@repo/db";
 import { isLocale, isTimeZone, type Locale, negotiateLocale } from "@repo/i18n";
-import type { JobMeta, Producer } from "@repo/jobs";
-import { currentContext } from "@repo/nest-common";
+import type { Producer } from "@repo/jobs";
+import { currentContext, jobMetaFromContext } from "@repo/nest-common";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
@@ -147,15 +147,6 @@ const API_KEY_PLUGIN_PATHS = [
 const MOBILE_SCHEME = "boilerplate";
 const DAY = 24 * 60 * MINUTE;
 const INVITATION_DAYS = 7;
-
-/** Request metadata copied onto queued emails so their logs share the request id. */
-function jobMeta(): JobMeta {
-  const context = currentContext();
-  return {
-    ...(context?.requestId && { requestId: context.requestId }),
-    ...(context?.userId && { userId: context.userId }),
-  };
-}
 
 /** A hook's request body and query: better-auth types them `any`; read them as unknown. */
 const requestOf = (ctx: { body?: unknown; query?: unknown }) => ({
@@ -589,7 +580,7 @@ export function createAuth({
               to: { email, locale: await localeFor(email, ctx?.headers) },
               data: { otp, purpose: type, expiresInMinutes: Math.round(OTP_EXPIRES_IN / MINUTE) },
             },
-            { jobId: randomUUID(), meta: jobMeta() },
+            { jobId: randomUUID(), meta: jobMetaFromContext() },
           );
         },
       }),
@@ -713,7 +704,7 @@ export function createAuth({
                 expiresInDays: INVITATION_DAYS,
               },
             },
-            { jobId: randomUUID(), meta: jobMeta() },
+            { jobId: randomUUID(), meta: jobMetaFromContext() },
           );
         },
       }),

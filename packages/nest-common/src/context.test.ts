@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { contextLogFields, currentContext, runWithContext, updateContext } from "./context";
+import {
+  contextLogFields,
+  currentContext,
+  jobMetaFromContext,
+  runWithContext,
+  updateContext,
+} from "./context";
 
 describe("request context", () => {
   it("is there for everything the call awaits, and gone outside it", async () => {
@@ -16,6 +22,14 @@ describe("request context", () => {
     runWithContext({ requestId: "r-2" }, () => {
       updateContext({ userId: "u-1" });
       expect(currentContext()).toEqual({ requestId: "r-2", userId: "u-1" });
+    });
+  });
+
+  it("copies the request and user ids onto a job, and nothing outside a request", () => {
+    expect(jobMetaFromContext()).toEqual({});
+    runWithContext({ requestId: "r-4", orgId: "o-4", locale: "es" }, () => {
+      updateContext({ userId: "u-4" });
+      expect(jobMetaFromContext()).toEqual({ requestId: "r-4", userId: "u-4" });
     });
   });
 

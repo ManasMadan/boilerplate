@@ -33,6 +33,18 @@ export function currentContext(): RequestContext | undefined {
   return storage.getStore();
 }
 
+/**
+ * The request's ids to copy onto a job it queues (a job's `meta`), so the job's logs
+ * carry the same request id as the HTTP request that asked for it.
+ */
+export function jobMetaFromContext() {
+  const context = currentContext();
+  return {
+    ...(context?.requestId && { requestId: context.requestId }),
+    ...(context?.userId && { userId: context.userId }),
+  };
+}
+
 /** Adds what is learned mid-request (e.g. the user, once the session is resolved). */
 export function updateContext(patch: Partial<Omit<RequestContext, "requestId">>) {
   const context = storage.getStore();

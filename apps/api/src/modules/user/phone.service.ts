@@ -25,10 +25,10 @@ import { localeOrDefault } from "@repo/i18n";
 import {
   AppError,
   createRateLimiter,
-  currentContext,
   type Database,
   InjectDatabase,
   InjectRedis,
+  jobMetaFromContext,
   type Redis,
 } from "@repo/nest-common";
 import { env } from "../../env";
@@ -108,7 +108,7 @@ export class PhoneService {
         to: { phone: phoneNumber, locale: localeOrDefault(locale) },
         data: { code, expiresInMinutes: Math.round(PHONE_CODE_EXPIRES_IN / MINUTE) },
       },
-      { jobId: randomUUID(), meta: jobMeta() },
+      { jobId: randomUUID(), meta: jobMetaFromContext() },
     );
     return { expiresInSeconds: PHONE_CODE_EXPIRES_IN };
   }
@@ -194,12 +194,4 @@ export class PhoneService {
       return updated;
     });
   }
-}
-
-function jobMeta() {
-  const context = currentContext();
-  return {
-    ...(context?.requestId && { requestId: context.requestId }),
-    ...(context?.userId && { userId: context.userId }),
-  };
 }
