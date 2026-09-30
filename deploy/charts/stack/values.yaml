@@ -292,6 +292,9 @@ services:
     enabled: true
     image: ai
     command: [python, -m, app.worker]
+    # No port to probe: the worker touches a file while its loop runs, and this fails once
+    # it's a minute old (apps/ai/app/heartbeat.py), so a stuck worker is restarted.
+    livenessCommand: [python, -m, app.heartbeat]
     database: { role: app_ai, envPrefix: AI }
     redis: true
     # Its secrets are the AI service's.

@@ -118,7 +118,9 @@ can start up to a second late on the Python side, whose blocking connection does
 read the Redis version.
 
 In Kubernetes it's the `ai-worker` deployment (same image, `python -m app.worker`,
-scaled by KEDA on the queue). Locally `bun dev:full` starts both (apps/ai's `dev` runs
+scaled by KEDA on the queue). It has no port to probe, so it touches a file every ten
+seconds while its event loop runs, and its liveness probe (`python -m app.heartbeat`)
+fails once that's a minute old: a stuck worker is restarted. Locally `bun dev:full` starts both (apps/ai's `dev` runs
 FastAPI and the worker, which restarts when a Python file changes). To run the worker on
 its own, without reloading:
 

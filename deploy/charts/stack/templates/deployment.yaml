@@ -123,6 +123,16 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
           {{- end }}
+          {{- else if $svc.livenessCommand }}
+          {{- /* A worker without a port proves it's alive with a command. */}}
+          startupProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 30
+            timeoutSeconds: 10
           {{- end }}
           {{- if $svc.routes }}
           lifecycle:

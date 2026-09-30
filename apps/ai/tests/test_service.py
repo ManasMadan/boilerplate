@@ -17,6 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.assistant import AssistantEvent, DoneEvent, SourcesEvent, TextEvent
+from app.heartbeat import alive
 from app.settings import get_settings
 from tests.fakes import otlp_collector, serve
 from tests.support import (
@@ -323,6 +324,8 @@ def test_the_worker_indexes_queued_documents_then_summarizes_them(client: TestCl
             assert listed.status == "ready", f"document {doc.id} is {listed.status}"
             # The local summarizer keeps a passage's opening sentence.
             assert listed.summary == "Indexed by the worker."
+            # Its liveness probe passes while it runs.
+            assert alive()
             [(feature, model, by)] = as_org(
                 org,
                 "SELECT DISTINCT feature, model, user_id FROM ai.usage WHERE org_id = %s",

@@ -22,6 +22,7 @@ from app.contracts.ai_ingest_summarize_job import AiIngestSummarizeJob
 from app.db.session import close_engine, open_engine
 from app.documents import Documents, create_summaries
 from app.embeddings import create_embedder
+from app.heartbeat import beat
 from app.log import configure_logging, log
 from app.queues import INGEST, IngestQueue, JobLike, start_worker
 from app.settings import get_settings
@@ -84,8 +85,11 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
+    # The liveness probe's proof that this loop still runs (app/heartbeat.py).
+    heartbeat = asyncio.create_task(beat())
     log.info("ai worker started", queue=INGEST)
     await stop.wait()
+    _ = heartbeat.cancel()
     await worker.close()
     await queue.close()
     await redis.aclose()

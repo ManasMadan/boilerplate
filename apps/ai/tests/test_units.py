@@ -4,6 +4,7 @@ import math
 import os
 import runpy
 import secrets
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -169,3 +170,41 @@ def test_a_job_this_version_does_not_know_fails() -> None:
     assert JOB_NAME.validate_python("summarize") == "summarize"
     with pytest.raises(ValidationError):
         JOB_NAME.validate_python("translate")
+
+
+def test_the_worker_heartbeat_is_alive_while_fresh_and_dead_when_stale(tmp_path: Path) -> None:
+    from app.heartbeat import alive
+
+    path = tmp_path / "alive"
+    assert not alive(path)
+    path.touch()
+    mtime = path.stat().st_mtime
+    assert alive(path, 60, now=lambda: mtime + 59)
+    assert not alive(path, 60, now=lambda: mtime + 61)
+
+
+async def test_the_worker_heartbeat_touches_its_file_until_cancelled(tmp_path: Path) -> None:
+    import asyncio
+
+    from app.heartbeat import beat
+
+    path = tmp_path / "alive"
+    task = asyncio.create_task(beat(path, every=0.01))
+    await asyncio.sleep(0.05)
+    assert path.exists()
+    _ = task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+def test_the_liveness_probe_passes_only_with_a_fresh_heartbeat(tmp_path: Path) -> None:
+    # The probe's own command, reading the heartbeat from the temporary directory.
+    def probe() -> int:
+        env = {**os.environ, "TMPDIR": str(tmp_path)}
+        return subprocess.run(
+            [sys.executable, "-m", "app.heartbeat"], env=env, check=False
+        ).returncode
+
+    assert probe() == 1
+    (tmp_path / "ai-worker-alive").touch()
+    assert probe() == 0

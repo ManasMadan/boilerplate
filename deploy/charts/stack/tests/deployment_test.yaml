@@ -195,7 +195,7 @@ tests:
           path: "spec.template.spec.containers[0].envFrom"
           value: [{ secretRef: { name: demo-ai } }]
       - notExists: { path: "spec.template.spec.containers[0].ports" }
-      - notExists: { path: "spec.template.spec.containers[0].livenessProbe" }
+      - notExists: { path: "spec.template.spec.containers[0].readinessProbe" }
 
   - it: leaves the replica count to the autoscaler when there is one
     documentSelector: { path: metadata.name, value: demo-api }
@@ -262,6 +262,16 @@ tests:
       - contains:
           path: spec.template.spec.volumes
           content: { name: ca-bundle, secret: { secretName: local-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+
+  - it: restarts the AI worker when its heartbeat goes stale
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - equal:
+          path: "spec.template.spec.containers[0].livenessProbe.exec.command"
+          value: [python, -m, app.heartbeat]
+      - equal:
+          path: "spec.template.spec.containers[0].startupProbe.exec.command"
+          value: [python, -m, app.heartbeat]
 
   - it: loads no Secret into services with nothing secret
     documentSelector: { path: metadata.name, value: demo-worker }
