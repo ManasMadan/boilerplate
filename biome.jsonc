@@ -44,7 +44,11 @@
         // @ts-expect-error, which then passes.
         "noTsIgnore": "error",
         // An empty block is a failure swallowed or code left unfinished; say why instead.
-        "noEmptyBlockStatements": "error"
+        "noEmptyBlockStatements": "error",
+        // A skipped test is a test that silently stopped running. The few that need a
+        // credential use skipIf with the reason, listed in docs/testing.md.
+        "noSkippedTests": "error",
+        "noFocusedTests": "error"
       },
       "style": {
         "noNonNullAssertion": "error",
@@ -57,6 +61,12 @@
     }
   },
   "overrides": [
+    {
+      // Playwright's conditional skip, for the two browser tests that need real
+      // credentials: both are in docs/testing.md's "Skipped tests" table.
+      "includes": ["apps/web/e2e/captcha.spec.ts", "apps/web/e2e/google.spec.ts"],
+      "linter": { "rules": { "suspicious": { "noSkippedTests": "off" } } }
+    },
     {
       // Code that reaches the browser imports zod as `import * as z from "zod"`: the
       // bundler keeps only the members used. `import { z }` binds zod's prebuilt namespace

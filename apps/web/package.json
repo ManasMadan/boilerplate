@@ -11,7 +11,7 @@
     "build": "bun --env-file=../../.env run next build && bun run scripts/copy-static.ts",
     "start": "node --env-file-if-exists=../../.env .next/standalone/apps/web/server.js",
     "check-types": "SKIP_ENV_VALIDATION=1 next typegen && tsc",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "test:e2e": "playwright test",
     "budget": "bun scripts/bundle-budget.ts",
     "coverage": "vitest run --coverage"

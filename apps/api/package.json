@@ -9,7 +9,7 @@
     "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
     "check-types": "tsc",
     "gen": "bun scripts/openapi.ts openapi.json",
-    "test": "vitest run --project unit --passWithNoTests",
+    "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "auth:schema": "bun --env-file=../../.env run auth generate --config src/auth/auth.cli.ts --adapter prisma --dialect postgresql --output ../../node_modules/.cache/auth-schema.prisma --yes",
     "seed": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/seed.mjs",

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "check-types": "tsc",
-    "test": "vitest run --project unit --passWithNoTests",
+    "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "coverage": "vitest run --coverage"
   },
