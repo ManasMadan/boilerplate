@@ -16,11 +16,11 @@ import {
   type ApiKeyScope,
   type createApiKeyInput,
 } from "@repo/contracts/api";
+import type { OrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
 import { AppError, type Database, InjectDatabase } from "@repo/nest-common";
 import { z } from "zod";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "../../auth/auth.module";
-import type { OrgRole } from "../../auth/memberships";
 import { emitEvent } from "../../outbox";
 import { type ApiKeyRow, ApiKeysRepository } from "./api-keys.repository";
 

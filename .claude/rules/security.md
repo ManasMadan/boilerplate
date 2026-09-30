@@ -17,6 +17,10 @@ paths:
   `apps/api/src/rpc/procedures.ts`) plus the service's own check for anything finer
   (ownership, entitlements). A new procedure on tenant data is at least `inOrg`;
   anything that manages members, keys, billing or webhooks is `orgAdmin`.
+- A role is parsed with `parseOrgRole` from `@repo/contracts/roles`, never cast from the
+  stored string (better-auth joins several with commas, and anything can be written
+  there), and checked by an allow-list (`canManageWorkspace`, or `role === "owner"`),
+  never by excluding one role: a role the code doesn't know must grant nothing.
 - Tenant isolation is enforced by Postgres RLS, not by `where: { orgId }`. Query tenant
   data only through `withTenant`/`tenantTx` (or `tenant(org_id)` in Python) with the
   `orgId` from the procedure context, never from the input.

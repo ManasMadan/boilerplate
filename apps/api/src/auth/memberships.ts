@@ -8,26 +8,28 @@
  * (organization hooks) forgets it immediately, so a removed member loses access on
  * their very next request.
  */
+import { type OrgRole, parseOrgRole } from "@repo/contracts/roles";
 import type { Db } from "@repo/db";
 import { CacheService, type Redis } from "@repo/nest-common";
 
 const TTL_SECONDS = 300;
-
-export type OrgRole = "owner" | "admin" | "member";
 
 export function createMemberships(db: Db, redis: Redis) {
   const cache = new CacheService(redis, "membership");
   const key = (orgId: string, userId: string) => `${orgId}:${userId}`;
 
   return {
-    /** The user's role in the organization, or null when they aren't a member. */
+    /**
+     * The user's role in the organization, or null when they aren't a member or their
+     * stored role isn't one this knows (see @repo/contracts/roles: it fails closed).
+     */
     role(orgId: string, userId: string): Promise<OrgRole | null> {
       return cache.wrap(key(orgId, userId), TTL_SECONDS, async () => {
         const member = await db.member.findFirst({
           where: { organizationId: orgId, userId },
           select: { role: true },
         });
-        return (member?.role as OrgRole | undefined) ?? null;
+        return parseOrgRole(member?.role);
       });
     },
     /** Call after any change to this membership. */

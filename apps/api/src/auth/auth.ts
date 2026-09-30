@@ -14,6 +14,7 @@
  *
  * After adding or removing a plugin, regenerate the auth tables (db-change skill).
  */
+
 import { randomUUID } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
 import { cimd } from "@better-auth/cimd";
@@ -49,6 +50,7 @@ import {
   mcpResource,
   ORG_CLAIM,
 } from "@repo/contracts/mcp";
+import { parseOrgRole } from "@repo/contracts/roles";
 import { type Db, transaction } from "@repo/db";
 import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
 import type { JobMeta, Producer } from "@repo/jobs";
@@ -234,7 +236,7 @@ export function createAuth({
           for (const { organizationId, organization } of owned) {
             const others = organization.members.filter((member) => member.userId !== user.id);
             if (others.length === 0) soleMember.push(organizationId);
-            else if (!others.some((member) => member.role === "owner")) {
+            else if (!others.some((member) => parseOrgRole(member.role) === "owner")) {
               throw new APIError("BAD_REQUEST", {
                 code: "ORGANIZATION_NEEDS_OWNER",
                 message:

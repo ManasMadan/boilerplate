@@ -482,7 +482,8 @@
       "role": {
         "owner": "Owner",
         "admin": "Admin",
-        "member": "Member"
+        "member": "Member",
+        "unknown": "No access (unknown role)"
       },
       "roleLabel": "Role for {name}",
       "remove": "Remove",

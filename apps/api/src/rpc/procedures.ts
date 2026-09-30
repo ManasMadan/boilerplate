@@ -23,9 +23,10 @@ import { implement, ORPCError, ValidationError } from "@orpc/server";
 import { API_KEY_HEADER, type ApiKeyScope, contract, type ErrorData } from "@repo/contracts/api";
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import { AppError, currentContext, updateContext } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
-import type { Memberships, OrgRole } from "../auth/memberships";
+import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
 
 export interface RpcContext {
@@ -156,7 +157,7 @@ export function createProcedures(
 
   /** Organization owners and admins only (settings, members, audit log). */
   const orgAdmin = inOrg.use(async ({ context, next }) => {
-    if (context.role === "member") throw new AppError("FORBIDDEN");
+    if (!canManageWorkspace(context.role)) throw new AppError("FORBIDDEN");
     return next();
   });
 

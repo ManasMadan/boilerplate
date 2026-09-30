@@ -416,6 +416,38 @@ describe("organizations and the audit trail", () => {
     expect(log.items.map((entry) => entry.payload.title)).toEqual(["Audited"]);
     await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
   });
+
+  it("reads a stored role by an allow-list: an unknown one grants nothing, a compound one its strongest part", async () => {
+    const { member, orgId, memberId } = await team();
+    const setRole = async (role: string) => {
+      const admin = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+      await admin.connect();
+      await admin
+        .query("UPDATE auth.member SET role = $1 WHERE organization_id = $2 AND user_id = $3", [
+          role,
+          orgId,
+          memberId,
+        ])
+        .finally(() => admin.end());
+      // As a membership change through better-auth would, forget the cached role.
+      const cached = await harness.redis.keys(`cache:membership:*${orgId}:${memberId}`);
+      if (cached.length) await harness.redis.del(...cached);
+    };
+
+    // better-auth joins several roles with commas: the strongest one counts.
+    await setRole("member,admin");
+    expect((await member.session.rpc.audit.list({ limit: 20 })).items).toEqual([]);
+    // A role the API doesn't know (a future "viewer", a typo, a hand edit) isn't an admin,
+    // nor a member: it grants nothing at all.
+    await setRole("viewer");
+    await expectError(member.session.rpc.audit.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
+    await expectError(member.session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+    await setRole("member,viewer");
+    await expectError(member.session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+    await setRole("member");
+    await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
+    expect((await member.session.rpc.todo.list({})).items).toEqual([]);
+  });
 });
 
 describe("webhook endpoints", () => {

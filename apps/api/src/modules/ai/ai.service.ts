@@ -6,10 +6,12 @@
  * Service errors are mapped to this API's error codes; anything unexpected becomes
  * UPSTREAM_UNAVAILABLE, never the service's own message.
  */
+
 import { Injectable } from "@nestjs/common";
 import { type AiCaller, AiServiceError, createAiClient } from "@repo/ai-client";
 import type { AiDocument, AssistantEvent } from "@repo/contracts/api";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
   createRateLimiter,
@@ -91,8 +93,8 @@ export class AiService {
   }
 
   /** A member may remove their own documents; owners and admins any. */
-  async removeDocument(userId: string, orgId: string, role: string, documentId: string) {
-    if (role === "member") {
+  async removeDocument(userId: string, orgId: string, role: OrgRole, documentId: string) {
+    if (!canManageWorkspace(role)) {
       const document = (await this.documents(userId, orgId)).find((d) => d.id === documentId);
       if (!document) throw new AppError("DOCUMENT_NOT_FOUND");
       if (document.createdBy !== userId) throw new AppError("FORBIDDEN");
