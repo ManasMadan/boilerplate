@@ -12,13 +12,15 @@
   "scripts": {
     "check-types": "tsc",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "gen": "bun scripts/declare-messages.ts"
   },
   "dependencies": {
     "react": "catalog:",
     "use-intl": "catalog:"
   },
   "devDependencies": {
+    "@formatjs/icu-messageformat-parser": "3.5.20",
     "@repo/contracts": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",

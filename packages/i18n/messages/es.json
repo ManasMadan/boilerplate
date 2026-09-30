@@ -129,7 +129,7 @@
         "negative": "Negativo",
         "neutral": "Neutral"
       },
-      "result": "{score}% de confianza · modelo {model}",
+      "result": "{score, number}% de confianza · modelo {model}",
       "disabled": "El servicio de IA no está configurado."
     }
   },
@@ -654,7 +654,7 @@
         "copied": "Copiado",
         "done": "Ya lo guardé",
         "rotate": "Cambiar secreto",
-        "rotated": "Se creó un secreto nuevo. El anterior sigue firmando las entregas junto a él durante {hours} horas: cambia tu receptor al secreto nuevo antes de que termine ese plazo."
+        "rotated": "Se creó un secreto nuevo. El anterior sigue firmando las entregas junto a él durante {hours, number} horas: cambia tu receptor al secreto nuevo antes de que termine ese plazo."
       },
       "status": {
         "enabled": "Activo",
@@ -729,7 +729,7 @@
         "audit:read": "Ver el registro de auditoría"
       },
       "expiry": "Caduca",
-      "expiryDays": "En {days} días",
+      "expiryDays": "En {days, number} días",
       "create": "Crear clave",
       "created": "Clave de API creada",
       "key": {
@@ -823,7 +823,7 @@
     "missing": "Esta página necesita el enlace de uno de nuestros correos."
   },
   "sms": {
-    "phoneCode": "{code} es tu código de verificación de Boilerplate. Caduca en {expiresInMinutes} minutos. No lo compartas con nadie.",
+    "phoneCode": "{code} es tu código de verificación de Boilerplate. Caduca en {expiresInMinutes, number} minutos. No lo compartas con nadie.",
     "securityAlert": {
       "email-changed": "Boilerplate: se cambió el correo de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
       "password-changed": "Boilerplate: se cambió tu contraseña. ¿No fuiste tú? Restablécela ahora.",
@@ -845,7 +845,7 @@
       "pro": "Pro"
     },
     "current": "Plan actual",
-    "membersLimit": "{used} de {limit} miembros",
+    "membersLimit": "{used, number} de {limit, number} miembros",
     "membersUnlimited": "{used, plural, one {# miembro} other {# miembros}}, sin límite",
     "webhooks": "Webhooks",
     "included": "Incluido",
@@ -879,7 +879,7 @@
       }
     },
     "checkoutDone": "¡Gracias! Tu plan se actualizará en un momento.",
-    "limitReached": "Tu plan permite {limit} miembros. Mejóralo en la configuración de facturación para invitar a más.",
+    "limitReached": "Tu plan permite {limit, number} miembros. Mejóralo en la configuración de facturación para invitar a más.",
     "upgradeForWebhooks": "Los webhooks forman parte de Pro. Mejora tu plan en la configuración de facturación para enviar eventos a tus endpoints."
   },
   "assistant": {

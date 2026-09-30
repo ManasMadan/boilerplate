@@ -9,6 +9,12 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 
 /** Why a file can't be uploaded for `purpose`, before anything is sent (or null). */
+/** The rules of a purpose as its refusals' messages name them (`{types}`, `{maxBytes}`). */
+export function uploadRuleParams(purpose: UploadPurpose) {
+  const rules = uploadPurposes[purpose];
+  return { types: rules.types.join(", "), maxBytes: rules.maxBytes };
+}
+
 export function checkUpload(
   purpose: UploadPurpose,
   file: { type: string; size: number },
@@ -17,11 +23,12 @@ export function checkUpload(
   params: Record<string, string | number>;
 } | null {
   const rules = uploadPurposes[purpose];
+  const { types, maxBytes } = uploadRuleParams(purpose);
   if (!(rules.types as readonly string[]).includes(file.type)) {
-    return { code: "FILE_TYPE_NOT_ALLOWED" as const, params: { types: rules.types.join(", ") } };
+    return { code: "FILE_TYPE_NOT_ALLOWED" as const, params: { types } };
   }
   if (file.size > rules.maxBytes) {
-    return { code: "FILE_TOO_LARGE" as const, params: { maxBytes: rules.maxBytes } };
+    return { code: "FILE_TOO_LARGE" as const, params: { maxBytes } };
   }
   return null;
 }

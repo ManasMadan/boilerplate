@@ -8,6 +8,7 @@
  * the service was down still goes out later that day. Items that arrive after that
  * day's digest wait for the next one.
  */
+
 import { InjectQueue } from "@nestjs/bullmq";
 import {
   Injectable,
@@ -16,6 +17,7 @@ import {
 } from "@nestjs/common";
 import { withUser } from "@repo/db";
 import { DigestEmail, digestSubject, renderEmail } from "@repo/email";
+import { loosely } from "@repo/i18n";
 import { createProducer } from "@repo/jobs";
 import {
   type Database,
@@ -120,8 +122,8 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
       const data = item.data as Record<string, string>;
       const base = `notification.${item.template}`;
       return {
-        title: t(`${base}.title` as Parameters<typeof t>[0], data),
-        body: t(`${base}.body` as Parameters<typeof t>[0], data),
+        title: loosely(t)(`${base}.title`, data),
+        body: loosely(t)(`${base}.body`, data),
       };
     });
     const providerMessageId = await this.email.send(

@@ -3,6 +3,7 @@
 import {
   checkUpload,
   UploadFailedError,
+  uploadRuleParams,
   useFileQuery,
   useUploadFileMutation,
 } from "@repo/client/api/files/upload";
@@ -10,6 +11,7 @@ import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { useSetAvatarMutation } from "@repo/client/api/user/avatar";
 import { useMeQuery } from "@repo/client/api/user/me";
 import { uploadPurposes } from "@repo/contracts/files";
+import { loosely } from "@repo/i18n";
 import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -48,7 +50,13 @@ export function AvatarCard() {
   useEffect(() => {
     if (!fileId || !file.data) return;
     if (file.data.status === "rejected") {
-      setProblem(tAll(`errors.${file.data.rejectReason ?? "FILE_UNREADABLE"}`));
+      // The worker's reason, with the limits its message names (too large, wrong type).
+      setProblem(
+        loosely(tAll)(
+          `errors.${file.data.rejectReason ?? "FILE_UNREADABLE"}`,
+          uploadRuleParams("avatar"),
+        ),
+      );
       setFileId(null);
     } else if (file.data.status === "ready") {
       setFileId(null);
@@ -73,7 +81,7 @@ export function AvatarCard() {
     setProblem(null);
     const refused = checkUpload("avatar", chosen);
     if (refused) {
-      setProblem(tAll(`errors.${refused.code}`, refused.params));
+      setProblem(loosely(tAll)(`errors.${refused.code}`, refused.params));
       return;
     }
     try {

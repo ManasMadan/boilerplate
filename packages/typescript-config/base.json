@@ -32,6 +32,9 @@
     "moduleResolution": "Bundler",
     "moduleDetection": "force",
     "resolveJsonModule": true,
+    // Lets a generated `x.d.json.ts` type `x.json`: the English catalog is typed with each
+    // message's literal text, so translations' ICU arguments are checked (packages/i18n).
+    "allowArbitraryExtensions": true,
     "noEmit": true,
     // Required by every single-file transpiler (Bun, SWC, esbuild): each file must be
     // compilable on its own, so type-only imports must be marked `import type`.

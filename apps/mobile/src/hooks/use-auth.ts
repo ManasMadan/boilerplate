@@ -4,10 +4,11 @@
  */
 import { authErrorKey } from "@repo/client/auth/errors";
 import { authFormSchemas } from "@repo/client/auth/forms";
+import { loosely } from "@repo/i18n";
 import { useTranslations } from "use-intl";
 
 export function useAuthSchemas() {
-  return authFormSchemas(useTranslations("validation"));
+  return authFormSchemas(loosely(useTranslations("validation")));
 }
 
 export function useAuthErrorMessage() {

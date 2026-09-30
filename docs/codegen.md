@@ -13,7 +13,8 @@ the Python service's routes and models, and commit what changes.
 | Package | Source | Output | Committed |
 |---|---|---|---|
 | `packages/db` | `prisma/schema/*.prisma` | `src/generated/prisma` (the Prisma client, `prisma generate`) | no |
-| `packages/jobs` | zod schemas in `src/queues.ts` and `packages/contracts/src/realtime.ts` | `generated/schemas/*.json` (JSON Schema), `generated/queue-settings.json` | yes |
+| `packages/jobs` | zod schemas in `src/queues.ts` and `packages/contracts/src/realtime.ts` | `generated/schemas/*.json` (JSON Schema), `generated/queue-settings.json`; every event's schema in `generated/events.json` (the compatibility check) | yes |
+| `packages/i18n` | `messages/en.json` | `messages/en.d.json.ts` (the catalog's type, each message as its literal text, so ICU arguments are type-checked) | yes |
 | `apps/ai` | its FastAPI app, and the JSON Schemas above | `openapi.json`; `app/contracts/*.py` (Pydantic models) and `app/contracts/queue_settings.json` | yes |
 | `packages/ai-client` | `apps/ai/openapi.json` | `src/generated` (typed fetch client, zod schemas, SDK) | yes |
 | `apps/api` | the oRPC contract in `packages/contracts/src/api` | `openapi.json` (the public REST API, `/api/v1`) | yes |

@@ -10,6 +10,7 @@
       "**",
       "!**/generated",
       "!**/*.gen.ts",
+      "!**/*.d.json.ts",
       "!**/openapi.json",
       "!apps/ai/.venv",
       "!**/.next",

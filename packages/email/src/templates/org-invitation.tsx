@@ -8,11 +8,9 @@ export interface OrgInvitationEmailProps extends LocalizedProps {
   expiresInDays: number;
 }
 
-export const orgInvitationSubject = ({
-  t,
-  inviterName,
-  organizationName,
-}: OrgInvitationEmailProps) => t("email.orgInvitation.subject", { inviterName, organizationName });
+// No names in the subject: anyone can invite any address, so it mustn't carry their text.
+export const orgInvitationSubject = ({ t }: OrgInvitationEmailProps) =>
+  t("email.orgInvitation.subject");
 
 export default function OrgInvitationEmail({
   locale,
@@ -23,11 +21,7 @@ export default function OrgInvitationEmail({
   expiresInDays,
 }: OrgInvitationEmailProps) {
   return (
-    <Layout
-      locale={locale}
-      t={t}
-      preview={t("email.orgInvitation.subject", { inviterName, organizationName })}
-    >
+    <Layout locale={locale} t={t} preview={t("email.orgInvitation.subject")}>
       <Heading as="h1" style={{ fontSize: 22, margin: "0 0 12px" }}>
         {t("email.orgInvitation.heading", { organizationName })}
       </Heading>

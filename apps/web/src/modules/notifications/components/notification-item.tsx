@@ -1,6 +1,7 @@
 "use client";
 
 import type { AppNotification } from "@repo/contracts/api";
+import { loosely } from "@repo/i18n";
 import { cn } from "@repo/ui/lib/utils";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 
@@ -12,10 +13,10 @@ export function NotificationText({ notification }: { notification: AppNotificati
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className={cn("text-sm", !notification.readAt && "font-medium")}>
-        {t(`${notification.type}.title`, notification.data)}
+        {loosely(t)(`${notification.type}.title`, notification.data)}
       </span>
       <span className="text-xs text-muted-foreground">
-        {t(`${notification.type}.body`, notification.data)}
+        {loosely(t)(`${notification.type}.body`, notification.data)}
       </span>
       <time
         className="text-xs text-muted-foreground"

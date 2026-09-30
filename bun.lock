@@ -419,6 +419,7 @@
         "use-intl": "catalog:",
       },
       "devDependencies": {
+        "@formatjs/icu-messageformat-parser": "3.5.20",
         "@repo/contracts": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",

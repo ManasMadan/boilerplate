@@ -5,17 +5,16 @@
 // Vitest, Playwright, Storybook, Expo, Jest, …); the ones below are started some other way.
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
-  // Generated clients export more than we call; they're regenerated, not pruned.
-  "ignore": ["**/generated/**"],
+  // Generated clients export more than we call; they're regenerated, not pruned. A
+  // `.d.json.ts` types its JSON file for TypeScript, which nothing imports by name.
+  "ignore": ["**/generated/**", "**/*.d.json.ts"],
   // Tools installed on the machine (doctor checks them), not npm packages.
-  "ignoreBinaries": ["uv", "tofu", "kind", "openssl"],
+  "ignoreBinaries": ["uv", "tofu", "openssl"],
   "workspaces": {
     ".": {
       // Claude Code hooks (.claude/settings.json), the image build's peer check
       // (deploy/docker/*.Dockerfile) and the repo scripts.
-      "entry": [".claude/hooks/*.ts", "deploy/docker/check-peers.mjs", "scripts/*.ts"],
-      // Scripts started with `bun scripts/…` from the repo root, not imports.
-      "ignoreUnresolved": ["scripts/services.ts", "scripts/doctor.ts"]
+      "entry": [".claude/hooks/*.ts", "deploy/docker/check-peers.mjs", "scripts/*.ts"]
     },
     "apps/api": {
       // The better-auth CLI's config (the auth:schema script).
