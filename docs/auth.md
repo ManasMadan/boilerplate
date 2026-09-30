@@ -141,7 +141,7 @@ and MCP tokens. The key is `BETTER_AUTH_SECRET`; rotating it means adding versio
 secrets (`BETTER_AUTH_SECRETS`, `apps/api/src/auth/secrets.ts`) and then running
 `bun run secrets:reencrypt`, which moves every stored value, and the webhook signing
 secrets under `ENCRYPTION_KEYS`, to the newest key (`apps/api/src/secrets/reencrypt.ts`).
-The rotate-secrets skill has the steps.
+The rotate-secrets runbook (`.claude/skills/rotate-secrets/SKILL.md`) has the steps.
 
 ## Security alerts
 

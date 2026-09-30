@@ -117,7 +117,7 @@ that uses it.
 | Variable | Read by | Default / example | What it does |
 |---|---|---|---|
 | `BETTER_AUTH_SECRET` | api (req.) | generated | At least 32 characters. Signs sessions and encrypts what better-auth stores (OAuth tokens, 2FA secrets and backup codes, JWT signing keys). |
-| `BETTER_AUTH_SECRETS` | api | unset | Rotating the one above: `2:<secret>,1:<secret>`, newest first (each at least 32 characters). The newest signs and encrypts; the rest, and `BETTER_AUTH_SECRET`, still decrypt. Then `bun run secrets:reencrypt`. See the rotate-secrets skill. |
+| `BETTER_AUTH_SECRETS` | api | unset | Rotating the one above: `2:<secret>,1:<secret>`, newest first (each at least 32 characters). The newest signs and encrypts; the rest, and `BETTER_AUTH_SECRET`, still decrypt. Then `bun run secrets:reencrypt`. See the rotate-secrets runbook (`.claude/skills/rotate-secrets/SKILL.md`). |
 | `BETTER_AUTH_URL` | api (req.), ai | `http://localhost:3000` | The site's public origin. The API is served on it (`/rpc`, `/api`), so cookies are first-party; OAuth callbacks, the OAuth issuer and MCP resource URLs are built from it. The AI service needs it (with `API_URL`) for its MCP server. |
 | `WEB_URL` | api (req.), web (req.), notifications | `http://localhost:3000` | The web app's origin: the API's CORS and trusted origin, links in messages, canonical URLs. Notifications: required in production. |
 | `APP_ORIGINS` | api | `http://localhost:3100` | Other origins allowed to sign users in, comma-separated (the mobile app's web build). Native apps need nothing here. |

@@ -123,3 +123,21 @@ nudges streamed to clients over `/rpc`. See [jobs-and-events.md](jobs-and-events
 Integrations that will change at scale sit behind one interface that callers already
 use; each interface's file says how to swap it. The full list, with what each becomes
 and the skill that swaps it, is the "Scaling path" table in the [README](../README.md#scaling-path).
+
+## Glossary
+
+| Term | Means here |
+|---|---|
+| Workspace, organization | the same thing: the tenant. The UI says workspace; the code, better-auth and the database say organization (`org_id`). Every user gets a personal one at sign-up |
+| Tenant table | a table with `org_id` (or `user_id` for per-user data) and forced row-level security, read through `withTenant` and written in `tenantTx` ([database.md](database.md)) |
+| Owner schema | each Postgres schema (`app`, `auth`, `files`, …) has one service that writes it; others get the narrowest grants they need ([database.md](database.md#schemas-and-owners)) |
+| Runtime role, migrator | services connect as their own `app_<service>` role, which can't change the schema or bypass row-level security; migrations run as `migrator`, which owns every table |
+| Outbox | a table each event-emitting service writes its domain events to, in the same transaction as the change; the worker's relay copies them into the queues ([jobs-and-events.md](jobs-and-events.md)) |
+| Domain event | a versioned fact (`todo.completed.v1`) published through the outbox; the audit log, customer webhooks, notifications, billing and live updates consume them |
+| Seam | an interface every caller goes through for something that changes at scale (email, storage, event transport, …), so growing means a new implementation, not new callers. The README's "Scaling path" lists them, each with a `swap-*` runbook |
+| Feature switch | an optional feature is on only when its variables are set (`apps/api/src/features.ts`); off, its procedures answer `FEATURE_DISABLED` and clients hide it |
+| Stand-in | a local replacement for a third party that speaks its real protocol: Mailpit for email and texts, `packages/fake-stripe`, the fake push and Twilio servers, the `local:extractive` model and `hashing` embeddings. Production refuses them at boot |
+| Profile | a set of local Docker services: core (`bun run db:up`), `mail`, `full` ([troubleshooting.md](troubleshooting.md#local-services)) |
+| Staging bump | the commit deploy.yml pushes to `master` after a merge, setting staging's image tag; it's how staging deploys |
+| Promotion pull request | the pull request `bun run promote v<version>` opens to point production at a release's images; merging it is the production deploy ([deploy.md](deploy.md)) |
+| Preview | a pull request's own environment, in namespace `pr-<number>`, while it carries the `preview` label |
