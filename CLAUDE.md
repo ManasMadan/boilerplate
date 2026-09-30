@@ -133,7 +133,9 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),
   dependencies installed and code generated. Never `git stash` (every worktree shares
   one stash stack) and never `git worktree add` by hand. The worktrees share the
-  Docker services, so only one `bun dev` runs at a time; `wt merge` and `wt remove` ask
+  Docker services unless one runs `bun run setup --stack <n>` (its own compose project and
+  ports; `docs/environment.md`), and only one `bun dev` runs at a time (the app ports are
+  fixed); `wt merge` and `wt remove` ask
   first.
 - `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
   database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists

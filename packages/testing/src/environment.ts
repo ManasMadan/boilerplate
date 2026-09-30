@@ -3,7 +3,8 @@
  * values (the ports docker compose publishes, local defaults), with its placeholder
  * secrets replaced by fresh ones. Variables already set win, which is how CI points the
  * tests at its own services. A developer's `.env` is never read, so a test can't pass only
- * because of what one machine has configured.
+ * because of what one machine has configured. A checkout with its own stack of services
+ * (`.env.stack`, see stack.ts) gets that stack's ports, so its tests use its services.
  *
  * Each package with integration tests calls `applyTestEnvironment()` at the top of its
  * vitest.config.ts, before global setup and the test workers start (they inherit it).
@@ -15,6 +16,7 @@ import { parseEnv } from "node:util";
 // Through the package name, which Node resolves to the .ts file (vitest.config.ts loads this
 // under Node's own loader, where a relative import needs an extension).
 import { fillPlaceholders } from "@repo/testing/secrets";
+import { STACK_FILE } from "@repo/testing/stack";
 
 /** The repository's `.env.example`, found from `from` upwards. */
 export function findEnvExample(from = process.cwd()): string {
@@ -32,6 +34,8 @@ export function findEnvExample(from = process.cwd()): string {
  */
 export function testEnvironment(example = findEnvExample()): Record<string, string> {
   const values = parseEnv(readFileSync(example, "utf8")) as Record<string, string>;
+  const stack = join(dirname(example), STACK_FILE);
+  if (existsSync(stack)) Object.assign(values, parseEnv(readFileSync(stack, "utf8")));
   // The test runner sets NODE_ENV (test); the example's is for `bun dev`.
   delete values.NODE_ENV;
   return fillPlaceholders(

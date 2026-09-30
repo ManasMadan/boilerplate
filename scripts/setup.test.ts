@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parseEnv } from "./lib";
-import { main, setup, syncEnv } from "./setup";
+import { composeProject, main, setup, syncEnv } from "./setup";
 import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -74,5 +74,61 @@ describe("setup", () => {
     const paths = files("");
     syncEnv(paths.envPath, paths.examplePath);
     expect(parseEnv(readFileSync(paths.envPath, "utf8")).get("NEW")).toBe("x");
+  });
+
+  describe("with its own stack of services", () => {
+    const stackFiles = () => {
+      const paths = files("");
+      writeFileSync(
+        paths.examplePath,
+        "POSTGRES_PORT=55432\nDATABASE_URL=postgresql://localhost:55432/app\nAUTH_SECRET=change-me\n",
+      );
+      return { ...paths, forTests: join(dirname(paths.envPath), ".env.stack") };
+    };
+
+    it("moves this checkout's ports, URLs and compose project, and tells the tests", () => {
+      const printed = captureOutput();
+      const { forTests, ...paths } = stackFiles();
+      const { run, calls } = fakeRun();
+      expect(setup({ run, ...paths, stack: 1, project: "app" })).toBe(0);
+      const env = parseEnv(readFileSync(paths.envPath, "utf8"));
+      expect(env.get("POSTGRES_PORT")).toBe("55532");
+      expect(env.get("DATABASE_URL")).toBe("postgresql://localhost:55532/app");
+      expect(env.get("COMPOSE_PROJECT_NAME")).toBe("app-stack1");
+      expect(env.get("AUTH_SECRET")).not.toBe("change-me");
+      // The tests get the ports and URLs, and no secret.
+      expect(readFileSync(forTests, "utf8")).toBe(
+        "POSTGRES_PORT=55532\nDATABASE_URL=postgresql://localhost:55532/app\n",
+      );
+      expect(printed()).toContain("Stack 1: compose project app-stack1, Postgres on 55532");
+      expect(calls).toContain("bun scripts/services.ts up");
+    });
+
+    it("goes back to the defaults with stack 0, with --env too", () => {
+      captureOutput();
+      const { forTests, ...paths } = stackFiles();
+      expect(main(["--env", "--stack", "2"], { ...paths, project: "app" })).toBe(0);
+      expect(existsSync(forTests)).toBe(true);
+      expect(main(["--env", "--stack", "0"], { ...paths, project: "app" })).toBe(0);
+      const env = parseEnv(readFileSync(paths.envPath, "utf8"));
+      expect(env.get("POSTGRES_PORT")).toBe("55432");
+      expect(env.get("COMPOSE_PROJECT_NAME")).toBe("app");
+      expect(existsSync(forTests)).toBe(false);
+      // The project named in this repository's docker-compose.yml.
+      expect(main(["--env", "--stack", "0"], paths)).toBe(0);
+      expect(parseEnv(readFileSync(paths.envPath, "utf8")).get("COMPOSE_PROJECT_NAME")).toBe(
+        composeProject(),
+      );
+    });
+
+    it("refuses a stack that isn't 0 to 9, before touching anything", () => {
+      const printed = captureOutput();
+      const { run, calls } = fakeRun();
+      for (const argv of [["--stack"], ["--stack", "10"], ["--env", "--stack", "x"]]) {
+        expect(main(argv, { run, ...stackFiles() })).toBe(1);
+      }
+      expect(calls).toEqual([]);
+      expect(printed()).toContain("--stack takes a number from 0 to 9");
+    });
   });
 });

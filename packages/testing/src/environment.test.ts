@@ -25,6 +25,17 @@ describe("the test environment", () => {
     expect(env.BETTER_AUTH_SECRET?.length).toBeGreaterThanOrEqual(32);
   });
 
+  it("uses the ports of the checkout's own stack of services, when it has one", () => {
+    const dir = example("POSTGRES_PORT=55432\nDATABASE_URL=postgresql://localhost:55432/app\n");
+    writeFileSync(
+      join(dir, ".env.stack"),
+      "POSTGRES_PORT=55632\nDATABASE_URL=postgresql://localhost:55632/app\n",
+    );
+    const env = testEnvironment(join(dir, ".env.example"));
+    expect(env.POSTGRES_PORT).toBe("55632");
+    expect(env.DATABASE_URL).toBe("postgresql://localhost:55632/app");
+  });
+
   it("never replaces what's already set (CI's services), and says what it set", () => {
     const dir = example("REDIS_URL=redis://localhost:56379\nUNSUBSCRIBE_SECRET=change-me\n");
     const env: NodeJS.ProcessEnv = { REDIS_URL: "redis://localhost:6379" };

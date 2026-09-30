@@ -91,7 +91,11 @@ export function doctor({
   if (env.size === 0) problem("No .env yet. Run `bun run setup`.");
   else {
     const missing = [...example.keys()].filter((key) => !env.has(key));
-    const unknown = [...env.keys()].filter((key) => !example.has(key));
+    // `bun run setup --stack <n>` names a checkout's own compose project; .env.example
+    // leaves it to docker-compose.yml's `name:`.
+    const unknown = [...env.keys()].filter(
+      (key) => !example.has(key) && key !== "COMPOSE_PROJECT_NAME",
+    );
     const placeholders = [...env]
       .filter(([, value]) => PLACEHOLDER.test(value))
       .map(([key]) => key);

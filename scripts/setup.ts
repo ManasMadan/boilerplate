@@ -4,15 +4,31 @@
  *
  *   bun run setup
  *   bun scripts/setup.ts --env   only .env (what `bun dev` runs first, after a pull)
+ *   bun run setup --stack <n>    this checkout gets its own services (a worktree next to
+ *                                another that runs them): compose project
+ *                                `<name>-stack<n>`, every port 100 × n up (1 to 9;
+ *                                0 goes back to the defaults). packages/testing/src/stack.ts
  *
  * Safe to run again: existing .env values are kept; only missing variables are added
  * and placeholders are replaced.
  */
 
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 // By path, not package name: setup writes .env before `bun install` has linked packages.
 import { fillPlaceholders } from "../packages/testing/src/secrets";
-import { ENV_EXAMPLE_PATH, ENV_PATH, ok, readEnv, runSync, writeEnvValue } from "./lib";
+import { STACK_FILE, STACKS, stackValues } from "../packages/testing/src/stack";
+import {
+  ENV_EXAMPLE_PATH,
+  ENV_PATH,
+  envLine,
+  fail,
+  ok,
+  ROOT,
+  readEnv,
+  runSync,
+  writeEnvValue,
+} from "./lib";
 
 /** The steps after .env, each a command that must pass before the next. */
 const STEPS: [string, string[]][] = [
@@ -45,10 +61,50 @@ export function syncEnv(envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH) {
   }
 }
 
+/** The compose project's name (docker-compose.yml's `name:`). */
+export const composeProject = (root = ROOT) =>
+  /^name:\s*(\S+)/m.exec(readFileSync(join(root, "docker-compose.yml"), "utf8"))?.[1] ?? "app";
+
+/**
+ * Moves this checkout's services to `stack`: the ports, local URLs and compose project in
+ * `envPath`, and `.env.stack` beside it, the same moves over .env.example, for the tests.
+ */
+export function useStack(stack: number, envPath: string, examplePath: string, project: string) {
+  const example = Object.fromEntries(readEnv(examplePath));
+  const changes = stackValues(Object.fromEntries(readEnv(envPath)), example, stack, project);
+  for (const [key, value] of Object.entries(changes)) writeEnvValue(envPath, key, value);
+  const forTests = join(dirname(envPath), STACK_FILE);
+  if (stack === 0) rmSync(forTests, { force: true });
+  else {
+    const values = Object.entries(stackValues(example, example, stack));
+    writeFileSync(forTests, `${values.map(([key, value]) => envLine(key, value)).join("\n")}\n`);
+  }
+  const env = readEnv(envPath);
+  ok(
+    `Stack ${stack}: compose project ${env.get("COMPOSE_PROJECT_NAME")}, Postgres on ${env.get("POSTGRES_PORT")}, Valkey on ${env.get("VALKEY_PORT")}`,
+  );
+}
+
+interface Options {
+  run?: typeof runSync;
+  envPath?: string;
+  examplePath?: string;
+  /** The stack to move to (`--stack <n>`), if any. */
+  stack?: number;
+  project?: string;
+}
+
 /** Writes `envPath` from `examplePath`, then runs the steps; the exit code. */
-export function setup({ run = runSync, envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH } = {}) {
+export function setup({
+  run = runSync,
+  envPath = ENV_PATH,
+  examplePath = ENV_EXAMPLE_PATH,
+  stack,
+  project = composeProject(),
+}: Options = {}) {
   console.log("\n1. Environment");
   syncEnv(envPath, examplePath);
+  if (stack !== undefined) useStack(stack, envPath, examplePath, project);
   for (const [title, [command = "", ...args]] of STEPS) {
     console.log(`\n${title}`);
     const { status } = run(command, args, { stdio: "inherit" });
@@ -59,12 +115,19 @@ export function setup({ run = runSync, envPath = ENV_PATH, examplePath = ENV_EXA
 }
 
 /** The command: .env only with `--env`, otherwise the whole setup; the exit code. */
-export function main(
-  argv = process.argv.slice(2),
-  { run = runSync, envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH } = {},
-) {
-  if (!argv.includes("--env")) return setup({ run, envPath, examplePath });
+export function main(argv = process.argv.slice(2), options: Omit<Options, "stack"> = {}) {
+  const at = argv.indexOf("--stack");
+  const stack = at === -1 ? undefined : Number(argv[at + 1]);
+  if (stack !== undefined && !(Number.isInteger(stack) && stack >= 0 && stack < STACKS)) {
+    fail(`--stack takes a number from 0 to ${STACKS - 1}.`);
+    return 1;
+  }
+  if (!argv.includes("--env")) return setup({ ...options, stack });
+  const { envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH } = options;
   syncEnv(envPath, examplePath);
+  if (stack !== undefined) {
+    useStack(stack, envPath, examplePath, options.project ?? composeProject());
+  }
   return 0;
 }
 

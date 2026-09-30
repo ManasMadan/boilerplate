@@ -10,6 +10,9 @@
  *   bun run db:down        stop them (data is kept; `bun run docker:clean` deletes it)
  *   bun scripts/services.ts check [--mail|--files|--full]   only report whether they'd fit
  *
+ * The compose project is docker-compose.yml's `name:`, or this checkout's own
+ * (COMPOSE_PROJECT_NAME in .env, from `bun run setup --stack <n>`): compose reads .env.
+ *
  * Every service has a memory limit. Before starting, this adds up the limits of what's
  * about to start and checks they fit in Docker's memory next to what other containers
  * already use. If they don't, it starts nothing: running out of memory makes Docker kill
@@ -17,7 +20,6 @@
  */
 import { fail, ok, ROOT, type Run, runSync, warn } from "./lib";
 
-const PROJECT = "boilerplate";
 /** Kept free for Docker itself and the growth of what's already running. */
 const HEADROOM = 512 * 1024 ** 2;
 const MB = 1024 ** 2;
@@ -119,7 +121,7 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
   }
   if (command !== "up" && command !== "check") {
     console.error(
-      `usage: bun scripts/services.ts up [--mail|--files|--full] | check [--mail|--files|--full] | down   (project "${PROJECT}")`,
+      "usage: bun scripts/services.ts up [--mail|--files|--full] | check [--mail|--files|--full] | down",
     );
     return 1;
   }

@@ -18,6 +18,13 @@ def test_is_the_example_with_placeholders_filled_without_node_env_or_empty_value
     assert len(env["AI_SERVICE_SECRET"]) >= 32
 
 
+def test_uses_the_ports_of_the_checkouts_own_stack(tmp_path: Path) -> None:
+    example = tmp_path / ".env.example"
+    example.write_text("REDIS_URL=redis://localhost:56379\nAI_SERVICE_SECRET=change-me\n")
+    (tmp_path / ".env.stack").write_text("REDIS_URL=redis://localhost:56579\n")
+    assert load_test_environment(example)["REDIS_URL"] == "redis://localhost:56579"
+
+
 def test_never_replaces_what_is_set(tmp_path: Path) -> None:
     example = tmp_path / ".env.example"
     example.write_text("REDIS_URL=redis://localhost:56379\nAI_SERVICE_SECRET=change-me\n")

@@ -110,6 +110,13 @@ Each service connects as its own Postgres role (see [database.md](database.md)).
 Read by `docker-compose.yml` only. Change one if the port is taken, and update the URL
 that uses it.
 
+A second checkout on the same machine (a worktree) shares these services unless it runs
+`bun run setup --stack <n>` (1 to 9; 0 goes back): that writes `COMPOSE_PROJECT_NAME`
+(`<name>-stack<n>`, its own containers and volumes; not in `.env.example`, which leaves
+the name to `docker-compose.yml`), moves every port below by 100 × n, points the local
+URLs at them, and writes the same ports for its tests to `.env.stack`. Each stack takes
+its own share of Docker's memory, which `bun run db:up` checks before starting it.
+
 | Variable | Default | Service |
 |---|---|---|
 | `DOCKER_BIND_ADDRESS` | 127.0.0.1 | The address every local service listens on. `0.0.0.0` opens them to your network (for a phone, with `S3_ENDPOINT` at your LAN address); their passwords are well known, so only on a network you trust. |

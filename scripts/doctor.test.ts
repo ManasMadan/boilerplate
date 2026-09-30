@@ -73,7 +73,7 @@ describe("doctor", () => {
 
   it("names drift in .env, the wrong Node, and services that aren't up", () => {
     const printed = captureOutput();
-    writeFileSync(envPath, "SECRET=change-me\nOLD=1\n");
+    writeFileSync(envPath, "SECRET=change-me\nOLD=1\nCOMPOSE_PROJECT_NAME=app-stack1\n");
     const run = machine(
       { "node --version": { stdout: "v12.0.0\n" } },
       "postgres healthy running\nvalkey  exited\n",

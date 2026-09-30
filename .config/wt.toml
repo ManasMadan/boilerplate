@@ -3,10 +3,14 @@
 # switching. `wt switch --create <branch>` makes one next to this checkout and runs the
 # hooks below; `wt list` shows them all; `wt remove` deletes one with its branch.
 #
-# Every worktree shares this machine's Docker services (docker-compose.yml pins the
-# project name), so each gets the main checkout's .env, ports and databases. Tests and
-# type-checks run in parallel fine (each test file clones its own database); only one
-# `bun dev` can hold the app ports at a time.
+# Every worktree shares this machine's Docker services by default (docker-compose.yml
+# names the project), so each gets the main checkout's .env, ports and databases. Tests
+# and type-checks run in parallel fine (each test file clones its own database). A
+# worktree that needs services of its own (a migration, a flushed Valkey, a stopped
+# container) runs `bun run setup --stack <n>` (1 to 9): its own compose project and
+# volumes, every service port 100 × n up, in its .env and for its tests (.env.stack).
+# The apps' own ports (3000 to 3004, 8000) stay the same, so only one `bun dev` or
+# end-to-end run holds them at a time.
 
 # Blocking: the worktree isn't handed over until it can run commands.
 [[pre-start]]
