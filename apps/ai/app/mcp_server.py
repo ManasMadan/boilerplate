@@ -13,16 +13,18 @@ packages/contracts/src/mcp.ts (and the api's resource policy in auth.ts), regist
 """
 
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from typing import Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import jwt
+import structlog
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
@@ -33,6 +35,7 @@ from starlette.applications import Starlette
 
 from app.db.session import engine
 from app.documents import Documents
+from app.log import log
 
 MCP_PATH = "/ai/mcp"
 # What the server answers: the endpoint, and its OAuth protected-resource metadata.
@@ -190,12 +193,24 @@ def create_mcp_server(
         ),
     )
 
-    async def guard() -> Caller:
+    @asynccontextmanager
+    async def tool_call(ctx: Context) -> AsyncGenerator[Caller]:
+        """Who is calling, within their rate limit, with the request id on every log
+        line. A failure inside the tool is logged and answered as INTERNAL with the
+        request id: the client never sees what went wrong inside."""
         caller = current_caller()
-        if not await within_limit(redis(), caller):
-            # Shown to the client as the tool's error (other exceptions are hidden).
-            raise ToolError("RATE_LIMITED: too many calls; wait a minute and try again")
-        return caller
+        request_id = (ctx.headers or {}).get("x-request-id") or f"mcp:{uuid4()}"
+        with structlog.contextvars.bound_contextvars(
+            request_id=request_id, org_id=str(caller.org_id), user_id=str(caller.user_id)
+        ):
+            if not await within_limit(redis(), caller):
+                # ToolError's message is what the client sees.
+                raise ToolError("RATE_LIMITED: too many calls; wait a minute and try again")
+            try:
+                yield caller
+            except Exception as error:
+                log.exception("mcp tool failed")
+                raise ToolError(f"INTERNAL: the tool failed (request id {request_id})") from error
 
     @server.tool(
         name="list_documents",
@@ -203,13 +218,13 @@ def create_mcp_server(
         description="The workspace's documents, newest first, with their status and summary.",
         annotations=ToolAnnotations(read_only_hint=True),
     )
-    async def list_documents() -> list[DocumentSummary]:  # pyright: ignore[reportUnusedFunction]
-        caller = await guard()
-        rows: Sequence[Any] = await documents().list(caller.org_id)
-        return [
-            DocumentSummary(id=row.id, title=row.title, status=row.status, summary=row.summary)
-            for row in rows
-        ]
+    async def list_documents(ctx: Context) -> list[DocumentSummary]:  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+        async with tool_call(ctx) as caller:
+            rows = await documents().list(caller.org_id)
+            return [
+                DocumentSummary(id=row.id, title=row.title, status=row.status, summary=row.summary)
+                for row in rows
+            ]
 
     @server.tool(
         name="search_documents",
@@ -220,21 +235,22 @@ def create_mcp_server(
         ),
         annotations=ToolAnnotations(read_only_hint=True),
     )
-    async def search_documents(  # pyright: ignore[reportUnusedFunction]
+    async def search_documents(  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+        ctx: Context,
         query: str = Field(min_length=1, max_length=2_000),
         limit: int = Field(default=5, ge=1, le=20),
     ) -> list[PassageResult]:
-        caller = await guard()
-        passages = await documents().search(caller.org_id, query, limit)
-        return [
-            PassageResult(
-                document_id=passage.document_id,
-                title=passage.title,
-                content=passage.content,
-                score=passage.score,
-            )
-            for passage in passages
-        ]
+        async with tool_call(ctx) as caller:
+            passages = await documents().search(caller.org_id, query, limit)
+            return [
+                PassageResult(
+                    document_id=passage.document_id,
+                    title=passage.title,
+                    content=passage.content,
+                    score=passage.score,
+                )
+                for passage in passages
+            ]
 
     return server
 

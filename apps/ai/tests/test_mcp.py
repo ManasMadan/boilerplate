@@ -341,3 +341,48 @@ def test_calls_are_limited_per_app_and_user(client: TestClient) -> None:
     assert not any(result.get("isError") for result in results[:60])
     assert results[60]["isError"] is True
     assert "RATE_LIMITED" in results[60]["content"][0]["text"]
+
+
+@pytest.mark.integration
+def test_a_failing_tool_is_logged_and_tells_the_client_only_the_request_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    from app.main import app
+
+    org, user = new_org()
+    granted(org, user)
+
+    async def broken(_org_id: UUID) -> list[object]:
+        raise RuntimeError("connection to 10.0.0.7 refused")
+
+    monkeypatch.setattr(app.state.documents, "list", broken)
+
+    def list_documents(request_id: str | None) -> str:
+        response = client.post(
+            "/ai/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "list_documents", "arguments": {}},
+            },
+            headers={
+                "accept": "application/json, text/event-stream",
+                "authorization": f"Bearer {token_for(org, user)}",
+                **({"x-request-id": request_id} if request_id else {}),
+            },
+        )
+        result = response.json()["result"]
+        assert result["isError"] is True
+        [content] = result["content"]
+        return str(content["text"])
+
+    # The SDK puts "Error executing tool list_documents: " in front.
+    shown = list_documents("req-mcp")
+    assert shown.endswith(": INTERNAL: the tool failed (request id req-mcp)")
+    assert "10.0.0.7" not in shown
+    assert "(request id mcp:" in list_documents(None)
+    logged = capfd.readouterr().out
+    assert "mcp tool failed" in logged
+    assert "req-mcp" in logged
+    assert "connection to 10.0.0.7 refused" in logged

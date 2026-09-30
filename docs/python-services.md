@@ -127,7 +127,9 @@ bun run --cwd apps/ai worker
 request needs an OAuth access token from the API's authorization server for this
 resource (RFC 8707 audience `<site>/ai/mcp`), signed with a key from the API's JWKS
 (fetched from `API_URL`), naming a workspace, whose grant is still active
-(`auth.mcp_grant_active`). Calls are limited to 60 a minute per app and user. See
+(`auth.mcp_grant_active`). Calls are limited to 60 a minute per app and user. A tool
+that fails is logged with its request id (the `x-request-id` header, or a fresh one) and
+answers `INTERNAL` with that id; what went wrong never reaches the client. See
 [auth.md](auth.md) for the OAuth side.
 
 To add a tool: give it a scope in `packages/contracts/src/mcp.ts` (and the API's resource
