@@ -35,6 +35,9 @@ Which kind goes where:
   `packages/fake-stripe`, `apps/notifications/test/fake-twilio.ts` and `fake-push.ts`,
   Mailpit for email, the `local:extractive` model and `hashing` embeddings for AI. New
   providers get a fake like these, not `vi.mock`.
+- `packages/client`'s hooks run against the contract implemented in memory
+  (`standIn` and `renderHook` in `packages/client/test/stand-in.tsx`), never a mocked
+  `fetch`; each test implements only the procedures it calls.
 - Every source file is at 100% (lines, branches, functions), every suite merged.
   `bun run test:coverage` runs them all and names what each file misses (it needs the
   full Docker profile and takes minutes: run it in the background); `bun run --filter

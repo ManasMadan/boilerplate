@@ -2,7 +2,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 import { type TodoListData, useSettleTodoMutation, useTodoListQueryKey } from "./list";
-import { applyDelete } from "./optimistic";
+import { applyDelete, restoreTodoLists } from "./optimistic";
 
 export function useTodoDeleteMutation() {
   const { api } = useApi();
@@ -19,9 +19,7 @@ export function useTodoDeleteMutation() {
         );
         return { previous };
       },
-      onError: (_error, _input, context) => {
-        for (const [key, data] of context?.previous ?? []) queryClient.setQueryData(key, data);
-      },
+      onError: (_error, _input, context) => restoreTodoLists(queryClient, context),
       onSettled: settle,
     }),
   );

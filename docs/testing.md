@@ -171,6 +171,18 @@ bun run --cwd apps/web test:e2e                     # against a stack you're alr
 - Maestro flows for what only a native build can check, run by hand
   (`apps/mobile/maestro/README.md`).
 
+## API client
+
+`packages/client`'s hooks are unit tests against the API's contract implemented in
+memory (`packages/client/test/stand-in.tsx`): `standIn` takes the procedures a test
+calls, typed by the contract, and answers over oRPC's own wire format through the
+client's `fetch` option, so inputs and outputs are validated both ways as against the
+real API. `renderHook` renders a hook inside `ApiProvider` with `react-test-renderer`.
+Polling and reconnect waits run on fake timers (`setInterval` for polling, `setTimeout`
+for reconnects and retries), advanced to the millisecond, with `until` to wait for a
+condition without moving them. The API's own behaviour is covered by its tests in
+`apps/api`.
+
 ## Components
 
 `bun run --cwd packages/ui test:stories` runs every story in Chromium, in the light and

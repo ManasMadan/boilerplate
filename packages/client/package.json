@@ -32,9 +32,13 @@
     "react": "catalog:"
   },
   "devDependencies": {
+    "@orpc/server": "catalog:",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "@types/react-test-renderer": "19.3.0",
+    "react-test-renderer": "19.2.3",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

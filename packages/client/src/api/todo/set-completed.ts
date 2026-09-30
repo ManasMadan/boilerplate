@@ -6,7 +6,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 import { type TodoListData, useSettleTodoMutation, useTodoListQueryKey } from "./list";
-import { applySetCompleted } from "./optimistic";
+import { applySetCompleted, restoreTodoLists } from "./optimistic";
 
 export function useTodoSetCompletedMutation() {
   const { api } = useApi();
@@ -23,9 +23,7 @@ export function useTodoSetCompletedMutation() {
         );
         return { previous };
       },
-      onError: (_error, _input, context) => {
-        for (const [key, data] of context?.previous ?? []) queryClient.setQueryData(key, data);
-      },
+      onError: (_error, _input, context) => restoreTodoLists(queryClient, context),
       onSettled: settle,
     }),
   );

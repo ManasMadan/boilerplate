@@ -1,1 +1,5 @@
-{ "extends": "@repo/typescript-config/react-library.json", "include": ["src"] }
+{
+  "extends": "@repo/typescript-config/react-library.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": ["src", "test"]
+}
