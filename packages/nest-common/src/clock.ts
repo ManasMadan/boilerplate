@@ -17,8 +17,10 @@ export class SystemClock extends Clock {
 
 /** For tests: starts at a fixed instant and only moves when told to. */
 export class FakeClock extends Clock {
-  constructor(private current: Date = new Date("2026-01-01T00:00:00.000Z")) {
+  private current: Date;
+  constructor(start = new Date("2026-01-01T00:00:00.000Z")) {
     super();
+    this.current = new Date(start);
   }
   now() {
     return new Date(this.current);
