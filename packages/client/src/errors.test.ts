@@ -22,6 +22,12 @@ describe("errorCode", () => {
     expect(errorCode(new ORPCError("SOMETHING_NEW"))).toBe("INTERNAL");
     expect(errorCode(new Error("boom"))).toBe("INTERNAL");
   });
+
+  it("reads a code the API reported inside a response, as { code }", () => {
+    expect(errorMessageKey({ code: "AI_RUN_LIMIT" })).toBe("errors.AI_RUN_LIMIT");
+    expect(errorCode({ code: "SOMETHING_NEW" })).toBe("INTERNAL");
+    expect(errorCode(null)).toBe("INTERNAL");
+  });
 });
 
 describe("what an error carries", () => {
