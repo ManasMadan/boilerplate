@@ -84,17 +84,21 @@ const OPTIONAL: [label: string, chart: string, values: string[]][] = [
 const fields = (file: string) =>
   Bun.YAML.parse(readFileSync(file, "utf8")) as Partial<Record<string, string>>;
 
-/** Checks the charts, environments, platform and secrets under `root`; the exit code. */
-export function charts({ run = runSync, root = ROOT } = {}): number {
-  const CHARTS = join(root, "deploy/charts");
-  const ENVIRONMENTS = join(root, "deploy/environments");
-  const PLATFORM = join(root, "deploy/platform");
+type Result = { ok: boolean; output: string };
 
-  const exec = (command: string, args: string[], input?: string) => {
-    const result = run(command, args, { input, cwd: root });
-    return { ok: result.status === 0, output: `${result.stdout}${result.stderr}` };
-  };
+/** What every section of the check shares: the repo, a command runner, and the verdicts. */
+type Checks = {
+  root: string;
+  exec: (command: string, args: string[], input?: string) => Result;
+  kubeconform: (manifests: string) => Result;
+  /** Reports a step's result; a failed one fails the run. */
+  check: (label: string, result: Result) => void;
+  /** Fails the run with a message. */
+  refuse: (message: string) => void;
+};
 
+/** A kubeconform run on `manifests`: the local binary, or its image in Docker. */
+function kubeconformWith(exec: Checks["exec"], root: string) {
   const hasKubeconform = exec("kubeconform", ["-v"]).ok;
   /**
    * Where kubeconform keeps the schemas it downloads: every environment and chart asks for
@@ -103,78 +107,68 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
    */
   const SCHEMA_CACHE = join(root, "node_modules/.cache/kubeconform");
   mkdirSync(SCHEMA_CACHE, { recursive: true });
-
-  function kubeconform(manifests: string) {
-    const args = (cache: string) => [
-      "-strict",
-      "-summary",
-      "-cache",
-      cache,
-      "-kubernetes-version",
-      KUBERNETES_VERSION,
-      "-schema-location",
-      "default",
-      "-schema-location",
-      CRD_SCHEMAS,
-      "-",
-    ];
-    return hasKubeconform
-      ? exec("kubeconform", args(SCHEMA_CACHE), manifests)
-      : exec(
-          "docker",
-          [
-            "run",
-            "--rm",
-            "-i",
-            "--memory=256m",
-            "--user",
-            `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`,
-            "-v",
-            `${SCHEMA_CACHE}:/cache`,
-            KUBECONFORM_IMAGE,
-            ...args("/cache"),
-          ],
-          manifests,
-        );
-  }
-
-  /** `promtool check rules` on a rendered PrometheusRule. */
-  function promtool(manifest: string) {
-    const { spec } = Bun.YAML.parse(manifest) as { spec: { groups: unknown } };
-    const script = "cat > /tmp/rules.yaml && promtool check rules /tmp/rules.yaml";
+  const args = (cache: string) => [
+    "-strict",
+    "-summary",
+    "-cache",
+    cache,
+    "-kubernetes-version",
+    KUBERNETES_VERSION,
+    "-schema-location",
+    "default",
+    "-schema-location",
+    CRD_SCHEMAS,
+    "-",
+  ];
+  return (manifests: string) => {
+    if (hasKubeconform) return exec("kubeconform", args(SCHEMA_CACHE), manifests);
+    const user = `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`;
     return exec(
       "docker",
-      ["run", "--rm", "-i", "--memory=256m", "--entrypoint", "sh", PROMETHEUS_IMAGE, "-c", script],
-      JSON.stringify({ groups: spec.groups }),
+      [
+        "run",
+        "--rm",
+        "-i",
+        "--memory=256m",
+        "--user",
+        user,
+        "-v",
+        `${SCHEMA_CACHE}:/cache`,
+        KUBECONFORM_IMAGE,
+        ...args("/cache"),
+      ],
+      manifests,
     );
-  }
-
-  let failed = false;
-  const check = (label: string, result: { ok: boolean; output: string }) => {
-    if (result.ok) {
-      ok(label);
-    } else {
-      failed = true;
-      fail(label);
-      console.error(result.output.trim());
-    }
   };
+}
 
-  // -------------------------------------------------------------------------- our charts
+/** `promtool check rules` on a rendered PrometheusRule. */
+function promtool(exec: Checks["exec"], manifest: string) {
+  const { spec } = Bun.YAML.parse(manifest) as { spec: { groups: unknown } };
+  const script = "cat > /tmp/rules.yaml && promtool check rules /tmp/rules.yaml";
+  return exec(
+    "docker",
+    ["run", "--rm", "-i", "--memory=256m", "--entrypoint", "sh", PROMETHEUS_IMAGE, "-c", script],
+    JSON.stringify({ groups: spec.groups }),
+  );
+}
 
+/** helm lint and helm-unittest for each of our charts. */
+function checkOwnCharts({ root, exec, check }: Checks) {
   for (const [chart, values] of Object.entries(OWN_CHARTS)) {
     const path = join(root, chart);
     check(`${chart}: lint`, exec("helm", ["lint", "--strict", path, ...values]));
     check(`${chart}: unit tests`, exec("helm", ["unittest", path]));
   }
+}
 
-  // ------------------------------------------------------------------------ environments
-
-  for (const env of readdirSync(ENVIRONMENTS).sort()) {
+/** Both application charts rendered for every environment, then validated together. */
+function checkEnvironments({ root, exec, kubeconform, check, refuse }: Checks) {
+  const environments = join(root, "deploy/environments");
+  for (const env of readdirSync(environments).sort()) {
     const extra = RELEASE_VALUES[env];
     if (!extra) {
-      failed = true;
-      fail(`${env}: add it to RELEASE_VALUES in scripts/charts.ts`);
+      refuse(`${env}: add it to RELEASE_VALUES in scripts/charts.ts`);
       continue;
     }
     const rendered: string[] = [];
@@ -182,11 +176,11 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
       const result = exec("helm", [
         "template",
         env,
-        join(CHARTS, chart),
+        join(root, "deploy/charts", chart),
         "--namespace",
         env,
         "-f",
-        join(ENVIRONMENTS, env, `${chart}.yaml`),
+        join(environments, env, `${chart}.yaml`),
         ...extra[chart],
       ]);
       check(`${env}: ${chart} renders`, result);
@@ -196,7 +190,10 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
       check(`${env}: manifests are valid Kubernetes`, kubeconform(rendered.join("\n---\n")));
     }
   }
+}
 
+/** The optional features no environment turns on, rendered and validated the same way. */
+function checkOptional({ root, exec, kubeconform, check }: Checks) {
   for (const [label, chart, values] of OPTIONAL) {
     const result = exec("helm", [
       "template",
@@ -210,14 +207,16 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
     check(`${label} renders`, result);
     if (result.ok) check(`${label} is valid Kubernetes`, kubeconform(result.output));
   }
+}
 
-  // ---------------------------------------------------------------------------- platform
-
+/** The platform's own charts rendered and validated, and the alert rules through promtool. */
+function checkPlatform({ root, exec, kubeconform, check }: Checks) {
+  const platform = join(root, "deploy/platform");
   for (const chart of ["config", "mail", "jaeger", "alerts"]) {
     const result = exec("helm", [
       "template",
       chart,
-      join(PLATFORM, chart),
+      join(platform, chart),
       ...(OWN_CHARTS[`deploy/platform/${chart}`] ?? []),
     ]);
     check(`platform ${chart} renders`, result);
@@ -228,18 +227,20 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
   const rules = exec("helm", [
     "template",
     "alerts",
-    join(PLATFORM, "alerts"),
+    join(platform, "alerts"),
     "-s",
     "templates/rules.yaml",
     ...(OWN_CHARTS["deploy/platform/alerts"] ?? []),
   ]);
-  check("alert rules pass promtool", rules.ok ? promtool(rules.output) : rules);
+  check("alert rules pass promtool", rules.ok ? promtool(exec, rules.output) : rules);
+}
 
-  const addonDirs = [join(PLATFORM, "addons"), join(PLATFORM, "addons/observability")];
-  for (const dir of addonDirs) {
-    for (const file of readdirSync(dir)
-      .filter((name) => name.endsWith(".yaml"))
-      .sort()) {
+/** Every add-on chart at its pinned version, with our values. */
+function checkAddons({ root, exec, check }: Checks) {
+  const platform = join(root, "deploy/platform");
+  for (const dir of [join(platform, "addons"), join(platform, "addons/observability")]) {
+    const files = readdirSync(dir).filter((name) => name.endsWith(".yaml"));
+    for (const file of files.sort()) {
       const addon = fields(join(dir, file));
       if (!addon.chart || !addon.repoURL || !addon.version || !addon.addon) continue;
       const chart = addon.repoURL.startsWith("https://")
@@ -256,14 +257,19 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
           "--namespace",
           addon.namespace ?? "default",
           "-f",
-          join(PLATFORM, "values", `${addon.addon}.yaml`),
+          join(platform, "values", `${addon.addon}.yaml`),
         ]),
       );
     }
   }
+}
 
-  // Argo CD itself, at the version OpenTofu's bootstrap installs, with our values: the sops
-  // plugin's ConfigMap and the repo server's sidecar must come out of them.
+/**
+ * Argo CD itself, at the version OpenTofu's bootstrap installs, with our values: the sops
+ * plugin's ConfigMap and the repo server's sidecar must come out of them. Then Argo CD's
+ * own manifests, validated.
+ */
+function checkArgocd({ root, exec, kubeconform, check, refuse }: Checks) {
   const argocdVersion = /variable "argocd_version"[\s\S]*?default\s*=\s*"([^"]+)"/.exec(
     readFileSync(join(root, "infra/tofu/modules/bootstrap/variables.tf"), "utf8"),
   )?.[1];
@@ -283,10 +289,12 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
     ]);
     const wired =
       result.ok &&
-      result.output.includes("name: argocd-cmp-cm") &&
-      result.output.includes("sops.yaml:") &&
-      result.output.includes("/var/run/argocd/argocd-cmp-server") &&
-      result.output.includes("secretName: sops-age");
+      [
+        "name: argocd-cmp-cm",
+        "sops.yaml:",
+        "/var/run/argocd/argocd-cmp-server",
+        "secretName: sops-age",
+      ].every((line) => result.output.includes(line));
     check(`argo-cd ${argocdVersion} renders with the sops plugin`, {
       ok: wired,
       output: result.ok
@@ -294,8 +302,7 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
         : result.output,
     });
   } else {
-    failed = true;
-    fail("argocd_version not found in infra/tofu/modules/bootstrap/variables.tf");
+    refuse("argocd_version not found in infra/tofu/modules/bootstrap/variables.tf");
   }
 
   const argocd = ["root.yaml", "projects.yaml", "repositories.yaml"]
@@ -306,21 +313,26 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
     .map((file) => `---\n${readFileSync(join(root, file), "utf8")}`)
     .join("\n");
   check("Argo CD manifests are valid", kubeconform(argocd));
+}
 
-  // ----------------------------------------------------------------------------- secrets
-
-  const secretDirs = [
-    ...readdirSync(ENVIRONMENTS).map((env) => ({
-      dir: join(ENVIRONMENTS, env, "secrets"),
+/** The directories that hold committed secrets: each environment's and the platform's. */
+function secretDirectories(root: string) {
+  const environments = join(root, "deploy/environments");
+  const platform = join(root, "deploy/platform/secrets");
+  return [
+    ...readdirSync(environments).map((env) => ({
+      dir: join(environments, env, "secrets"),
       platform: false,
     })),
-    ...(existsSync(join(PLATFORM, "secrets"))
-      ? readdirSync(join(PLATFORM, "secrets")).map((env) => ({
-          dir: join(PLATFORM, "secrets", env),
-          platform: true,
-        }))
+    ...(existsSync(platform)
+      ? readdirSync(platform).map((env) => ({ dir: join(platform, env), platform: true }))
       : []),
   ].filter(({ dir }) => existsSync(dir));
+}
+
+/** Every file in a secrets directory is a SOPS-encrypted Secret. */
+function checkSecrets({ root, check }: Checks) {
+  const secretDirs = secretDirectories(root);
   const problems: string[] = [];
   const sopsConfig = readFileSync(join(root, ".sops.yaml"), "utf8");
   for (const { dir, platform } of secretDirs) {
@@ -341,7 +353,41 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
     ok: problems.length === 0,
     output: problems.join("\n"),
   });
+}
 
+/** Checks the charts, environments, platform and secrets under `root`; the exit code. */
+export function charts({ run = runSync, root = ROOT } = {}): number {
+  let failed = false;
+  const exec: Checks["exec"] = (command, args, input) => {
+    const result = run(command, args, { input, cwd: root });
+    return { ok: result.status === 0, output: `${result.stdout}${result.stderr}` };
+  };
+  const refuse = (message: string) => {
+    failed = true;
+    fail(message);
+  };
+  const checks: Checks = {
+    root,
+    exec,
+    kubeconform: kubeconformWith(exec, root),
+    check: (label, result) => {
+      if (result.ok) return ok(label);
+      refuse(label);
+      console.error(result.output.trim());
+    },
+    refuse,
+  };
+  for (const section of [
+    checkOwnCharts,
+    checkEnvironments,
+    checkOptional,
+    checkPlatform,
+    checkAddons,
+    checkArgocd,
+    checkSecrets,
+  ]) {
+    section(checks);
+  }
   return failed ? 1 : 0;
 }
 

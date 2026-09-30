@@ -57,6 +57,23 @@ function tools(overrides: (line: string) => Partial<Ran> | undefined = () => und
   });
 }
 
+/** A failure in each kind of step: a lint, an environment, the platform, the rules, Argo CD. */
+function brokenIn(root: string) {
+  return (line: string): Partial<Ran> | undefined => {
+    if (line.startsWith("helm lint --strict") && line.includes("deploy/charts/data")) {
+      return { status: 1, stderr: "values don't meet the schema" };
+    }
+    if (line.startsWith(`helm template production ${root}/deploy/charts/data`)) {
+      return { status: 1, stderr: "production data broke" };
+    }
+    if (line.startsWith("helm template mail ")) return { status: 1, stderr: "mail broke" };
+    if (line.startsWith("helm template optional ")) return { status: 1, stderr: "optional broke" };
+    if (line.includes("-s templates/rules.yaml")) return { status: 1, stderr: "rules broke" };
+    if (line.startsWith("helm template argocd argo-cd")) return { stdout: "name: argocd-cm\n" };
+    return undefined;
+  };
+}
+
 describe("the charts check", () => {
   it("lints, tests, renders and validates every chart, and checks the secrets", () => {
     const printed = captureOutput();
@@ -139,20 +156,7 @@ describe("the charts check", () => {
     mkdirSync(join(root, "deploy/environments/qa"));
     writeFileSync(join(root, "deploy/environments/staging/secrets/api.yaml"), "kind: Secret\n");
     mkdirSync(join(root, "deploy/platform/secrets/staging/nested"));
-    const { run, calls } = tools((line) => {
-      if (line.startsWith("helm lint --strict") && line.includes("deploy/charts/data")) {
-        return { status: 1, stderr: "values don't meet the schema" };
-      }
-      if (line.startsWith(`helm template production ${root}/deploy/charts/data`)) {
-        return { status: 1, stderr: "production data broke" };
-      }
-      if (line.startsWith("helm template mail ")) return { status: 1, stderr: "mail broke" };
-      if (line.startsWith("helm template optional "))
-        return { status: 1, stderr: "optional broke" };
-      if (line.includes("-s templates/rules.yaml")) return { status: 1, stderr: "rules broke" };
-      if (line.startsWith("helm template argocd argo-cd")) return { stdout: "name: argocd-cm\n" };
-      return undefined;
-    });
+    const { run, calls } = tools(brokenIn(root));
     expect(charts({ run, root })).toBe(1);
     const output = printed();
     expect(output).toContain("deploy/charts/data: lint");

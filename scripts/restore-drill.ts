@@ -25,6 +25,23 @@ import { fail, ok, ROOT, runSync } from "./lib";
 // functions, sequences), shared with the data chart's drill of the cluster backups.
 const FINGERPRINT = readFileSync(join(ROOT, "deploy/charts/data/files/fingerprint.sql"), "utf8");
 
+/** Whether the restore's fingerprint matches the source's; prints what differs. */
+function identical(before: string[], after: string[]) {
+  const restored = new Set(after);
+  const kept = new Set(before);
+  const lost = before.filter((line) => !restored.has(line));
+  const extra = after.filter((line) => !kept.has(line));
+  if (lost.length === 0 && extra.length === 0) {
+    const tables = before.filter((line) => line.startsWith("table ")).length;
+    ok(`identical: ${tables} tables with their rows, security, grants and functions`);
+    return true;
+  }
+  fail("the restore differs from the source");
+  for (const line of lost) console.log(`    - ${line}`);
+  for (const line of extra) console.log(`    + ${line}`);
+  return false;
+}
+
 /** Dumps `source`, restores it into a scratch database and compares them; the exit code. */
 export function restoreDrill(
   source = process.argv[2] ?? "app",
@@ -73,21 +90,7 @@ export function restoreDrill(
     pg(["createdb", "-U", "postgres", "-T", "template0", scratch]);
     pg(["pg_restore", "-U", "postgres", "-d", scratch, "--exit-on-error", dump]);
     ok(`restored it into ${scratch}`);
-    const after = fingerprint(scratch);
-
-    const restored = new Set(after);
-    const kept = new Set(before);
-    const lost = before.filter((line) => !restored.has(line));
-    const extra = after.filter((line) => !kept.has(line));
-    if (lost.length === 0 && extra.length === 0) {
-      const tables = before.filter((line) => line.startsWith("table ")).length;
-      ok(`identical: ${tables} tables with their rows, security, grants and functions`);
-      passed = true;
-    } else {
-      fail("the restore differs from the source");
-      for (const line of lost) console.log(`    - ${line}`);
-      for (const line of extra) console.log(`    + ${line}`);
-    }
+    passed = identical(before, fingerprint(scratch));
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   } finally {

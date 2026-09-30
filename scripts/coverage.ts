@@ -43,6 +43,36 @@ const empty = (): FileCoverage => ({
 const add = <K>(map: Map<K, number>, key: K, hits: number) =>
   map.set(key, (map.get(key) ?? 0) + hits);
 
+/** How each LCOV record adds to a file's coverage. */
+const RECORDS: Record<string, (file: FileCoverage, rest: string) => void> = {
+  DA: (file, rest) => {
+    const [number, hits] = rest.split(",");
+    add(file.lines, Number(number), Number(hits));
+  },
+  BRDA: (file, rest) => {
+    const [number, block, branch, taken] = rest.split(",");
+    add(file.branches, `${number},${block},${branch}`, taken === "-" ? 0 : Number(taken));
+  },
+  // FN:<line>,<name>, or FN:<line>,<end line>,<name> (LCOV 2, as coverage.py writes it).
+  FN: (file, rest) => {
+    const [number, ...fields] = rest.split(",");
+    const name = (/^\d+$/.test(fields[0] ?? "") ? fields.slice(1) : fields).join(",");
+    file.functionLines.set(name, Number(number));
+    add(file.functions, name, 0);
+  },
+  FNDA: (file, rest) => {
+    const [hits, ...name] = rest.split(",");
+    add(file.functions, name.join(","), Number(hits));
+  },
+};
+
+/** The file's entry in `coverage`, created empty the first time. */
+function opened(coverage: Map<string, FileCoverage>, path: string) {
+  const file = coverage.get(path) ?? empty();
+  coverage.set(path, file);
+  return file;
+}
+
 /**
  * Parses an LCOV report into `coverage`, summing hits with what's there already. Paths
  * become relative to the repository (`base` is the directory the report's relative
@@ -57,31 +87,14 @@ export function mergeLcov(
 ) {
   let file: FileCoverage | undefined;
   for (const line of lcov.split("\n")) {
-    const [tag, rest = ""] = line.split(/:(.*)/s);
+    const [tag = "", rest = ""] = line.split(/:(.*)/s);
     if (tag === "SF") {
       const path = relative(root, rest.startsWith("/") ? rest : join(base, rest));
-      file = owns && !owns.test(path) ? undefined : (coverage.get(path) ?? empty());
-      if (file) coverage.set(path, file);
-      continue;
-    }
-    if (!file) continue;
-    if (tag === "DA") {
-      const [number, hits] = rest.split(",");
-      add(file.lines, Number(number), Number(hits));
-    } else if (tag === "BRDA") {
-      const [number, block, branch, taken] = rest.split(",");
-      add(file.branches, `${number},${block},${branch}`, taken === "-" ? 0 : Number(taken));
-    } else if (tag === "FN") {
-      // FN:<line>,<name>, or FN:<line>,<end line>,<name> (LCOV 2, as coverage.py writes it).
-      const [number, ...rest2] = rest.split(",");
-      const name = (/^\d+$/.test(rest2[0] ?? "") ? rest2.slice(1) : rest2).join(",");
-      file.functionLines.set(name, Number(number));
-      add(file.functions, name, 0);
-    } else if (tag === "FNDA") {
-      const [hits, ...name] = rest.split(",");
-      add(file.functions, name.join(","), Number(hits));
+      file = owns?.test(path) === false ? undefined : opened(coverage, path);
     } else if (tag === "end_of_record") {
       file = undefined;
+    } else if (file) {
+      RECORDS[tag]?.(file, rest);
     }
   }
   return coverage;

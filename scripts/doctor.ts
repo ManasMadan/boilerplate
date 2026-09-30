@@ -17,29 +17,15 @@ import {
   warn,
 } from "./lib";
 
-/**
- * Checks the tools, `envPath` against `examplePath`, and the local services; the exit
- * code. `bunVersion` is the running Bun's.
- */
-export function doctor({
-  run = runSync,
-  envPath = ENV_PATH,
-  examplePath = ENV_EXAMPLE_PATH,
-  bunVersion = Bun.version,
-} = {}): number {
-  let problems = 0;
-  const problem = (message: string) => {
-    problems += 1;
-    fail(message);
-  };
-
+/** What each section needs: a command's output, and a way to count a problem. */
+type Doctor = {
   /** What the command prints, or null when it fails or doesn't exist. */
-  const version = (command: string[]) => {
-    const result = run(command[0] as string, command.slice(1));
-    return result.status === 0 ? result.stdout.trim() : null;
-  };
+  version: (command: string[]) => string | null;
+  problem: (message: string) => void;
+};
 
-  console.log("\nTools");
+/** Node at the version .nvmrc names, and Bun within package.json's range. */
+function checkRuntimes({ version, problem }: Doctor, bunVersion: string) {
   const wantedNode = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim();
   const node = version(["node", "--version"]);
   if (!node) problem("Node is not installed. Install it with nvm: `nvm install` (reads .nvmrc).");
@@ -63,7 +49,10 @@ export function doctor({
       `Bun ${bunVersion}; CI and the images use ${pinnedBun} (\`bun upgrade --version ${pinnedBun}\`).`,
     );
   else ok(`Bun ${bunVersion}`);
+}
 
+/** uv, Worktrunk (optional) and Docker; whether Docker is running. */
+function checkTools({ version, problem }: Doctor): boolean {
   // Not only for the Python service: codegen runs it (turbo's gen → @repo/ai-client →
   // @repo/ai#gen), and setup, dev, check-types and test all depend on codegen.
   const uv = version(["uv", "--version"]);
@@ -84,82 +73,113 @@ export function doctor({
   const docker = version(["docker", "info", "--format", "{{.ServerVersion}}"]);
   if (docker) ok(`Docker ${docker}`);
   else problem("Docker is not running. Start Docker Desktop (or your Docker daemon).");
+  return Boolean(docker);
+}
 
-  console.log("\nEnvironment (.env)");
+/** `.env` against `.env.example`: nothing missing, nothing left at a placeholder. */
+function checkEnv({ problem }: Doctor, envPath: string, examplePath: string) {
   const env = readEnv(envPath);
   const example = readEnv(examplePath);
-  if (env.size === 0) problem("No .env yet. Run `bun run setup`.");
-  else {
-    const missing = [...example.keys()].filter((key) => !env.has(key));
-    // `bun run setup --stack <n>` names a checkout's own compose project; .env.example
-    // leaves it to docker-compose.yml's `name:`.
-    const unknown = [...env.keys()].filter(
-      (key) => !example.has(key) && key !== "COMPOSE_PROJECT_NAME",
+  if (env.size === 0) return problem("No .env yet. Run `bun run setup`.");
+  const missing = [...example.keys()].filter((key) => !env.has(key));
+  // `bun run setup --stack <n>` names a checkout's own compose project; .env.example
+  // leaves it to docker-compose.yml's `name:`.
+  const unknown = [...env.keys()].filter(
+    (key) => !example.has(key) && key !== "COMPOSE_PROJECT_NAME",
+  );
+  const placeholders = [...env].filter(([, value]) => PLACEHOLDER.test(value)).map(([key]) => key);
+  if (missing.length)
+    problem(
+      `Missing in .env: ${missing.join(", ")}. Run \`bun run setup\`: it adds them, generating the secrets.`,
     );
-    const placeholders = [...env]
-      .filter(([, value]) => PLACEHOLDER.test(value))
-      .map(([key]) => key);
-    if (missing.length)
-      problem(
-        `Missing in .env: ${missing.join(", ")}. Run \`bun run setup\`: it adds them, generating the secrets.`,
-      );
-    if (unknown.length)
-      warn(
-        `In .env but not in .env.example (renamed or removed?): ${unknown.join(", ")}. Remove them with \`bun run env:unset ${unknown.join(" ")}\`.`,
-      );
-    if (placeholders.length)
-      problem(`Still set to a placeholder: ${placeholders.join(", ")}. Run \`bun run setup\`.`);
-    if (!missing.length && !placeholders.length)
-      ok(`${env.size} variables, in sync with .env.example`);
-  }
+  if (unknown.length)
+    warn(
+      `In .env but not in .env.example (renamed or removed?): ${unknown.join(", ")}. Remove them with \`bun run env:unset ${unknown.join(" ")}\`.`,
+    );
+  if (placeholders.length)
+    problem(`Still set to a placeholder: ${placeholders.join(", ")}. Run \`bun run setup\`.`);
+  if (!missing.length && !placeholders.length)
+    ok(`${env.size} variables, in sync with .env.example`);
+}
 
+/** The core compose services are up, and the database has its service roles. */
+function checkServices({ version, problem }: Doctor) {
+  const out = version([
+    "docker",
+    "compose",
+    "ps",
+    "--format",
+    "{{.Service}} {{.Health}} {{.State}}",
+  ]);
+  const running = new Map(
+    (out ?? "")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [service = "", health = "", state = ""] = line.split(" ");
+        return [service, health || state] as const;
+      }),
+  );
+  for (const service of ["postgres", "valkey", "mailpit"]) {
+    const status = running.get(service);
+    if (status === "healthy" || status === "running") ok(`${service} ${status}`);
+    else problem(`${service} is not running. Run \`bun run db:up\`.`);
+  }
+  if (running.get("postgres") !== "healthy") return;
+
+  // A volume created before the role bootstrap existed has no service roles, and every
+  // service would fail with "password authentication failed".
+  const roles = version([
+    "docker",
+    "compose",
+    "exec",
+    "-T",
+    "postgres",
+    "psql",
+    "-U",
+    "postgres",
+    "-d",
+    "app",
+    "-Atc",
+    "select count(*) from pg_roles where rolname in ('migrator','app_api','app_worker','app_notifications','app_webhooks','app_ai')",
+  ]);
+  if (roles === "6") ok("database roles bootstrapped");
+  else
+    problem(
+      "Database roles are missing (volume predates infra/postgres/init). Recreate it: `docker compose down -v && bun run setup` (this deletes local data).",
+    );
+}
+
+/**
+ * Checks the tools, `envPath` against `examplePath`, and the local services; the exit
+ * code. `bunVersion` is the running Bun's.
+ */
+export function doctor({
+  run = runSync,
+  envPath = ENV_PATH,
+  examplePath = ENV_EXAMPLE_PATH,
+  bunVersion = Bun.version,
+} = {}): number {
+  let problems = 0;
+  const checks: Doctor = {
+    version: (command) => {
+      const result = run(command[0] as string, command.slice(1));
+      return result.status === 0 ? result.stdout.trim() : null;
+    },
+    problem: (message) => {
+      problems += 1;
+      fail(message);
+    },
+  };
+
+  console.log("\nTools");
+  checkRuntimes(checks, bunVersion);
+  const docker = checkTools(checks);
+  console.log("\nEnvironment (.env)");
+  checkEnv(checks, envPath, examplePath);
   if (docker) {
     console.log("\nLocal services (docker compose)");
-    const out = version([
-      "docker",
-      "compose",
-      "ps",
-      "--format",
-      "{{.Service}} {{.Health}} {{.State}}",
-    ]);
-    const running = new Map(
-      (out ?? "")
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const [service = "", health = "", state = ""] = line.split(" ");
-          return [service, health || state] as const;
-        }),
-    );
-    for (const service of ["postgres", "valkey", "mailpit"]) {
-      const status = running.get(service);
-      if (status === "healthy" || status === "running") ok(`${service} ${status}`);
-      else problem(`${service} is not running. Run \`bun run db:up\`.`);
-    }
-
-    if (running.get("postgres") === "healthy") {
-      // A volume created before the role bootstrap existed has no service roles, and
-      // every service would fail with "password authentication failed".
-      const roles = version([
-        "docker",
-        "compose",
-        "exec",
-        "-T",
-        "postgres",
-        "psql",
-        "-U",
-        "postgres",
-        "-d",
-        "app",
-        "-Atc",
-        "select count(*) from pg_roles where rolname in ('migrator','app_api','app_worker','app_notifications','app_webhooks','app_ai')",
-      ]);
-      if (roles === "6") ok("database roles bootstrapped");
-      else
-        problem(
-          "Database roles are missing (volume predates infra/postgres/init). Recreate it: `docker compose down -v && bun run setup` (this deletes local data).",
-        );
-    }
+    checkServices(checks);
   }
 
   console.log(problems ? `\n${problems} problem(s) found.\n` : "\nAll good.\n");

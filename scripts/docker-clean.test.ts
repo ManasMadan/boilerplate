@@ -4,21 +4,23 @@ import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
 
+/** A machine with everything docker:clean removes, and a few things it must keep. */
+function everythingThere(line: string) {
+  if (line === "kind get clusters") return { stdout: "other\nboilerplate\n" };
+  if (line.includes("reference=boilerplate/*")) return { stdout: "boilerplate/api:dev\n" };
+  if (line.endsWith("config --images")) return { stdout: "postgres:18\nvalkey/valkey:9\n" };
+  if (line.includes("reference=vsc-boilerplate-*")) return { stdout: "vsc-boilerplate-1:latest\n" };
+  if (line.includes("reference=kindest/node")) return { stdout: "kindest/node:v1\n" };
+  if (line === "docker image inspect grafana/k6:2.3.0") return { status: 1 };
+  if (line.includes("ancestor=postgres:18")) return { stdout: "other-db\n" };
+  if (line === "docker image rm valkey/valkey:9") return { status: 1 };
+  return {};
+}
+
 describe("docker:clean", () => {
   it("removes the services, the cluster, the builder and the repo's unused images", () => {
     const printed = captureOutput();
-    const { run, calls } = fakeRun((line) => {
-      if (line === "kind get clusters") return { stdout: "other\nboilerplate\n" };
-      if (line.includes("reference=boilerplate/*")) return { stdout: "boilerplate/api:dev\n" };
-      if (line.endsWith("config --images")) return { stdout: "postgres:18\nvalkey/valkey:9\n" };
-      if (line.includes("reference=vsc-boilerplate-*"))
-        return { stdout: "vsc-boilerplate-1:latest\n" };
-      if (line.includes("reference=kindest/node")) return { stdout: "kindest/node:v1\n" };
-      if (line === "docker image inspect grafana/k6:2.3.0") return { status: 1 };
-      if (line.includes("ancestor=postgres:18")) return { stdout: "other-db\n" };
-      if (line === "docker image rm valkey/valkey:9") return { status: 1 };
-      return {};
-    });
+    const { run, calls } = fakeRun(everythingThere);
     cleanDocker(run);
     expect(calls).toContain("kind delete cluster --name boilerplate");
     expect(calls).toContain("docker buildx rm --force boilerplate");

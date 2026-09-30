@@ -103,6 +103,75 @@ const PROFILES: Record<string, string> = { "--full": "full", "--mail": "mail", "
  */
 const IN_BACKGROUND = new Set(["clamav"]);
 
+type Plan = NonNullable<ReturnType<typeof budget>>;
+
+const gb = (n: number) => `${(n / 1024 ** 3).toFixed(1)} GB`;
+
+/** Whether what's starting fits in Docker's free memory; says what to do when it doesn't. */
+function fits({ needed, free, total, inUse, starting }: Plan, flag: string | undefined) {
+  if (needed > free) {
+    fail(
+      `Not starting ${starting.join(", ")}: they may use up to ${gb(needed)}, and Docker has ` +
+        `${gb(Math.max(free, 0))} to spare (${gb(total)} in total, ${gb(inUse)} in use by running containers).`,
+    );
+    if (flag === "--full" || flag === "--files") {
+      warn(
+        "Start the core only (bun run db:up) with FILE_SCANNER=none, or give Docker more memory (Docker Desktop → Settings → Resources).",
+      );
+    } else {
+      warn(
+        "Give Docker more memory (Docker Desktop → Settings → Resources), or stop other containers.",
+      );
+    }
+    return false;
+  }
+  if (starting.length > 0)
+    ok(`${starting.join(", ")} fit in memory (up to ${gb(needed)} of ${gb(free)} free)`);
+  return true;
+}
+
+/** Starts the plan's services with `compose` (a `docker compose` run); the exit code. */
+function start({ oneShots, longRunning }: Plan, compose: (args: string[]) => number) {
+  // `up --wait` counts a container that exits as a failure, even with status 0, so the
+  // setup steps run on their own once everything they depend on is up.
+  const background = longRunning.filter((name) => IN_BACKGROUND.has(name));
+  const up = compose([
+    "up",
+    "-d",
+    "--wait",
+    ...longRunning.filter((name) => !IN_BACKGROUND.has(name)),
+  ]);
+  if (up !== 0) return up;
+  for (const name of oneShots) {
+    const status = compose(["run", "--rm", name]);
+    if (status !== 0) return status;
+  }
+  if (background.length > 0) {
+    warn(
+      `Starting ${background.join(", ")} in the background: on a first start ClamAV downloads its virus signatures (up to 6 minutes), and uploads stay pending until it answers (\`docker compose logs -f clamav\`).`,
+    );
+    const status = compose(["up", "-d", ...background]);
+    if (status !== 0) return status;
+  }
+  // Postgres runs its init files only on a new volume; the local read-only role (for the
+  // Postgres MCP server) is safe to reapply, so a database made before it gets it too.
+  return compose([
+    "exec",
+    "-T",
+    "postgres",
+    "psql",
+    "-q",
+    "-U",
+    "postgres",
+    "-d",
+    "app",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-f",
+    "/docker-entrypoint-initdb.d/02-readonly-role.sql",
+  ]);
+}
+
 /** `up`, `check` or `down`, with an optional profile flag; the exit code. */
 export function services(argv = process.argv.slice(2), run = runSync): number {
   const [command, flag] = argv;
@@ -126,70 +195,14 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
     return 1;
   }
   const plan = budget(run, profileArgs);
-  if (!plan) return 1;
-  const { needed, free, total, inUse, starting, oneShots, longRunning } = plan;
-  const gb = (n: number) => `${(n / 1024 ** 3).toFixed(1)} GB`;
-  if (needed > free) {
-    fail(
-      `Not starting ${starting.join(", ")}: they may use up to ${gb(needed)}, and Docker has ` +
-        `${gb(Math.max(free, 0))} to spare (${gb(total)} in total, ${gb(inUse)} in use by running containers).`,
-    );
-    if (flag === "--full" || flag === "--files") {
-      warn(
-        "Start the core only (bun run db:up) with FILE_SCANNER=none, or give Docker more memory (Docker Desktop → Settings → Resources).",
-      );
-    } else {
-      warn(
-        "Give Docker more memory (Docker Desktop → Settings → Resources), or stop other containers.",
-      );
-    }
-    return 1;
-  }
-  if (starting.length > 0)
-    ok(`${starting.join(", ")} fit in memory (up to ${gb(needed)} of ${gb(free)} free)`);
+  if (!plan || !fits(plan, flag)) return 1;
   if (command === "check") return 0;
-  // `up --wait` counts a container that exits as a failure, even with status 0, so the
-  // setup steps run on their own once everything they depend on is up.
-  const compose = (args: string[]) =>
-    run("docker", ["compose", ...profileArgs, ...args], { cwd: ROOT, stdio: "inherit" }).status ??
-    1;
-  const background = longRunning.filter((name) => IN_BACKGROUND.has(name));
-  const up = compose([
-    "up",
-    "-d",
-    "--wait",
-    ...longRunning.filter((name) => !IN_BACKGROUND.has(name)),
-  ]);
-  if (up !== 0) return up;
-  for (const name of oneShots) {
-    const status = compose(["run", "--rm", name]);
-    if (status !== 0) return status;
-  }
-  if (background.length > 0) {
-    warn(
-      `Starting ${background.join(", ")} in the background: on a first start ClamAV downloads its virus signatures (up to 6 minutes), and uploads stay pending until it answers (\`docker compose logs -f clamav\`).`,
-    );
-    const status = compose(["up", "-d", ...background]);
-    if (status !== 0) return status;
-  }
-  // Postgres runs its init files only on a new volume; the local read-only role (for the
-  // Postgres MCP server) is safe to reapply, so a database made before it gets it too.
-  const readonlyRole = compose([
-    "exec",
-    "-T",
-    "postgres",
-    "psql",
-    "-q",
-    "-U",
-    "postgres",
-    "-d",
-    "app",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-f",
-    "/docker-entrypoint-initdb.d/02-readonly-role.sql",
-  ]);
-  return readonlyRole;
+  return start(
+    plan,
+    (args) =>
+      run("docker", ["compose", ...profileArgs, ...args], { cwd: ROOT, stdio: "inherit" }).status ??
+      1,
+  );
 }
 
 if (import.meta.main) process.exit(services());
