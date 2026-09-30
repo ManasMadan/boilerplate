@@ -14,6 +14,12 @@ import { getRequestConfig } from "next-intl/server";
 export const LOCALE_COOKIE = "locale";
 export const TIME_ZONE_COOKIE = "tz";
 
+// Right-to-left languages; extend when adding e.g. Arabic or Hebrew to packages/i18n.
+const RTL = new Set(["ar", "he", "fa", "ur"]);
+
+/** The `dir` of a page in `locale`. */
+export const textDirection = (locale: string) => (RTL.has(locale) ? "rtl" : "ltr");
+
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();
   const saved = cookieStore.get(LOCALE_COOKIE)?.value;
