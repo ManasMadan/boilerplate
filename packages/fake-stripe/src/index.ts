@@ -29,41 +29,46 @@ export interface FakeStripeOptions {
 
 type Form = Record<string, unknown>;
 
-interface Subscription {
-  id: string;
-  object: "subscription";
+// The fake's objects hold only what the app reads. Each field it shares with Stripe's own
+// types takes its type from them, so a field Stripe renames or retypes in an SDK upgrade
+// fails to compile here instead of the fake quietly answering the old shape.
+interface Subscription
+  extends Pick<
+    Stripe.Subscription,
+    "id" | "object" | "metadata" | "cancel_at_period_end" | "trial_end" | "canceled_at" | "created"
+  > {
   customer: string;
-  status: string;
-  metadata: Record<string, string>;
-  cancel_at_period_end: boolean;
-  trial_end: number | null;
-  canceled_at: number | null;
-  created: number;
+  status: Stripe.Subscription.Status;
   items: { object: "list"; data: SubscriptionItem[] };
 }
 
-interface SubscriptionItem {
-  id: string;
-  object: "subscription_item";
+interface SubscriptionItem
+  extends Pick<
+    Stripe.SubscriptionItem,
+    "id" | "object" | "current_period_start" | "current_period_end"
+  > {
+  // Optional and nullable in Stripe's types; the fake always sets them.
   quantity: number;
-  current_period_start: number;
-  current_period_end: number;
-  price: { id: string; object: "price"; recurring: { interval: string }; unit_amount: number };
+  price: Pick<Stripe.Price, "id" | "object"> & {
+    unit_amount: number;
+    recurring: Pick<Stripe.Price.Recurring, "interval">;
+  };
 }
 
-interface Invoice {
-  id: string;
-  object: "invoice";
+interface Invoice
+  extends Pick<
+    Stripe.Invoice,
+    "id" | "object" | "number" | "amount_due" | "created" | "hosted_invoice_url"
+  > {
   customer: string;
   /** Where this API version puts an invoice's subscription. */
-  parent: { type: "subscription_details"; subscription_details: { subscription: string } };
+  parent: {
+    type: Stripe.Invoice.Parent["type"];
+    subscription_details: { subscription: string };
+  };
   /** A draft has no number or hosted page until it's finalized. */
-  number: string | null;
   status: "paid" | "open" | "draft";
-  amount_due: number;
   currency: "usd";
-  created: number;
-  hosted_invoice_url: string | null;
 }
 
 const now = () => Math.floor(Date.now() / 1000);
