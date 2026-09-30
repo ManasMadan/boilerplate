@@ -20,7 +20,11 @@ Auth never sends email itself: codes, invitations and alerts are queued on
 | Two-factor (TOTP) | yes | yes | A second step after the password, with 10 backup codes and an option to trust the device. |
 
 Phone numbers are not a sign-in method. A user can add one (verified by a texted code,
-`apps/api/src/modules/user/phone.service.ts`) to receive security alerts by text.
+`apps/api/src/modules/user/phone.service.ts`) to receive security alerts by text. A
+code allows five guesses, counted atomically before each comparison, and verifying is
+limited per user. Whether a number is already on another account shows only when
+verifying it, never when asking for a code, so the send endpoint can't be used to find
+out who has which number.
 
 better-auth's admin plugin is on (impersonation sessions last an hour); no admin UI
 ships with it.

@@ -7,7 +7,11 @@
  * password reset by SMS, which makes a phone number enough to take over an account.
  *
  *   - Codes are random, stored hashed in Redis with the number they were sent to, expire
- *     after PHONE_CODE_EXPIRES_IN and allow MAX_ATTEMPTS guesses.
+ *     after PHONE_CODE_EXPIRES_IN and allow MAX_ATTEMPTS guesses, counted atomically
+ *     before comparing, so parallel guesses can't exceed it. Verifying is limited per
+ *     user too.
+ *   - Whether a number is on another account shows only when verifying it (the database's
+ *     unique constraint), never when asking for a code: sending can't enumerate numbers.
  *   - Texts cost money and can be abused to spam a number (or to pump premium numbers),
  *     so sending needs a fresh session and is limited per user and per number.
  *   - Adding, changing or removing the number is audited and alerts the account's
@@ -34,12 +38,6 @@ import { emitEvent } from "../../outbox";
 const MAX_ATTEMPTS = 5;
 const MINUTE = 60;
 
-interface PendingCode {
-  phoneNumber: string;
-  hash: string;
-  attempts: number;
-}
-
 const codeKey = (userId: string) => `phone-code:${userId}`;
 const hashCode = (userId: string, code: string) =>
   createHash("sha256").update(`${userId}:${code}`).digest("hex");
@@ -48,6 +46,7 @@ const hashCode = (userId: string, code: string) =>
 export class PhoneService {
   private readonly perUser;
   private readonly perNumber;
+  private readonly verifies;
 
   constructor(
     @InjectDatabase() private readonly database: Database,
@@ -67,6 +66,12 @@ export class PhoneService {
       windowSeconds: 60 * MINUTE,
       onRedisError: "deny",
     });
+    this.verifies = createRateLimiter(redis, {
+      name: "phone-code-verify",
+      points: 20,
+      windowSeconds: 60 * MINUTE,
+      onRedisError: "deny",
+    });
   }
 
   async current(userId: string) {
@@ -78,33 +83,20 @@ export class PhoneService {
   }
 
   async sendCode(userId: string, locale: string | null | undefined, phoneNumber: string) {
-    const current = await this.database.read.user.findUnique({
-      where: { id: userId },
-      select: { phoneNumber: true },
-    });
-    if (current?.phoneNumber === phoneNumber) throw new AppError("PHONE_NUMBER_TAKEN");
-    const taken = await this.database.read.user.findUnique({
-      where: { phoneNumber },
-      select: { id: true },
-    });
-    if (taken) throw new AppError("PHONE_NUMBER_TAKEN");
-
-    for (const [limiter, key] of [
-      [this.perUser, userId],
-      [this.perNumber, phoneNumber],
-    ] as const) {
-      const result = await limiter.consume(key);
-      if (!result.allowed) {
-        throw new AppError("RATE_LIMITED", {
-          params: { retryAfterSeconds: result.retryAfterSeconds },
-        });
-      }
-    }
+    await this.perUser.take(userId);
+    await this.perNumber.take(phoneNumber);
+    // Its own number again: nothing to verify (and nothing learned about anyone else's).
+    if ((await this.current(userId)) === phoneNumber) throw new AppError("PHONE_NUMBER_TAKEN");
 
     const code = String(randomInt(0, 10 ** PHONE_CODE_LENGTH)).padStart(PHONE_CODE_LENGTH, "0");
-    const pending: PendingCode = { phoneNumber, hash: hashCode(userId, code), attempts: 0 };
-    // A new code replaces the previous one.
-    await this.redis.set(codeKey(userId), JSON.stringify(pending), "EX", PHONE_CODE_EXPIRES_IN);
+    // A new code replaces the previous one, attempts and all.
+    const key = codeKey(userId);
+    await this.redis
+      .multi()
+      .del(key)
+      .hset(key, { phoneNumber, hash: hashCode(userId, code), attempts: 0 })
+      .expire(key, PHONE_CODE_EXPIRES_IN)
+      .exec();
     await this.notifications.add(
       "send",
       {
@@ -118,18 +110,29 @@ export class PhoneService {
   }
 
   async verify(userId: string, phoneNumber: string, code: string) {
+    await this.verifies.take(userId);
     const key = codeKey(userId);
-    const raw = await this.redis.get(key);
-    const pending = raw ? (JSON.parse(raw) as PendingCode) : null;
-    if (!pending || pending.phoneNumber !== phoneNumber) throw new AppError("PHONE_CODE_INVALID");
-    const matches = timingSafeEqual(
-      Buffer.from(pending.hash, "hex"),
-      Buffer.from(hashCode(userId, code), "hex"),
-    );
+    // Count the attempt before looking, atomically: of any number of parallel guesses,
+    // only MAX_ATTEMPTS get compared. (On a missing key this creates a lone counter; it
+    // has no hash, so it verifies nothing, and it expires below.)
+    const [[, attempt], [, pending]] = (await this.redis
+      .multi()
+      .hincrby(key, "attempts", 1)
+      .hgetall(key)
+      .exec()) as [[null, number], [null, Record<string, string>]];
+    if (!pending.hash) {
+      await this.redis.expire(key, PHONE_CODE_EXPIRES_IN);
+      throw new AppError("PHONE_CODE_INVALID");
+    }
+    if (attempt > MAX_ATTEMPTS) {
+      await this.redis.del(key);
+      throw new AppError("PHONE_CODE_INVALID");
+    }
+    const matches =
+      pending.phoneNumber === phoneNumber &&
+      timingSafeEqual(Buffer.from(pending.hash, "hex"), Buffer.from(hashCode(userId, code), "hex"));
     if (!matches) {
-      pending.attempts += 1;
-      if (pending.attempts >= MAX_ATTEMPTS) await this.redis.del(key);
-      else await this.redis.set(key, JSON.stringify(pending), "KEEPTTL");
+      if (attempt === MAX_ATTEMPTS) await this.redis.del(key);
       throw new AppError("PHONE_CODE_INVALID");
     }
     // One use only, even if two requests race with the right code.

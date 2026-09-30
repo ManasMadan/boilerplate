@@ -13,6 +13,7 @@ import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { PhoneService } from "../src/modules/user/phone.service";
 import { publishRealtime } from "../src/realtime";
 import {
   createSession,
@@ -1041,6 +1042,28 @@ describe("phone number", () => {
     expect((await session.rpc.user.me()).phoneNumber).toBeNull();
   });
 
+  it("counts parallel guesses too: no more than five are ever compared", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const phoneNumber = newPhone();
+    await session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    const wrong = data.code === "000000" ? "111111" : "000000";
+    // In-process, so the guesses really interleave at every Redis round trip. Imported
+    // only now: it loads the API's configuration, which startApi sets up first.
+    const phone = harness.app.get<PhoneService>(
+      (await import("../src/modules/user/phone.service")).PhoneService,
+    );
+    const guesses = await Promise.allSettled(
+      Array.from({ length: 15 }, () => phone.verify(userId, phoneNumber, wrong)),
+    );
+    expect(guesses.every((guess) => guess.status === "rejected")).toBe(true);
+    await expectError(
+      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "PHONE_CODE_INVALID",
+    );
+  });
+
   it("a code only verifies the number it was sent to, and only once", async () => {
     const { session } = await signedInUser();
     const phoneNumber = newPhone();
@@ -1070,11 +1093,18 @@ describe("phone number", () => {
     );
   });
 
-  it("a number can be on one account only", async () => {
+  it("a number can be on one account only, which shows only when verifying it", async () => {
     const owner = await signedInUser();
     const { phoneNumber } = await addPhone(owner.session);
     const other = await signedInUser();
-    await expectError(other.session.rpc.user.sendPhoneCode({ phoneNumber }), "PHONE_NUMBER_TAKEN");
+    // Asking for a code says nothing about whose number it is...
+    await other.session.rpc.user.sendPhoneCode({ phoneNumber });
+    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
+    // ...only proving you receive its texts does.
+    await expectError(
+      other.session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
+      "PHONE_NUMBER_TAKEN",
+    );
     // Its own number again: nothing to verify.
     await expectError(owner.session.rpc.user.sendPhoneCode({ phoneNumber }), "PHONE_NUMBER_TAKEN");
   });
