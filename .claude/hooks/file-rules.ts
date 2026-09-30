@@ -25,8 +25,9 @@ const GENERATED =
 const LOCKFILE =
   /(^|\/)(bun\.lock|uv\.lock|\.terraform\.lock\.hcl)$|^packages\/db\/prisma\/migrations\/migration_lock\.toml$/;
 const MIGRATION = /prisma\/migrations\/[^/]+\/migration\.sql$/;
-const ENVIRONMENT_VALUES = /^deploy\/environments\/[^/]+\/stack\.yaml$/;
-const IMAGE_TAG = /^\s*tag:/m;
+const ENVIRONMENT_VALUES = /^deploy\/environments\/[^/]+\/(stack|release)\.yaml$/;
+// An image tag, or the git revision production deploys from (release.yaml).
+const IMAGE_TAG = /^\s*(tag|imageTag|revision):/m;
 /**
  * The agent's own guard rails: hooks, permissions, the commit hooks and the lint and
  * dependency rules. A change to one needs the user to look at it.
@@ -70,7 +71,7 @@ export function verdictFor({ path, shipped = false, before, after }: Change): Ve
     [before, after].some((text) => text && IMAGE_TAG.test(text))
   ) {
     return deny(
-      "Image tags in deploy/environments are written by CI (deploy.yml for staging, `bun run promote` for production). Roll back with the rollback skill.",
+      "Image tags and the release revision in deploy/environments are written by CI (deploy.yml for staging, `bun run promote` for production). Roll back with the rollback skill.",
     );
   }
   if (GUARD_RAILS.test(path)) {

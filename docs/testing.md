@@ -12,7 +12,9 @@
 | Restore drill | `scripts/restore-drill.ts` | `bun run db:restore-drill` | the local Postgres container |
 
 Before pushing: `bun run lint`, `bun run check-types`, `bun run test`, and for anything
-touching the database, queues or HTTP, `bun run test:integration`.
+touching the database, queues or HTTP, `bun run test:integration`. The pre-push hook
+(`.husky/pre-push`) runs types and unit tests for the affected packages, the scripts'
+and hooks' types and tests, and knip; the rest is yours to run, and CI runs it all.
 
 ## Unit
 

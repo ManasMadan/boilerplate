@@ -4,3 +4,5 @@ bunx turbo run check-types test --affected --output-logs=errors-only
 bunx tsc -p scripts
 bunx tsc -p .claude/hooks
 bun test ./scripts/ ./.claude/hooks/
+# Unused files, exports and dependencies (knip): quick, and CI fails on them.
+bun run lint:unused

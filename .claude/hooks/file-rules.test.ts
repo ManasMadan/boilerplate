@@ -42,5 +42,9 @@ describe("the file rules", () => {
     const values = "deploy/environments/production/stack.yaml";
     expect(decision(values, { before: '  tag: "sha-1"', after: '  tag: "sha-2"' })).toBe("deny");
     expect(decision(values, { before: "  replicas: 2", after: "  replicas: 3" })).toBe("allow");
+    const release = "deploy/environments/production/release.yaml";
+    expect(decision(release, { before: "revision: v1.2.0", after: "revision: v1.1.0" })).toBe(
+      "deny",
+    );
   });
 });
