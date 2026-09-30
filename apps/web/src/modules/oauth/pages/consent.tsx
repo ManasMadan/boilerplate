@@ -131,11 +131,13 @@ export function OAuthConsentPage() {
           {returnTo ? t("returnTo", { host: returnTo }) : null} {t("trust")}
         </p>
       </CardContent>
+      {/* Both wait for the app's details: the server renders this page before the
+          browser can act on a click, and a click on an enabled button then is lost. */}
       <CardFooter className="gap-2">
         <Button onClick={() => answer(true)} disabled={busy || client.isPending}>
           {t("allow")}
         </Button>
-        <Button variant="ghost" onClick={() => answer(false)} disabled={busy}>
+        <Button variant="ghost" onClick={() => answer(false)} disabled={busy || client.isPending}>
           {t("deny")}
         </Button>
       </CardFooter>
