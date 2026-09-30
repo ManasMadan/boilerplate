@@ -12,7 +12,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyTestEnvironment } from "@repo/testing/environment";
-import { coverage } from "@repo/vitest-config";
+import { coverage, tags } from "@repo/vitest-config";
 import { playwright } from "@vitest/browser-playwright";
 import { configDefaults, defineConfig } from "vitest/config";
 import { commands } from "./test/commands";
@@ -45,10 +45,11 @@ const browserProject = (
     name,
     include,
     exclude: [...configDefaults.exclude, ...exclude],
+    tags,
     globalSetup: ["./test/global-setup.ts"],
     setupFiles: ["./test/process.ts", "./test/setup.ts"],
     testTimeout: 30_000,
-    // Real requests (password breach checks, captcha checks) can take a few seconds.
+    // Real requests (captcha checks) can take a few seconds.
     expect: { poll: { timeout: 10_000 } },
     // The test pages' server, on the site's origin as the API knows it (test/services.ts).
     api: { port: SITE[services].port, strictPort: true },

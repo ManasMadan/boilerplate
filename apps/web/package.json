@@ -12,7 +12,8 @@
     "start": "node --env-file-if-exists=../../.env .next/standalone/apps/web/server.js",
     "check-types": "SKIP_ENV_VALIDATION=1 next typegen && tsc",
     "test": "vitest run --project unit",
-    "test:integration": "vitest run --project 'browser*'",
+    "test:integration": "vitest run --project 'browser*' --tags-filter=!files",
+    "test:integration:files": "vitest run --project 'browser*' --tags-filter=files",
     "test:e2e": "playwright test",
     "budget": "bun scripts/bundle-budget.ts",
     "coverage": "vitest run --coverage"

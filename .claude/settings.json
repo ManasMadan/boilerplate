@@ -39,6 +39,8 @@
       "Bash(bun run test:coverage)",
       "Bash(bun run test:e2e)",
       "Bash(bun run test:integration)",
+      "Bash(bun run test:integration:files)",
+      "Bash(bun run test:integration:files *)",
       "Bash(bun run test:load)",
       "Bash(bun run build *)",
       "Bash(bun run charts:check *)",

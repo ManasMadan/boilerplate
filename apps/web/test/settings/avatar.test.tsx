@@ -44,7 +44,8 @@ async function uploaded(user: User) {
 const checked = (id: string, set: string) =>
   commands.sql(`UPDATE files.file SET ${set}, updated_at = now() WHERE id = $1`, [id]);
 
-describe("the profile picture", () => {
+// Uploads go to RustFS: the files profile (`bun run test:integration:files`).
+describe("the profile picture", { tags: ["files"] }, () => {
   it("is uploaded, checked, shown, and removed", async () => {
     const { user, page } = await showCard();
     await userEvent.click(page.getByRole("button", { name: "Upload a picture" }));

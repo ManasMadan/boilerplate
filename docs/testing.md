@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Unit | `src/**/*.test.ts(x)` in each package, `apps/mobile/src`, `apps/ai/tests` (not marked `integration`) | `bun run test` | nothing (cached by turbo) |
 | Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/web/test` (in Chromium), `apps/ai` tests marked `integration` | `bun run test:integration` | the core: Postgres, Valkey, Mailpit (started for you) |
-| Integration, file uploads | the suites tagged `files` in `apps/api`, `apps/worker` and `packages/nest-common` | `bun run test:integration:files` | the core plus RustFS and ClamAV (started for you) |
+| Integration, file uploads | the suites tagged `files` in `apps/api`, `apps/worker`, `packages/nest-common` and `apps/web/test` | `bun run test:integration:files` | the core plus RustFS and ClamAV (started for you) |
 | Coverage | every suite merged, every file at 100% | `bun run test:coverage` | the full profile (`bun run db:up:full`) |
 | End to end | `apps/web/e2e`, `apps/mobile/e2e`, then the k6 smoke | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
 | Components | every story in `packages/ui` | `bun run --cwd packages/ui test:stories`, `test:visual` | Chromium; Docker for `test:visual` |
