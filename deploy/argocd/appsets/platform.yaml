@@ -30,6 +30,9 @@ spec:
           - git:
               repoURL: https://github.com/ManasMadan/boilerplate.git
               revision: HEAD
+              # The generator's own `path` parameter (the file's location) would replace
+              # an add-on's `path` key; this moves it to `.file.path`.
+              pathParamPrefix: file
               files:
                 - path: deploy/platform/addons/*.yaml
   template:
