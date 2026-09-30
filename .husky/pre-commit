@@ -1,4 +1,5 @@
-# Formats and lints only the staged files (seconds, not minutes), and scans them for
-# secrets so none reaches history. The full suite runs in CI.
+# Formats and lints only the staged files (seconds, not minutes): Biome, ruff, prisma
+# format, Squawk on new migrations and tofu fmt (package.json's lint-staged), then scans
+# them for secrets with gitleaks so none reaches history. The full suite runs in CI.
 bunx lint-staged
 bun scripts/secret-scan.ts

@@ -152,7 +152,7 @@
     ],
     "*.prisma": "bun scripts/format-prisma.ts",
     "packages/db/prisma/migrations/**/migration.sql": "bun scripts/lint-migrations.ts",
-    "*.{tf,tftest.hcl}": "tofu fmt"
+    "*.{tf,tftest.hcl}": "bun scripts/tofu-fmt.ts"
   },
   "overrides": {
     "deepmerge-ts": "8.0.0",
