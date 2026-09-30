@@ -51,7 +51,9 @@ def start_telemetry(
     HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
     if app is not None:
         FastAPIInstrumentor.instrument_app(
-            app, tracer_provider=tracer_provider, excluded_urls="health/live,health/ready"
+            app,
+            tracer_provider=tracer_provider,
+            excluded_urls="health/live,health/ready,health/dependencies",
         )
     return True
 

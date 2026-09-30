@@ -93,7 +93,10 @@ describe("bootstrap", () => {
 
     const ready = await fetch(`${base}/health/ready`);
     expect(ready.status).toBe(200);
-    expect(await ready.json()).toMatchObject({
+    expect(await ready.json()).toEqual({ status: "ok" });
+    const dependencies = await fetch(`${base}/health/dependencies`);
+    expect(dependencies.status).toBe(200);
+    expect(await dependencies.json()).toMatchObject({
       status: "ok",
       info: { db: { status: "up" }, redis: { status: "up" } },
     });
@@ -121,18 +124,20 @@ describe("errors", () => {
   });
 });
 
-describe("readiness", () => {
-  it("fails while the database can't be reached", async () => {
+describe("the dependency check", () => {
+  it("fails while the database can't be reached, and readiness doesn't", async () => {
     const app = await build(DatabaseDownModule, { loadShedding: false });
     expect((await get(app, "/health/live")).statusCode).toBe(200);
-    const ready = await get(app, "/health/ready");
-    expect(ready.statusCode).toBe(503);
-    expect(ready.json()).toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    // A shared dependency down must not take every pod out of rotation at once.
+    expect((await get(app, "/health/ready")).statusCode).toBe(200);
+    const dependencies = await get(app, "/health/dependencies");
+    expect(dependencies.statusCode).toBe(503);
+    expect(dependencies.json()).toMatchObject({ code: "SERVICE_UNAVAILABLE" });
   });
 
   it("fails for a dependency the service never registered", async () => {
     const app = await build(UnregisteredModule, { loadShedding: false });
-    expect((await get(app, "/health/ready")).statusCode).toBe(503);
+    expect((await get(app, "/health/dependencies")).statusCode).toBe(503);
   });
 });
 

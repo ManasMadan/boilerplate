@@ -87,8 +87,11 @@ setups. Inbound Stripe webhooks go straight to `localhost:3004/webhooks/stripe`.
 
 Other routes on the API: `/api/auth/*` (better-auth), `/api/mcp` (MCP),
 `/api/v1/files/<id>/content` (redirect to a signed download),
-`/api/v1/notifications/unsubscribe` (one-click unsubscribe), `/health/live` and
-`/health/ready` (every backend service has these; the web app's probe is `/healthz`).
+`/api/v1/notifications/unsubscribe` (one-click unsubscribe), `/health/live`,
+`/health/ready` and `/health/dependencies` (every backend service has these; the web
+app's probe is `/healthz`). Readiness means the process serves requests; the dependency
+check, which fails while Postgres or Redis don't answer, is for dashboards and start-up
+scripts, so a shared dependency's restart doesn't take every pod out of rotation.
 
 ## Auth and tenancy
 

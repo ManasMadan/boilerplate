@@ -19,10 +19,12 @@ apps/worker is the one to copy.
    scripts), `tsconfig.json`, `tsdown.config.ts`, `vitest.config.ts`, `src/main.ts`,
    `src/telemetry.ts`, `src/app.module.ts`, `src/env.ts` (with `databaseEnv("<NAME>")`
    if it uses Postgres), and a `CLAUDE.md` (commands, where things are, gotchas). Give it
-   the next free port (3005 and up) as `PORT: port(<n>)`, and `/health/live` and
-   `/health/ready` through `HealthModule` from `@repo/nest-common`.
-2. `bun install` to link it. Its Redis database number for integration tests: none are
-   free (docs/testing.md), so give its suites a key prefix of their own.
+   the next free port (3005 and up) as `PORT: port(<n>)`, and `/health/live`,
+   `/health/ready` and `/health/dependencies` through `HealthModule` from
+   `@repo/nest-common`.
+2. `bun install` to link it. Its integration tests take the next free Valkey database
+   number (docs/testing.md lists them) and flush it with `flushTestDatabase`;
+   `scripts/redis-databases.test.ts` fails if two suites share one.
 
 ## Its database role, if it uses Postgres
 
@@ -68,7 +70,7 @@ and talks to the API only through `packages/client`.
 
 - `bun run lint` (the boundary rules see the new app), `bun run check-types`,
   `bun run test`, `bun run test:integration` pass.
-- `bun dev` starts it (in the background) and `curl localhost:<port>/health/ready`
-  answers 200.
+- `bun dev` starts it (in the background) and `curl localhost:<port>/health/dependencies`
+  answers 200 (it's up and reaches its database and Redis).
 - `bun run charts:check` passes, and `docker buildx bake <name>` builds.
 - The `reviewer` agent, and `migration-reviewer` for its grants, report nothing blocking.

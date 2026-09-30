@@ -272,6 +272,31 @@ export type Usage = {
     outputTokens: number;
 };
 
+export type DependenciesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health/dependencies';
+};
+
+export type DependenciesErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type DependenciesError = DependenciesErrors[keyof DependenciesErrors];
+
+export type DependenciesResponses = {
+    /**
+     * Successful Response
+     */
+    200: HealthResponse;
+};
+
+export type DependenciesResponse = DependenciesResponses[keyof DependenciesResponses];
+
 export type LiveData = {
     body?: never;
     path?: never;

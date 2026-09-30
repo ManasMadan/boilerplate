@@ -42,6 +42,7 @@ pytestmark = pytest.mark.integration
 def test_health(client: TestClient) -> None:
     assert body(client.get("/health/live")) == {"status": "ok"}
     assert body(client.get("/health/ready")) == {"status": "ok"}
+    assert body(client.get("/health/dependencies")) == {"status": "ok"}
 
 
 def test_every_route_needs_the_api_s_token(client: TestClient) -> None:

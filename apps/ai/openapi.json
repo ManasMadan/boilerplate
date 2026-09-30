@@ -512,6 +512,35 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/health/dependencies": {
+      "get": {
+        "description": "Postgres and Redis answer: for dashboards and start-up scripts.",
+        "operationId": "dependencies",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Dependencies"
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "live",
@@ -542,6 +571,7 @@
     },
     "/health/ready": {
       "get": {
+        "description": "Serving requests. Not the dependencies: they're shared, so an outage of one would\ntake every pod out of rotation at once (see /health/dependencies).",
         "operationId": "ready",
         "responses": {
           "200": {

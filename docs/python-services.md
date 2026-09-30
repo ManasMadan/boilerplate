@@ -20,7 +20,8 @@ tokens itself (below).
 
 | Route | What it does |
 |---|---|
-| `GET /health/live`, `GET /health/ready` | probes (ready checks Postgres and Redis) |
+| `GET /health/live`, `GET /health/ready` | probes (ready: the process serves requests) |
+| `GET /health/dependencies` | Postgres and Redis answer (dashboards, start-up scripts) |
 | `POST /v1/sentiment` | the example model in `app/model.py`, a word-list classifier |
 | `GET/POST /v1/documents`, `DELETE /v1/documents/{document_id}` | a workspace's documents; creating one queues indexing |
 | `POST /v1/assistant/answers` | the assistant's answer, as server-sent events |

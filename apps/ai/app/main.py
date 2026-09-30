@@ -166,7 +166,15 @@ def live() -> HealthResponse:
 
 
 @app.get("/health/ready", operation_id="ready")
-async def ready() -> HealthResponse:
+def ready() -> HealthResponse:
+    """Serving requests. Not the dependencies: they're shared, so an outage of one would
+    take every pod out of rotation at once (see /health/dependencies)."""
+    return HealthResponse(status="ok")
+
+
+@app.get("/health/dependencies", operation_id="dependencies")
+async def dependencies() -> HealthResponse:
+    """Postgres and Redis answer: for dashboards and start-up scripts."""
     async with engine().connect() as connection:
         await connection.execute(text("SELECT 1"))
     # redis-py shares its command signatures between the sync and async clients, so ping

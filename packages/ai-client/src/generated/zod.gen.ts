@@ -216,6 +216,11 @@ export const zAssistantEvent = z.object({
 /**
  * Successful Response
  */
+export const zDependenciesResponse = zHealthResponse;
+
+/**
+ * Successful Response
+ */
 export const zLiveResponse = zHealthResponse;
 
 /**
