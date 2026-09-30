@@ -19,7 +19,13 @@ vi.mock("next/headers", () => ({
       request.cookies.has(name) ? { name, value: request.cookies.get(name) } : undefined,
     has: (name: string) => request.cookies.has(name),
   }),
-  headers: async () => request.headers,
+  // With the cookies in their header, as a real request has them.
+  headers: async () => {
+    const headers = new Headers(request.headers);
+    const cookie = [...request.cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+    if (cookie) headers.set("cookie", cookie);
+    return headers;
+  },
 }));
 
 // Next's compiler replaces next/font calls with the font's generated class names.
