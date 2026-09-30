@@ -124,6 +124,13 @@ variable "sops_age_key" {
   sensitive   = true
 }
 
+variable "sops_preview_age_key" {
+  description = "With previews = true: the previews' own age private key (TF_VAR_sops_preview_age_key)."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 variable "state_passphrase" {
   description = "Encrypts state and plans (TF_VAR_state_passphrase, at least 16 characters)."
   type        = string

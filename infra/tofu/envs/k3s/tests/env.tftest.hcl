@@ -36,6 +36,7 @@ variables {
   previews              = true
   install_over_ssh      = false
   sops_age_key          = "AGE-SECRET-KEY-1QQQQ"
+  sops_preview_age_key  = "AGE-SECRET-KEY-1PPPP"
   state_passphrase      = "correct horse battery staple"
   nodes = {
     staging-1 = { address = "203.0.113.10" }

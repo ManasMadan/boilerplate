@@ -5,7 +5,9 @@
 # rebuild; removing the label or closing the pull request deletes the preview.
 #
 # Only branches of this repository get previews: a fork's code never runs with the
-# token that pushes images.
+# token that pushes images. Argo CD deploys the images with the target branch's charts
+# and Secrets, never the pull request's, so labelling a fork's pull request runs nothing
+# of the fork's.
 name: Preview
 
 on:

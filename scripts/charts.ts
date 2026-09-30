@@ -22,7 +22,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail, ok, ROOT } from "./lib";
-import { unsafeSecret } from "./secrets-check";
+import { recipientsFor, unsafeSecret } from "./secrets-check";
 
 const CHARTS = join(ROOT, "deploy/charts");
 const ENVIRONMENTS = join(ROOT, "deploy/environments");
@@ -250,11 +250,17 @@ const secretDirs = [
     : []),
 ].filter(({ dir }) => existsSync(dir));
 const problems: string[] = [];
+const sopsConfig = readFileSync(join(ROOT, ".sops.yaml"), "utf8");
 for (const { dir, platform } of secretDirs) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name).slice(ROOT.length + 1);
     const problem = entry.isFile()
-      ? unsafeSecret(entry.name, readFileSync(join(dir, entry.name), "utf8"), platform)
+      ? unsafeSecret(
+          entry.name,
+          readFileSync(join(dir, entry.name), "utf8"),
+          platform,
+          recipientsFor(path, sopsConfig),
+        )
       : "not a file";
     if (problem) problems.push(`${path}: ${problem}`);
   }

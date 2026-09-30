@@ -88,8 +88,12 @@ server decrypts with it in a sidecar that runs `sops`, the `sops` config managem
 plugin (`argocd/argo-cd-values.yaml`). Applications whose source says
 `plugin: { name: sops }` get every `*.sops.yaml` file of their path, decrypted:
 `environments/<env>/secrets/` with the stack, `platform/secrets/<env>/` with the
-platform. Staging's cluster also decrypts `environments/preview/secrets/`, the Secrets
-every preview shares (test-mode keys only).
+platform. The Secrets every preview shares (`environments/preview/secrets/`, test-mode
+keys only) have an age key of their own: the cluster hosting previews holds it as
+`preview.txt` next to its own `keys.txt`, and previews decrypt with it alone. A file
+copied from staging's directory doesn't decrypt in a preview, and `charts:check` and the
+pre-commit hook refuse any secret not encrypted to exactly the keys `.sops.yaml` names
+for its directory.
 
 `.sops.yaml` at the repository's root says who can decrypt what: per environment, the
 cluster's public key and those of the people who edit its secrets. Its keys are
@@ -99,6 +103,7 @@ Setting up an environment, once (`age` and `sops` from your package manager):
 
 ```sh
 age-keygen -o staging.agekey             # the cluster's key pair; prints its public key
+age-keygen -o preview.agekey             # the previews' own, on the cluster hosting them
 age-keygen -o ~/.config/sops/age/keys.txt   # yours, if you don't have one yet
 ```
 

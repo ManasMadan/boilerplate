@@ -1,10 +1,12 @@
 # A preview per pull request labelled `preview` (only maintainers can add labels), on
 # the clusters that host previews (label boilerplate.dev/previews=true, normally
-# staging's), at https://pr-<number>.preview.<the cluster's domain>. It runs the PR's
-# head commit: the chart and values from it, the images CI built from it
-# (sha-<commit>), its own database and Valkey, and the shared preview Secrets
-# (deploy/environments/preview/secrets/, decrypted by Argo CD's sops plugin). Removing
-# the label or closing the PR deletes the preview and its namespace.
+# staging's), at https://pr-<number>.preview.<the cluster's domain>. It runs the images
+# CI built from the PR's head commit (sha-<commit>, only for this repository's own
+# branches) with the charts, values and shared preview Secrets of the branch it targets
+# (deploy/environments/preview/secrets/, decrypted with the preview key alone). The
+# charts never come from the PR: a fork's could run any image with those Secrets. So a
+# PR's chart changes show up once merged, not in its preview. It gets its own database
+# and Valkey. Removing the label or closing the PR deletes the preview and its namespace.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -68,7 +70,7 @@ spec:
     spec:
       sources:
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: "{{ .head_sha }}"
+          targetRevision: "{{ .target_branch }}"
           path: deploy/charts/{{ .chart }}
           helm:
             releaseName: boilerplate
@@ -88,8 +90,10 @@ spec:
               {{- end }}
         {{- if eq .chart "stack" }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: "{{ .head_sha }}"
+          targetRevision: "{{ .target_branch }}"
           path: deploy/environments/preview/secrets
           plugin:
             name: sops
+            env:
+              - { name: AGE_KEY, value: preview }
         {{- end }}

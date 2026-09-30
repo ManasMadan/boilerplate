@@ -42,8 +42,9 @@ run "registers_the_cluster_for_the_applicationsets" {
 run "marks_the_cluster_that_hosts_previews" {
   command = apply
   variables {
-    environment = "staging"
-    previews    = true
+    environment          = "staging"
+    previews             = true
+    sops_preview_age_key = "AGE-SECRET-KEY-1PPPP"
   }
   assert {
     condition     = kubernetes_secret_v1.cluster.metadata[0].labels["boilerplate.dev/previews"] == "true"
@@ -80,6 +81,34 @@ run "installs_the_sops_key_for_argo_cd" {
     condition     = kubernetes_secret_v1.sops_age.data["keys.txt"] == var.sops_age_key
     error_message = "the age identity under keys.txt"
   }
+}
+
+run "keeps_the_preview_key_apart" {
+  command = apply
+  variables {
+    previews             = true
+    sops_preview_age_key = "AGE-SECRET-KEY-1PPPP\n"
+  }
+  assert {
+    condition     = kubernetes_secret_v1.sops_age.data["preview.txt"] == var.sops_preview_age_key && kubernetes_secret_v1.sops_age.data["keys.txt"] == var.sops_age_key
+    error_message = "previews decrypt with their own key, under preview.txt"
+  }
+}
+
+run "has_no_preview_key_without_previews" {
+  command = apply
+  assert {
+    condition     = !contains(keys(kubernetes_secret_v1.sops_age.data), "preview.txt")
+    error_message = "only the cluster hosting previews holds their key"
+  }
+}
+
+run "needs_the_preview_key_to_host_previews" {
+  command = plan
+  variables {
+    previews = true
+  }
+  expect_failures = [kubernetes_secret_v1.sops_age]
 }
 
 run "configures_argo_cd" {

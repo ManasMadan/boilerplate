@@ -45,9 +45,9 @@ tick them off in your own copy of this file or in an issue.
 
 [deploy/README.md](../deploy/README.md), "Secrets with SOPS" and "Credentials".
 
-- [ ] An age key pair per environment (`age-keygen -o <env>.agekey`) and one for you;
-      the public keys in `.sops.yaml` (its keys are placeholders, and `sops` refuses
-      them). Keep each environment's private key outside the repository: it's the only
+- [ ] An age key pair per environment (`age-keygen -o <env>.agekey`), one for the
+      previews (`preview.agekey`) and one for you; the public keys in `.sops.yaml` (its
+      keys are placeholders, and `sops` refuses them). Keep each environment's private key outside the repository: it's the only
       way to decrypt that environment's secrets.
 - [ ] The DKIM key pair for mail ([infra/tofu/README.md](../infra/tofu/README.md), DNS).
 - [ ] The encrypted Secrets: one per service in `deploy/environments/<env>/secrets/`,

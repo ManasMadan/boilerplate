@@ -37,8 +37,15 @@ resource "kubernetes_secret_v1" "sops_age" {
     name      = "sops-age"
     namespace = kubernetes_namespace_v1.argocd.metadata[0].name
   }
-  data = {
-    "keys.txt" = var.sops_age_key
+  data = merge(
+    { "keys.txt" = var.sops_age_key },
+    var.previews ? { "preview.txt" = var.sops_preview_age_key } : {},
+  )
+  lifecycle {
+    precondition {
+      condition     = !var.previews || strcontains(coalesce(var.sops_preview_age_key, "-"), "AGE-SECRET-KEY-1")
+      error_message = "A cluster hosting previews needs their age key (sops_preview_age_key), separate from its own."
+    }
   }
 }
 

@@ -196,6 +196,7 @@ Per `infra-<env>` environment, for `infra.yml` (see the header of that workflow 
 | `SSH_PRIVATE_KEY` | the key the environment's machines accept |
 | `CLOUDFLARE_API_TOKEN` | the zone's token (permissions in `infra/tofu/modules/cloudflare`) |
 | `SOPS_AGE_KEY` | the environment's age private key, installed for Argo CD |
+| `SOPS_PREVIEW_AGE_KEY` | on the environment hosting previews only: their own age private key |
 | `TF_VAR_state_passphrase` | encrypts the state and plans |
 
 The runner connects to the machines over SSH and to the Kubernetes API (ports 22 and

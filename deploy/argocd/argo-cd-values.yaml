@@ -5,8 +5,10 @@
 # them with the `sops` config management plugin below: Applications whose source says
 # `plugin: { name: sops }` get every *.sops.yaml file of their path, decrypted. It runs
 # in a sidecar of the repo server, the only container that can read the cluster's age
-# key: the Secret `sops-age` in this namespace, key `keys.txt` (one or more
-# AGE-SECRET-KEY-... lines; the bootstrap creates it).
+# keys: the Secret `sops-age` in this namespace (the bootstrap creates it), key
+# `keys.txt` for the cluster's own secrets and, on the cluster hosting previews,
+# `preview.txt` for theirs. A source with the plugin env `AGE_KEY: preview` decrypts
+# with the preview key alone.
 configs:
   cmp:
     create: true
@@ -17,6 +19,10 @@ configs:
           args:
             - |
               set -eu
+              case "${ARGOCD_ENV_AGE_KEY:-keys}" in
+                keys|preview) export SOPS_AGE_KEY_FILE="/sops/${ARGOCD_ENV_AGE_KEY:-keys}.txt" ;;
+                *) echo "unknown AGE_KEY: $ARGOCD_ENV_AGE_KEY" >&2; exit 1 ;;
+              esac
               for file in *.sops.yaml; do
                 [ -e "$file" ] || continue
                 printf -- '---\n'
@@ -29,9 +35,6 @@ repoServer:
       image: quay.io/getsops/sops:v3.13.3-alpine
       # The plugin server Argo CD copies into var-files; it runs the command above.
       command: [/var/run/argocd/argocd-cmp-server]
-      env:
-        - name: SOPS_AGE_KEY_FILE
-          value: /sops/keys.txt
       securityContext:
         runAsNonRoot: true
         # Argo CD's user, as in the repo server.
@@ -60,5 +63,3 @@ repoServer:
     - name: sops-age
       secret:
         secretName: sops-age
-        items:
-          - { key: keys.txt, path: keys.txt }

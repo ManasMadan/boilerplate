@@ -115,6 +115,13 @@ own namespace with its own database and Valkey, and the Secrets every preview sh
 (`deploy/environments/preview/secrets/`). New pushes rebuild; removing the label or
 closing the pull request deletes it.
 
+A preview runs the pull request's images with the charts, values and Secrets of the
+branch it targets, never the pull request's own: a fork's charts could otherwise run any
+image with those Secrets once someone added the label. So changes to `deploy/` show up
+in staging after merging, not in the preview. The preview Secrets are encrypted to a key
+of their own, which the cluster decrypts previews with alone, so a staging Secret copied
+into that directory doesn't decrypt there (and `charts:check` refuses it).
+
 ## Infrastructure
 
 Each environment is k3s on machines you run, with Cloudflare in front, from one

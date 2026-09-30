@@ -7,11 +7,18 @@
 # Only the Secrets' values are encrypted (data, stringData); names and namespaces stay
 # readable, so reviews show which Secret changed.
 creation_rules:
-  # Staging's cluster also hosts the previews, so it decrypts theirs.
-  - path_regex: (^|/)deploy/(environments/(staging|preview)/secrets|platform/secrets/staging)/[^/]+\.sops\.yaml$
+  - path_regex: (^|/)deploy/(environments/staging/secrets|platform/secrets/staging)/[^/]+\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
     age: >-
       age1stagingclusterpublickeyreplaceme,
+      age1yourpublickeyreplaceme
+  # Previews have a key of their own, which the cluster hosting them holds next to its
+  # own and decrypts previews with alone: a staging Secret copied into a preview's
+  # directory doesn't decrypt there.
+  - path_regex: (^|/)deploy/environments/preview/secrets/[^/]+\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: >-
+      age1previewpublickeyreplaceme,
       age1yourpublickeyreplaceme
   - path_regex: (^|/)deploy/(environments/production/secrets|platform/secrets/production)/[^/]+\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$

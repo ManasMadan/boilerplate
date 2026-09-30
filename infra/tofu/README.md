@@ -63,6 +63,7 @@ cp staging.tfvars.example staging.tfvars          # your machines, domain, …
 export CLOUDFLARE_API_TOKEN=…                     # see modules/cloudflare for its permissions
 export TF_VAR_ssh_private_key="$(cat ~/.ssh/boilerplate)"
 export TF_VAR_sops_age_key="$(cat staging.agekey)"
+export TF_VAR_sops_preview_age_key="$(cat preview.agekey)"   # with previews = true
 export TF_VAR_state_passphrase=…
 tofu init -backend-config=backend-staging.hcl
 tofu apply -var-file=staging.tfvars

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { isPlatformSecret, unsafeSecret } from "./secrets-check";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { isPlatformSecret, recipientsFor, unsafeSecret } from "./secrets-check";
 
 const secret = (value: string, extra = "") =>
   `apiVersion: v1\nkind: Secret\nmetadata:\n  name: boilerplate-api\n${extra}stringData:\n  BETTER_AUTH_SECRET: ${value}\n`;
@@ -42,5 +44,22 @@ describe("the secrets check", () => {
   it("tells platform Secrets from the application's by path", () => {
     expect(isPlatformSecret("deploy/platform/secrets/staging/stalwart.sops.yaml")).toBe(true);
     expect(isPlatformSecret("deploy/environments/staging/secrets/api.sops.yaml")).toBe(false);
+  });
+
+  it("refuses a file encrypted to other keys than its directory's", () => {
+    expect(unsafeSecret("api.sops.yaml", encrypted, false, ["age1example"])).toBeNull();
+    expect(unsafeSecret("api.sops.yaml", encrypted, false, ["age1preview", "age1you"])).toContain(
+      "not the keys .sops.yaml names for this directory",
+    );
+  });
+
+  it("gives previews keys of their own, never the staging cluster's", () => {
+    const config = readFileSync(join(import.meta.dir, "../.sops.yaml"), "utf8");
+    const preview = recipientsFor("deploy/environments/preview/secrets/api.sops.yaml", config);
+    const staging = recipientsFor("deploy/environments/staging/secrets/api.sops.yaml", config);
+    expect(preview).toEqual(["age1previewpublickeyreplaceme", "age1yourpublickeyreplaceme"]);
+    expect(staging).toContain("age1stagingclusterpublickeyreplaceme");
+    expect(preview).not.toContain("age1stagingclusterpublickeyreplaceme");
+    expect(recipientsFor("README.md", config)).toBeUndefined();
   });
 });

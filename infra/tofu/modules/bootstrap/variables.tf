@@ -40,6 +40,13 @@ variable "sops_age_key" {
   }
 }
 
+variable "sops_preview_age_key" {
+  description = "On the cluster hosting previews, the age private key they decrypt their SOPS secrets with alone (never the cluster's own)."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 variable "repo_url" {
   description = "The Git repository Argo CD deploys from."
   type        = string

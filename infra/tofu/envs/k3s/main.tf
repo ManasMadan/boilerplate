@@ -6,8 +6,8 @@
 #   tofu apply -var-file=staging.tfvars
 #
 # Credentials come from the environment: CLOUDFLARE_API_TOKEN (see modules/cloudflare
-# for its permissions), TF_VAR_ssh_private_key, TF_VAR_sops_age_key and
-# TF_VAR_state_passphrase.
+# for its permissions), TF_VAR_ssh_private_key, TF_VAR_sops_age_key (and
+# TF_VAR_sops_preview_age_key where previews run) and TF_VAR_state_passphrase.
 
 locals {
   name = "boilerplate-${var.environment}"
@@ -72,6 +72,8 @@ module "bootstrap" {
   previews      = var.previews
   observability = var.observability
   sops_age_key  = var.sops_age_key
+
+  sops_preview_age_key = var.sops_preview_age_key
   cluster_annotations = merge(
     {
       domain         = var.domain
