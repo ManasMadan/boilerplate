@@ -29,11 +29,9 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext, UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
-    ModelRequest,
     ModelResponse,
     TextPart,
     ToolCallPart,
-    ToolReturnPart,
 )
 from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
@@ -43,6 +41,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from app.documents import Documents, Passage
 from app.errors import AppError
 from app.log import log
+from app.messages import last_tool_return, user_prompt
 from app.schemas import REQUEST
 from app.usage import Reservation, reserve, settle
 
@@ -122,26 +121,14 @@ def _render(passages: list[Passage]) -> str:
 
 def _extractive_answer(messages: list[ModelMessage]) -> str | None:
     """The local model's answer: the best passage, quoted, once the tool has returned."""
-    for message in reversed(messages):
-        if isinstance(message, ModelRequest):
-            for part in message.parts:
-                if isinstance(part, ToolReturnPart):
-                    content = str(part.content)
-                    if content == "No passages found.":
-                        return "I couldn't find that in the workspace's documents."
-                    first = content.split("<passage>\n", 1)[1].split("\n</passage>", 1)[0]
-                    title = content.split("\n", 1)[0].split("] ", 1)[1]
-                    return f"From “{title}”: {first}"
-    return None
-
-
-def _question(messages: list[ModelMessage]) -> str:
-    for message in messages:
-        if isinstance(message, ModelRequest):
-            for part in message.parts:
-                if part.part_kind == "user-prompt" and isinstance(part.content, str):
-                    return part.content
-    return ""
+    content = last_tool_return(messages)
+    if content is None:
+        return None
+    if content == "No passages found.":
+        return "I couldn't find that in the workspace's documents."
+    first = content.split("<passage>\n", 1)[1].split("\n</passage>", 1)[0]
+    title = content.split("\n", 1)[0].split("] ", 1)[1]
+    return f"From “{title}”: {first}"
 
 
 def local_extractive() -> Model:
@@ -150,7 +137,7 @@ def local_extractive() -> Model:
         if answer is not None:
             return ModelResponse(parts=[TextPart(answer)])
         return ModelResponse(
-            parts=[ToolCallPart("search_documents", {"query": _question(messages)})]
+            parts=[ToolCallPart("search_documents", {"query": user_prompt(messages)})]
         )
 
     async def stream(
@@ -160,7 +147,7 @@ def local_extractive() -> Model:
         if answer is None:
             yield {
                 0: DeltaToolCall(
-                    name="search_documents", json_args=json.dumps({"query": _question(messages)})
+                    name="search_documents", json_args=json.dumps({"query": user_prompt(messages)})
                 )
             }
             return

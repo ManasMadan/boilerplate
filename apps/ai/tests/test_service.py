@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from app.assistant import AssistantEvent, DoneEvent, SourcesEvent, TextEvent
 from app.settings import get_settings
+from tests.fakes import otlp_collector, serve
 from tests.support import (
     ENV,
     as_org,
@@ -58,6 +59,14 @@ def test_every_route_needs_the_api_s_token(client: TestClient) -> None:
             "message": "UNAUTHENTICATED",
             "data": {"params": {}, "requestId": "r1"},
         }
+
+
+def test_the_sentiment_route(client: TestClient) -> None:
+    org, user = new_org()
+    response = client.post(
+        "/v1/sentiment", json={"text": "I love this, it is great"}, headers=headers(org, user)
+    )
+    assert body(response) == {"label": "positive", "score": 1.0, "model": "wordlist-v1"}
 
 
 def test_invalid_input_is_a_validation_error(client: TestClient) -> None:
@@ -263,6 +272,19 @@ def test_the_assistant_is_off_without_a_model(
     }
 
 
+def test_the_mcp_server_is_off_without_the_api_s_address(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("API_URL")
+    get_settings.cache_clear()
+    from app.main import app
+
+    with TestClient(app) as without:
+        response = without.post("/ai/mcp", json={})
+    assert response.status_code == 404
+    assert error_of(response).code == "NOT_FOUND"
+
+
 def test_an_unknown_route_is_a_contract_error(client: TestClient) -> None:
     response = client.get("/v1/nope")
     assert response.status_code == 404
@@ -288,23 +310,27 @@ def test_the_worker_indexes_queued_documents_then_summarizes_them(client: TestCl
         )
     )
     assert doc.summary is None
-    env = {**os.environ, **ENV}
-    worker = subprocess.Popen([sys.executable, "-m", "app.worker"], env=env)
-    try:
-        deadline = time.monotonic() + 20
-        listed = doc
-        while time.monotonic() < deadline and listed.summary is None:
-            time.sleep(0.2)
-            [listed] = documents_of(client.get("/v1/documents", headers=headers(org, user)))
-        assert listed.status == "ready", f"document {doc.id} is {listed.status}"
-        # The local summarizer keeps a passage's opening sentence.
-        assert listed.summary == "Indexed by the worker."
-        [(feature, model, by)] = as_org(
-            org,
-            "SELECT DISTINCT feature, model, user_id FROM ai.usage WHERE org_id = %s",
-            (org,),
-        )
-        assert (feature, model, by) == ("summary", "local:extractive", user)
-    finally:
-        worker.terminate()
-        assert worker.wait(timeout=10) == 0
+    with serve({"/v1/traces": otlp_collector, "/v1/metrics": otlp_collector}) as collector:
+        # With a collector configured, as in production, so its traces are exported too.
+        env = {**os.environ, **ENV, "OTEL_EXPORTER_OTLP_ENDPOINT": collector.url}
+        worker = subprocess.Popen([sys.executable, "-m", "app.worker"], env=env)
+        try:
+            deadline = time.monotonic() + 20
+            listed = doc
+            while time.monotonic() < deadline and listed.summary is None:
+                time.sleep(0.2)
+                [listed] = documents_of(client.get("/v1/documents", headers=headers(org, user)))
+            assert listed.status == "ready", f"document {doc.id} is {listed.status}"
+            # The local summarizer keeps a passage's opening sentence.
+            assert listed.summary == "Indexed by the worker."
+            [(feature, model, by)] = as_org(
+                org,
+                "SELECT DISTINCT feature, model, user_id FROM ai.usage WHERE org_id = %s",
+                (org,),
+            )
+            assert (feature, model, by) == ("summary", "local:extractive", user)
+        finally:
+            worker.terminate()
+            assert worker.wait(timeout=10) == 0
+    # Spans are sent in batches, and the last batch when the worker stops.
+    assert "/v1/traces" in {path for path, _ in collector.received}

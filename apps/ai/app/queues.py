@@ -6,7 +6,7 @@ what they carry and how they retry.
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol, assert_type
 from uuid import UUID
 
 # bullmq's source is typed but ships without a py.typed marker, so pyright treats it as
@@ -61,13 +61,14 @@ class IngestQueue:
             "payload": {"documentId": document_id, "orgId": org_id},
         }
         # One job per document and step: queuing the same step twice runs it once.
-        match name:
-            case "ingest":
-                data = AiIngestIngestJob.model_validate(job)
-                job_id = str(document_id)
-            case "summarize":
-                data = AiIngestSummarizeJob.model_validate(job)
-                job_id = f"{document_id}-summary"
+        if name == "ingest":
+            data = AiIngestIngestJob.model_validate(job)
+            job_id = str(document_id)
+        else:
+            # The only other job: one added in packages/jobs is a type error here.
+            assert_type(name, Literal["summarize"])
+            data = AiIngestSummarizeJob.model_validate(job)
+            job_id = f"{document_id}-summary"
         await self._queue.add(  # pyright: ignore[reportUnknownMemberType]  # bullmq leaves the job's data untyped
             name, data.model_dump(mode="json", exclude_none=True), job_options(INGEST, job_id)
         )

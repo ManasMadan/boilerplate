@@ -96,17 +96,12 @@ addopts = "-m 'not integration'"
 
 [tool.coverage.run]
 source = ["app"]
+branch = true
 # The worker runs as a subprocess in the integration tests; measure it there too.
 patch = ["subprocess"]
-omit = [
-  # Generated from the JSON Schemas (bun run gen).
-  "app/contracts/*",
-  # Writes openapi.json for codegen.
-  "app/export_openapi.py",
-]
 
 [tool.coverage.report]
-# The floor the suite currently meets (unit + integration), rounded down, less a point
-# for paths that only run sometimes. Raise it as tests are added.
-fail_under = 95
+# Every line and every branch, unit and integration tests together. Nothing is excluded:
+# a line no test reaches is either tested or deleted.
+fail_under = 100
 show_missing = true

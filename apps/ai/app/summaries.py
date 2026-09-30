@@ -22,10 +22,12 @@ from typing import TypedDict, cast
 from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RunUsage, UsageLimits
+
+from app.messages import user_prompt
 
 MAX_PASSAGES = 20
 PARALLEL = 4
@@ -42,20 +44,11 @@ COMBINE = (
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 
 
-def _prompt(messages: list[ModelMessage]) -> str:
-    for message in messages:
-        if isinstance(message, ModelRequest):
-            for part in message.parts:
-                if part.part_kind == "user-prompt" and isinstance(part.content, str):
-                    return part.content
-    return ""
-
-
 def local_summarizer() -> Model:
     """Opening sentences instead of a model: one per passage, up to three when combining."""
 
     async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        text = " ".join(_prompt(messages).split())
+        text = " ".join(user_prompt(messages).split())
         sentences = [s for s in _SENTENCE.split(text) if s]
         keep = 3 if info.instructions == COMBINE else 1
         return ModelResponse(parts=[TextPart(" ".join(sentences[:keep]))])

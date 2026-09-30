@@ -38,7 +38,11 @@ paths:
   mirror it and `tests/test_models_match_db.py` fails when they drift. Tenant data only
   through `tenant(org_id)` in `app/db/session.py`, which sets `app.org_id` for RLS.
 - Every route except health needs the caller JWT (`CallerDep` in `app/auth.py`).
-- Tests are `tests/test_*.py`. Anything needing Postgres or Redis is marked
-  `pytest.mark.integration` (excluded by default; `bun run test:integration` runs them).
+- Tests are `tests/test_*.py`. Anything needing Postgres, Redis or a local HTTP server is
+  marked `pytest.mark.integration` (excluded by default; `bun run test:integration` runs
+  them). Coverage is 100% of lines and branches, unit and integration together, with
+  nothing omitted: a line no test reaches gets a test or goes. Providers are exercised
+  through the local fakes in `tests/fakes.py` (OpenAI's API, an OTLP collector), which
+  speak the real protocol.
   Model behaviour is tested with the local stand-ins and the evals (`bun run --cwd
   apps/ai evals`), not by mocking the provider.

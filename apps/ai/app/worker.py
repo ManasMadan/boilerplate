@@ -9,6 +9,7 @@ the queue's backoff (the same settings the TypeScript side uses).
 import asyncio
 import signal
 from contextlib import AbstractContextManager
+from typing import Literal, assert_type
 from uuid import UUID
 
 import structlog
@@ -59,22 +60,24 @@ async def main() -> None:
     )
 
     async def process(job: JobLike) -> None:
-        match JOB_NAME.validate_python(job.name):
-            case "ingest":
-                ingest = AiIngestIngestJob.model_validate(job.data)
-                with _bound(job, ingest):
-                    await documents.index(
-                        ingest.payload.orgId,
-                        ingest.payload.documentId,
-                        request_id=ingest.meta.requestId,
-                        user_id=_user(ingest),
-                    )
-            case "summarize":
-                summarize = AiIngestSummarizeJob.model_validate(job.data)
-                with _bound(job, summarize):
-                    await documents.summarize(
-                        summarize.payload.orgId, summarize.payload.documentId, _user(summarize)
-                    )
+        name = JOB_NAME.validate_python(job.name)
+        if name == "ingest":
+            ingest = AiIngestIngestJob.model_validate(job.data)
+            with _bound(job, ingest):
+                await documents.index(
+                    ingest.payload.orgId,
+                    ingest.payload.documentId,
+                    request_id=ingest.meta.requestId,
+                    user_id=_user(ingest),
+                )
+        else:
+            # The only other job: one added in packages/jobs is a type error here.
+            assert_type(name, Literal["summarize"])
+            summarize = AiIngestSummarizeJob.model_validate(job.data)
+            with _bound(job, summarize):
+                await documents.summarize(
+                    summarize.payload.orgId, summarize.payload.documentId, _user(summarize)
+                )
 
     worker = start_worker(INGEST, process, str(settings.redis_url), concurrency=4)
     stop = asyncio.Event()

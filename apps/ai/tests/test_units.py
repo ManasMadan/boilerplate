@@ -2,7 +2,10 @@
 
 import math
 import os
+import runpy
 import secrets
+import sys
+from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -129,3 +132,40 @@ def test_summaries_follow_the_configured_model() -> None:
     summaries = create_summaries(_settings(AI_MODEL="local:extractive", AI_TOKENS_PER_RUN="5000"))
     assert summaries is not None
     assert (summaries.model_name, summaries.monthly_tokens) == ("local:extractive", 2_000_000)
+
+
+async def test_nothing_reaches_the_database_before_the_engine_is_opened() -> None:
+    from app.db.session import close_engine, engine, tenant
+
+    await close_engine()
+    with pytest.raises(RuntimeError, match="open_engine"):
+        engine()
+    with pytest.raises(RuntimeError, match="open_engine"):
+        async with tenant(ORG):
+            pass
+
+
+def test_routes_have_no_services_before_the_app_starts() -> None:
+    from app.main import services
+
+    with pytest.raises(RuntimeError, match="lifespan"):
+        services()
+
+
+def test_the_openapi_export_is_the_committed_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "openapi.json"
+    monkeypatch.setattr(sys, "argv", ["export_openapi", str(out)])
+    runpy.run_module("app.export_openapi", run_name="__main__")
+    # What `bun run gen` writes; CI also fails when the committed copy is stale.
+    committed = Path(__file__).resolve().parents[1] / "openapi.json"
+    assert out.read_text() == committed.read_text()
+
+
+def test_a_job_this_version_does_not_know_fails() -> None:
+    from app.worker import JOB_NAME
+
+    assert JOB_NAME.validate_python("summarize") == "summarize"
+    with pytest.raises(ValidationError):
+        JOB_NAME.validate_python("translate")
