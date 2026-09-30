@@ -171,6 +171,41 @@ export function writeTargets(line: string): string[] {
 const deny = (reason: string): Verdict => ({ decision: "deny", reason });
 const ask = (reason: string): Verdict => ({ decision: "ask", reason });
 
+/**
+ * Worktrunk (`wt`): making, listing and switching worktrees is routine; landing a branch,
+ * deleting one, rewriting its history, approving the project's hooks or starting another
+ * program in a worktree is the user's call.
+ */
+function worktrunkVerdict(
+  sub: string,
+  third: string,
+  has: (...flags: string[]) => boolean,
+): Verdict {
+  if (sub === "merge") {
+    return ask(
+      "wt merge lands the branch on master locally and removes the worktree; changes reach master through pull requests.",
+    );
+  }
+  if (sub === "remove") return ask("wt remove deletes the worktree and, once merged, its branch.");
+  if (sub === "config")
+    return ask("wt config changes the user's Worktrunk setup (shell, plugins).");
+  if (
+    sub === "step" &&
+    ["commit", "squash", "push", "rebase", "promote", "prune", "relocate"].includes(third)
+  ) {
+    return ask(
+      `wt step ${third} commits, rewrites or moves branches; it needs the user's approval.`,
+    );
+  }
+  if (has("--yes", "-y")) {
+    return ask("--yes approves the project's hooks without the user seeing them first.");
+  }
+  if (sub === "switch" && has("-x", "--execute")) {
+    return ask("wt switch -x starts another program (often another agent) in the worktree.");
+  }
+  return null;
+}
+
 /** What the policy says about one simple command, or null. */
 function commandVerdict({ env, words }: Simple, installed: (bin: string) => boolean): Verdict {
   const [program = "", sub = "", third = ""] = words;
@@ -198,6 +233,18 @@ function commandVerdict({ env, words }: Simple, installed: (bin: string) => bool
       return ask("Deleting a branch loses its commits.");
     if (sub === "reset" && has("--hard")) return ask("git reset --hard discards uncommitted work.");
     if (sub === "clean") return ask("git clean deletes untracked files.");
+    // Read-only forms are fine; anything else swaps work in and out of a stack every
+    // worktree shares, so one session's stash can land in another's tree.
+    if (sub === "stash" && !["list", "show"].includes(third)) {
+      return ask(
+        "git stash is shared by every worktree of this repository; commit the work, or use another worktree (`wt switch --create`).",
+      );
+    }
+    if (sub === "worktree" && third === "add") {
+      return ask(
+        "Make worktrees with `wt switch --create <branch>` (.config/wt.toml copies .env and installs).",
+      );
+    }
     if (sub === "commit") return ask("Commits need the user's approval (CLAUDE.md).");
     if (sub === "push") return ask("Pushing publishes the branch; it needs the user's approval.");
   }
@@ -232,6 +279,10 @@ function commandVerdict({ env, words }: Simple, installed: (bin: string) => bool
     return ask(
       `${sub} isn't installed here, so bunx would download and run npm's "${sub}". Run \`bun install\` first.`,
     );
+  }
+  if (program === "wt") {
+    const wt = worktrunkVerdict(sub, third, has);
+    if (wt) return wt;
   }
   if (program === "tofu" && ["apply", "destroy", "import", "state"].includes(sub)) {
     return ask("This changes real infrastructure or its state.");

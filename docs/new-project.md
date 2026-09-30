@@ -17,6 +17,7 @@ devcontainer has only OpenTofu, kubectl and Helm of them.
 | `helm` with the `helm-unittest` plugin | `bun run charts:check` |
 | `kubectl` | checking the first deploy (step 7) |
 | `kind` | `bun run k8s:up`, the whole stack in a local cluster before a real one |
+| `wt` (Worktrunk, optional) | one worktree per branch, for parallel work and Claude Code agents (`.config/wt.toml`) |
 
 ## 1. Make it yours
 

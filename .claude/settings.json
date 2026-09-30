@@ -100,6 +100,11 @@
       "Bash(docker compose ps*)",
       "Bash(docker compose logs*)",
       "Bash(docker compose up*)",
+      "Bash(wt list*)",
+      "Bash(wt switch*)",
+      "Bash(wt step diff*)",
+      "Bash(wt step copy-ignored*)",
+      "Bash(wt --version)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -256,5 +261,16 @@
   "statusLine": {
     "type": "command",
     "command": "bun \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/statusline.ts\""
+  },
+  "extraKnownMarketplaces": {
+    "worktrunk": {
+      "source": {
+        "source": "github",
+        "repo": "max-sixty/worktrunk"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "worktrunk@worktrunk": true
   }
 }

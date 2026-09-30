@@ -31,6 +31,7 @@ function machine(answers: Record<string, Partial<Ran>> = {}, ps = healthy) {
     if (line in answers) return answers[line];
     if (line === "node --version") return { stdout: `v${node}.1.0\n` };
     if (line === "uv --version") return { stdout: "uv 0.12.0\n" };
+    if (line === "wt --version") return { stdout: "wt 0.57.0\n" };
     if (line.startsWith("docker info")) return { stdout: "29.0.0\n" };
     if (line.startsWith("docker compose ps")) return { stdout: ps };
     if (line.startsWith("docker compose exec")) return { stdout: "6\n" };
@@ -47,6 +48,7 @@ describe("doctor", () => {
     expect(output).toContain(`Node v${node}.1.0`);
     expect(output).toContain(`Bun ${pinnedBun}`);
     expect(output).toContain("uv 0.12.0");
+    expect(output).toContain("wt 0.57.0");
     expect(output).toContain("Docker 29.0.0");
     expect(output).toContain("2 variables, in sync with .env.example");
     expect(output).toContain("mailpit running");
@@ -62,6 +64,7 @@ describe("doctor", () => {
     expect(output).toContain("Node is not installed");
     expect(output).toContain("Bun 1.0.0 found");
     expect(output).toContain("uv is not installed");
+    expect(output).toContain("Worktrunk isn't installed (optional");
     expect(output).toContain("Docker is not running");
     expect(output).toContain("No .env yet. Run `bun run setup`.");
     expect(output).not.toContain("Local services");

@@ -24,6 +24,8 @@
 # remove everything with `bun run docker:clean`.
 #
 # Images are pinned; Renovate proposes upgrades. Ports can be overridden in .env.
+# The project is named, so every worktree of this repository (.config/wt.toml) shares
+# these containers and volumes instead of starting its own.
 name: boilerplate
 
 services:

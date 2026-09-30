@@ -20,6 +20,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | Every check that applies to a change | the `verify` skill |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
 | New database migration | `bun run db:migrate` |
+| Work on another branch in parallel (its own worktree, sharing the local services) | `wt switch --create <branch>` (`wt list` shows them) |
 | Set a secret in .env (never read or print it: the Read tool refuses, and so must you) | `bun run env:set KEY=value` (`env:unset KEY` removes one) |
 
 Run commands from the repo root. Never `cd` into a package to run tools directly; for one
@@ -119,6 +120,13 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   tfvars and tfstate, load-test sessions) are denied to the Read tool; a shell command
   could still print them, so never try. There is no sandbox: Docker and the local
   services need the socket and the network.
+- Worktrees: parallel branches and agents use Worktrunk (`wt`, `.config/wt.toml`), whose
+  Claude Code plugin settings.json enables: an agent started with `isolation: worktree`
+  gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),
+  dependencies installed and code generated. Never `git stash` (every worktree shares
+  one stash stack) and never `git worktree add` by hand. The worktrees share the
+  Docker services, so only one `bun dev` runs at a time; `wt merge` and `wt remove` ask
+  first.
 - `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
   database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
   only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and

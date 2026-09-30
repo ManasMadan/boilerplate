@@ -73,6 +73,14 @@ export function doctor({
       "uv is not installed. Setup, `bun dev`, types and tests need it (the AI service's code generation): `brew install uv`, or see https://docs.astral.sh/uv/.",
     );
 
+  // Optional: parallel branches and agents in worktrees (.config/wt.toml).
+  const wt = version(["wt", "--version"]);
+  if (wt) ok(wt);
+  else
+    warn(
+      "Worktrunk isn't installed (optional: one worktree per branch, for parallel work and agents): `brew install worktrunk && wt config shell install`.",
+    );
+
   const docker = version(["docker", "info", "--format", "{{.ServerVersion}}"]);
   if (docker) ok(`Docker ${docker}`);
   else problem("Docker is not running. Start Docker Desktop (or your Docker daemon).");

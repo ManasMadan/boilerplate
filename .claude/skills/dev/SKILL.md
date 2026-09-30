@@ -29,6 +29,16 @@ them with the Bash tool's `run_in_background` and read their output from there, 
 in the foreground (the call would hang until its timeout). The first `dev:full` waits
 several minutes for ClamAV's virus signatures.
 
+## Several branches at once
+
+`wt switch --create <branch>` (Worktrunk, `.config/wt.toml`) makes a worktree next to
+this checkout, copies `.env`, installs and generates; `wt switch <branch>` moves between
+them and `wt list` shows each one's state. They all use this machine's Docker services
+(docker-compose.yml names the project), so tests and builds run side by side, but the
+app ports are fixed: stop `bun dev` in one before starting it in another. `wt remove`
+(which asks first) deletes a worktree and its merged branch. Without Worktrunk
+(`bun run doctor` says so), `brew install worktrunk && wt config shell install`.
+
 ## Troubleshooting
 
 1. `bun run doctor`. It lists the exact fix for tools, `.env` drift and services.
