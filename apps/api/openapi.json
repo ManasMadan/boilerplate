@@ -74,6 +74,177 @@
             }
           }
         }
+      },
+      "webhook.todo.created.v1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "todo.created.v1"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "todoId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "todoId",
+              "title"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "timestamp",
+          "data"
+        ]
+      },
+      "webhook.todo.completed.v1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "todo.completed.v1"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "todoId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "todoId",
+              "title"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "timestamp",
+          "data"
+        ]
+      },
+      "webhook.todo.deleted.v1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "todo.deleted.v1"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "todoId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "todoId"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "timestamp",
+          "data"
+        ]
+      },
+      "webhook.org.member_added.v1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "org.member_added.v1"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "role": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "organizationId",
+              "userId",
+              "role"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "timestamp",
+          "data"
+        ]
+      },
+      "webhook.org.member_removed.v1": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "org.member_removed.v1"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "role": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "organizationId",
+              "userId",
+              "role"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "timestamp",
+          "data"
+        ]
       }
     }
   },
@@ -51258,6 +51429,118 @@
             "session": []
           }
         ]
+      }
+    }
+  },
+  "webhooks": {
+    "todo.created.v1": {
+      "post": {
+        "operationId": "webhook.todo.created.v1",
+        "summary": "todo.created.v1",
+        "description": "Signed with the endpoint's secret: verify the webhook-id, webhook-timestamp and webhook-signature headers (Standard Webhooks) before trusting it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/webhook.todo.created.v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Anything else is retried."
+          }
+        }
+      }
+    },
+    "todo.completed.v1": {
+      "post": {
+        "operationId": "webhook.todo.completed.v1",
+        "summary": "todo.completed.v1",
+        "description": "Signed with the endpoint's secret: verify the webhook-id, webhook-timestamp and webhook-signature headers (Standard Webhooks) before trusting it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/webhook.todo.completed.v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Anything else is retried."
+          }
+        }
+      }
+    },
+    "todo.deleted.v1": {
+      "post": {
+        "operationId": "webhook.todo.deleted.v1",
+        "summary": "todo.deleted.v1",
+        "description": "Signed with the endpoint's secret: verify the webhook-id, webhook-timestamp and webhook-signature headers (Standard Webhooks) before trusting it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/webhook.todo.deleted.v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Anything else is retried."
+          }
+        }
+      }
+    },
+    "org.member_added.v1": {
+      "post": {
+        "operationId": "webhook.org.member_added.v1",
+        "summary": "org.member_added.v1",
+        "description": "Signed with the endpoint's secret: verify the webhook-id, webhook-timestamp and webhook-signature headers (Standard Webhooks) before trusting it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/webhook.org.member_added.v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Anything else is retried."
+          }
+        }
+      }
+    },
+    "org.member_removed.v1": {
+      "post": {
+        "operationId": "webhook.org.member_removed.v1",
+        "summary": "org.member_removed.v1",
+        "description": "Signed with the endpoint's secret: verify the webhook-id, webhook-timestamp and webhook-signature headers (Standard Webhooks) before trusting it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/webhook.org.member_removed.v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Anything else is retried."
+          }
+        }
       }
     }
   }

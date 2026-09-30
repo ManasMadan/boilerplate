@@ -168,7 +168,11 @@ for 24 hours.
 
 Names are versioned (`todo.completed.v1`). Adding an optional field is compatible;
 anything else is a new version, published alongside the old one until every consumer
-has moved. The audit log records every event except `notification.requested.v1`
+has moved. CI holds this: `bun run gen` writes every event's schema to
+`packages/jobs/generated/events.json`, and on a pull request `scripts/events-compat.ts`
+compares it with the base branch's, failing on a removed event or a field removed,
+retyped, made required or made optional. The events customers can subscribe to are also
+in the `webhooks` section of `apps/api/openapi.json`, with the body they receive. The audit log records every event except `notification.requested.v1`
 (`unauditedEvents`): its payload is a whole notification, addresses included, and the
 change it's about has its own event.
 

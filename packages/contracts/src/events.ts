@@ -4,7 +4,7 @@
  *
  * Names are versioned (`todo.completed.v1`). Adding an optional field is compatible;
  * anything else is a new version, published alongside the old one until every
- * consumer has moved. Consumers must be idempotent (events are delivered at least once)
+ * consumer has moved (CI checks this: scripts/events-compat.ts). Consumers must be idempotent (events are delivered at least once)
  * and must not depend on order.
  *
  * Adding an event: define its payload here, emit it with `emitEvent(tx, ...)` in the

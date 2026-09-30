@@ -7,6 +7,10 @@
  * apps/ai turns them into Pydantic models, so a payload is defined once, in zod, and
  * both languages validate the same shape; CI fails if the committed files drift.
  *
+ * It also writes every domain event's payload schema (generated/events.json), which CI
+ * compares with the base branch's, so a published event only ever gains optional fields
+ * (scripts/events-compat.ts).
+ *
  * Add a queue to `shared` when a Python service produces or consumes it: every job on
  * it gets its own schema, and its job names and settings come along.
  */
@@ -14,6 +18,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorData, errorIssue, errorResponse } from "@repo/contracts/api/base";
 import { ERROR_CODES, errorCode } from "@repo/contracts/errors";
+import { events } from "@repo/contracts/events";
 import { REALTIME_REDIS_PREFIX, realtimeChannel, realtimeMessage } from "@repo/contracts/realtime";
 import { z } from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
@@ -126,6 +131,16 @@ const settings = Object.fromEntries(
 );
 writeFileSync(join(out, "..", "queue-settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
 writeFileSync(join(out, "..", "error-codes.json"), `${JSON.stringify(ERROR_CODES, null, 2)}\n`);
+// What consumers accept of each event ("input": zod strips keys it doesn't know).
+const catalog = Object.fromEntries(
+  Object.keys(events)
+    .sort()
+    .map((name) => [
+      name,
+      z.toJSONSchema(events[name as keyof typeof events], { target: "draft-2020-12", io: "input" }),
+    ]),
+);
+writeFileSync(join(out, "..", "events.json"), `${JSON.stringify(catalog, null, 2)}\n`);
 // The Redis channel Python publishes an organization's messages on, with `{id}` where
 // the organization's id goes.
 writeFileSync(

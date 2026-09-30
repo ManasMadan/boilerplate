@@ -23,8 +23,10 @@ builds in the field all depend on it.
   ICU arguments: strings and numbers only.
 - Events (`src/events.ts`): names are versioned (`todo.completed.v1`). Adding an
   optional field is compatible; anything else is a new `.v2` published alongside the old
-  one. Consumers must be idempotent and order-independent. Only events in
-  `webhookEvents` reach customers.
+  one. The `api-compat` CI job refuses anything else (`scripts/events-compat.ts`,
+  against the base branch's `packages/jobs/generated/events.json`). Consumers must be
+  idempotent and order-independent. Only events in `webhookEvents` reach customers, and
+  the OpenAPI document's `webhooks` section describes what they receive.
 - Never break `/api/v1`. Removing a field, renaming, narrowing a type or adding a
   required input fails the `api-compat` CI job (oasdiff against the base branch's
   `apps/api/openapi.json`). Add instead: new optional fields, new procedures. A real

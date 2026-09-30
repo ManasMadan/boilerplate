@@ -421,10 +421,11 @@ jobs:
 
   # Conventional pull-request titles: squash merges make them the commit on master, and
   # the release notes are built from them (scripts/release.ts).
-  # The public REST API (/api/v1) against the base branch's: removing or narrowing
-  # anything third parties call fails, unless the title declares the breaking change
-  # (`feat(api)!: …`), which the release notes then list first, for a new major version. The
-  # document itself is kept current by the codegen job (apps/api/openapi.json).
+  # The public REST API (/api/v1) and the domain events against the base branch's:
+  # removing or narrowing anything third parties call fails, unless the title declares
+  # the breaking change (`feat(api)!: …`), which the release notes then list first, for a
+  # new major version. The codegen job keeps the documents current (apps/api/openapi.json,
+  # packages/jobs/generated/events.json).
   api-compat:
     name: API compatibility
     if: github.event_name == 'pull_request'
@@ -455,6 +456,16 @@ jobs:
           fi
           docker run --rm -v "$RUNNER_TEMP:/base:ro" -v "$PWD/apps/api:/head:ro" "$OASDIFF" \
             breaking /base/base.json /head/openapi.json --format githubactions "${fail[@]}"
+      - uses: ./.github/actions/setup
+      # Domain events (the audit log, notifications, customers' webhooks) may only gain
+      # optional fields; a breaking title reports without failing, as above.
+      - name: Event compatibility
+        run: |
+          if [[ "$TITLE" =~ ^[a-z]+(\([a-z-]+\))?!: ]]; then
+            bun scripts/events-compat.ts "$BASE" || true
+          else
+            bun scripts/events-compat.ts "$BASE"
+          fi
 
   pr-title:
     name: Pull request title
