@@ -303,6 +303,46 @@ describe("outbound deliveries", () => {
     });
   });
 
+  it("records why an endpoint couldn't be reached as a code, never an internal message", async () => {
+    // Nothing listens on port 9.
+    const { orgId, endpointId } = await endpoint({ url: "http://127.0.0.1:9/hook" });
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    expect(await deliveries.attempt(orgId, deliveryId, false)).toBe("retry");
+    expect(await delivery(deliveryId)).toMatchObject({
+      last_status: null,
+      last_error: "connection_failed",
+    });
+  });
+
+  it("fails the job, not the endpoint, when signing fails on our side", async () => {
+    const { orgId, endpointId } = await endpoint();
+    // A secret encrypted under a key this service doesn't have (a botched rotation).
+    await asRole("postgres", (client) =>
+      client.query("UPDATE webhooks.endpoint SET secret = 'v1.missing-key.AAAA' WHERE id = $1", [
+        endpointId,
+      ]),
+    );
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    await expect(deliveries.attempt(orgId, deliveryId, true)).rejects.toThrow();
+    // The delivery waits for the job's retry; the endpoint is neither blamed nor turned off.
+    expect(await delivery(deliveryId)).toMatchObject({
+      status: "pending",
+      attempts: 0,
+      last_error: null,
+    });
+    const [row] = await asRole(
+      "postgres",
+      async (client) =>
+        (
+          await client.query("SELECT disabled_at FROM webhooks.endpoint WHERE id = $1", [
+            endpointId,
+          ])
+        ).rows,
+    );
+    expect(row.disabled_at).toBeNull();
+    expect(received).toEqual([]);
+  });
+
   it("treats a redirect as a failed delivery, and never sends the signed body on", async () => {
     const { orgId, endpointId } = await endpoint({ url: receiverUrl.replace("/hook", "/moved") });
     const deliveryId = await deliveries.createTest(orgId, endpointId);
@@ -345,7 +385,7 @@ describe("outbound deliveries", () => {
     const { orgId, endpointId } = await endpoint({ url: "http://10.0.0.1/hook" });
     const deliveryId = await deliveries.createTest(orgId, endpointId);
     expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("failed");
-    expect((await delivery(deliveryId)).last_error).toBe("DESTINATION_NOT_ALLOWED");
+    expect((await delivery(deliveryId)).last_error).toBe("destination_not_allowed");
   });
 
   it("replays a finished delivery with the same message id", async () => {

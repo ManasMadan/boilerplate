@@ -9,9 +9,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
+import type { WebhookDeliveryError } from "@repo/contracts/api";
 import { tenantTx, withTenant } from "@repo/db";
 import {
+  AppError,
   type Database,
+  describeError,
   InjectDatabase,
   InjectPinoLogger,
   keysFromEnv,
@@ -67,26 +70,35 @@ export class DeliveryService {
         },
       },
     });
-    if (delivery?.status !== "pending") return "skipped";
+    if (!delivery) {
+      // Under row-level security a wrong organization looks exactly like a missing row.
+      this.log.warn({ orgId, deliveryId }, "webhook delivery not found; skipped");
+      return "skipped";
+    }
+    if (delivery.status !== "pending") return "skipped";
     if (delivery.endpoint.disabledAt) {
       await tenant.webhookDelivery.update({
         where: { id: deliveryId },
-        data: { status: "failed", lastError: "endpoint disabled" },
+        data: { status: "failed", lastError: "endpoint_disabled" },
       });
       return "skipped";
     }
 
+    // Before the attempt, outside its try: failing to sign (a missing encryption key) is
+    // our fault, not the endpoint's, so it fails the job (logged, retried) and never
+    // counts against the endpoint or disables it.
+    const headers = {
+      "content-type": "application/json",
+      "user-agent": USER_AGENT,
+      ...signatureHeaders(this.secretsOf(delivery.endpoint), delivery.eventId, delivery.body),
+    };
     const started = performance.now();
     let status: number | undefined;
-    let error: string | undefined;
+    let error: WebhookDeliveryError | undefined;
     try {
       const response = await safeFetch(delivery.endpoint.url, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "user-agent": USER_AGENT,
-          ...signatureHeaders(this.secretsOf(delivery.endpoint), delivery.eventId, delivery.body),
-        },
+        headers,
         body: delivery.body,
         timeoutMs: env.WEBHOOK_TIMEOUT_MS,
         maxResponseBytes: 64 * 1024,
@@ -98,7 +110,11 @@ export class DeliveryService {
       });
       status = response.status;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      error = deliveryError(cause);
+      this.log.info(
+        { orgId, deliveryId, error, err: describeError(cause) },
+        "webhook attempt failed",
+      );
     }
     const succeeded = status !== undefined && status >= 200 && status < 300;
     const outcome: AttemptResult = succeeded ? "succeeded" : isLastAttempt ? "failed" : "retry";
@@ -109,7 +125,7 @@ export class DeliveryService {
         attempts: { increment: 1 },
         lastAttemptAt: new Date(),
         lastStatus: status ?? null,
-        lastError: succeeded ? null : (error ?? `HTTP ${status}`),
+        lastError: error ?? null,
         lastDurationMs: Math.round(performance.now() - started),
         ...(outcome === "succeeded" && { status: "succeeded", succeededAt: new Date() }),
         ...(outcome === "failed" && { status: "failed" }),
@@ -178,4 +194,22 @@ export class DeliveryService {
       this.log.warn({ endpointId, orgId }, "webhook endpoint disabled after failing continuously");
     });
   }
+}
+
+/**
+ * What went wrong reaching the endpoint, as a code for tenants to see. Anything that
+ * isn't about the endpoint is rethrown: it's our bug, and it fails the job instead.
+ */
+export function deliveryError(cause: unknown): WebhookDeliveryError {
+  if (cause instanceof AppError) {
+    if (cause.code === "DESTINATION_NOT_ALLOWED") return "destination_not_allowed";
+    if (cause.code === "RESPONSE_TOO_LARGE") return "response_too_large";
+    throw cause;
+  }
+  if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
+    return "timeout";
+  }
+  // undici: "fetch failed", with the socket's reason (refused, reset, DNS, TLS) as cause.
+  if (cause instanceof TypeError && cause.message === "fetch failed") return "connection_failed";
+  throw cause;
 }

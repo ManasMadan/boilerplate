@@ -109688,6 +109688,13 @@
                           "lastError": {
                             "anyOf": [
                               {
+                                "enum": [
+                                  "timeout",
+                                  "connection_failed",
+                                  "destination_not_allowed",
+                                  "response_too_large",
+                                  "endpoint_disabled"
+                                ],
                                 "type": "string"
                               },
                               {

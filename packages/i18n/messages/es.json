@@ -673,7 +673,14 @@
         "failed": "Falló",
         "redeliver": "Enviar de nuevo",
         "redelivered": "Se enviará de nuevo",
-        "loadMore": "Cargar más"
+        "loadMore": "Cargar más",
+        "error": {
+          "timeout": "tiempo agotado",
+          "connection_failed": "no se pudo conectar",
+          "destination_not_allowed": "dirección no permitida",
+          "response_too_large": "respuesta demasiado grande",
+          "endpoint_disabled": "endpoint desactivado"
+        }
       },
       "eventLabels": {
         "todo": {

@@ -8,6 +8,7 @@ import {
   WEBHOOK_ENDPOINT_LIMIT,
   WEBHOOK_SECRET_OVERLAP_HOURS,
   type WebhookEndpoint,
+  webhookDeliverySchema,
 } from "@repo/contracts/api";
 import type { EventPayload, WebhookEventName } from "@repo/contracts/events";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
@@ -210,8 +211,16 @@ export class WebhooksService implements OnApplicationShutdown {
       throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: endpointId } });
     }
     const rows = await this.repository.listDeliveries(orgId, endpointId, page);
+    // Parsed, not cast: the columns are text. A code the contract doesn't know (a row from
+    // before the codes) reads as the nearest, a failed connection.
+    const { status, lastError } = webhookDeliverySchema.shape;
+    const knownError = lastError.catch("connection_failed");
     return toPage(
-      rows.map((row) => ({ ...row, status: row.status as "pending" | "succeeded" | "failed" })),
+      rows.map((row) => ({
+        ...row,
+        status: status.parse(row.status),
+        lastError: knownError.parse(row.lastError),
+      })),
       page.limit,
     );
   }

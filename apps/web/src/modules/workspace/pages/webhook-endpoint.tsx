@@ -185,7 +185,9 @@ function DeliveriesCard({ endpointId }: { endpointId: string }) {
                     })}{" "}
                     · {t("attempts", { count: delivery.attempts })}
                     {delivery.lastStatus ? ` · HTTP ${delivery.lastStatus}` : ""}
-                    {delivery.lastError && !delivery.lastStatus ? ` · ${delivery.lastError}` : ""}
+                    {delivery.lastError && !delivery.lastStatus
+                      ? ` · ${t(`error.${delivery.lastError}`)}`
+                      : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

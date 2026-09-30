@@ -27,13 +27,26 @@ export const webhookEndpointSchema = z.object({
 });
 export type WebhookEndpoint = z.infer<typeof webhookEndpointSchema>;
 
+/**
+ * Why an attempt failed without an HTTP status, as a code (the apps translate it), never
+ * our own error message. A response with a status records the status instead.
+ */
+export const WEBHOOK_DELIVERY_ERRORS = [
+  "timeout",
+  "connection_failed",
+  "destination_not_allowed",
+  "response_too_large",
+  "endpoint_disabled",
+] as const;
+export type WebhookDeliveryError = (typeof WEBHOOK_DELIVERY_ERRORS)[number];
+
 export const webhookDeliverySchema = z.object({
   id: z.uuid(),
   eventName: z.string(),
   status: z.enum(["pending", "succeeded", "failed"]),
   attempts: z.number().int(),
   lastStatus: z.number().int().nullable(),
-  lastError: z.string().nullable(),
+  lastError: z.enum(WEBHOOK_DELIVERY_ERRORS).nullable(),
   lastAttemptAt: z.date().nullable(),
   createdAt: z.date(),
 });

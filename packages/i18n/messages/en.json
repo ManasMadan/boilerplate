@@ -673,7 +673,14 @@
         "failed": "Failed",
         "redeliver": "Send again",
         "redelivered": "Queued to send again",
-        "loadMore": "Load more"
+        "loadMore": "Load more",
+        "error": {
+          "timeout": "timed out",
+          "connection_failed": "couldn't connect",
+          "destination_not_allowed": "address not allowed",
+          "response_too_large": "response too large",
+          "endpoint_disabled": "endpoint turned off"
+        }
       },
       "eventLabels": {
         "todo": {
