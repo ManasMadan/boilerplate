@@ -77,6 +77,9 @@ import type { Memberships } from "./memberships";
 import { orgAccess, orgRoles } from "./org-access";
 import { securityAlertFor } from "./security-alerts";
 
+/** The paths that create an account from a social provider's profile (Google's). */
+const SOCIAL_SIGN_UP = /^\/(callback\/|sign-in\/social$)/;
+
 /** Where the mobile sign-in redirect (/expo-authorization-proxy) may send people. */
 const PROVIDER_ORIGINS = new Set(["https://accounts.google.com"]);
 
@@ -407,6 +410,9 @@ export function createAuth({
           before: async (user, ctx) => ({
             data: {
               ...user,
+              // A picture comes only from a social provider's profile at sign-up; sign-up's
+              // body would take any string, and the avatar flow owns it after that.
+              image: SOCIAL_SIGN_UP.test(ctx?.path ?? "") ? (user.image ?? null) : null,
               name: String(user.name).trim().slice(0, NAME_MAX_LENGTH),
               locale: negotiateLocale(
                 typeof user.locale === "string" && user.locale

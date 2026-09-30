@@ -143,6 +143,20 @@ describe("the mobile sign-in redirect", () => {
 });
 
 describe("sign-up and verification", () => {
+  it("ignores a picture sent with sign-up: only the avatar upload sets one", async () => {
+    const session = createSession(harness);
+    const email = newEmail();
+    await session.auth("/sign-up/email", {
+      email,
+      password: newPassword(),
+      name: "Pic",
+      image: "https://evil.example/tracker.png",
+    });
+    const { otp } = await takeOtp(harness, email);
+    await session.auth("/email-otp/verify-email", { email, otp });
+    expect((await session.rpc.user.me()).image).toBeNull();
+  });
+
   it("sends one address at most ten codes an hour, whichever endpoint asks", async () => {
     const session = createSession(harness);
     const email = newEmail();

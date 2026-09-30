@@ -35,6 +35,9 @@ check before anyone can see it:
 Pages link to `/api/v1/files/<id>/content`, which checks the session and redirects to a
 presigned download valid for 5 minutes, so links never expire. Row-level security keeps
 files private to their uploader, except ready avatars, which anyone signed in may read.
+A user's picture (`user.image`) is only ever such an avatar, or the profile picture a
+social provider gave at sign-up: sign-up and profile updates ignore or refuse a picture
+a client sends.
 
 The worker's `files-cleanup` task (hourly) forgets uploads never completed or rejected
 after a day, and deletes objects whose row is gone (a trigger queues them in
