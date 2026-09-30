@@ -32,6 +32,16 @@ describe("event routing", () => {
     expect([unrouted, bumped]).toEqual([false, false]);
   });
 
+  it("sends billing its Stripe events and seat changes, and live screens their todos", () => {
+    const bills = eventSubscribers["events-billing"];
+    expect(bills("stripe.event_received.v1")).toBe(true);
+    expect(bills("org.member_added.v1")).toBe(true);
+    expect(bills("org.member_removed.v1")).toBe(true);
+    expect(bills("todo.created.v1")).toBe(false);
+    expect(eventSubscribers["events-realtime"]("todo.completed.v1")).toBe(true);
+    expect(eventSubscribers["events-realtime"]("org.member_added.v1")).toBe(false);
+  });
+
   it("retries with jitter, so jobs that failed together don't all come back at once", () => {
     for (const [name, queue] of Object.entries(queues)) {
       const backoff = queue.options.backoff as { type?: string; jitter?: number } | undefined;

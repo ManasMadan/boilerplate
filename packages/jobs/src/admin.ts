@@ -22,7 +22,8 @@ export interface FailedJob {
 export async function failedJobs(queue: Queue, limit = 50): Promise<FailedJob[]> {
   const jobs = await queue.getFailed(0, limit - 1);
   return jobs.map((job) => ({
-    id: job.id ?? "",
+    // A job read back from a queue always has its id (it's in the key).
+    id: job.id as string,
     name: job.name,
     attemptsMade: job.attemptsMade,
     failedReason: job.failedReason,
@@ -64,7 +65,7 @@ async function allFailedIds(queue: Queue) {
   const page = 500;
   for (let start = 0; ; start += page) {
     const jobs = await queue.getFailed(start, start + page - 1);
-    ids.push(...jobs.flatMap((job) => (job.id ? [job.id] : [])));
+    ids.push(...jobs.map((job) => job.id as string));
     if (jobs.length < page) return ids;
   }
 }

@@ -19,6 +19,12 @@ describe("parseJob", () => {
     expect(parsed.template).toBe("auth.otp");
   });
 
+  it("refuses a job its queue doesn't have", () => {
+    expect(() =>
+      parseJob("notifications-critical", "nope" as never, { meta: {}, payload }),
+    ).toThrow('Unknown job "nope" on queue "notifications-critical"');
+  });
+
   it("rejects payloads that break the contract, and data without the envelope", () => {
     expect(() =>
       parseJob("notifications-critical", "send", {
