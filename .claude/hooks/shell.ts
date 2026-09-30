@@ -214,6 +214,11 @@ function commandVerdict({ env, words }: Simple): Verdict {
       "Decrypting a secrets file puts its values in the conversation. The user edits it with `sops <file>`.",
     );
   }
+  // A new dependency is code from outside: the user picks it (and Renovate waits 3 days
+  // for any release; bunfig.toml makes `bun add` wait too).
+  if ((program === "bun" && sub === "add") || (program === "uv" && sub === "add")) {
+    return ask("Adding a dependency brings in outside code; the user decides.");
+  }
   if (program === "tofu" && ["apply", "destroy", "import", "state"].includes(sub)) {
     return ask("This changes real infrastructure or its state.");
   }

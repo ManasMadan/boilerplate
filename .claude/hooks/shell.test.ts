@@ -68,6 +68,9 @@ describe("the command policy", () => {
     ["bunx prisma db push --force-reset", "ask"],
     ["bunx prisma db execute --file x.sql", "ask"],
     ["bun run test", "allow"],
+    ["bun add zod", "ask"],
+    ["uv add httpx", "ask"],
+    ["bun install", "allow"],
     ["git status; git commit -m x --no-verify", "deny"],
   ])("%s: %s", (command, expected) => {
     expect(decision(command)).toBe(expected);

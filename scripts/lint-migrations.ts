@@ -1,7 +1,8 @@
 /**
  * Lints the database migrations a change adds or edits with Squawk (.squawk.toml):
  * `bun run db:lint`. Compares with master (or $GITHUB_BASE_REF in a pull request);
- * migrations already on master are applied everywhere and can't change anyway.
+ * migrations already on master are applied everywhere and can't change anyway. Given
+ * files instead (the pre-commit hook passes the staged ones), it lints those.
  */
 import { spawnSync } from "node:child_process";
 import { ok, ROOT } from "./lib";
@@ -9,6 +10,7 @@ import { ok, ROOT } from "./lib";
 const SQUAWK = "squawk-cli@2.66.0";
 const base = process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : "master";
 
+const given = process.argv.slice(2);
 const diff = spawnSync(
   "git",
   [
@@ -25,7 +27,9 @@ if (diff.status !== 0) {
   console.error(diff.stderr);
   process.exit(1);
 }
-const changed = diff.stdout.split("\n").filter((file) => file.endsWith("/migration.sql"));
+const changed = (given.length ? given : diff.stdout.split("\n")).filter((file) =>
+  file.endsWith("/migration.sql"),
+);
 
 if (changed.length === 0) {
   ok(`no new migrations since ${base}`);

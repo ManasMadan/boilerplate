@@ -1,0 +1,6 @@
+# Types and unit tests for the packages this branch changes, and the repo's scripts and
+# Claude Code hooks, before anything leaves the machine. CI still runs everything.
+bunx turbo run check-types test --affected --output-logs=errors-only
+bunx tsc -p scripts
+bunx tsc -p .claude/hooks
+bun test ./scripts/ ./.claude/hooks/

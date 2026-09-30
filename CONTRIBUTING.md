@@ -22,7 +22,10 @@ removes everything this repository created in Docker.
    user-facing string goes through `packages/i18n`.
 3. Before pushing: `bun run lint`, `bun run check-types`, `bun run test`, and for
    anything touching the database, queues or HTTP, `bun run test:integration`. The git
-   hooks run formatting and lint on what you commit.
+   hooks help: on commit they format and lint the staged files (Biome, ruff, Prisma,
+   `tofu fmt`, Squawk on migrations) and scan them for secrets with gitleaks (installed,
+   or through Docker); on push they run types and unit tests for the packages you
+   changed and the repo's scripts and Claude Code hooks.
 4. Open a pull request. Its title becomes the squashed commit, so it follows
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:
    `feat(api): add todo sharing`, `fix(web): keep the draft on reload`. The scopes are in

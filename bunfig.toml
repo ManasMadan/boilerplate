@@ -10,3 +10,6 @@ linker = "hoisted"
 # which for React Native pulls native modules the Expo SDK wasn't built against.
 # Every dependency, peer or not, is declared explicitly (and checked by knip).
 peer = false
+# A version must have been out three days before `bun add` or `bun update` picks it, like
+# Renovate's minimumReleaseAge: most malicious or broken releases are pulled within days.
+minimumReleaseAge = 259200
