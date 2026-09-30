@@ -25,6 +25,9 @@ export interface Identity {
   bundleId: string;
 }
 
+/** This script and its test name the template on purpose: they're left as they are. */
+const SELF = new Set(["scripts/rename.ts", "scripts/rename.test.ts"]);
+
 /** What the template is called, as `rename` finds it. */
 const OLD = { name: "boilerplate", owner: "ManasMadan", product: "Boilerplate" };
 
@@ -91,7 +94,7 @@ export function rename(root: string, identity: Identity) {
     .filter(Boolean);
   const files = new Map<string, string>();
   const changed: string[] = [];
-  for (const path of tracked) {
+  for (const path of tracked.filter((path) => !SELF.has(path))) {
     const bytes = readFileSync(join(root, path));
     if (bytes.includes(0)) continue; // binary
     const before = bytes.toString("utf8");
