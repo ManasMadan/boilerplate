@@ -53,6 +53,18 @@ webhook:
   url: http://boilerplate-webhooks.boilerplate.svc.cluster.local:3004/webhooks/stalwart
   events: [delivery.dsn-perm-fail, delivery.dsn-temp-fail]
 
+# A smarthost: send every outgoing message through another SMTP server instead of
+# straight to the recipients' MX hosts. For a node whose provider blocks port 25, or
+# whose address is on blocklists (docs/new-project.md, Mail): any relay you run, or a
+# provider's. Empty host: direct delivery. With a username, the password is the
+# Secret's RELAY_PASSWORD. DKIM signing stays here, so SPF must allow the relay too.
+relay:
+  host: ""
+  port: 587
+  # true for SMTPS (465); otherwise STARTTLS, which the relay must offer.
+  implicitTls: false
+  username: ""
+
 # The certificate for the server's name, from cert-manager.
 tls:
   issuer: letsencrypt

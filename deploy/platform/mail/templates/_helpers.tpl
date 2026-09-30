@@ -73,6 +73,23 @@ password, which the plan init container writes in for @SMTP_PASSWORD@.
     "events" $events
     "eventsPolicy" "include"))) -}}
 {{- end -}}
+{{- with .Values.relay.host -}}
+{{- $r := $.Values.relay -}}
+{{- $ops = append $ops (dict "@type" "upsert" "object" "MtaRoute" "matchOn" (list "name") "value" (dict "relay" (dict
+    "@type" "Relay"
+    "name" "relay"
+    "address" .
+    "port" $r.port
+    "protocol" "smtp"
+    "implicitTls" $r.implicitTls
+    "allowInvalidCerts" false
+    "authUsername" $r.username
+    "authSecret" (ternary (dict "@type" "EnvironmentVariable" "variableName" "RELAY_PASSWORD") (dict "@type" "None") (ne $r.username ""))))) -}}
+{{- /* Mail for our own domain stays local; everything else goes through the relay. */ -}}
+{{- $ops = append $ops (dict "@type" "update" "object" "MtaOutboundStrategy" "value" (dict "route" (dict
+    "match" (list (dict "if" "is_local_domain(rcpt_domain)" "then" "'local'"))
+    "else" "'relay'"))) -}}
+{{- end -}}
 {{- range $i, $op := concat $ops .Values.extraPlan -}}
 {{- if $i }}{{ "\n" }}{{ end }}{{ toJson $op }}
 {{- end -}}

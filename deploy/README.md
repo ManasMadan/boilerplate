@@ -242,6 +242,13 @@ recovery-mode server, before the real one starts; the administrator never works 
 server's open ports. Stalwart posts delivery failures to the webhooks service in the
 cluster, signed with `STALWART_WEBHOOK_SECRET`; a changed setting restarts the pod.
 
+Sign-in codes, password resets and invitations all go out this way, so a node that
+can't deliver (outgoing port 25 blocked, or its address on a blocklist) breaks sign-in.
+Where that's the case, set `relay` in `platform/mail/values.yaml`: Stalwart then sends
+every message for another domain through that SMTP server, with its password as
+`RELAY_PASSWORD` in the `stalwart` Secret. It still signs with our DKIM key, so DMARC
+passes on DKIM even though SPF names only the mail node.
+
 ## Observability
 
 Off unless a cluster opts in with the label `boilerplate.dev/observability: "true"` on

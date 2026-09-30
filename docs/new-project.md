@@ -275,7 +275,9 @@ GitHub token for previews, Grafana's admin) are in the table in deploy/README.md
 - [ ] The mail node's address on the blocklists, before you rely on it: look it up at
       https://mxtoolbox.com/blacklists.aspx (Spamhaus, Barracuda, …). A listed address
       from a cheap range sends codes and invitations to spam or nowhere; ask the provider
-      for another one, or request delisting.
+      for another one, or request delisting. If neither port 25 nor the address can be
+      fixed, send through a relay instead (`relay` in `deploy/platform/mail/values.yaml`,
+      deploy/README.md "Mail").
 - [ ] `<env>.tfvars` from the example; `tofu apply`; put its outputs (the DNS token,
       Turnstile keys) into the SOPS secrets.
 - [ ] Reverse DNS of the mail node set to `mail.<domain>` at the machines' provider, for
