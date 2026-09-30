@@ -46,8 +46,8 @@ export function fakeApi(overrides: Record<string, Handler> = {}): Call[] {
     const url = new URL(request.url);
     const rpc = url.pathname.startsWith("/rpc/");
     const text = await request.text();
-    const body = text ? JSON.parse(text) : Object.fromEntries(url.searchParams);
-    const input = (rpc ? body.json : body) ?? {};
+    const body = (text ? JSON.parse(text) : Object.fromEntries(url.searchParams)) as Input;
+    const input = ((rpc ? body.json : body) ?? {}) as Input;
     calls.push({ path: url.pathname, input, headers: request.headers });
     const handler = handlers[url.pathname];
     if (!handler) throw new Error(`No fake answer for ${request.method} ${url.pathname}`);

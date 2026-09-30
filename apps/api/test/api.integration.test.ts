@@ -111,7 +111,7 @@ describe("error responses", () => {
     expect(unauthenticated.headers.get("www-authenticate")).toBe('ApiKey header="x-api-key"');
     const outdated = await send("/api/v1/todos", { headers: { "x-app-version": "1.0.0" } });
     expect(outdated.status).toBe(400);
-    expect((await outdated.json()).code).toBe("CLIENT_OUTDATED");
+    expect(((await outdated.json()) as { code: string }).code).toBe("CLIENT_OUTDATED");
   });
 
   it("refuses, outside production, to answer a code the procedure's contract doesn't declare", async () => {
@@ -1404,7 +1404,7 @@ describe("notifications", () => {
       body: "List-Unsubscribe=One-Click",
     });
     expect(response.status).toBe(400);
-    expect((await response.json()).code).toBe("UNSUBSCRIBE_LINK_INVALID");
+    expect(((await response.json()) as { code: string }).code).toBe("UNSUBSCRIBE_LINK_INVALID");
   });
 
   it("unsubscribes from a signed link, one-click included, and rejects forgeries", async () => {
@@ -1886,7 +1886,7 @@ describe("uploads and the profile picture", () => {
       redirect: "manual",
     });
     expect(response.status).toBe(404);
-    expect((await response.json()).code).toBe("FILE_NOT_FOUND");
+    expect(((await response.json()) as { code: string }).code).toBe("FILE_NOT_FOUND");
   });
 
   it("keeps each user's uploads private", async () => {
@@ -2390,7 +2390,9 @@ describe("the REST API's reference", () => {
   it("serves the OpenAPI document, and a page to read it outside production", async () => {
     const spec = await fetch(`${harness.baseUrl}/api/v1/openapi.json`);
     expect(spec.status).toBe(200);
-    expect((await spec.json()).info).toMatchObject({ title: "Boilerplate API" });
+    expect(((await spec.json()) as { info: object }).info).toMatchObject({
+      title: "Boilerplate API",
+    });
     const docs = await fetch(`${harness.baseUrl}/docs`);
     expect(docs.headers.get("content-type")).toContain("text/html");
     expect(await docs.text()).toContain('data-url="/api/v1/openapi.json"');

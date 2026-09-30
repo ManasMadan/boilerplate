@@ -298,7 +298,9 @@ describe("outbound deliveries", () => {
       (n) => n >= 1,
     );
     await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(received.map((r) => JSON.parse(r.body).type)).toEqual(["todo.deleted.v1"]);
+    expect(received.map((r) => (JSON.parse(r.body) as { type: string }).type)).toEqual([
+      "todo.deleted.v1",
+    ]);
     expect(received[0]?.headers["webhook-id"]).toBe(deleted.id);
   });
 

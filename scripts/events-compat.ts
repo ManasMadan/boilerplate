@@ -46,7 +46,9 @@ export function check(
 ): { problems: string[]; note?: string } {
   const base = show(baseRef, CATALOG);
   if (!base) return { problems: [], note: "The base branch has no event catalog yet." };
-  return { problems: breakingChanges(JSON.parse(base), JSON.parse(head())) };
+  return {
+    problems: breakingChanges(JSON.parse(base) as Catalog, JSON.parse(head()) as Catalog),
+  };
 }
 
 /** Prints the result, as GitHub annotations, and returns the exit code. */

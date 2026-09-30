@@ -107,7 +107,7 @@ describe("re-encrypting secrets", () => {
     expect(await open(twoFactor.backupCodes)).toBe(BACKUP_CODES);
 
     const jwks = await db.jwks.findUniqueOrThrow({ where: { id: ids.jwks } });
-    expect(await open(JSON.parse(jwks.privateKey))).toBe('{"d":"private"}');
+    expect(await open(JSON.parse(jwks.privateKey) as string)).toBe('{"d":"private"}');
 
     const secret = await tenantTx(db, ids.org, (tx) =>
       tx.webhookEndpoint.findUniqueOrThrow({ where: { id: ids.endpoint } }),

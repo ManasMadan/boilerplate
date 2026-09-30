@@ -3,6 +3,9 @@ import type { AddressInfo } from "node:net";
 import { Webhook } from "standardwebhooks";
 import { createWorkspace, expect, signUp, test, upgrade } from "./support";
 
+/** The event type a delivery's body names. */
+const eventType = (body = "{}") => (JSON.parse(body) as { type?: string }).type;
+
 /** A local endpoint that records what it receives (the stack allows 127.0.0.1 in development). */
 async function receiver() {
   const received: { headers: IncomingHttpHeaders; body: string }[] = [];
@@ -66,7 +69,7 @@ test("add an endpoint, receive signed events, replay, test, rotate and delete", 
   await page.getByRole("button", { name: "Turn on" }).click();
   await page.getByRole("button", { name: "Send test event" }).click();
   await expect.poll(() => hook.received.length, { timeout: 20_000 }).toBe(3);
-  expect(JSON.parse(hook.received[2]?.body ?? "{}").type).toBe("webhook.test");
+  expect(eventType(hook.received[2]?.body)).toBe("webhook.test");
 
   await page.getByRole("button", { name: "Rotate secret" }).click();
   const rotated = (await page.getByTestId("webhook-secret").textContent()) ?? "";
@@ -110,6 +113,6 @@ test("only chosen events are sent", async ({ page }) => {
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByRole("checkbox", { name: "Only on completion" }).click();
   await expect.poll(() => hook.received.length, { timeout: 20_000 }).toBe(1);
-  expect(JSON.parse(hook.received[0]?.body ?? "{}").type).toBe("todo.completed.v1");
+  expect(eventType(hook.received[0]?.body)).toBe("todo.completed.v1");
   await hook.close();
 });

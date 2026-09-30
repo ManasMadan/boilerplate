@@ -54,7 +54,7 @@ function parse(path: string): ClientManifest {
   const source = readFileSync(path, "utf8");
   const start = source.indexOf("= {");
   if (start === -1) throw new Error(`Unexpected manifest format: ${path}`);
-  return JSON.parse(source.slice(start + 2, source.lastIndexOf("}") + 1));
+  return JSON.parse(source.slice(start + 2, source.lastIndexOf("}") + 1)) as ClientManifest;
 }
 
 const build = JSON.parse(readFileSync(join(NEXT, "build-manifest.json"), "utf8")) as {

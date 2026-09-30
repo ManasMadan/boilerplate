@@ -46,10 +46,13 @@ const behaviour = new Map<
 /** Organizations whose hanging answer the API stopped reading (the connection closed). */
 const closed = new Set<string>();
 
-async function body(request: IncomingMessage) {
+/** A request's JSON body, as far as the stand-in reads it. */
+async function body(request: IncomingMessage): Promise<{ title?: string } | undefined> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(chunk as Buffer);
-  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+  return chunks.length
+    ? (JSON.parse(Buffer.concat(chunks).toString()) as { title?: string })
+    : undefined;
 }
 
 beforeAll(async () => {
@@ -96,7 +99,7 @@ beforeAll(async () => {
       const doc: Doc = {
         id: randomUUID(),
         org,
-        title: input.title,
+        title: input?.title ?? "",
         status: "pending",
         error: null,
         chunkCount: 0,

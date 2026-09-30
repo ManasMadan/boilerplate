@@ -60,7 +60,7 @@ async function runService(env: Record<string, string>) {
   return stdout
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line) as { msg?: string; trace_id?: string });
 }
 
 interface ExportedSpans {

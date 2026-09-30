@@ -52,7 +52,7 @@ describe("discovery", () => {
       `${harness.baseUrl}/.well-known/oauth-authorization-server/api/auth`,
     );
     expect(response.status).toBe(200);
-    const metadata = await response.json();
+    const metadata = (await response.json()) as Record<string, unknown>;
     expect(metadata).toMatchObject({
       issuer: new URL("/api/auth", siteUrl()).toString(),
       authorization_endpoint: expect.stringContaining("/api/auth/oauth2/authorize"),
