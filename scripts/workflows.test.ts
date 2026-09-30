@@ -3,7 +3,8 @@
  * gets which secrets, what runs when, and the rules every job follows (.claude/rules/ci.md).
  */
 import { describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
@@ -134,5 +135,74 @@ describe("ci.yml's codegen check", () => {
   it("fails on new generated files too, not only on changed ones", () => {
     expect(step?.run).toContain('[[ -n "$(git status --porcelain)" ]]');
     expect(step?.run).not.toContain("git diff --exit-code");
+  });
+});
+
+describe("deploy.yml's staging bump", () => {
+  const { jobs } = workflow("deploy.yml");
+  const script = jobs.staging?.steps?.find((s) => s.name === "Point staging at the new images")
+    ?.run as string;
+
+  /** A master with commits a (staging's), b and c, pushed to a local origin. */
+  function repository() {
+    const dir = mkdtempSync(join(tmpdir(), "staging-bump-"));
+    const git = (...args: string[]) =>
+      Bun.spawnSync(["git", ...args], { cwd: join(dir, "work") })
+        .stdout.toString()
+        .trim();
+    Bun.spawnSync(["git", "init", "--bare", "-b", "master", join(dir, "origin")]);
+    Bun.spawnSync(["git", "clone", join(dir, "origin"), join(dir, "work")]);
+    git("config", "user.email", "ci@example.com");
+    git("config", "user.name", "CI");
+    const commit = (message: string) => {
+      git("commit", "--allow-empty", "-qm", message);
+      return git("rev-parse", "HEAD");
+    };
+    mkdirSync(join(dir, "work/deploy/environments/staging"), { recursive: true });
+    const a = commit("a");
+    writeFileSync(
+      join(dir, "work/deploy/environments/staging/stack.yaml"),
+      `image:\n  tag: "sha-${a}"\n`,
+    );
+    git("add", ".");
+    const b = commit("b");
+    const c = commit("c");
+    git("push", "-q", "origin", "master");
+    const bump = (tag: string) =>
+      Bun.spawnSync(["bash", "-c", script], {
+        cwd: join(dir, "work"),
+        env: { ...process.env, TAG: tag },
+      });
+    const staging = () =>
+      Bun.spawnSync([
+        "git",
+        "--git-dir",
+        join(dir, "origin"),
+        "show",
+        "master:deploy/environments/staging/stack.yaml",
+      ]).stdout.toString();
+    return { a, b, c, bump, staging };
+  }
+
+  it("moves staging forward to a newer commit's images", () => {
+    const repo = repository();
+    expect(repo.bump(`sha-${repo.c}`).exitCode).toBe(0);
+    expect(repo.staging()).toContain(`tag: "sha-${repo.c}"`);
+  });
+
+  it("never moves it back when an older commit's run finishes last", () => {
+    const repo = repository();
+    repo.bump(`sha-${repo.c}`);
+    const late = repo.bump(`sha-${repo.b}`);
+    expect(late.exitCode).toBe(0);
+    expect(late.stdout.toString()).toContain("newer than");
+    expect(repo.staging()).toContain(`tag: "sha-${repo.c}"`);
+  });
+
+  it("builds every commit's images: one run per commit, never cancelled", () => {
+    const text = readFileSync(join(ROOT, ".github/workflows/deploy.yml"), "utf8");
+    expect(text).toContain(
+      `group: deploy-\${{ github.event.workflow_run.head_sha || github.sha }}`,
+    );
   });
 });

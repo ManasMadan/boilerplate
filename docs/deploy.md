@@ -68,6 +68,11 @@ rollback.
 3. commits the new tag to `deploy/environments/staging/stack.yaml` (as the repository's
    GitHub App, `[skip ci]`), and Argo CD rolls it out.
 
+Every commit gets its own run, so every commit on master has images and can be
+released, however quickly merges follow each other. Moving staging is one run at a
+time, never backwards (a run that finishes after a newer commit's leaves staging where
+it is), and its push retries on top of whatever landed on master meanwhile.
+
 ## Releases → production
 
 Releases are version tags pushed by hand, on a commit of `master`:
