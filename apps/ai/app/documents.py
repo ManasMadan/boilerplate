@@ -13,6 +13,7 @@ from redis.asyncio import Redis
 from sqlalchemy import delete, func, select, update
 
 from app.chunking import chunk
+from app.contracts.realtime_message import DocumentsChanged
 from app.db.models import Document, DocumentChunk
 from app.db.session import tenant
 from app.embeddings import Embedder
@@ -26,6 +27,8 @@ from app.usage import record, used_this_month
 
 # Passages sent to the embedding model per request.
 EMBED_BATCH = 64
+# What screens showing the documents are told when one is added, indexed or removed.
+CHANGED = DocumentsChanged(type="documents.changed")
 
 
 @dataclass(frozen=True)
@@ -73,7 +76,7 @@ class Documents:
             await session.flush()
             await session.refresh(document)
         await self._queue.add("ingest", document.id, org_id, request_id=request_id, user_id=user_id)
-        await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
+        await publish_to_org(self._redis, org_id, CHANGED)
         return document
 
     async def list(self, org_id: UUID) -> list[Document]:
@@ -94,7 +97,7 @@ class Documents:
             )
             if deleted is None:
                 raise AppError("DOCUMENT_NOT_FOUND")
-        await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
+        await publish_to_org(self._redis, org_id, CHANGED)
 
     async def index(
         self,
@@ -127,7 +130,7 @@ class Documents:
                         status="failed", error="DOCUMENT_INDEXING_FAILED", updated_at=func.now()
                     )
                 )
-            await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
+            await publish_to_org(self._redis, org_id, CHANGED)
             raise
         async with tenant(org_id) as session:
             await session.execute(
@@ -150,7 +153,7 @@ class Documents:
                     status="ready", error=None, chunk_count=len(passages), updated_at=func.now()
                 )
             )
-        await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
+        await publish_to_org(self._redis, org_id, CHANGED)
         if self._summaries:
             await self._queue.add(
                 "summarize", document_id, org_id, request_id=request_id, user_id=user_id
@@ -187,7 +190,7 @@ class Documents:
                 .where(Document.id == document_id)
                 .values(summary=summary or None, updated_at=func.now())
             )
-        await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
+        await publish_to_org(self._redis, org_id, CHANGED)
 
     async def search(self, org_id: UUID, query: str, limit: int = 5) -> list[Passage]:
         [vector] = await self._embedder.embed([query])

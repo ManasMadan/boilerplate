@@ -25,3 +25,10 @@ export const realtimeChannel = {
   user: (userId: string) => `user:${userId}`,
   org: (orgId: string) => `org:${orgId}`,
 };
+
+/**
+ * Channels travel over Redis pub/sub under this prefix (packages/nest-common realtime
+ * publishes and subscribes there; the Python service publishes there too, with the
+ * prefix generated from here).
+ */
+export const REALTIME_REDIS_PREFIX = "realtime:";

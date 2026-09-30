@@ -98,7 +98,9 @@ a newer producer can add an optional field without an older worker rejecting the
 and the job names are a generated `Literal`: a job added in `packages/jobs` is a type
 error in the worker until it's handled. A failure throws, and BullMQ retries with the same backoff the TypeScript
 side uses (the queue settings are generated from `packages/jobs`). It publishes a live
-nudge to the organization when a document changes, so the web app refreshes.
+nudge to the organization when a document changes, so the web app refreshes
+(`app/realtime.py`: the message models and the channel's Redis name are generated from
+`packages/contracts/src/realtime.ts`, so both sides agree on them).
 
 In Kubernetes it's the `ai-worker` deployment (same image, `python -m app.worker`,
 scaled by KEDA on the queue). Locally `bun dev:full` starts both (apps/ai's `dev` runs

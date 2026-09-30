@@ -1,8 +1,9 @@
 /**
  * Writes the contracts the Python service shares as JSON Schema (generated/schemas,
  * committed), the shared queues' Redis prefix and job options
- * (generated/queue-settings.json), and the error catalog's statuses
- * (generated/error-codes.json).
+ * (generated/queue-settings.json), the error catalog's statuses
+ * (generated/error-codes.json) and the realtime channels' Redis names
+ * (generated/realtime-channels.json).
  * apps/ai turns them into Pydantic models, so a payload is defined once, in zod, and
  * both languages validate the same shape; CI fails if the committed files drift.
  *
@@ -13,7 +14,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorData, errorIssue, errorResponse } from "@repo/contracts/api/base";
 import { ERROR_CODES, errorCode } from "@repo/contracts/errors";
-import { realtimeMessage } from "@repo/contracts/realtime";
+import { REALTIME_REDIS_PREFIX, realtimeChannel, realtimeMessage } from "@repo/contracts/realtime";
 import { z } from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
@@ -87,6 +88,11 @@ const titles = new Map<z.ZodType, string>([
   [errorCode, "ErrorCode"],
   [errorData, "ErrorData"],
   [errorIssue, "ErrorIssue"],
+  // Each realtime message by what it says: "documents.changed" → DocumentsChanged.
+  ...realtimeMessage.options.map((option): [z.ZodType, string] => [
+    option,
+    pascal(option.shape.type.value.replace(".", "-")),
+  ]),
 ]);
 
 for (const [file, { title, schema, io }] of Object.entries(schemas)) {
@@ -115,3 +121,9 @@ const settings = Object.fromEntries(
 );
 writeFileSync(join(out, "..", "queue-settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
 writeFileSync(join(out, "..", "error-codes.json"), `${JSON.stringify(ERROR_CODES, null, 2)}\n`);
+// The Redis channel Python publishes an organization's messages on, with `{id}` where
+// the organization's id goes.
+writeFileSync(
+  join(out, "..", "realtime-channels.json"),
+  `${JSON.stringify({ org: REALTIME_REDIS_PREFIX + realtimeChannel.org("{id}") }, null, 2)}\n`,
+);
