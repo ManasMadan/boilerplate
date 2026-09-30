@@ -264,7 +264,8 @@ GitHub token for previews, Grafana's admin) are in the table in deploy/README.md
 - [ ] Reverse DNS of the mail node set to `mail.<domain>` at the machines' provider, for
       its IPv6 address too if it has one (receivers check the address mail came from).
 - [ ] The infra workflow's secrets per `infra-<env>` environment, to plan and apply from
-      CI (repository-settings.md).
+      CI, and the read-only ones per `infra-<env>-plan`, for pull request plans
+      (repository-settings.md).
 
 ## 6. Third-party accounts
 

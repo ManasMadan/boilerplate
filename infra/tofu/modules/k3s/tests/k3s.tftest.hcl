@@ -252,11 +252,19 @@ run "warns_about_two_servers" {
 }
 
 run "needs_a_key_to_install_over_ssh" {
-  command = plan
+  command = apply
   variables {
     ssh_private_key = null
   }
   expect_failures = [terraform_data.first]
+}
+
+# Pull request plans run without the SSH key (infra.yml).
+run "plans_without_the_ssh_key" {
+  command = plan
+  variables {
+    ssh_private_key = null
+  }
 }
 
 run "needs_a_server" {

@@ -46,6 +46,13 @@ gh api -X PUT "repos/$REPO/environments/infra-production" --input - <<JSON
 {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true},
  "reviewers": [{"type": "User", "id": $(gh api user --jq .id)}]}
 JSON
+# Pull request plans run the pull request's OpenTofu code with the state's passphrase,
+# from any branch, so each one waits for your approval.
+for env in infra-staging-plan infra-production-plan; do
+  gh api -X PUT "repos/$REPO/environments/$env" --input - <<JSON
+{"reviewers": [{"type": "User", "id": $(gh api user --jq .id)}]}
+JSON
+done
 
 # master: pull requests only, squash-merged, with CI, the security checks and CodeQL
 # passing. APPROVALS is 0 for a single maintainer (GitHub doesn't let you approve your
@@ -169,7 +176,8 @@ warning, and Renovate doesn't run.
 | Environment | Used by | Protection |
 |---|---|---|
 | `staging` | `deploy.yml` (the staging bump) | deployment branch `master` |
-| `infra-staging`, `infra-production` | `infra.yml` (plan and apply) | required reviewers on production; deployment branch `master` for apply |
+| `infra-staging`, `infra-production` | `infra.yml` (apply, and plans run by hand) | required reviewers on production; deployment branch `master` |
+| `infra-staging-plan`, `infra-production-plan` | `infra.yml` (plans on pull requests) | required reviewers; any branch |
 
 Production itself has no GitHub environment: it changes only by merging the promotion
 pull request, which the ruleset already gates.
@@ -202,6 +210,15 @@ Per `infra-<env>` environment, for `infra.yml` (see the header of that workflow 
 | `SOPS_AGE_KEY` | the environment's age private key, installed for Argo CD |
 | `SOPS_PREVIEW_AGE_KEY` | on the environment hosting previews only: their own age private key |
 | `TF_VAR_state_passphrase` | encrypts the state and plans |
+
+A pull request's plan runs that pull request's OpenTofu code, so its environment,
+`infra-<env>-plan`, holds only what a plan reads: `TOFU_TFVARS` and
+`TF_VAR_state_passphrase` as above, a `TOFU_BACKEND` whose bucket keys can only read,
+and a `CLOUDFLARE_API_TOKEN` with the read permissions of the ones listed in
+`infra/tofu/modules/cloudflare`. Never the SSH key or an age key: only an apply uses
+them. The passphrase still decrypts the state, which holds the cluster's admin key,
+which is why each plan waits for a reviewer: read the pull request's changes to
+`infra/tofu` before approving it. Pull requests from forks get no plan.
 
 The runner connects to the machines over SSH and to the Kubernetes API (ports 22 and
 6443): allow GitHub's runner addresses in the machines' firewall, or give the

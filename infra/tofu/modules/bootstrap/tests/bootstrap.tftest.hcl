@@ -78,7 +78,7 @@ run "installs_the_sops_key_for_argo_cd" {
     error_message = "the repo server mounts the Secret sops-age in argocd"
   }
   assert {
-    condition     = kubernetes_secret_v1.sops_age.data["keys.txt"] == var.sops_age_key
+    condition     = local.sops_keys["keys.txt"] == var.sops_age_key && kubernetes_secret_v1.sops_age.data_wo_revision == 1
     error_message = "the age identity under keys.txt"
   }
 }
@@ -90,7 +90,7 @@ run "keeps_the_preview_key_apart" {
     sops_preview_age_key = "AGE-SECRET-KEY-1PPPP\n"
   }
   assert {
-    condition     = kubernetes_secret_v1.sops_age.data["preview.txt"] == var.sops_preview_age_key && kubernetes_secret_v1.sops_age.data["keys.txt"] == var.sops_age_key
+    condition     = local.sops_keys["preview.txt"] == var.sops_preview_age_key && local.sops_keys["keys.txt"] == var.sops_age_key
     error_message = "previews decrypt with their own key, under preview.txt"
   }
 }
@@ -98,15 +98,33 @@ run "keeps_the_preview_key_apart" {
 run "has_no_preview_key_without_previews" {
   command = apply
   assert {
-    condition     = !contains(keys(kubernetes_secret_v1.sops_age.data), "preview.txt")
+    condition     = !contains(keys(local.sops_keys), "preview.txt")
     error_message = "only the cluster hosting previews holds their key"
   }
 }
 
 run "needs_the_preview_key_to_host_previews" {
-  command = plan
+  command = apply
   variables {
     previews = true
+  }
+  expect_failures = [kubernetes_secret_v1.sops_age]
+}
+
+# Pull request plans run without the age keys (infra.yml): planning needs neither, and
+# shows no change to the Secret that holds them.
+run "plans_without_the_age_keys" {
+  command = plan
+  variables {
+    previews     = true
+    sops_age_key = null
+  }
+}
+
+run "needs_the_age_key_to_apply" {
+  command = apply
+  variables {
+    sops_age_key = null
   }
   expect_failures = [kubernetes_secret_v1.sops_age]
 }

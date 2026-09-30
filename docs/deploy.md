@@ -130,7 +130,10 @@ OpenTofu root (`infra/tofu/envs/k3s`) applied per environment.
 `.github/workflows/infra.yml` posts a `tofu plan` on pull requests that change
 `infra/tofu`, for each environment in the `TOFU_TARGETS` repository variable. Applying is
 a manual run (environment, apply), gated by the GitHub environment's reviewers; it
-installs or upgrades k3s over SSH, updates the DNS records and bootstraps Argo CD.
+installs or upgrades k3s over SSH, updates the DNS records and bootstraps Argo CD. A
+pull request's plan runs in an environment of its own that has no SSH key and no age
+keys (a plan needs neither) and read-only credentials otherwise, and waits for a
+reviewer, since it still decrypts the state (docs/repository-settings.md).
 
 `kind.yml` deploys the whole stack to kind when images, charts or migrations change, and
 nightly: every image, the data chart (its credentials generated, RustFS's bucket

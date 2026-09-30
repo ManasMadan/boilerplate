@@ -55,10 +55,11 @@ variable "nodes" {
 }
 
 variable "ssh_private_key" {
-  description = "The key OpenTofu installs k3s with (TF_VAR_ssh_private_key)."
+  description = "The key OpenTofu installs k3s with (TF_VAR_ssh_private_key). Needed to apply, not to plan."
   type        = string
   default     = null
   sensitive   = true
+  ephemeral   = true
 }
 
 variable "install_over_ssh" {
@@ -118,17 +119,28 @@ variable "mail" {
 
 # ---------------------------------------------------------------------------- secrets
 
+# The SSH and age keys are ephemeral: only an apply needs them, and they're never kept
+# in the state or a saved plan (so pull request plans run without them).
 variable "sops_age_key" {
-  description = "The environment's age private key, for Argo CD to decrypt its SOPS secrets (TF_VAR_sops_age_key)."
+  description = "The environment's age private key, for Argo CD to decrypt its SOPS secrets (TF_VAR_sops_age_key). Needed to apply, not to plan."
   type        = string
   sensitive   = true
+  ephemeral   = true
+  default     = null
 }
 
 variable "sops_preview_age_key" {
   description = "With previews = true: the previews' own age private key (TF_VAR_sops_preview_age_key)."
   type        = string
   sensitive   = true
+  ephemeral   = true
   default     = null
+}
+
+variable "sops_keys_version" {
+  description = "Raise it to write new age keys to the cluster (see the rotate-secrets skill): OpenTofu can't see a write-only key change."
+  type        = number
+  default     = 1
 }
 
 variable "state_passphrase" {

@@ -109,7 +109,8 @@ restart that service once synced, then revoke the old key.
 
 It decrypts every Secret of its environment. To replace it: `age-keygen` a new pair, put
 the new public key in `.sops.yaml` next to the old, `sops updatekeys` every file of that
-environment, commit; replace the `sops-age` Secret in `argocd` (the bootstrap's
-`sops_age_key`, `infra/tofu/README.md`) and restart the repo server; then remove the old
+environment, commit; replace the `sops-age` Secret in `argocd` (apply the new key as
+`TF_VAR_sops_age_key` with `sops_keys_version` raised by one in tfvars, since OpenTofu
+can't see a write-only key change; `infra/tofu/README.md`) and restart the repo server; then remove the old
 public key from `.sops.yaml` and `updatekeys` again. A leaked key means every secret it
 could decrypt is leaked too: rotate those values as well.

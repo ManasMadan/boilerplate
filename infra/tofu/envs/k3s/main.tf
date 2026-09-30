@@ -74,6 +74,7 @@ module "bootstrap" {
   sops_age_key  = var.sops_age_key
 
   sops_preview_age_key = var.sops_preview_age_key
+  sops_keys_version    = var.sops_keys_version
   cluster_annotations = merge(
     {
       domain         = var.domain

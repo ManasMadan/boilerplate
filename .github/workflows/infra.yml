@@ -3,19 +3,30 @@
 # request. Applying is manual (Run workflow → environment, apply) and waits for the
 # GitHub environment's required reviewers.
 #
-# The runner needs to reach the nodes: SSH (22) to install k3s, and the Kubernetes API
-# (6443) for Argo CD's bootstrap. Allow GitHub's runner addresses there, or run this on a
-# self-hosted runner that's inside your network.
+# A pull request's plan runs the pull request's own OpenTofu code, so it runs in an
+# environment of its own, infra-<env>-plan, that holds only what a plan needs: no SSH
+# key and no age keys (only an apply uses them), read-only Cloudflare and state
+# credentials. It still decrypts the state, which holds the cluster's admin key, so
+# that environment requires a reviewer too: read the pull request's infra/tofu changes
+# before approving its plan. Pull requests from forks get no plan.
 #
-# Setup, per environment (GitHub → Settings → Environments → infra-<env>):
+# The runner needs to reach the nodes: SSH (22) to install k3s, and the Kubernetes API
+# (6443) for Argo CD's bootstrap and every plan. Allow GitHub's runner addresses there,
+# or run this on a self-hosted runner that's inside your network.
+#
+# Setup (GitHub → Settings → Environments; docs/repository-settings.md has the commands):
 #   TOFU_TARGETS (repository variable)  e.g. ["staging", "production"]
-#   TOFU_BACKEND (secret)               the contents of backend-<env>.hcl
-#   TOFU_TFVARS (secret)                the contents of <env>.tfvars
-#   SSH_PRIVATE_KEY (secret)            the key the nodes accept
-#   CLOUDFLARE_API_TOKEN (secret)       see infra/tofu/modules/cloudflare
-#   SOPS_AGE_KEY (secret)               the environment's age private key
-#   SOPS_PREVIEW_AGE_KEY (secret)       where previews run: their own age private key
-#   TF_VAR_state_passphrase (secret)    encrypts state and plans
+#   in infra-<env> (apply, master only) and infra-<env>-plan (plans, any branch):
+#     TOFU_BACKEND (secret)             the contents of backend-<env>.hcl; read-only
+#                                       bucket keys in the plan environment
+#     TOFU_TFVARS (secret)              the contents of <env>.tfvars
+#     CLOUDFLARE_API_TOKEN (secret)     see infra/tofu/modules/cloudflare; its read
+#                                       permissions only in the plan environment
+#     TF_VAR_state_passphrase (secret)  encrypts state and plans
+#   in infra-<env> only:
+#     SSH_PRIVATE_KEY (secret)          the key the nodes accept
+#     SOPS_AGE_KEY (secret)             the environment's age private key
+#     SOPS_PREVIEW_AGE_KEY (secret)     where previews run: their own age private key
 name: Infrastructure
 
 on:
@@ -57,13 +68,77 @@ jobs:
             echo "matrix=${TARGETS:-[]}" >> "$GITHUB_OUTPUT"
           fi
 
-  tofu:
+  plan:
+    name: plan ${{ matrix.env }}
+    needs: targets
+    if: >-
+      github.event_name == 'pull_request' && needs.targets.outputs.matrix != '[]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: infra-${{ matrix.env }}-plan
+    permissions: { contents: read, pull-requests: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: infra/tofu/envs/k3s
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_state_passphrase: ${{ secrets.TF_VAR_state_passphrase }}
+      TF_IN_AUTOMATION: "1"
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with: { tofu_version: 1.11.6, tofu_wrapper: false }
+      - name: Environment files
+        env:
+          BACKEND: ${{ secrets.TOFU_BACKEND }}
+          TFVARS: ${{ secrets.TOFU_TFVARS }}
+        run: |
+          umask 077
+          printf '%s\n' "$BACKEND" > backend.hcl
+          printf '%s\n' "$TFVARS" > env.tfvars
+      - run: tofu init -input=false -backend-config=backend.hcl
+      # Without the state lock: the plan environment's bucket keys are read-only, and a
+      # plan changes nothing.
+      - name: Plan
+        run: |
+          set -o pipefail
+          tofu plan -input=false -no-color -lock=false -var-file=env.tfvars | tee plan.txt
+      - name: Post the plan
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TARGET: ${{ matrix.env }}
+        with:
+          script: |
+            const fs = require("node:fs");
+            const plan = fs.readFileSync("infra/tofu/envs/k3s/plan.txt", "utf8");
+            const summary = plan.split("\n").filter((line) => /^(Plan:|No changes\.)/.test(line)).join("\n");
+            const marker = `<!-- tofu-plan ${process.env.TARGET} -->`;
+            const body = `${marker}\n**OpenTofu plan: ${process.env.TARGET}**\n\n${summary || "(see the run's log)"}\n\n<details><summary>Plan</summary>\n\n\`\`\`\n${plan.slice(-60000)}\n\`\`\`\n</details>`;
+            const number = context.payload.pull_request.number;
+            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: number });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
+            }
+
+  apply:
     name: ${{ matrix.env }}
     needs: targets
-    if: needs.targets.outputs.matrix != '[]'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     environment: infra-${{ matrix.env }}
-    permissions: { contents: read, pull-requests: write }
+    permissions: { contents: read }
     strategy:
       fail-fast: false
       matrix:
@@ -95,30 +170,9 @@ jobs:
           printf '%s\n' "$TFVARS" > env.tfvars
       - run: tofu init -input=false -backend-config=backend.hcl
       - name: Plan
-        id: plan
         run: |
           set -o pipefail
           tofu plan -input=false -no-color -var-file=env.tfvars -out=tfplan | tee plan.txt
-      - name: Post the plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          TARGET: ${{ matrix.env }}
-        with:
-          script: |
-            const fs = require("node:fs");
-            const plan = fs.readFileSync("infra/tofu/envs/k3s/plan.txt", "utf8");
-            const summary = plan.split("\n").filter((line) => /^(Plan:|No changes\.)/.test(line)).join("\n");
-            const marker = `<!-- tofu-plan ${process.env.TARGET} -->`;
-            const body = `${marker}\n**OpenTofu plan: ${process.env.TARGET}**\n\n${summary || "(see the run's log)"}\n\n<details><summary>Plan</summary>\n\n\`\`\`\n${plan.slice(-60000)}\n\`\`\`\n</details>`;
-            const number = context.payload.pull_request.number;
-            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: number });
-            const existing = comments.find((comment) => comment.body?.startsWith(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
-            } else {
-              await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
-            }
       - name: Apply
-        if: github.event_name == 'workflow_dispatch' && inputs.apply
+        if: inputs.apply
         run: tofu apply -input=false tfplan

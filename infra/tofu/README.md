@@ -74,6 +74,12 @@ State holds the cluster's certificate authorities, join tokens and admin key; it
 encrypted with the passphrase before it leaves your machine, and without the passphrase
 the environment can't be managed any more, so keep it safe.
 
+The SSH key and the age keys are only needed to apply: they're ephemeral, so they're in
+neither the state nor a saved plan, and the age keys go to the cluster as write-only
+data. A plan runs without them (pull request plans do, see
+`.github/workflows/infra.yml`). Because OpenTofu can't see a write-only value change,
+replacing an age key means raising `sops_keys_version` too (the rotate-secrets skill).
+
 Then put what OpenTofu made into the environment's SOPS secrets (see
 `deploy/README.md`): `tofu output -raw cloudflare_dns_api_token` for cert-manager and
 `tofu output -json turnstile` for the api. Point `site.host` in

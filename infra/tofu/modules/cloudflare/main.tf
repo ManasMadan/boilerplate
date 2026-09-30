@@ -5,7 +5,8 @@
 #
 # The provider's own token needs: Zone Settings Edit, Zone WAF Edit (for managed_waf),
 # DNS Edit, SSL and Certificates Edit (origin pulls), Turnstile Sites Write, and API
-# Tokens Write (to create the scoped token).
+# Tokens Write (to create the scoped token). A token that only plans (pull requests,
+# .github/workflows/infra.yml) needs the Read of each instead.
 
 data "cloudflare_zone" "this" {
   filter = {

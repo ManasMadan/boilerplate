@@ -149,3 +149,15 @@ run "mail_needs_one_of_the_nodes" {
   }
   expect_failures = [var.mail]
 }
+
+# What a pull request's plan gets (infra.yml): no SSH key and no age keys, which only an
+# apply needs.
+run "plans_without_the_apply_only_keys" {
+  command = plan
+  variables {
+    install_over_ssh     = true
+    ssh_private_key      = null
+    sops_age_key         = null
+    sops_preview_age_key = null
+  }
+}
