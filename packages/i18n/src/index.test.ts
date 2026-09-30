@@ -121,6 +121,16 @@ describe("catalog completeness", () => {
     }
   });
 
+  it("has a sentence for every auth error code, and none for codes that aren't one", async () => {
+    const { AUTH_ERROR_CODES } = await import("@repo/contracts/errors");
+    for (const locale of ["en", "es"] as const) {
+      const messages = await bundledMessages.load(locale);
+      expect(Object.keys(messages.authErrors).sort(), locale).toEqual(
+        [...AUTH_ERROR_CODES, "generic"].sort(),
+      );
+    }
+  });
+
   it("asks for exactly the params an error code is declared with", async () => {
     const { ERROR_CODES, ERROR_PARAMS } = await import("@repo/contracts/errors");
     const messages = en.errors as Record<string, string>;

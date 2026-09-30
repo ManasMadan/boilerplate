@@ -115,3 +115,63 @@ export const errorCode = z.enum(Object.keys(ERROR_CODES) as ErrorCode[]);
 
 export const isErrorCode = (value: unknown): value is ErrorCode =>
   typeof value === "string" && Object.hasOwn(ERROR_CODES, value);
+
+/**
+ * The auth failures a user sees a sentence for (`authErrors.<CODE>` in packages/i18n;
+ * anything else shows `authErrors.generic`). better-auth and its plugins answer with
+ * their own codes, not ERROR_CODES: these are the ones people hit, ours from the auth
+ * hooks (ORGANIZATION_NEEDS_OWNER), and the few catalog codes auth answers with too.
+ *
+ * Adding one: add it here and `authErrors.<CODE>` to every catalog (the i18n test fails
+ * until you do). A code that means the same to a user as another goes in
+ * AUTH_ERROR_ALIASES instead.
+ */
+export const AUTH_ERROR_CODES = [
+  "INVALID_EMAIL_OR_PASSWORD",
+  "EMAIL_NOT_VERIFIED",
+  "USER_ALREADY_EXISTS",
+  "PASSWORD_COMPROMISED",
+  "INVALID_PASSWORD",
+  "INVALID_OTP",
+  "OTP_EXPIRED",
+  "TOO_MANY_ATTEMPTS",
+  "INVALID_CODE",
+  "INVALID_BACKUP_CODE",
+  "INVALID_TWO_FACTOR_COOKIE",
+  "SESSION_EXPIRED",
+  "PASSKEY_NOT_FOUND",
+  "PREVIOUSLY_REGISTERED",
+  "AUTHENTICATION_FAILED",
+  "PASSKEY_CANCELLED",
+  "ORGANIZATION_NEEDS_OWNER",
+  "OAUTH_REQUEST_EXPIRED",
+  // From ERROR_CODES.
+  "VALIDATION_FAILED",
+  "RATE_LIMITED",
+  "ENTITLEMENT_REQUIRED",
+] as const satisfies readonly string[];
+export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
+
+/**
+ * Codes that mean one of AUTH_ERROR_CODES to a user. Passkey prompts in particular fail
+ * in browser-specific ways: dismissing the dialog surfaces as the browser's
+ * NotAllowedError (ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY), an aborted ceremony, or the
+ * plugin's own *_CANCELLED codes.
+ */
+export const AUTH_ERROR_ALIASES: Readonly<Record<string, AuthErrorCode>> = {
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "USER_ALREADY_EXISTS",
+  TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE: "TOO_MANY_ATTEMPTS",
+  SESSION_NOT_FRESH: "SESSION_EXPIRED",
+  AUTH_CANCELLED: "PASSKEY_CANCELLED",
+  REGISTRATION_CANCELLED: "PASSKEY_CANCELLED",
+  ERROR_CEREMONY_ABORTED: "PASSKEY_CANCELLED",
+  ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY: "PASSKEY_CANCELLED",
+  ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED: "PREVIOUSLY_REGISTERED",
+  ORGANIZATION_MEMBERSHIP_LIMIT_REACHED: "ENTITLEMENT_REQUIRED",
+  // OAuth errors (the `error` field): the signed request an app sent the user with has
+  // expired (it's valid for 10 minutes) or was altered.
+  invalid_signature: "OAUTH_REQUEST_EXPIRED",
+};
+
+export const isAuthErrorCode = (value: unknown): value is AuthErrorCode =>
+  (AUTH_ERROR_CODES as readonly unknown[]).includes(value);

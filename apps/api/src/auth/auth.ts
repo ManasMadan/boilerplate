@@ -41,6 +41,7 @@ import {
   userAdditionalFields,
 } from "@repo/contracts/auth";
 import type { Entitlements } from "@repo/contracts/billing";
+import type { AuthErrorCode } from "@repo/contracts/errors";
 import type { EventName, EventPayload } from "@repo/contracts/events";
 import {
   AI_MCP_PATH,
@@ -306,7 +307,7 @@ export function createAuth({
             if (others.length === 0) soleMember.push(organizationId);
             else if (!others.some((member) => parseOrgRole(member.role) === "owner")) {
               throw new APIError("BAD_REQUEST", {
-                code: "ORGANIZATION_NEEDS_OWNER",
+                code: "ORGANIZATION_NEEDS_OWNER" satisfies AuthErrorCode,
                 message:
                   "Transfer ownership of your shared workspaces before deleting your account.",
               });

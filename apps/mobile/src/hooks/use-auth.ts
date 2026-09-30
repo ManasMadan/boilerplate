@@ -15,6 +15,6 @@ export function useAuthErrorMessage() {
   const t = useTranslations("authErrors");
   return (error: unknown) => {
     const key = authErrorKey(error);
-    return key && t.has(key as "generic") ? t(key as "generic") : t("generic");
+    return t(key ?? "generic");
   };
 }

@@ -28,7 +28,9 @@ builds in the field all depend on it.
 - Error codes: add to `ERROR_CODES` in `src/errors.ts` with the HTTP status, and add
   `errors.<CODE>` to every catalog in `packages/i18n` in the same change. `params` are
   ICU arguments: strings and numbers only. A module declares only codes its code can
-  throw (`apps/api/src/rpc/router.test.ts` checks).
+  throw (`apps/api/src/rpc/router.test.ts` checks). Auth failures users see a sentence
+  for are `AUTH_ERROR_CODES` (and `AUTH_ERROR_ALIASES`) in the same file, translated as
+  `authErrors.<CODE>`.
 - Events (`src/events.ts`): names are versioned (`todo.completed.v1`). Adding an
   optional field is compatible; anything else is a new `.v2` published alongside the old
   one. The `api-compat` CI job refuses anything else (`scripts/events-compat.ts`,
