@@ -12,6 +12,7 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { createLogger, type LogLevel } from "@repo/logger";
 import { Logger } from "nestjs-pino";
 import { createRequestIdGenerator, REQUEST_ID_HEADER } from "./logging";
+import { redactQuery } from "./telemetry";
 
 export interface BootstrapOptions {
   port: number;
@@ -99,7 +100,7 @@ export async function createServer(
       const line = {
         requestId: request.id,
         method: request.method,
-        url: request.url,
+        url: redactQuery(request.url),
         status,
         durationMs: Math.round(reply.elapsedTime),
       };

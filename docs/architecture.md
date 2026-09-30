@@ -62,7 +62,9 @@ setups. Inbound Stripe webhooks go straight to `localhost:3004/webhooks/stripe`.
    `/docs` outside production).
 2. The gateway routes it to apps/api. Fastify resolves the client IP through
    `TRUSTED_PROXIES`, and every request runs in a request context (request id, locale,
-   client version) that logs, queued jobs and outbox events inherit. Both protocols take
+   client version) that logs, queued jobs and outbox events inherit. Logs and traces keep
+   a URL's path and its query's parameter names, never their values (OAuth codes and
+   tokens travel there). Both protocols take
    JSON bodies only, of at most 1 MB, checked before anything else runs (anything else
    is a 415 or 413); files go to object storage directly, through presigned URLs.
 3. The procedure pipeline (`apps/api/src/rpc/procedures.ts`) is the only one: version
