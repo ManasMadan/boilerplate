@@ -71,7 +71,6 @@ still written, and skips with the reason when they're missing.
 |---|---|---|
 | Google sign-in | needs a real Google account | `apps/web/e2e/google.spec.ts`, with `E2E_GOOGLE_EMAIL` and `E2E_GOOGLE_PASSWORD` |
 | Client ID Metadata Documents from a public URL | needs an HTTPS document on the internet | `apps/api/test/oauth.integration.test.ts` (the CIMD case), with `E2E_CIMD_CLIENT_ID` |
-| Turnstile's real widget | CI runs without the Turnstile keys | `apps/web/e2e/captcha.spec.ts` and `apps/api/test/captcha.integration.test.ts`, with Cloudflare's always-pass test keys (`.env.example`) |
 | Mail through Stalwart | needs the `mail` profile | `apps/notifications/test/stalwart.integration.test.ts` and `apps/webhooks/test/stalwart.integration.test.ts`, with `STALWART_SMTP_URL` and `STALWART_URL` (above) |
 | Native mobile: a session surviving a restart, the push permission prompt, links opened by the OS | needs a device or simulator with a development build | `apps/mobile/maestro/*.yaml`, by hand (`apps/mobile/maestro/README.md`) |
 | Real Stripe test mode | the suites use `packages/fake-stripe` | by hand: [files-and-billing.md](files-and-billing.md), "Real Stripe test mode" |
@@ -165,6 +164,9 @@ bun run --cwd apps/web test:e2e                     # against a stack you're alr
 ```
 
 `apps/web/e2e/google.spec.ts` runs only with `E2E_GOOGLE_EMAIL` and `E2E_GOOGLE_PASSWORD`.
+CI runs the suite with the captcha on, with Cloudflare's always-pass test keys (in
+`ci.yml`'s e2e job), so the widget and the token check run too; locally
+`apps/web/e2e/captcha.spec.ts` skips unless you set them (`.env.example`).
 
 ## Mobile
 

@@ -282,3 +282,11 @@ describe("ci.yml's path filters", () => {
     expect(result.exitCode).not.toBe(0);
   });
 });
+
+describe("ci.yml's end-to-end job", () => {
+  it("turns the captcha on with Cloudflare's always-pass test keys, so its valid path runs", () => {
+    const env = workflow("ci.yml").jobs.e2e?.env ?? {};
+    expect(env.TURNSTILE_SITE_KEY).toBe("1x00000000000000000000AA");
+    expect(env.TURNSTILE_SECRET_KEY).toBe("1x0000000000000000000000000000000AA");
+  });
+});

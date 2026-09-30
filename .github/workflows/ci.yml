@@ -298,6 +298,10 @@ jobs:
       STRIPE_PRICE_PRO_MONTHLY: price_pro_monthly
       STRIPE_PRICE_PRO_YEARLY: price_pro_yearly
       STRIPE_API_URL: http://127.0.0.1:12111
+      # The captcha on, with Cloudflare's published always-pass test keys: the widget and
+      # the token check run for real (apps/web/e2e/captcha.spec.ts) without a challenge.
+      TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
