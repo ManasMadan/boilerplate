@@ -21,7 +21,7 @@ Which kind goes where:
 | E2E (web) | `apps/web/e2e/*.spec.ts` | `bun run test:e2e --app web` | full stack |
 | E2E (mobile) | `apps/mobile/e2e/*.spec.ts` (react-native-web); native flows in `apps/mobile/maestro/` | `bun run test:e2e --app mobile` | full stack |
 | Python | `apps/ai/tests/test_*.py`, `pytest.mark.integration` for DB/Redis | `bun run test` / `bun run test:integration` | Docker for integration |
-| Components | `packages/ui/src/components/*.stories.tsx` with `play` | `bun run --cwd packages/ui test:stories` | Playwright browser |
+| Components | `packages/ui/src/components/*.stories.tsx` with `play`, plain `*.test.tsx` beside them | `bun run --cwd packages/ui test:stories` | Playwright browser |
 
 - Unit tests are pure: no network, no database, no clock you don't control. They are
   cached by turbo, so a hidden dependency gives stale results.

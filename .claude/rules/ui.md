@@ -16,6 +16,10 @@ The web component library: shadcn-style components (`components.json`, style
   anything interactive. `bun run --cwd packages/ui test:stories` renders each story in
   Chromium in the light and dark themes, runs its `play`, and fails on any axe
   violation: a component without an accessible name or with poor contrast fails here.
+- A part or edge case no story shows gets a plain browser test,
+  `src/components/<name>.test.tsx` (`render` from `test/render.tsx`, queried with `page`
+  from `vitest/browser`), in the same run. It takes no screenshot; a new story does, so
+  a new story needs its baselines generated (`test:visual:update`) in the same change.
 - Visual baselines: `bun run --cwd packages/ui test:visual` compares every story with
   `visual/__screenshots__` in the Playwright Docker image (so screenshots match CI).
   A deliberate visual change: `test:visual:update`, and commit the new screenshots.

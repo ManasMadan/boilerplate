@@ -186,7 +186,10 @@ condition without moving them. The API's own behaviour is covered by its tests i
 ## Components
 
 `bun run --cwd packages/ui test:stories` runs every story in Chromium, in the light and
-dark themes: it must render, pass its play function and have no axe violations.
+dark themes: it must render, pass its play function and have no axe violations. The same
+run includes the package's plain browser tests (`src/components/<name>.test.tsx`,
+rendered with `render` from `packages/ui/test/render.tsx`) for what a story doesn't show:
+a part no story uses, an edge case. They take no screenshots, so they need no baselines.
 `bun run --cwd packages/ui test:visual` compares a screenshot of every story and theme
 with the committed baselines, in the Playwright Docker image;
 `test:visual:update` rewrites them.
