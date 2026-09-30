@@ -346,6 +346,12 @@ describe("test hooks", () => {
     expect(await failed.json()).toMatchObject({ status: "past_due" });
     expect(types().slice(-2)).toEqual(["invoice.payment_failed", "customer.subscription.updated"]);
 
+    const events = fake.events.length;
+    await post(`/__fake/subscriptions/${subscription?.id}/draft-invoice`);
+    expect(fake.events.length).toBe(events);
+    const [draft] = (await stripe.invoices.list({ customer: customer.id, limit: 1 })).data;
+    expect(draft).toMatchObject({ status: "draft", number: null, hosted_invoice_url: null });
+
     const lapsed = await post(`/__fake/subscriptions/${subscription?.id}/lapse`);
     expect(await lapsed.json()).toMatchObject({ status: "canceled" });
     expect(types().at(-1)).toBe("customer.subscription.deleted");

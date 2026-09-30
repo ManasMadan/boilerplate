@@ -7,7 +7,7 @@
  *
  * Hosted pages: `/checkout/<session>` (pay, pay with a declined card, or go back) and
  * `/portal/<session>` (cancel or resume the plan, then return). Test hooks under
- * `/__fake/` make a renewal fail or a subscription lapse.
+ * `/__fake/` make a renewal fail, a subscription lapse, or draft the next invoice.
  *
  * Only what the app calls is implemented; anything else answers 404 like an unknown
  * Stripe route, so a new Stripe call fails loudly in tests until it's added here.
@@ -57,12 +57,13 @@ interface Invoice {
   customer: string;
   /** Where this API version puts an invoice's subscription. */
   parent: { type: "subscription_details"; subscription_details: { subscription: string } };
-  number: string;
-  status: "paid" | "open";
+  /** A draft has no number or hosted page until it's finalized. */
+  number: string | null;
+  status: "paid" | "open" | "draft";
   amount_due: number;
   currency: "usd";
   created: number;
-  hosted_invoice_url: string;
+  hosted_invoice_url: string | null;
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -133,6 +134,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
 
   function invoiceFor(subscription: Subscription, status: Invoice["status"]) {
     const item = subscription.items.data[0] as SubscriptionItem;
+    const draft = status === "draft";
     const invoice: Invoice = {
       id: id("in"),
       object: "invoice",
@@ -141,12 +143,12 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         type: "subscription_details",
         subscription_details: { subscription: subscription.id },
       },
-      number: `FAKE-${String(invoices.length + 1).padStart(4, "0")}`,
+      number: draft ? null : `FAKE-${String(invoices.length + 1).padStart(4, "0")}`,
       status,
       amount_due: subscription.status === "trialing" ? 0 : item.price.unit_amount * item.quantity,
       currency: "usd",
       created: now(),
-      hosted_invoice_url: `${baseUrl}/invoices/${invoices.length + 1}`,
+      hosted_invoice_url: draft ? null : `${baseUrl}/invoices/${invoices.length + 1}`,
     };
     invoices.push(invoice);
     return invoice;
@@ -377,9 +379,13 @@ export async function startFakeStripe(options: FakeStripeOptions) {
   async function hooks(path: string) {
     const failed = /^\/__fake\/subscriptions\/(sub_\w+)\/payment-failed$/.exec(path);
     const lapsed = /^\/__fake\/subscriptions\/(sub_\w+)\/lapse$/.exec(path);
-    const subscription = subscriptions.get((failed ?? lapsed)?.[1] ?? "");
+    // The next renewal's invoice, as Stripe drafts it an hour before it's due.
+    const upcoming = /^\/__fake\/subscriptions\/(sub_\w+)\/draft-invoice$/.exec(path);
+    const subscription = subscriptions.get((failed ?? lapsed ?? upcoming)?.[1] ?? "");
     if (!subscription) return undefined;
-    if (failed) {
+    if (upcoming) {
+      invoiceFor(subscription, "draft");
+    } else if (failed) {
       subscription.status = "past_due";
       const invoice = invoiceFor(subscription, "open");
       await emit("invoice.payment_failed", { ...invoice, attempt_count: 1 });
