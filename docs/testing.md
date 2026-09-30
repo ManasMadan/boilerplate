@@ -3,8 +3,9 @@
 | Layer | Where | Command | Needs |
 |---|---|---|---|
 | Unit | `src/**/*.test.ts(x)` in each package, `apps/mobile/src`, `apps/ai/tests` (not marked `integration`) | `bun run test` | nothing (cached by turbo) |
-| Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/web/test` (in Chromium), `apps/ai` tests marked `integration` | `bun run test:integration` | Postgres, Valkey, Mailpit, RustFS, ClamAV, Stalwart (started for you) |
-| Coverage | every suite merged, every file at 100% | `bun run test:coverage` | the same services |
+| Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/web/test` (in Chromium), `apps/ai` tests marked `integration` | `bun run test:integration` | the core: Postgres, Valkey, Mailpit (started for you) |
+| Integration, file uploads | the suites tagged `files` in `apps/api`, `apps/worker` and `packages/nest-common` | `bun run test:integration:files` | the core plus RustFS and ClamAV (started for you) |
+| Coverage | every suite merged, every file at 100% | `bun run test:coverage` | the full profile (`bun run db:up:full`) |
 | End to end | `apps/web/e2e`, `apps/mobile/e2e`, then the k6 smoke | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
 | Components | every story in `packages/ui` | `bun run --cwd packages/ui test:stories`, `test:visual` | Chromium; Docker for `test:visual` |
 | Load | `load/api.ts` (k6) | `bun run test:load` | a running API, Docker |
@@ -24,12 +25,31 @@ packages (the `unit` project in services), Jest with React Native Testing Librar
 
 ## Integration
 
-`bun run test:integration` starts the full Docker profile (`bun scripts/services.ts up
---full`) and runs every package's `test:integration`, never cached. The full profile's
-memory limits add up to about 3.4 GB, and the start refuses unless Docker has that free
-plus half a gigabyte of headroom (about 3.9 GB): on Docker Desktop's default 2 GB, raise
-it in Settings, Resources. It takes longer than two minutes, so run it in the
-background when a tool times out commands (an agent's shell, for one).
+`bun run test:integration` starts the core services (`bun scripts/services.ts up`) and
+runs every package's `test:integration`, never cached, except the file-upload tests.
+Those need object storage and virus scanning, and are tagged `files` (vitest's
+`{ tags: ["files"] }` on their `describe`, declared by `tags` in `packages/vitest-config`):
+`bun run test:integration:files` starts the core plus the files services
+(`services.ts up --files`) and runs only them. A package's `test:integration` passes
+`--tags-filter=!files` and its `test:integration:files` passes `--tags-filter=files`;
+`coverage` passes neither, so `bun run test:coverage` and CI's integration job, which
+starts every service, run them all. A new test that needs RustFS or ClamAV gets the tag.
+
+What each profile needs: the start adds up the memory limits in `docker-compose.yml` of
+what isn't running yet, and refuses unless Docker has that free plus half a gigabyte of
+headroom.
+
+| Profile | Starts | Limits add up to | Docker needs free |
+|---|---|---|---|
+| core (`bun run db:up`, `test:integration`) | Postgres, Valkey, Mailpit | 0.9 GB | about 1.4 GB |
+| files (`services.ts up --files`, `test:integration:files`) | the core, RustFS, ClamAV | 2.9 GB | about 3.4 GB |
+| mail (`bun run db:up:mail`) | the core, Stalwart | 1.2 GB | about 1.7 GB |
+| full (`bun run db:up:full`, `test:coverage`, `test:e2e`) | all of the above, Jaeger | 3.4 GB | about 3.9 GB |
+
+Docker Desktop's default 2 GB fits the core; for the others raise it in Settings,
+Resources. ClamAV is most of the files profile (1.5 GB). The integration run takes longer
+than two minutes, so run it in the background when a tool times out commands (an agent's
+shell, for one).
 
 - Each test file gets its own Postgres database cloned from a migrated template, and
   connects as the service's own role, so a missing grant or row-level security policy

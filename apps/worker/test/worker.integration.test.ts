@@ -581,7 +581,9 @@ describe("maintenance", () => {
     await queue.close();
   });
 
-  it("forgets abandoned uploads, and removes queued objects however many there are", async () => {
+  it("forgets abandoned uploads, and removes queued objects however many there are", {
+    tags: ["files"],
+  }, async () => {
     const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "red" } })
       .png()
       .toBuffer();
@@ -644,7 +646,7 @@ describe("maintenance", () => {
   });
 });
 
-describe("uploads", () => {
+describe("uploads", { tags: ["files"] }, () => {
   // The EICAR test file: every antivirus detects it, and it's harmless.
   const EICAR = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
 

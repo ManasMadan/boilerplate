@@ -8,6 +8,14 @@
  */
 import type { CoverageOptions } from "vitest/node";
 
+/**
+ * Tags an integration project declares (`test: { tags }`). A suite tagged `files` needs
+ * the files profile, RustFS and ClamAV, which Docker's default memory can't fit next to
+ * the core: `bun run test:integration` leaves those out (`--tags-filter=!files`) and
+ * `bun run test:integration:files` runs only them. Coverage, locally and in CI, runs all.
+ */
+export const tags = [{ name: "files", description: "needs RustFS and ClamAV: the files profile" }];
+
 export function coverage(): CoverageOptions {
   return {
     provider: "v8",

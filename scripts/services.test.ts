@@ -63,6 +63,9 @@ describe("starting the local services", () => {
     );
     expect(printed()).toContain("FILE_SCANNER=none");
     expect(calls.some((line) => line.includes(" up "))).toBe(false);
+    expect(services(["up", "--files"], run)).toBe(1);
+    expect(calls).toContain("docker compose --profile files config --format json");
+    expect(printed().match(/FILE_SCANNER=none/g)).toHaveLength(2);
     expect(services(["up"], run)).toBe(1);
     expect(printed()).toContain("or stop other containers");
   });

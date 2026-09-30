@@ -3,7 +3,7 @@
  * `integration` (test/, against real Postgres and Redis from docker compose).
  */
 import { applyTestEnvironment } from "@repo/testing/environment";
-import { coverage, decoratorMetadata } from "@repo/vitest-config";
+import { coverage, decoratorMetadata, tags } from "@repo/vitest-config";
 import { defineConfig } from "vitest/config";
 
 // .env.example's values (not the developer's .env), before global setup and the workers.
@@ -30,6 +30,7 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["test/**/*.test.ts"],
+          tags,
           // Each file gets its own database cloned from the migrated template.
           globalSetup: ["./test/global-setup.ts"],
           // Cloning the template waits while another package's run prepares it.

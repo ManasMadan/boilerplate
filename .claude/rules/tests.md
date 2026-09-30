@@ -17,7 +17,7 @@ Which kind goes where:
 |---|---|---|---|
 | Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached; the Stop hook runs it for affected packages) | nothing |
 | Scripts and hooks | `scripts/*.test.ts`, `.claude/hooks/*.test.ts` (Bun's runner) | `bun test ./scripts/ ./.claude/hooks/` | nothing |
-| Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` | Docker (the command starts it) |
+| Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` (the core services); suites tagged `files` (RustFS, ClamAV) with `bun run test:integration:files` | Docker (the command starts it) |
 | Web pages and components | `apps/web/test/**/*.test.tsx`, in Chromium against the real API | `bun run --filter @repo/web test:integration` | Docker, Chromium |
 | E2E (web) | `apps/web/e2e/*.spec.ts` | `bun run test:e2e --app web` | full stack |
 | E2E (mobile) | `apps/mobile/e2e/*.spec.ts` (react-native-web); native flows in `apps/mobile/maestro/` | `bun run test:e2e --app mobile` | full stack |

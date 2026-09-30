@@ -1,4 +1,4 @@
-/** Requires the `files` profile: `bun run db:up:full` (RustFS on :9000). */
+/** Needs the files profile (RustFS on :59000): `bun run test:integration:files`. */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { S3Storage } from "../src/storage";
@@ -12,7 +12,7 @@ const storage = new S3Storage({
   forcePathStyle: true,
 });
 
-describe("S3Storage", () => {
+describe("S3Storage", { tags: ["files"] }, () => {
   it("uploads through a presigned PUT and serves it through a presigned GET", async () => {
     const key = `quarantine/test/${randomUUID()}.txt`;
     const body = "hello from a browser";

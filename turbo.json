@@ -41,6 +41,11 @@
       "dependsOn": ["gen", "^gen"],
       "cache": false
     },
+    // The integration tests that need the files profile (RustFS, ClamAV).
+    "test:integration:files": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false
+    },
     // Unit and integration tests with coverage, as LCOV for scripts/coverage.ts (needs the
     // services, like test:integration).
     "coverage": {

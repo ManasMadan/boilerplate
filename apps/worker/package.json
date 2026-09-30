@@ -9,7 +9,8 @@
     "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
     "check-types": "tsc",
     "test": "vitest run --project unit",
-    "test:integration": "vitest run --project integration",
+    "test:integration": "vitest run --project integration --tags-filter=!files",
+    "test:integration:files": "vitest run --project integration --tags-filter=files",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {

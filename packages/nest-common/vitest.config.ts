@@ -3,7 +3,7 @@
  * the docker compose Postgres, Redis and RustFS).
  */
 import { applyTestEnvironment } from "@repo/testing/environment";
-import { coverage, decoratorMetadata } from "@repo/vitest-config";
+import { coverage, decoratorMetadata, tags } from "@repo/vitest-config";
 import { defineConfig } from "vitest/config";
 
 // .env.example's values (not the developer's .env), before global setup and the workers.
@@ -19,6 +19,7 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["test/**/*.test.ts"],
+          tags,
           // A file that needs a database clones its own from the migrated template.
           globalSetup: ["./test/global-setup.ts"],
           hookTimeout: 60_000,

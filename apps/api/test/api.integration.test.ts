@@ -1761,7 +1761,7 @@ describe("phone number", () => {
   });
 });
 
-describe("uploads and the profile picture", () => {
+describe("uploads and the profile picture", { tags: ["files"] }, () => {
   const storage = new S3Storage({
     bucket: LOCAL_STORAGE.S3_BUCKET,
     region: "us-east-1",

@@ -15,9 +15,10 @@ bun run doctor     # when something looks off
 
 Local services run in Docker with memory limits and their own ports, so they sit
 beside other projects' containers. Docker needs about 1.4 GB free for the core
-(`bun dev`) and about 3.9 GB for the full profile (`bun dev:full`,
-`bun run test:integration`, `bun run test:coverage`); the start refuses when they don't
-fit. `bun run db:down` stops them; `bun run docker:clean` removes everything this
+(`bun dev`, `bun run test:integration`), about 3.4 GB for the file-upload tests
+(`bun run test:integration:files`, with RustFS and ClamAV) and about 3.9 GB for the full
+profile (`bun dev:full`, `bun run test:coverage`); the start refuses when they don't fit
+([docs/testing.md](docs/testing.md#integration) has each profile). `bun run db:down` stops them; `bun run docker:clean` removes everything this
 repository created in Docker. [docs/troubleshooting.md](docs/troubleshooting.md) has the
 fixes for what usually goes wrong.
 

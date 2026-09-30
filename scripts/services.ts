@@ -5,8 +5,10 @@
  *   bun run db:up          Postgres, Valkey, Mailpit
  *   bun run db:up:mail     plus the Stalwart mail server (the prod-like email path)
  *   bun run db:up:full     plus that, object storage and virus scanning (ClamAV, ~1.5 GB)
+ *   bun scripts/services.ts up --files   the core plus object storage and virus scanning
+ *                          only, for the file-upload tests (`bun run test:integration:files`)
  *   bun run db:down        stop them (data is kept; `bun run docker:clean` deletes it)
- *   bun scripts/services.ts check [--mail|--full]   only report whether they'd fit
+ *   bun scripts/services.ts check [--mail|--files|--full]   only report whether they'd fit
  *
  * Every service has a memory limit. Before starting, this adds up the limits of what's
  * about to start and checks they fit in Docker's memory next to what other containers
@@ -90,7 +92,7 @@ function budget(run: Run, profileArgs: string[]) {
   };
 }
 
-const PROFILES: Record<string, string> = { "--full": "full", "--mail": "mail" };
+const PROFILES: Record<string, string> = { "--full": "full", "--mail": "mail", "--files": "files" };
 
 /**
  * Started without waiting for them to be healthy: ClamAV downloads its virus signatures
@@ -104,7 +106,7 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
   const [command, flag] = argv;
   const profile = flag ? PROFILES[flag] : undefined;
   if (flag && !profile) {
-    console.error(`unknown flag ${flag}: use --mail or --full`);
+    console.error(`unknown flag ${flag}: use --mail, --files or --full`);
     return 1;
   }
   const profileArgs = profile ? ["--profile", profile] : [];
@@ -117,7 +119,7 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
   }
   if (command !== "up" && command !== "check") {
     console.error(
-      `usage: bun scripts/services.ts up [--mail|--full] | check [--mail|--full] | down   (project "${PROJECT}")`,
+      `usage: bun scripts/services.ts up [--mail|--files|--full] | check [--mail|--files|--full] | down   (project "${PROJECT}")`,
     );
     return 1;
   }
@@ -130,7 +132,7 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
       `Not starting ${starting.join(", ")}: they may use up to ${gb(needed)}, and Docker has ` +
         `${gb(Math.max(free, 0))} to spare (${gb(total)} in total, ${gb(inUse)} in use by running containers).`,
     );
-    if (flag === "--full") {
+    if (flag === "--full" || flag === "--files") {
       warn(
         "Start the core only (bun run db:up) with FILE_SCANNER=none, or give Docker more memory (Docker Desktop → Settings → Resources).",
       );
