@@ -1004,7 +1004,7 @@ describe("webhook endpoints", () => {
     ]);
     await client.end();
     expect(rows[0].secret).not.toContain(created.secret.slice(6));
-    expect(rows[0].secret).toMatch(/^v1\./);
+    expect(rows[0].secret).toMatch(/^v2\./);
     expect(events.rows.map((row) => row.name)).toEqual(["webhook.endpoint_created.v1"]);
 
     const rotated = await session.rpc.webhooks.rotateSecret({ id: created.endpoint.id });
