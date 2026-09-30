@@ -33,7 +33,9 @@ schemas kubeconform validates against are downloaded once into
 stack's migration Job runs before its services (a Helm pre-install/pre-upgrade hook,
 an Argo CD PreSync hook), so the database must already be up. Keeping it in its own
 release is what guarantees that, and it means redeploying the application never touches
-the database.
+the database. The migration Job runs on every sync of the stack, a self-heal included,
+not only when there's a new migration: `prisma migrate deploy` with nothing new to apply
+changes nothing, so a rerun costs one short-lived pod and a line in Argo CD's history.
 
 ## Network policies
 
