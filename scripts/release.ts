@@ -20,7 +20,12 @@ const STAGING = "deploy/environments/staging/stack.yaml";
 /** How long release.yml waits for CI and deploy.yml to finish on the tagged commit. */
 const DEPLOY_WAIT_MS = 60 * 60_000;
 
-/** The sections of the notes, in order; other types (chore, docs, test, …) are left out. */
+/**
+ * The sections of the notes, in order; other types (chore, docs, test, …) are left out.
+ * Written here rather than with git-cliff or GitHub's generated notes: breaking changes
+ * come first, from the `!` or the BREAKING CHANGE footer, which is how the API
+ * compatibility check tells a major release apart (ci.yml, api-compat).
+ */
 const SECTIONS: [type: string, title: string][] = [
   ["feat", "Features"],
   ["fix", "Fixes"],
