@@ -93,15 +93,22 @@ export function toContractError(
   return new ORPCError("INTERNAL", { status: 500, data: { params: {} as ErrorParams, requestId } });
 }
 
-/** Compares dotted versions ("1.12.0" < "1.2.0" is false). Missing parts count as 0. */
+const VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Whether an app's version is below the minimum. Versions are major.minor.patch, and a
+ * pre-release (1.2.0-beta) comes before its release. Anything else counts as older: a
+ * gate that let unreadable versions through would let any client skip it.
+ */
 function isOlderVersion(version: string, minimum: string) {
-  const a = version.split(".").map(Number);
-  const b = minimum.split(".").map(Number);
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+  const [a, b] = [VERSION.exec(version), VERSION.exec(minimum)];
+  if (!a) return true;
+  if (!b) throw new Error(`MINIMUM_CLIENT_VERSION isn't major.minor.patch: ${minimum}`);
+  for (let i = 1; i <= 3; i++) {
+    const diff = Number(a[i]) - Number(b[i]);
     if (diff !== 0) return diff < 0;
   }
-  return false;
+  return a[4] !== undefined && b[4] === undefined;
 }
 
 /** Checks an API key for a procedure that needs `scope` (modules/api-keys). */

@@ -15,7 +15,6 @@ interface ProvidersProps {
   locale: Locale;
   timeZone: string;
   messages: AbstractIntlMessages;
-  appVersion: string;
   nonce: string | undefined;
   children: ReactNode;
 }
@@ -23,14 +22,7 @@ interface ProvidersProps {
 let switchingWorkspace = false;
 
 /** Every client-side context, mounted once by the root layout. */
-export function Providers({
-  locale,
-  timeZone,
-  messages,
-  appVersion,
-  nonce,
-  children,
-}: ProvidersProps) {
+export function Providers({ locale, timeZone, messages, nonce, children }: ProvidersProps) {
   const router = useRouter();
   return (
     <ThemeProvider
@@ -42,7 +34,9 @@ export function Providers({
     >
       <NextIntlClientProvider locale={locale} timeZone={timeZone} messages={messages}>
         <ApiProvider
-          options={{ appVersion, getLocale: () => locale }}
+          // No app version: the site always serves its current code, and its release is a
+          // build id, not a version the API's update gate could compare.
+          options={{ getLocale: () => locale }}
           // The session ended (signed out elsewhere, expired, revoked). Signing out clears
           // the now-useless cookie; otherwise the proxy would still see it and bounce the
           // user from /sign-in back to the dashboard.

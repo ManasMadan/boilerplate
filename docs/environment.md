@@ -57,7 +57,7 @@ Read by api, worker, notifications and webhooks (`coreEnv`).
 | `LOG_LEVEL` | `info` | pino level: `fatal` … `trace`, or `silent`. |
 | `TRUSTED_PROXIES` | `loopback` | Comma-separated CIDRs or `loopback`, `linklocal`, `uniquelocal`: who may set `X-Forwarded-For` and `x-request-id`. The client IP drives rate limits, lockout and audit logs. The stack chart sets `uniquelocal`. |
 | `LOAD_SHEDDING` | `on` | `off` stops answering 503 under pressure. Only for many instances on one machine (the integration tests). |
-| `RELEASE` | `dev` | Build id (image tag), stamped by CI. The web app sends it to the API as `x-app-version`. |
+| `RELEASE` | `dev` | Build id (image tag), stamped by CI. |
 | `PORT` | per service | api 3001, worker 3002, notifications 3003, webhooks 3004. |
 
 The AI service reads `NODE_ENV`, `LOG_LEVEL` (`debug`, `info`, `warning` or `error`
@@ -122,7 +122,7 @@ that uses it.
 | `BETTER_AUTH_URL` | api (req.), ai | `http://localhost:3000` | The site's public origin. The API is served on it (`/rpc`, `/api`), so cookies are first-party; OAuth callbacks, the OAuth issuer and MCP resource URLs are built from it. The AI service needs it (with `API_URL`) for its MCP server. |
 | `WEB_URL` | api (req.), web (req.), notifications | `http://localhost:3000` | The web app's origin: the API's CORS and trusted origin, links in messages, canonical URLs. Notifications: required in production. |
 | `APP_ORIGINS` | api | `http://localhost:3100` | Other origins allowed to sign users in, comma-separated (the mobile app's web build). Native apps need nothing here. |
-| `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | Clients sending an older `x-app-version` get `CLIENT_OUTDATED` (mobile shows its update screen). |
+| `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | major.minor.patch. The mobile app sends its version as `x-app-version`; one below this (a pre-release comes before its release) or one that isn't a version at all gets `CLIENT_OUTDATED`, and the app shows its update screen. The web app sends none. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | api | empty | Both set: "Sign in with Google" (`google` feature). Redirect URI: `${BETTER_AUTH_URL}/api/auth/callback/google`. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | api | empty | Both set: Cloudflare Turnstile on sign-up, emailed codes and password reset (`captcha` feature). The site key reaches browsers through `system.info`. Cloudflare's always-pass test keys are in `.env.example`. |
 | `ENCRYPTION_KEYS` | api (req.), webhooks (req.) | generated | `id:base64key[,id:base64key…]`, 32-byte keys. The first encrypts, any listed key decrypts; prepend a new one to rotate. Encrypts webhook signing secrets at rest. |

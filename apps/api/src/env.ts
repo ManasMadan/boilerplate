@@ -56,7 +56,10 @@ export const env = createEnv({
       .pipe(z.array(z.url())),
 
     /** Oldest web/mobile app version still supported; older clients get CLIENT_OUTDATED. */
-    MINIMUM_CLIENT_VERSION: z.string().default("0.0.0"),
+    MINIMUM_CLIENT_VERSION: z
+      .string()
+      .regex(/^\d+\.\d+\.\d+$/, "major.minor.patch")
+      .default("0.0.0"),
 
     // Optional: Google sign-in.
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),

@@ -1815,4 +1815,14 @@ describe("clients", () => {
       minimumClientVersion: "2.0.0",
     });
   });
+
+  it("counts a version it can't read as outdated, so the gate can't be skipped", async () => {
+    for (const appVersion of ["2.0.0-rc.1", "garbage", "3", "2.0", "v2.1.0", "NaN.NaN.NaN"]) {
+      const session = createSession(harness, { appVersion });
+      await expectError(session.rpc.system.info(), "CLIENT_OUTDATED");
+    }
+    for (const appVersion of ["2.0.1", "2.1.0-beta", "10.0.0"]) {
+      await expect(createSession(harness, { appVersion }).rpc.system.info()).resolves.toBeTruthy();
+    }
+  });
 });

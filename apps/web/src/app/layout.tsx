@@ -6,7 +6,6 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone, getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
-import { env } from "@/env";
 import { PushSync } from "@/modules/notifications";
 import { LiveUpdates, PreferenceSync, SiteHeader } from "@/modules/shell";
 import { Providers } from "./providers";
@@ -46,13 +45,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       className={cn(GeistSans.variable, GeistMono.variable)}
     >
       <body className="min-h-dvh font-sans antialiased">
-        <Providers
-          locale={locale}
-          timeZone={timeZone}
-          messages={messages}
-          nonce={nonce}
-          appVersion={env.RELEASE}
-        >
+        <Providers locale={locale} timeZone={timeZone} messages={messages} nonce={nonce}>
           <PreferenceSync timeZone={timeZone} />
           <LiveUpdates />
           <PushSync />
