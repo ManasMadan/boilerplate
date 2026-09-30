@@ -14,6 +14,11 @@ export const DEMO_PEOPLE = [
   { name: "Team Mate", email: "teammate@example.com" },
 ] as const;
 
+interface DemoUser {
+  id: string;
+  personalOrgId: string;
+}
+
 export async function seedDemo({
   auth,
   database,
@@ -26,7 +31,7 @@ export async function seedDemo({
   if (await database.write.user.findUnique({ where: { email: DEMO_PEOPLE[0].email } })) {
     return null;
   }
-  const [demo, teammate] = await Promise.all(
+  const [demo, teammate] = (await Promise.all(
     DEMO_PEOPLE.map(async (person) => {
       // Signs up exactly as the app does (personal workspace, audit event); the emailed
       // code is skipped by marking the address verified.
@@ -40,13 +45,12 @@ export async function seedDemo({
       });
       return { id: user.id, personalOrgId: personal.organizationId };
     }),
-  );
-  if (!demo || !teammate) throw new Error("Both demo users are created above");
+  )) as [DemoUser, DemoUser];
 
-  const team = await auth.api.createOrganization({
+  // better-auth throws when it can't create one.
+  const team = (await auth.api.createOrganization({
     body: { name: "Acme", slug: "acme", userId: demo.id },
-  });
-  if (!team) throw new Error("The Acme workspace wasn't created");
+  })) as { id: string };
   await auth.api.addMember({
     body: { organizationId: team.id, userId: teammate.id, role: "member" },
   });

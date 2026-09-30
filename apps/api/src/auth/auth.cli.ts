@@ -16,8 +16,15 @@ import { env } from "../env";
 import { createAuth } from "./auth";
 import { createMemberships } from "./memberships";
 
-const notifications = {
-  add: () => Promise.reject(new Error("The auth CLI never sends notifications")),
+/** What the configuration would send or change through, all refusing. */
+export const inert = {
+  notifications: {
+    add: () => Promise.reject(new Error("The auth CLI never sends notifications")),
+  },
+  billing: {
+    entitlements: async () => unlimited,
+    cancelFor: () => Promise.reject(new Error("The auth CLI never changes billing")),
+  },
 };
 
 const db = createDb({ url: env.API_DATABASE_URL, poolMax: 1, service: "auth-cli" });
@@ -27,12 +34,9 @@ export const auth = createAuth({
   env,
   db,
   redis,
-  notifications,
+  notifications: inert.notifications,
   memberships: createMemberships(db, redis),
-  billing: {
-    entitlements: async () => unlimited,
-    cancelFor: () => Promise.reject(new Error("The auth CLI never changes billing")),
-  },
+  billing: inert.billing,
   // The only table written at startup: the OAuth provider seeds its resources.
   database: memoryAdapter({ oauthResource: [] }),
 });

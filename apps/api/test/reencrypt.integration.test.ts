@@ -122,4 +122,19 @@ describe("re-encrypting secrets", () => {
     });
     expect(result).toMatchObject({ accounts: 0, twoFactors: 0, signingKeys: 0 });
   });
+
+  it("goes through tables bigger than one page", async () => {
+    const db = database.write;
+    const { user } = await factories(db).userWithWorkspace();
+    const legacy = await symmetricEncrypt({ key: OLD_AUTH, data: "access" });
+    await db.account.createMany({
+      data: Array.from({ length: 450 }, (_, i) => ({
+        userId: user.id,
+        providerId: "google",
+        accountId: `${user.id}-${i}`,
+        accessToken: legacy,
+      })),
+    });
+    expect(await reencryptSecrets(database, rotated())).toMatchObject({ accounts: 450 });
+  });
 });
