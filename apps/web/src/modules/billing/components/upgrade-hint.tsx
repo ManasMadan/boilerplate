@@ -1,6 +1,6 @@
 "use client";
 
-import { useBillingOverviewQuery } from "@repo/client/api/billing";
+import { useBillingOverviewQuery } from "@repo/client/api/billing/overview";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
 import Link from "next/link";
 import { useTranslations } from "next-intl";

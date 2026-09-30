@@ -3,11 +3,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { errorCode } from "@repo/client";
 import { useMeQuery } from "@repo/client/api/user/me";
-import {
-  useRemovePhoneMutation,
-  useSendPhoneCodeMutation,
-  useVerifyPhoneMutation,
-} from "@repo/client/api/user/phone";
+import { useRemovePhoneMutation } from "@repo/client/api/user/remove-phone";
+import { useSendPhoneCodeMutation } from "@repo/client/api/user/send-phone-code";
+import { useVerifyPhoneMutation } from "@repo/client/api/user/verify-phone";
 import { phoneNumberSchema } from "@repo/contracts/auth";
 import { Button } from "@repo/ui/components/button";
 import {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRegisterDeviceMutation } from "@repo/client/api/notifications/devices";
+import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
 import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { currentSubscription, toDevice } from "../lib/web-push";

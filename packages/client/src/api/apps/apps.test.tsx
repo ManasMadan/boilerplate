@@ -1,11 +1,8 @@
 import type { ConnectedApp } from "@repo/contracts/api";
 import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
-import {
-  useConnectedAppsQuery,
-  useDisconnectAppMutation,
-  useInvalidateConnectedAppsQuery,
-} from "./connected";
+import { useDisconnectAppMutation } from "./disconnect";
+import { useConnectedAppsQuery } from "./list";
 
 const app = (n: number): ConnectedApp => ({
   id: id(n),
@@ -19,7 +16,7 @@ const app = (n: number): ConnectedApp => ({
 });
 
 describe("connected apps", () => {
-  it("lists them, and refetches after one is disconnected or when asked", async () => {
+  it("lists them, and refetches after one is disconnected", async () => {
     let apps = [app(1), app(2)];
     const api = standIn((os) => ({
       apps: {
@@ -33,7 +30,6 @@ describe("connected apps", () => {
       () => ({
         apps: useConnectedAppsQuery(),
         disconnect: useDisconnectAppMutation(),
-        invalidate: useInvalidateConnectedAppsQuery(),
       }),
       api,
     );
@@ -41,8 +37,5 @@ describe("connected apps", () => {
     await vi.waitFor(() => expect(names()).toEqual(["App 1", "App 2"]));
     await result.current.disconnect.mutateAsync({ id: id(1) });
     await vi.waitFor(() => expect(names()).toEqual(["App 2"]));
-    apps = [];
-    await result.current.invalidate();
-    await vi.waitFor(() => expect(names()).toEqual([]));
   });
 });

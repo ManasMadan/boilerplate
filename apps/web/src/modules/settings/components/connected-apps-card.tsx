@@ -1,6 +1,7 @@
 "use client";
 
-import { useConnectedAppsQuery, useDisconnectAppMutation } from "@repo/client/api/apps/connected";
+import { useDisconnectAppMutation } from "@repo/client/api/apps/disconnect";
+import { useConnectedAppsQuery } from "@repo/client/api/apps/list";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,

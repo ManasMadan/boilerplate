@@ -1,11 +1,9 @@
 "use client";
 
-import {
-  useBillingOverviewQuery,
-  useCheckoutMutation,
-  useInvoicesQuery,
-  usePortalMutation,
-} from "@repo/client/api/billing";
+import { useCheckoutMutation } from "@repo/client/api/billing/checkout";
+import { useInvoicesQuery } from "@repo/client/api/billing/invoices";
+import { useBillingOverviewQuery } from "@repo/client/api/billing/overview";
+import { usePortalMutation } from "@repo/client/api/billing/portal";
 import type { BillingOverview } from "@repo/contracts/api";
 import { formatMoney } from "@repo/contracts/money";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";

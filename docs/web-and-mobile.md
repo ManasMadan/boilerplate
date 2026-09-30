@@ -50,7 +50,8 @@ Every call goes through `packages/client`:
   contract in `packages/contracts` and its TanStack Query utilities, sending
   `x-app-version` and `x-locale` with every request.
 - Hooks live one per procedure and are imported by exact path:
-  `import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list"`.
+  `import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list"`. Each file
+  exports one hook, which `lint:boundaries` checks.
 - `@repo/client/auth` is the better-auth client (with its plugins), `@repo/client/auth/forms`
   the shared form schemas, `useLiveUpdates` the realtime stream that invalidates queries,
   and `errorMessageKey`/`fieldErrors` turn API error codes into translated messages.

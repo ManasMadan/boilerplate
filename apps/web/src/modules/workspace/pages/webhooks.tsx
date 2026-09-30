@@ -1,10 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  useCreateWebhookEndpointMutation,
-  useWebhookEndpointsQuery,
-} from "@repo/client/api/webhooks/endpoints";
+import { useCreateWebhookEndpointMutation } from "@repo/client/api/webhooks/create-endpoint";
+import { useWebhookEndpointsQuery } from "@repo/client/api/webhooks/list-endpoints";
 import { webhookEvents } from "@repo/contracts/events";
 import { Button } from "@repo/ui/components/button";
 import {

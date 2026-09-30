@@ -1,11 +1,9 @@
 /**
  * Uploading a file: ask the API for an upload, PUT the bytes straight to storage, then
- * complete it. The worker checks it next; `useFileQuery` follows its status (refetched
- * on the `files.changed` realtime nudge, and polled meanwhile in case one is missed).
+ * complete it. The worker checks it next; `useFileQuery` (./get) follows its status.
  */
-import type { FileInfo } from "@repo/contracts/api";
 import { type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 
 /** Why a file can't be uploaded for `purpose`, before anything is sent (or null). */
@@ -59,18 +57,4 @@ export function useUploadFileMutation() {
       return client.files.completeUpload({ fileId: created.id });
     },
   });
-}
-
-const settled = (file: FileInfo | undefined) =>
-  file?.status === "ready" || file?.status === "rejected";
-
-export function useFileQuery(fileId: string | null) {
-  const { api } = useApi();
-  return useQuery(
-    api.files.get.queryOptions({
-      input: { fileId: fileId ?? "" },
-      enabled: fileId !== null,
-      refetchInterval: (query) => (settled(query.state.data) ? false : 3_000),
-    }),
-  );
 }

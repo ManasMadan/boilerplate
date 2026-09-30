@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkRepositories, prismaModels } from "./check-layers";
+import { checkClientHooks, checkRepositories, prismaModels } from "./check-layers";
 import { captureOutput } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -53,5 +53,35 @@ describe("the repositories check", () => {
   it("passes the real API", () => {
     captureOutput();
     expect(checkRepositories()).toBe(0);
+  });
+});
+
+describe("the client's one-hook-per-file check", () => {
+  it("allows one hook per file, next to plain helpers and tests", () => {
+    const printed = captureOutput();
+    const api = tree({
+      "todo/list.ts": "export const PAGE = 20;\nexport function useTodoListQuery() {}\n",
+      "todo/optimistic.ts": "export function applyCreate() {}\nexport function applyDelete() {}\n",
+      "todo/todo.test.tsx": "export function useOne() {}\nexport function useTwo() {}\n",
+    });
+    expect(checkClientHooks(api)).toBe(0);
+    expect(printed()).toContain("one client hook per file");
+  });
+
+  it("refuses a file that exports two", () => {
+    const printed = captureOutput();
+    const api = tree({
+      "billing.ts":
+        "export function useOverviewQuery() {}\nexport const usePortalMutation = () => {};\n",
+    });
+    expect(checkClientHooks(api)).toBe(1);
+    expect(printed()).toContain(
+      "packages/client/src/api/billing.ts: exports useOverviewQuery, usePortalMutation; one hook per file.",
+    );
+  });
+
+  it("passes the real client", () => {
+    captureOutput();
+    expect(checkClientHooks()).toBe(0);
   });
 });

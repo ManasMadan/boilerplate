@@ -2,12 +2,10 @@ import { ORPCError } from "@orpc/client";
 import type { AiDocument, AssistantEvent } from "@repo/contracts/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
-import {
-  useAddDocumentMutation,
-  useAiDocumentsQuery,
-  useAssistant,
-  useRemoveDocumentMutation,
-} from "./assistant";
+import { useAddDocumentMutation } from "./add-document";
+import { useAssistant } from "./assistant";
+import { useAiDocumentsQuery } from "./documents";
+import { useRemoveDocumentMutation } from "./remove-document";
 import { useAiSentimentMutation } from "./sentiment";
 
 const document = (n: number, status: AiDocument["status"]): AiDocument => ({

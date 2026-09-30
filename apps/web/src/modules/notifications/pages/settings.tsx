@@ -1,9 +1,7 @@
 "use client";
 
-import {
-  useNotificationPreferencesQuery,
-  useUpdateNotificationPreferencesMutation,
-} from "@repo/client/api/notifications/preferences";
+import { useNotificationPreferencesQuery } from "@repo/client/api/notifications/preferences";
+import { useUpdateNotificationPreferencesMutation } from "@repo/client/api/notifications/update-preferences";
 import type { NotificationPreferences } from "@repo/contracts/api";
 import {
   Card,

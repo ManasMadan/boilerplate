@@ -9,7 +9,11 @@ The data layer shared by web and mobile. Apps never create their own oRPC client
 call `fetch` against the API.
 
 - One operation per file: `src/api/<area>/<operation>.ts`, imported by exact path
-  (`@repo/client/api/todo/list`). There is no barrel for hooks.
+  (`@repo/client/api/todo/list`). There is no barrel for hooks. A file exports exactly
+  one hook; plain helpers, constants and types may sit beside it, and a helper hook two
+  operations share (`todo/settle.ts`) gets its own file. `scripts/check-layers.ts` (in
+  `lint:boundaries`) fails on a second exported hook. Tests stay one per area
+  (`src/api/<area>/<area>.test.tsx`) and import each file they cover.
 - Hooks wrap the generated query utils: `const { api } = useApi()` then
   `useQuery(api.<ns>.<proc>.queryOptions(...))`, `.infiniteOptions(...)` or
   `.mutationOptions(...)`. Name them `use<Thing>Query`, `use<Thing>InfiniteQuery`,

@@ -1,9 +1,7 @@
 "use client";
 
-import {
-  useRegisterDeviceMutation,
-  useUnregisterDeviceMutation,
-} from "@repo/client/api/notifications/devices";
+import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
+import { useUnregisterDeviceMutation } from "@repo/client/api/notifications/unregister-device";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
 import {

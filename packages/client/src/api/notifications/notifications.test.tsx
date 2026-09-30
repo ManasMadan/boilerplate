@@ -2,18 +2,15 @@ import type { AppNotification, NotificationPreferences } from "@repo/contracts/a
 import { toPage } from "@repo/contracts/pagination";
 import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
-import { useRegisterDeviceMutation, useUnregisterDeviceMutation } from "./devices";
-import {
-  useMarkAllNotificationsReadMutation,
-  useMarkNotificationsReadMutation,
-  useNotificationsInfiniteQuery,
-  useUnreadNotificationsCountQuery,
-} from "./inbox";
-import {
-  useNotificationPreferencesQuery,
-  useUnsubscribeMutation,
-  useUpdateNotificationPreferencesMutation,
-} from "./preferences";
+import { useNotificationsInfiniteQuery } from "./list";
+import { useMarkAllNotificationsReadMutation } from "./mark-all-read";
+import { useMarkNotificationsReadMutation } from "./mark-read";
+import { useNotificationPreferencesQuery } from "./preferences";
+import { useRegisterDeviceMutation } from "./register-device";
+import { useUnreadNotificationsCountQuery } from "./unread-count";
+import { useUnregisterDeviceMutation } from "./unregister-device";
+import { useUnsubscribeMutation } from "./unsubscribe";
+import { useUpdateNotificationPreferencesMutation } from "./update-preferences";
 
 const notification = (n: number): AppNotification => ({
   id: id(n),

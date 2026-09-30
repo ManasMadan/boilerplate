@@ -2,7 +2,9 @@ import { ORPCError } from "@orpc/client";
 import type { ApiKey } from "@repo/contracts/api";
 import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
-import { useApiKeysQuery, useCreateApiKeyMutation, useRevokeApiKeyMutation } from "./keys";
+import { useCreateApiKeyMutation } from "./create";
+import { useApiKeysQuery } from "./list";
+import { useRevokeApiKeyMutation } from "./revoke";
 
 describe("API keys", () => {
   it("creates a key, shown once, and revokes it; the list follows each change", async () => {

@@ -1,16 +1,12 @@
 "use client";
 
-import {
-  useRedeliverWebhookMutation,
-  useWebhookDeliveriesInfiniteQuery,
-} from "@repo/client/api/webhooks/deliveries";
-import {
-  useDeleteWebhookEndpointMutation,
-  useRotateWebhookSecretMutation,
-  useSendWebhookTestMutation,
-  useUpdateWebhookEndpointMutation,
-  useWebhookEndpointsQuery,
-} from "@repo/client/api/webhooks/endpoints";
+import { useDeleteWebhookEndpointMutation } from "@repo/client/api/webhooks/delete-endpoint";
+import { useWebhookDeliveriesInfiniteQuery } from "@repo/client/api/webhooks/list-deliveries";
+import { useWebhookEndpointsQuery } from "@repo/client/api/webhooks/list-endpoints";
+import { useRedeliverWebhookMutation } from "@repo/client/api/webhooks/redeliver";
+import { useRotateWebhookSecretMutation } from "@repo/client/api/webhooks/rotate-secret";
+import { useSendWebhookTestMutation } from "@repo/client/api/webhooks/send-test";
+import { useUpdateWebhookEndpointMutation } from "@repo/client/api/webhooks/update-endpoint";
 import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import {
   AlertDialog,

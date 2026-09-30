@@ -1,11 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  useApiKeysQuery,
-  useCreateApiKeyMutation,
-  useRevokeApiKeyMutation,
-} from "@repo/client/api/api-keys/keys";
+import { useCreateApiKeyMutation } from "@repo/client/api/api-keys/create";
+import { useApiKeysQuery } from "@repo/client/api/api-keys/list";
+import { useRevokeApiKeyMutation } from "@repo/client/api/api-keys/revoke";
 import {
   API_KEY_EXPIRY_DAYS,
   API_KEY_SCOPES,

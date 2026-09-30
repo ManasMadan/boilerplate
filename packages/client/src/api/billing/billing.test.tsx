@@ -1,12 +1,10 @@
 import type { BillingOverview } from "@repo/contracts/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderHook, standIn, until } from "../../test/stand-in";
-import {
-  useBillingOverviewQuery,
-  useCheckoutMutation,
-  useInvoicesQuery,
-  usePortalMutation,
-} from "./billing";
+import { renderHook, standIn, until } from "../../../test/stand-in";
+import { useCheckoutMutation } from "./checkout";
+import { useInvoicesQuery } from "./invoices";
+import { useBillingOverviewQuery } from "./overview";
+import { usePortalMutation } from "./portal";
 
 const overview = (plan: BillingOverview["plan"]): BillingOverview => ({
   enabled: true,

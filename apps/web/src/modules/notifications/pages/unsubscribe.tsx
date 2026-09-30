@@ -1,6 +1,6 @@
 "use client";
 
-import { useUnsubscribeMutation } from "@repo/client/api/notifications/preferences";
+import { useUnsubscribeMutation } from "@repo/client/api/notifications/unsubscribe";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import {
   Card,

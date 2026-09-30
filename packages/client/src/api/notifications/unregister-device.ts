@@ -1,11 +1,6 @@
-/** Devices that receive push: registered on app start (and on opt-in), removed on sign-out. */
+/** Stops push to this device: on sign-out, and when the user opts out. */
 import { useMutation } from "@tanstack/react-query";
 import { useApi } from "../../provider";
-
-export function useRegisterDeviceMutation() {
-  const { api } = useApi();
-  return useMutation(api.notifications.registerDevice.mutationOptions());
-}
 
 export function useUnregisterDeviceMutation() {
   const { api } = useApi();

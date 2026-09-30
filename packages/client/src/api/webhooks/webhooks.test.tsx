@@ -2,15 +2,14 @@ import type { WebhookEndpoint } from "@repo/contracts/api";
 import { toPage } from "@repo/contracts/pagination";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
-import { useRedeliverWebhookMutation, useWebhookDeliveriesInfiniteQuery } from "./deliveries";
-import {
-  useCreateWebhookEndpointMutation,
-  useDeleteWebhookEndpointMutation,
-  useRotateWebhookSecretMutation,
-  useSendWebhookTestMutation,
-  useUpdateWebhookEndpointMutation,
-  useWebhookEndpointsQuery,
-} from "./endpoints";
+import { useCreateWebhookEndpointMutation } from "./create-endpoint";
+import { useDeleteWebhookEndpointMutation } from "./delete-endpoint";
+import { useWebhookDeliveriesInfiniteQuery } from "./list-deliveries";
+import { useWebhookEndpointsQuery } from "./list-endpoints";
+import { useRedeliverWebhookMutation } from "./redeliver";
+import { useRotateWebhookSecretMutation } from "./rotate-secret";
+import { useSendWebhookTestMutation } from "./send-test";
+import { useUpdateWebhookEndpointMutation } from "./update-endpoint";
 
 afterEach(() => {
   vi.useRealTimers();

@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
 import { useTodoCreateMutation } from "./create";
 import { useTodoDeleteMutation } from "./delete";
-import { useInvalidateTodoListQuery, useTodoListInfiniteQuery } from "./list";
+import { useInvalidateTodoListQuery } from "./invalidate-list";
+import { useTodoListInfiniteQuery } from "./list";
 import { useTodoSetCompletedMutation } from "./set-completed";
 
 const todo = (n: number): Todo => ({

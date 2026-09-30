@@ -2,9 +2,9 @@ import { ORPCError } from "@orpc/client";
 import type { RealtimeMessage } from "@repo/contracts/realtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../test/stand-in";
-import { useAiDocumentsQuery } from "./api/ai/assistant";
-import { useFileQuery } from "./api/files/upload";
-import { useUnreadNotificationsCountQuery } from "./api/notifications/inbox";
+import { useAiDocumentsQuery } from "./api/ai/documents";
+import { useFileQuery } from "./api/files/get";
+import { useUnreadNotificationsCountQuery } from "./api/notifications/unread-count";
 import { useTodoListInfiniteQuery } from "./api/todo/list";
 import { useLiveUpdates, useRealtime } from "./realtime";
 

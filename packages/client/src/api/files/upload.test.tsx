@@ -3,7 +3,8 @@ import type { AddressInfo } from "node:net";
 import type { FileInfo } from "@repo/contracts/api";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
-import { checkUpload, UploadFailedError, useFileQuery, useUploadFileMutation } from "./upload";
+import { useFileQuery } from "./get";
+import { checkUpload, UploadFailedError, useUploadFileMutation } from "./upload";
 
 const file = (status: FileInfo["status"]): FileInfo => ({
   id: id(1),

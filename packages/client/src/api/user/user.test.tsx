@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
 import { useSetAvatarMutation } from "./avatar";
 import { useMeQuery } from "./me";
-import { useRemovePhoneMutation, useSendPhoneCodeMutation, useVerifyPhoneMutation } from "./phone";
+import { useRemovePhoneMutation } from "./remove-phone";
+import { useSendPhoneCodeMutation } from "./send-phone-code";
+import { useVerifyPhoneMutation } from "./verify-phone";
 
 const me = {
   id: id(1),

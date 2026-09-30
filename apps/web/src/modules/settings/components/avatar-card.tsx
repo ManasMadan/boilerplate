@@ -1,10 +1,10 @@
 "use client";
 
+import { useFileQuery } from "@repo/client/api/files/get";
 import {
   checkUpload,
   UploadFailedError,
   uploadRuleParams,
-  useFileQuery,
   useUploadFileMutation,
 } from "@repo/client/api/files/upload";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";

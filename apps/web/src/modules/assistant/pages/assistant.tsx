@@ -1,12 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  useAddDocumentMutation,
-  useAiDocumentsQuery,
-  useAssistant,
-  useRemoveDocumentMutation,
-} from "@repo/client/api/ai/assistant";
+import { useAddDocumentMutation } from "@repo/client/api/ai/add-document";
+import { useAssistant } from "@repo/client/api/ai/assistant";
+import { useAiDocumentsQuery } from "@repo/client/api/ai/documents";
+import { useRemoveDocumentMutation } from "@repo/client/api/ai/remove-document";
 import {
   DOCUMENT_CONTENT_MAX_LENGTH,
   DOCUMENT_TITLE_MAX_LENGTH,

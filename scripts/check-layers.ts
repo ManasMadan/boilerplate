@@ -1,7 +1,9 @@
 /**
  * Layering rules that an import graph can't see, so dependency-cruiser can't check
  * them. In the API, only repositories touch Prisma: a service that queries a model
- * directly skips the one place that knows how the data is stored and scoped.
+ * directly skips the one place that knows how the data is stored and scoped. In
+ * packages/client, each file under src/api exports one hook, so an app imports exactly
+ * the operation it uses by its path.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -65,4 +67,25 @@ export function checkRepositories(
   return 0;
 }
 
-if (import.meta.main) process.exit(checkRepositories());
+/** Reports each client file under src/api that exports more than one hook; the exit code. */
+export function checkClientHooks(api = join(ROOT, "packages/client/src/api")): number {
+  let violations = 0;
+  for (const file of new Glob("**/*.{ts,tsx}").scanSync(api)) {
+    if (/\.test\.tsx?$/.test(file)) continue;
+    const source = readFileSync(join(api, file), "utf8");
+    const hooks = [
+      ...source.matchAll(/^export\s+(?:async\s+)?(?:function|const)\s+(use[A-Z]\w*)/gm),
+    ];
+    if (hooks.length > 1) {
+      violations += 1;
+      fail(
+        `packages/client/src/api/${file}: exports ${hooks.map(([, name]) => name).join(", ")}; one hook per file.`,
+      );
+    }
+  }
+  if (violations) return 1;
+  ok("one client hook per file");
+  return 0;
+}
+
+if (import.meta.main) process.exit(checkRepositories() | checkClientHooks());
