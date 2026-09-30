@@ -54,7 +54,7 @@ hash tag, so moving to a cluster needs no key migration. KEDA scales workers on
 | `notifications-bulk` | `send`, `deferred`, `digests`, `digest` | notifications (hourly digest scheduler) | notifications |
 | `events-audit` | `event` | the outbox relay | worker (audit log) |
 | `events-webhooks` | `event` | the outbox relay | webhooks (fan-out to endpoints) |
-| `events-notifications` | `event` | the outbox relay | notifications (notify someone, or suppress an address that bounced or complained) |
+| `events-notifications` | `event` | the outbox relay | notifications (notify someone, or suppress an address that hard-bounced) |
 | `events-realtime` | `event` | the outbox relay | worker (live UI nudges) |
 | `events-billing` | `event` | the outbox relay | api (billing) |
 | `webhook-deliveries` | `deliver`, `redeliver`, `send-test` | webhooks (fan-out, retries), api (replay and test from settings) | webhooks |
@@ -74,7 +74,8 @@ the Standard Webhooks schedule (`WEBHOOK_RETRY_DELAYS_MS`: 5 s, 5 min, 30 min, 2
 
 A job that fails validation or runs out of attempts stays in BullMQ's failed set for
 its queue's `removeOnFail` age: an hour on `notifications-critical` (its payloads can
-hold one-time codes), 7 days for most queues, 30 days for the event queues. There is no
+hold one-time codes), a day on `events-realtime` (a stale nudge is worthless), 30 days
+on the other event queues and `maintenance`, and 7 days on the rest. There is no
 separate dead-letter queue; the failed set is it. `bun run jobs` shows every queue's
 counts, `bun run jobs failed <queue>` lists failed jobs and why, and `retry` or
 `discard` put them back or drop them (`scripts/jobs.ts`, on `packages/jobs/src/admin.ts`;
@@ -157,6 +158,7 @@ has moved. The audit log records every event.
 | `webhook.endpoint_created.v1`, `webhook.endpoint_updated.v1`, `webhook.endpoint_deleted.v1`, `webhook.secret_rotated.v1` | api (webhook settings) | |
 | `webhook.endpoint_disabled.v1` | webhooks (endpoint failing for `WEBHOOK_AUTO_DISABLE_HOURS`) | notifications |
 | `stripe.event_received.v1` | webhooks (`/webhooks/stripe`) | billing |
+| `email.feedback_received.v1` | webhooks (`/webhooks/stalwart`: a hard bounce from our mail server) | notifications (suppresses the address) |
 
 Customers can subscribe their endpoints to the events in `webhookEvents`; the rest stay
 internal.

@@ -2,7 +2,7 @@
 # age public keys of a cluster (its private key is the Secret sops-age in its argocd
 # namespace) and of the people who edit that environment's secrets; `sops` picks the
 # rule by path when it creates a file. The keys below are placeholders until you set
-# yours (deploy/README.md, "Secrets"): sops refuses to encrypt with them.
+# yours (deploy/README.md, "Secrets with SOPS"): sops refuses to encrypt with them.
 #
 # Only the Secrets' values are encrypted (data, stringData); names and namespaces stay
 # readable, so reviews show which Secret changed.

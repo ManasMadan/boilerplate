@@ -47,7 +47,7 @@ search covers api → queue → worker → notifications.
 | `FEATURE_DISABLED` | the feature's variables aren't set (`apps/api/src/features.ts`) |
 | `CLIENT_OUTDATED` | the app sent `x-app-version` below `MINIMUM_CLIENT_VERSION` |
 | Email or code never arrives | notifications isn't running, or it went to Mailpit (http://localhost:58025) |
-| Job queued, never processed | the consuming service isn't running (`bun dev` starts the core ones; ai's worker is `bun run --cwd apps/ai worker`) |
+| Job queued, never processed | the consuming service isn't running (`bun dev` starts the core ones; ai and its worker come with `bun dev:full`) |
 | Event handled twice or out of order | consumers must be idempotent on the event id and order-independent |
 | AI calls fail with `UPSTREAM_UNAVAILABLE` | apps/ai isn't running (`bun dev:full`) or `AI_URL`/`AI_SERVICE_SECRET` differ |
 

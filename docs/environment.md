@@ -67,7 +67,7 @@ there) and `RELEASE` too; it listens on 8000 (its package scripts pass `--port 8
 
 | Variable | Default | What it does |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | An OTLP/HTTP collector, e.g. `http://otel-collector:4318`. Set, every service exports traces and metrics there and log lines carry `trace_id`; unset, nothing starts. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | An OTLP/HTTP collector, e.g. `http://otel-collector:4318`, or locally Jaeger at `http://localhost:54318` (in the `full` profile). Set, every service exports traces and metrics there and log lines carry `trace_id`; unset, nothing starts. |
 | `OTEL_SERVICE_NAME` | the service (`api`, `worker`, …, `ai`, `ai-worker`) | Overrides the name traces are reported under. |
 
 The other standard `OTEL_*` variables work as OpenTelemetry documents them (sampling,
@@ -110,6 +110,7 @@ that uses it.
 | `S3_PORT`, `S3_CONSOLE_PORT` | 59000, 59001 | RustFS (`files` profile) |
 | `CLAMAV_PORT` | 53310 | ClamAV (`files` profile) |
 | `STALWART_SMTPS_PORT`, `STALWART_HTTP_PORT` | 51465, 58080 | Stalwart (`mail` profile): submission over implicit TLS, management API |
+| `JAEGER_OTLP_PORT`, `JAEGER_UI_PORT` | 54318, 56686 | Jaeger (`telemetry` profile, and part of `full`): OTLP/HTTP in, traces at http://localhost:56686 |
 
 ## Auth and the API (apps/api)
 

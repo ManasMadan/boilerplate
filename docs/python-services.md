@@ -90,8 +90,9 @@ side uses (the queue settings are generated from `packages/jobs`). It publishes 
 nudge to the organization when a document changes, so the web app refreshes.
 
 In Kubernetes it's the `ai-worker` deployment (same image, `python -m app.worker`,
-scaled by KEDA on the queue). Locally `bun dev:full` starts only the FastAPI app; run the
-worker next to it, or documents stay pending:
+scaled by KEDA on the queue). Locally `bun dev:full` starts both (apps/ai's `dev` runs
+FastAPI and the worker, which restarts when a Python file changes). To run the worker on
+its own, without reloading:
 
 ```sh
 bun run --cwd apps/ai worker
@@ -121,8 +122,8 @@ from the migrated database. The service connects as `app_ai`.
 
 | Command | What it does |
 |---|---|
-| `bun run --cwd apps/ai dev` | FastAPI with reload on :8000 (part of `bun dev:full`) |
-| `bun run --cwd apps/ai worker` | the queue worker |
+| `bun run --cwd apps/ai dev` | FastAPI with reload on :8000 and the queue worker, restarted on changes (part of `bun dev:full`) |
+| `bun run --cwd apps/ai worker` | the queue worker alone |
 | `bun run --cwd apps/ai test` | pytest without the integration tests (part of `bun run test`) |
 | `bun run --cwd apps/ai test:integration` | the tests that need Postgres and Redis (part of `bun run test:integration`) |
 | `bun run --cwd apps/ai coverage` | every test, with the 95% floor in `pyproject.toml` |

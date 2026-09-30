@@ -10,7 +10,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | First-time setup (idempotent) | `bun run setup` |
 | Health check (tools, .env drift, services) | `bun run doctor` |
 | Develop (core profile: web, api, notifications, worker, webhooks) | `bun dev` |
-| Develop with every service (AI, files, billing, …) | `bun dev:full` |
+| Develop with every service (AI and its worker, RustFS, ClamAV, Stalwart, Jaeger, Expo, email previews) | `bun dev:full` |
 | Lint, formatting, architecture boundaries | `bun run lint` (`bun run format` to fix) |
 | Types | `bun run check-types` |
 | Unit tests (fast, cached) | `bun run test` |
@@ -23,9 +23,14 @@ Run commands from the repo root. Never `cd` into a package to run tools directly
 package use `bun run --filter @repo/<name> <script>` (or `bun run --cwd <dir> <script>`).
 
 Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025 (SMTP
-51025), RustFS 59000 (console 59001), ClamAV 53310; opt-in, the Stalwart mail server
-(`bun run db:up:mail`): submission 51465, management 58080. Web is on 3000, api 3001, worker
-3002, notifications 3003, webhooks 3004, ai 8000.
+51025); with `full`, RustFS 59000 (console 59001), ClamAV 53310 and Jaeger (OTLP 54318,
+UI 56686); the Stalwart mail server (`bun run db:up:mail`, and in `full`): submission
+51465, management 58080. Web is on 3000, api 3001, worker 3002, notifications 3003,
+webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and Expo's bundler.
+On demand: fake Stripe 12111 (`bun run stripe:fake`), the mobile web build 3100
+(`serve:web`, used by e2e), Storybook 6006. Uploads stay off until `S3_BUCKET` is set,
+and billing until the Stripe variables are (docs/files-and-billing.md), even with
+`dev:full`.
 
 ## Principles (non-negotiable)
 

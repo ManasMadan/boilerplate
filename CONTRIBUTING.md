@@ -31,7 +31,9 @@ removes everything this repository created in Docker.
    `feat(api): add todo sharing`, `fix(web): keep the draft on reload`. The scopes are in
    `commitlint.config.ts`. `feat` and `fix` end up in the changelog and the next version.
 
-CI must pass (the **CI passed** check) and a code owner must approve.
+CI must pass (the **CI passed** check). With a single maintainer the ruleset asks for no
+approval (GitHub doesn't let you approve your own pull request); once there's a team, it
+asks for one from a code owner (docs/repository-settings.md).
 
 ## Database changes
 

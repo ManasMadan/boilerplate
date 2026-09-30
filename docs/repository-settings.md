@@ -117,16 +117,20 @@ To check: `gh api "repos/$REPO/rulesets" --jq '.[].name'` prints `master` and
 
 **Settings → General → Pull Requests**
 
-- Allow **squash merging** only, with the default message set to **pull request title**:
-  the title is checked against Conventional Commits (the `pr-title` job), and it becomes
-  the commit the release notes are built from.
+- Allow **squash merging** only, with the default message set to **pull request title
+  and description** (`pr-title-description` in the command above): the title is checked
+  against Conventional Commits (the `pr-title` job), and it becomes the commit title the
+  release notes are built from; the description becomes its body.
 - Enable **Automatically delete head branches**.
 
 **Settings → Rules → Rulesets → New branch ruleset** for `master` (the default branch):
 
 - Restrict deletions; block force pushes.
-- Require a pull request before merging, with 1 approval, **Require review from Code
-  Owners** (`.github/CODEOWNERS`), and dismissal of stale approvals on new commits.
+- Require a pull request before merging, with dismissal of stale approvals on new
+  commits. With a single maintainer, 0 approvals and no code owner review (GitHub doesn't
+  let you approve your own pull request; that's what the command above sets). Once
+  there's a team, raise it here to 1 approval with **Require review from Code Owners**
+  (`.github/CODEOWNERS`).
 - Require status checks to pass: **CI passed**, which succeeds only when every CI job
   does (see `ci.yml`), so adding a CI job never needs a change here; and from
   `security.yml`, **Secrets in the history**, **Dependency review** and **Known
@@ -155,8 +159,8 @@ App runs Renovate (`renovate.yml`, configured in `renovate.json5`).
    `BOT_APP_PRIVATE_KEY` (the key file's contents).
 4. Add the App to the `master` ruleset's bypass list.
 
-Without the App the deploy workflow falls back to `GITHUB_TOKEN` and say
-so in a warning, and Renovate doesn't run.
+Without the App the deploy workflow falls back to `GITHUB_TOKEN` and says so in a
+warning, and Renovate doesn't run.
 
 ## Environments
 
