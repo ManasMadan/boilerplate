@@ -1,14 +1,13 @@
 """Error responses: the contract's shape (packages/contracts errorResponse), with the
 catalog's status for every code, whatever raised them."""
 
-from typing import get_args
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException
 
 from app.contracts.error_response import ErrorCode, ErrorResponse
 from app.errors import STATUS, AppError, install_error_handlers
+from tests.test_contracts import literal_values
 
 app = FastAPI()
 install_error_handlers(app)
@@ -33,8 +32,7 @@ client = TestClient(app, raise_server_exceptions=False)
 
 
 def test_every_code_has_the_catalog_s_status() -> None:
-    [codes, *_] = get_args(ErrorCode.__value__)
-    assert set(get_args(codes)) == set(STATUS)
+    assert literal_values(ErrorCode) == set(STATUS)
     assert AppError("DOCUMENT_NOT_FOUND").status == 404
     assert AppError("AI_BUDGET_EXCEEDED").status == 429
 

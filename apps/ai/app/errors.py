@@ -13,6 +13,7 @@ never returned).
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TypedDict
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -30,6 +31,16 @@ STATUS = TypeAdapter(dict[ErrorCode, int]).validate_json(
 _BY_STATUS: dict[int, ErrorCode] = {401: "UNAUTHENTICATED", 403: "FORBIDDEN", 404: "NOT_FOUND"}
 
 type Params = Mapping[str, str | int]
+
+
+class _Problem(TypedDict):
+    """The parts of a pydantic error this service reports (FastAPI hands them over untyped)."""
+
+    loc: tuple[str | int, ...]
+    type: str
+
+
+_PROBLEMS = TypeAdapter(list[_Problem])
 
 
 class AppError(Exception):
@@ -63,27 +74,27 @@ def install_error_handlers(app: FastAPI) -> None:
         return error_response(error, request.headers.get("x-request-id"))
 
     @app.exception_handler(AppError)
-    async def app_error(request: Request, error: AppError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+    async def app_error(request: Request, error: AppError) -> JSONResponse:
         return respond(request, error)
 
     @app.exception_handler(RequestValidationError)
-    async def validation(request: Request, error: RequestValidationError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+    async def validation(request: Request, error: RequestValidationError) -> JSONResponse:
         issues = [
             # The first part says where the value was (body, query, …); the client
             # needs the field.
-            ErrorIssue(path=list(e["loc"][1:]), code=e["type"])
-            for e in error.errors()
+            ErrorIssue(path=list(problem["loc"][1:]), code=problem["type"])
+            for problem in _PROBLEMS.validate_python(error.errors())
         ]
         return respond(request, AppError("VALIDATION_FAILED", issues=issues))
 
     @app.exception_handler(HTTPException)
-    async def http(request: Request, error: HTTPException) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+    async def http(request: Request, error: HTTPException) -> JSONResponse:
         # A status without a code of its own answers as the catalog's generic code,
         # with that code's status, so the two never disagree.
         fallback: ErrorCode = "INTERNAL" if error.status_code >= 500 else "BAD_REQUEST"
         return respond(request, AppError(_BY_STATUS.get(error.status_code, fallback)))
 
     @app.exception_handler(Exception)
-    async def unexpected(request: Request, error: Exception) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+    async def unexpected(request: Request, error: Exception) -> JSONResponse:
         log.exception("unhandled error", path=request.url.path, error=str(error))
         return respond(request, AppError("INTERNAL"))

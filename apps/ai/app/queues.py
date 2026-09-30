@@ -101,4 +101,4 @@ def start_worker(
         "concurrency": concurrency,
     }
     # bullmq types the processor as returning a Future; any coroutine function works.
-    return Worker(queue, process, options)  # pyright: ignore[reportArgumentType]
+    return Worker(queue, process, options)  # pyright: ignore[reportArgumentType]  # see above

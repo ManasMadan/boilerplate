@@ -11,6 +11,7 @@ Long work (indexing documents) runs in app/worker.py from the `ai-ingest` queue.
 
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable
 from contextlib import AsyncExitStack, asynccontextmanager
+from dataclasses import dataclass
 from typing import Annotated, cast
 from uuid import UUID
 
@@ -43,12 +44,33 @@ from app.settings import get_settings
 from app.telemetry import start_telemetry
 
 
+@dataclass(frozen=True)
+class Services:
+    """What the app builds at startup, for the routes (typed, unlike Starlette's
+    app.state)."""
+
+    redis: Redis
+    documents: Documents
+    assistant: Assistant | None
+    mcp: ASGIApp | None
+
+
+_services: Services | None = None
+
+
+def services() -> Services:
+    if _services is None:
+        raise RuntimeError("the app isn't started (its lifespan builds the services)")
+    return _services
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+    global _services
     settings = get_settings()
     configure_logging(settings.log_level, json=settings.node_env == "production")
     open_engine(settings.database_url, settings.database_pool_max)
-    redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]
+    redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]  # untyped options
     queue = IngestQueue(str(settings.redis_url))
     documents = Documents(
         create_embedder(settings.embeddings, settings.min_relevance),
@@ -56,21 +78,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         redis,
         create_summaries(settings),
     )
-    app.state.redis = redis
-    app.state.documents = documents
     exit_stack = AsyncExitStack()
-    app.state.mcp = None
+    mcp: ASGIApp | None = None
     if settings.site_url and settings.api_url:
-        mcp = create_mcp_server(
+        server = create_mcp_server(
             site_url=str(settings.site_url),
             api_url=str(settings.api_url),
             release=settings.release,
             documents=lambda: documents,
             redis=lambda: redis,
         )
-        app.state.mcp = mcp_app(mcp)
-        await exit_stack.enter_async_context(mcp.session_manager.run())
-    app.state.assistant = (
+        mcp = mcp_app(server)
+        await exit_stack.enter_async_context(server.session_manager.run())
+    assistant = (
         Assistant(
             create_agent(create_model(settings.model, settings.fallback_model)),
             documents,
@@ -81,7 +101,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         if settings.model
         else None
     )
+    _services = Services(redis=redis, documents=documents, assistant=assistant, mcp=mcp)
     yield
+    _services = None
     await exit_stack.aclose()
     await queue.close()
     await redis.aclose()
@@ -104,18 +126,18 @@ async def _mcp(scope: Scope, receive: Receive, send: Send) -> None:
     """Hands requests for /ai/mcp and its protected-resource metadata to the MCP server
     built at startup. Anything else, and everything when the server is off, is an
     unknown route."""
-    server: ASGIApp | None = app.state.mcp
+    server = services().mcp
     if server is None or scope.get("path") not in MCP_PATHS:
         raise AppError("NOT_FOUND")
     await server(scope, receive, send)
 
 
-def _documents(request: Request) -> Documents:
-    return request.app.state.documents
+def _documents() -> Documents:
+    return services().documents
 
 
-def _assistant(request: Request) -> Assistant:
-    assistant: Assistant | None = request.app.state.assistant
+def _assistant() -> Assistant:
+    assistant = services().assistant
     if not assistant:
         raise AppError("FEATURE_DISABLED", {"feature": "assistant"})
     return assistant
@@ -129,7 +151,7 @@ def _out(document: Document) -> DocumentOut:
     return DocumentOut(
         id=document.id,
         title=document.title,
-        status=document.status,  # pyright: ignore[reportArgumentType]  # checked by the database
+        status=document.status,
         error=document.error,
         chunkCount=document.chunk_count,
         summary=document.summary,
@@ -144,12 +166,13 @@ def live() -> HealthResponse:
 
 
 @app.get("/health/ready", operation_id="ready")
-async def ready(request: Request) -> HealthResponse:
+async def ready() -> HealthResponse:
     async with engine().connect() as connection:
         await connection.execute(text("SELECT 1"))
-    redis: Redis = request.app.state.redis
-    # redis-py types the async client's ping as returning bool.
-    await cast(Awaitable[bool], redis.ping())  # pyright: ignore[reportUnknownMemberType]
+    # redis-py shares its command signatures between the sync and async clients, so ping
+    # is typed as "a bool or an awaitable of one"; on the async client it's the latter.
+    ping = services().redis.ping()  # pyright: ignore[reportUnknownMemberType]  # see above
+    await cast(Awaitable[bool], ping)
     return HealthResponse(status="ok")
 
 

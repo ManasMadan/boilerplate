@@ -2,14 +2,11 @@
 (health probes aren't) and log lines carry the trace. The tracer provider is global to
 the process, so it starts once for this module."""
 
-from collections.abc import Iterator
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from pytest import MonkeyPatch
 from sqlalchemy import text
 
 from app.db.session import close_engine, open_engine
@@ -33,13 +30,13 @@ def live() -> dict[str, str]:
 
 
 @pytest.fixture(scope="module")
-def exporter() -> Iterator[InMemorySpanExporter]:
+def exporter() -> InMemorySpanExporter:
     spans = InMemorySpanExporter()
     assert start_telemetry("ai-test", app, processor=SimpleSpanProcessor(spans)) is True
-    yield spans
+    return spans
 
 
-def test_nothing_starts_without_an_endpoint(monkeypatch: MonkeyPatch) -> None:
+def test_nothing_starts_without_an_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
     assert start_telemetry("ai", FastAPI()) is False
 
@@ -61,7 +58,7 @@ def test_requests_are_traced_and_logs_carry_the_trace(exporter: InMemorySpanExpo
 
 @pytest.mark.integration
 async def test_queries_of_engines_opened_later_are_traced(
-    exporter: InMemorySpanExporter, monkeypatch: MonkeyPatch
+    exporter: InMemorySpanExporter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     for key, value in ENV.items():
         monkeypatch.setenv(key, value)

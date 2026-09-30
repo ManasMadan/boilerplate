@@ -49,10 +49,12 @@ _STOPWORDS = frozenset(
 def terms(text: str) -> list[str]:
     """The words that carry meaning, with plurals folded (refunds → refund).
 
-    ponytail: a naive plural rule, not a stemmer; this embedder is for development only.
+    A naive plural rule, not a stemmer: this embedder is for development only, and a real
+    embedding model handles word forms itself.
     """
     words: list[str] = []
-    for word in _WORD.findall(text.lower()):
+    for match in _WORD.finditer(text.lower()):
+        word = match.group()
         if len(word) < 2 or word in _STOPWORDS:
             continue
         if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):

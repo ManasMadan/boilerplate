@@ -2,7 +2,7 @@
 what a newer TypeScript side may add during a rolling deploy."""
 
 import importlib
-from typing import TypeAliasType, get_args
+from typing import TypeAliasType, cast, get_args
 from uuid import uuid4
 
 from app.contracts.ai_ingest_ingest_job import AiIngestIngestJob
@@ -13,8 +13,9 @@ from app.queues import INGEST, SETTINGS, job_options
 
 def literal_values(alias: TypeAliasType) -> set[str]:
     """The values of a generated `type X = Annotated[Literal[...], ...]`."""
-    [literal, *_] = get_args(alias.__value__)
-    return set(get_args(literal))
+    # typing's introspection is typed as Any all the way down.
+    literal = cast(object, get_args(cast(object, alias.__value__))[0])
+    return set(cast(tuple[str, ...], get_args(literal)))
 
 
 def test_every_queue_python_uses_is_exported_with_its_settings_and_jobs() -> None:

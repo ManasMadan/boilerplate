@@ -43,6 +43,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from app.documents import Documents, Passage
 from app.errors import AppError
 from app.log import log
+from app.schemas import REQUEST
 from app.usage import Reservation, reserve, settle
 
 INSTRUCTIONS = """You answer questions for the members of one workspace, using only its \
@@ -55,6 +56,8 @@ MAX_QUESTION_CHARS = 2_000
 
 
 class AssistantRequest(BaseModel):
+    model_config = REQUEST
+
     question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
 
 
@@ -141,7 +144,7 @@ def _question(messages: list[ModelMessage]) -> str:
     return ""
 
 
-def _local_extractive() -> Model:
+def local_extractive() -> Model:
     async def respond(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         answer = _extractive_answer(messages)
         if answer is not None:
@@ -168,10 +171,10 @@ def _local_extractive() -> Model:
 
 
 def create_model(name: str, fallback: str | None) -> Model | str:
-    primary: Model | str = _local_extractive() if name == "local:extractive" else name
+    primary: Model | str = local_extractive() if name == "local:extractive" else name
     if not fallback:
         return primary
-    secondary: Model | str = _local_extractive() if fallback == "local:extractive" else fallback
+    secondary: Model | str = local_extractive() if fallback == "local:extractive" else fallback
     return FallbackModel(primary, secondary)
 
 
@@ -179,7 +182,7 @@ def create_agent(model: Model | str) -> Agent[Deps, str]:
     agent = Agent(model, deps_type=Deps, instructions=INSTRUCTIONS, defer_model_check=True)
 
     @agent.tool
-    async def search_documents(ctx: RunContext[Deps], query: str) -> str:  # pyright: ignore[reportUnusedFunction]
+    async def search_documents(ctx: RunContext[Deps], query: str) -> str:
         """Search the workspace's documents for passages relevant to the query."""
         passages = await ctx.deps.documents.search(ctx.deps.org_id, query[:MAX_QUESTION_CHARS])
         for passage in passages:

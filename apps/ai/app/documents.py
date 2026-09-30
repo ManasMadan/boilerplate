@@ -8,11 +8,12 @@ limited to the caller's organization by row-level security.
 from dataclasses import dataclass
 from uuid import UUID
 
+# LangGraph ships without type stubs.
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic_ai import UsageLimitExceeded
 from pydantic_ai.usage import RunUsage, UsageLimits
 from redis.asyncio import Redis
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Float, delete, func, select, update
 
 from app.chunking import chunk
 from app.contracts.realtime_message import DocumentsChanged
@@ -51,18 +52,12 @@ class Summaries:
     tokens_per_run: int
 
 
+@dataclass(frozen=True)
 class Documents:
-    def __init__(
-        self,
-        embedder: Embedder,
-        queue: IngestQueue,
-        redis: Redis,
-        summaries: Summaries | None = None,
-    ) -> None:
-        self._embedder = embedder
-        self._queue = queue
-        self._redis = redis
-        self._summaries = summaries
+    embedder: Embedder
+    queue: IngestQueue
+    redis: Redis
+    summaries: Summaries | None = None
 
     async def create(
         self, org_id: UUID, user_id: UUID, title: str, content: str, request_id: str | None
@@ -78,8 +73,8 @@ class Documents:
             session.add(document)
             await session.flush()
             await session.refresh(document)
-        await self._queue.add("ingest", document.id, org_id, request_id=request_id, user_id=user_id)
-        await publish_to_org(self._redis, org_id, CHANGED)
+        await self.queue.add("ingest", document.id, org_id, request_id=request_id, user_id=user_id)
+        await publish_to_org(self.redis, org_id, CHANGED)
         return document
 
     async def list(self, org_id: UUID) -> list[Document]:
@@ -100,7 +95,7 @@ class Documents:
             )
             if deleted is None:
                 raise AppError("DOCUMENT_NOT_FOUND")
-        await publish_to_org(self._redis, org_id, CHANGED)
+        await publish_to_org(self.redis, org_id, CHANGED)
 
     async def index(
         self,
@@ -122,7 +117,7 @@ class Documents:
             passages = chunk(content)
             vectors: list[list[float]] = []
             for start in range(0, len(passages), EMBED_BATCH):
-                vectors.extend(await self._embedder.embed(passages[start : start + EMBED_BATCH]))
+                vectors.extend(await self.embedder.embed(passages[start : start + EMBED_BATCH]))
         except Exception:
             log.exception("indexing failed", document_id=str(document_id))
             async with tenant(org_id) as session:
@@ -133,7 +128,7 @@ class Documents:
                         status="failed", error="DOCUMENT_INDEXING_FAILED", updated_at=func.now()
                     )
                 )
-            await publish_to_org(self._redis, org_id, CHANGED)
+            await publish_to_org(self.redis, org_id, CHANGED)
             raise
         async with tenant(org_id) as session:
             await session.execute(
@@ -156,24 +151,24 @@ class Documents:
                     status="ready", error=None, chunk_count=len(passages), updated_at=func.now()
                 )
             )
-        await publish_to_org(self._redis, org_id, CHANGED)
-        if self._summaries:
-            await self._queue.add(
+        await publish_to_org(self.redis, org_id, CHANGED)
+        if self.summaries:
+            await self.queue.add(
                 "summarize", document_id, org_id, request_id=request_id, user_id=user_id
             )
 
     async def summarize(self, org_id: UUID, document_id: UUID, user_id: UUID | None) -> None:
         """Writes the document's summary (the summarize job). A workspace past its monthly
         allowance simply gets no summary; answering questions matters more."""
-        if not self._summaries:
+        if not self.summaries:
             return
         reservation = await reserve(
             org_id,
             user_id,
             "summary",
-            self._summaries.model_name,
-            most=self._summaries.tokens_per_run,
-            monthly=self._summaries.monthly_tokens,
+            self.summaries.model_name,
+            most=self.summaries.tokens_per_run,
+            monthly=self.summaries.monthly_tokens,
         )
         if reservation is None:
             log.info("skipping a summary: monthly budget used", document_id=str(document_id))
@@ -189,7 +184,7 @@ class Documents:
                     )
                 )
             summary = await summarize(
-                self._summaries.graph,
+                self.summaries.graph,
                 passages,
                 usage,
                 UsageLimits(total_tokens_limit=reservation.tokens),
@@ -207,11 +202,12 @@ class Documents:
                 .where(Document.id == document_id)
                 .values(summary=summary or None, updated_at=func.now())
             )
-        await publish_to_org(self._redis, org_id, CHANGED)
+        await publish_to_org(self.redis, org_id, CHANGED)
 
     async def search(self, org_id: UUID, query: str, limit: int = 5) -> list[Passage]:
-        [vector] = await self._embedder.embed([query])
-        distance = DocumentChunk.embedding.cosine_distance(vector)
+        [vector] = await self.embedder.embed([query])
+        # pgvector's cosine distance (what its untyped `cosine_distance` comparator emits).
+        distance = DocumentChunk.embedding.op("<=>", return_type=Float())(vector)
         async with tenant(org_id) as session:
             rows = await session.execute(
                 select(DocumentChunk.document_id, Document.title, DocumentChunk.content, distance)
@@ -219,7 +215,7 @@ class Documents:
                 .where(
                     DocumentChunk.org_id == org_id,
                     Document.status == "ready",
-                    distance <= 1 - self._embedder.min_score,
+                    distance <= 1 - self.embedder.min_score,
                 )
                 .order_by(distance)
                 .limit(limit)

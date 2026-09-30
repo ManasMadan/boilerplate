@@ -2,13 +2,14 @@
 
 import math
 import os
+import secrets
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from app.assistant import Deps, _local_extractive, create_agent
+from app.assistant import Deps, create_agent, local_extractive
 from app.auth import verify
 from app.documents import Passage, create_summaries
 from app.embeddings import HashingEmbedder
@@ -27,7 +28,7 @@ def test_a_valid_token_names_the_user_and_organization() -> None:
 @pytest.mark.parametrize(
     "token",
     [
-        service_token(USER, ORG, secret="another-secret-that-is-also-long-enough-x"),
+        service_token(USER, ORG, secret=secrets.token_urlsafe(32)),  # someone else's
         service_token(USER, ORG, lifetime=-10),  # expired
         service_token(USER, ORG, aud="web"),
         service_token(USER, ORG, iss="someone"),
@@ -66,7 +67,7 @@ def test_production_refuses_development_stand_ins() -> None:
             AI_MODEL="local:extractive",
         )
     with pytest.raises(ValidationError):
-        _settings(AI_SERVICE_SECRET="short")
+        _settings(AI_SERVICE_SECRET="x" * 31)  # one character short
 
 
 async def test_hashing_embeddings_put_similar_wording_close() -> None:
@@ -101,16 +102,16 @@ async def test_the_agent_searches_then_answers_from_the_passage() -> None:
     documents = StubDocuments(
         [Passage(document_id=doc, title="Handbook", content="Refunds take 5 days.", score=0.9)]
     )
-    deps = Deps(org_id=ORG, documents=documents)  # pyright: ignore[reportArgumentType]
-    result = await create_agent(_local_extractive()).run("How long do refunds take?", deps=deps)
+    deps = Deps(org_id=ORG, documents=documents)
+    result = await create_agent(local_extractive()).run("How long do refunds take?", deps=deps)
     assert documents.queries == ["How long do refunds take?"]
     assert result.output == "From “Handbook”: Refunds take 5 days."
     assert deps.sources == {doc: "Handbook"}
 
 
 async def test_the_agent_says_so_when_nothing_matches() -> None:
-    deps = Deps(org_id=ORG, documents=StubDocuments([]))  # pyright: ignore[reportArgumentType]
-    result = await create_agent(_local_extractive()).run("Anything?", deps=deps)
+    deps = Deps(org_id=ORG, documents=StubDocuments([]))
+    result = await create_agent(local_extractive()).run("Anything?", deps=deps)
     assert result.output == "I couldn't find that in the workspace's documents."
     assert deps.sources == {}
 

@@ -1,6 +1,3 @@
-# LangGraph ships without stubs and with partly unknown generics; it's used only in this
-# module, so these two strict checks are relaxed here and nowhere else.
-# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
 """Document summaries, as a LangGraph workflow: summarize each passage, then combine.
 
     START → summarize_passages → combine → END
@@ -19,10 +16,11 @@ opening sentences of the text, for development and tests.
 
 import asyncio
 import re
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from langgraph.graph import END, START, StateGraph
-from langgraph.graph.state import CompiledStateGraph
+# LangGraph ships without type stubs (and leaves some generics unknown); it's used only here.
+from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
+from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart
 from pydantic_ai.models import Model
@@ -98,12 +96,13 @@ def build_summary_graph(model: Model | str) -> CompiledStateGraph[SummaryState]:
         return {"summary": result.output.strip()}
 
     graph = StateGraph(SummaryState)
-    graph.add_node("summarize_passages", summarize_passages)
-    graph.add_node("combine", combine)
+    # add_node's overloads leave the node's input type unknown.
+    graph.add_node("summarize_passages", summarize_passages)  # pyright: ignore[reportUnknownMemberType]  # see above
+    graph.add_node("combine", combine)  # pyright: ignore[reportUnknownMemberType]  # see above
     graph.add_edge(START, "summarize_passages")
     graph.add_edge("summarize_passages", "combine")
     graph.add_edge("combine", END)
-    return graph.compile()
+    return graph.compile()  # pyright: ignore[reportUnknownMemberType]  # its checkpointer and cache types are unknown
 
 
 async def summarize(
@@ -116,7 +115,8 @@ async def summarize(
     once `limits` are reached)."""
     if not passages:
         return ""
-    final = await graph.ainvoke(
+    final = await graph.ainvoke(  # pyright: ignore[reportUnknownMemberType]  # its config types are unknown
         {"passages": passages, "summaries": [], "summary": "", "usage": usage, "limits": limits}
     )
-    return str(final["summary"])
+    # ainvoke returns the final state as a plain dict of Any.
+    return cast(str, final["summary"])

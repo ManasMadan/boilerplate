@@ -38,6 +38,7 @@
         "type": "object"
       },
       "AssistantRequest": {
+        "additionalProperties": false,
         "properties": {
           "question": {
             "maxLength": 2000,
@@ -53,6 +54,7 @@
         "type": "object"
       },
       "DocumentCreate": {
+        "additionalProperties": false,
         "properties": {
           "content": {
             "description": "Plain text.",
@@ -370,6 +372,7 @@
         "type": "object"
       },
       "SentimentRequest": {
+        "additionalProperties": false,
         "properties": {
           "text": {
             "description": "Text to classify.",

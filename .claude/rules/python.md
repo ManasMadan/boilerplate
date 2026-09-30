@@ -9,16 +9,19 @@ paths:
 - Tooling is uv only: `uv add <pkg>` (never pip, never edit `uv.lock`). Checks run
   through turbo from the root (`bun run lint`, `bun run check-types`, `bun run test`),
   or directly as `uv run --project apps/ai ruff check apps/ai`.
-- basedpyright runs in strict mode, with two rules off in `pyproject.toml`: `reportAny`
-  and `reportExplicitAny`, because the libraries the service builds on return `Any` in
-  many places. So the checker lets `Any` through; you don't. Annotate every signature
-  and field, narrow a library's `Any` to a real type at the boundary, and write `Any`
-  only where a library's own signature forces it. `# pyright: ignore[<rule>]` is only
-  for untyped third-party APIs or framework-registered callbacks, always with the rule
-  named, never a bare ignore.
+- basedpyright runs in strict mode with `reportAny` and `reportExplicitAny` on, tests
+  included. Type everything; where a library hands back `Any` (a parsed JSON body,
+  `get_args`), `cast` it to what it is, or validate it with a Pydantic model or
+  `TypeAdapter`. `# pyright: ignore[<rule>]` is only for untyped third-party APIs, always
+  with the rule named and a reason after it (`# pyright: ignore[rule]  # why`); an ignore
+  that no longer suppresses anything is an error. No file-level relaxations.
+- ruff adds async, FastAPI, timezone, pytest, bandit, blind-except, print and annotation
+  checks to the defaults. Output goes through `app/log.py`, not `print`.
 - Request and response models live in `app/schemas.py`. Constrain every field
   (`Field(min_length=..., max_length=..., ge=..., le=...)`, `Literal` for enums): the
-  constraints are both runtime validation and the OpenAPI document.
+  constraints are both runtime validation and the OpenAPI document. Request models take
+  `model_config = REQUEST` (strict, unknown fields refused): only apps/api calls this
+  service, so a mismatch is a bug to surface, not input to coerce.
 - The TypeScript side reads this service through `packages/ai-client`, generated from
   `apps/ai/openapi.json`. After changing a route or model run `bun run gen` and commit
   `openapi.json` and the regenerated client. `operation_id` becomes the TS function name.

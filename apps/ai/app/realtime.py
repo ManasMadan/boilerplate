@@ -27,5 +27,5 @@ def org_channel(org_id: UUID) -> str:
 
 
 async def publish_to_org(redis: Redis, org_id: UUID, message: RealtimeMessage) -> None:
-    # redis-py types publish's extra keyword arguments as unknown.
-    await redis.publish(org_channel(org_id), message.model_dump_json())  # pyright: ignore[reportUnknownMemberType]
+    channel, data = org_channel(org_id), message.model_dump_json()
+    await redis.publish(channel, data)  # pyright: ignore[reportUnknownMemberType]  # untyped options

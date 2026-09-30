@@ -15,7 +15,7 @@ packages/contracts/src/mcp.ts (and the api's resource policy in auth.ts), regist
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -28,7 +28,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, Field, TypeAdapter
 from redis.asyncio import Redis
 from sqlalchemy import text
 from starlette.applications import Starlette
@@ -48,29 +48,39 @@ CALLS_PER_MINUTE = 60
 # stream of forged key ids can't turn into a stream of requests to the api.
 KEY_REFRESH_SECONDS = 30
 
+type Jwks = dict[str, object]
+_JWKS = TypeAdapter[Jwks](Jwks)
+
 
 class ApiKeys:
     """The api's signing keys (its JWKS), fetched on first use and after a rotation."""
 
-    def __init__(self, jwks_url: str, fetch: Callable[[str], Awaitable[dict[str, Any]]]) -> None:
+    def __init__(
+        self,
+        jwks_url: str,
+        fetch: Callable[[str], Awaitable[Jwks]],
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._url = jwks_url
         self._fetch = fetch
+        self._clock = clock
         self._keys: dict[str, jwt.PyJWK] = {}
-        self._fetched_at = 0.0
+        self._fetched_at: float | None = None
 
     async def get(self, kid: str) -> jwt.PyJWK | None:
-        if kid not in self._keys and time.monotonic() - self._fetched_at >= KEY_REFRESH_SECONDS:
+        due = self._fetched_at is None or self._clock() - self._fetched_at >= KEY_REFRESH_SECONDS
+        if kid not in self._keys and due:
             jwks = jwt.PyJWKSet.from_dict(await self._fetch(self._url))
             self._keys = {key.key_id: key for key in jwks.keys if key.key_id}
-            self._fetched_at = time.monotonic()
+            self._fetched_at = self._clock()
         return self._keys.get(kid)
 
 
-async def _fetch_json(url: str) -> dict[str, Any]:
+async def _fetch_json(url: str) -> Jwks:
     async with httpx.AsyncClient(timeout=5) as client:
         response = await client.get(url)
         response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        return _JWKS.validate_json(response.content)
 
 
 async def grant_active(client_id: str, user_id: UUID, org_id: UUID) -> bool:
@@ -80,6 +90,21 @@ async def grant_active(client_id: str, user_id: UUID, org_id: UUID) -> bool:
             {"client_id": client_id, "user_id": user_id, "org_id": org_id},
         )
         return bool(result.scalar())
+
+
+class _Header(BaseModel):
+    kid: str | None = None
+
+
+class _Claims(BaseModel):
+    """What this server needs from a token, beyond what PyJWT checks itself."""
+
+    sub: UUID
+    org: UUID
+    # The OAuth client the token was issued to.
+    azp: str
+    exp: int
+    scope: str | None = None
 
 
 class ApiTokenVerifier:
@@ -99,33 +124,33 @@ class ApiTokenVerifier:
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
-            kid = jwt.get_unverified_header(token).get("kid")
-            key = await self._keys.get(kid) if isinstance(kid, str) else None
+            kid = _Header.model_validate(jwt.get_unverified_header(token)).kid
+            key = await self._keys.get(kid) if kid else None
             if key is None:
                 return None
-            claims: dict[str, Any] = jwt.decode(
-                token,
-                key=key,
-                algorithms=[key.algorithm_name],
-                audience=self._resource,
-                issuer=self._issuer,
-                options={"require": ["exp", "sub", "aud", "iss"]},
+            claims = _Claims.model_validate(
+                jwt.decode(
+                    token,
+                    key=key,
+                    algorithms=[key.algorithm_name],
+                    audience=self._resource,
+                    issuer=self._issuer,
+                    options={"require": ["exp", "sub", "aud", "iss"]},
+                )
             )
-            user_id, org_id = UUID(claims["sub"]), UUID(claims[ORG_CLAIM])
-            client_id = claims["azp"]
-        except jwt.PyJWTError, KeyError, ValueError, TypeError:
+        # A pydantic ValidationError is a ValueError: a claim that's missing or malformed.
+        except jwt.PyJWTError, ValueError:
             return None
-        if not isinstance(client_id, str) or not await self._grant(client_id, user_id, org_id):
+        if not await self._grant(claims.azp, claims.sub, claims.org):
             return None
-        scope = claims.get("scope")
         return AccessToken(
             token=token,
-            client_id=client_id,
-            scopes=scope.split() if isinstance(scope, str) else [],
-            expires_at=int(claims["exp"]),
+            client_id=claims.azp,
+            scopes=claims.scope.split() if claims.scope else [],
+            expires_at=claims.exp,
             resource=self._resource,
-            subject=str(user_id),
-            claims={ORG_CLAIM: str(org_id)},
+            subject=str(claims.sub),
+            claims={ORG_CLAIM: str(claims.org)},
         )
 
 
@@ -154,17 +179,18 @@ def current_caller() -> Caller:
     token = get_access_token()
     if token is None or token.subject is None or token.claims is None:
         raise PermissionError("no authenticated MCP caller")
-    return Caller(
-        user_id=UUID(token.subject), org_id=UUID(token.claims[ORG_CLAIM]), client_id=token.client_id
-    )
+    # The claims are the ones verify_token set: {ORG_CLAIM: <the workspace id>}.
+    org_id = cast(str, token.claims[ORG_CLAIM])
+    return Caller(user_id=UUID(token.subject), org_id=UUID(org_id), client_id=token.client_id)
 
 
 async def within_limit(redis: Redis, caller: Caller) -> bool:
     """A fixed one-minute window per app and user."""
     key = f"{{rl:ai-mcp}}:{caller.client_id}:{caller.user_id}:{int(time.time() // 60)}"
-    calls = await redis.incr(key)  # pyright: ignore[reportUnknownMemberType]
+    # redis-py types the async client's commands as "a value or an awaitable of one".
+    calls = cast(int, await redis.incr(key))
     if calls == 1:
-        await redis.expire(key, 60)  # pyright: ignore[reportUnknownMemberType]
+        await redis.expire(key, 60)
     return calls <= CALLS_PER_MINUTE
 
 
@@ -186,8 +212,8 @@ def create_mcp_server(
         version=release,
         token_verifier=verifier or ApiTokenVerifier(keys, issuer, resource),
         auth=AuthSettings(
-            issuer_url=issuer,  # pyright: ignore[reportArgumentType]  # pydantic parses the URL
-            resource_server_url=resource,  # pyright: ignore[reportArgumentType]
+            issuer_url=AnyHttpUrl(issuer),
+            resource_server_url=AnyHttpUrl(resource),
             required_scopes=[SCOPE],
             validate_token_resource=True,
         ),
@@ -218,7 +244,7 @@ def create_mcp_server(
         description="The workspace's documents, newest first, with their status and summary.",
         annotations=ToolAnnotations(read_only_hint=True),
     )
-    async def list_documents(ctx: Context) -> list[DocumentSummary]:  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+    async def list_documents(ctx: Context) -> list[DocumentSummary]:
         async with tool_call(ctx) as caller:
             rows = await documents().list(caller.org_id)
             return [
@@ -235,7 +261,7 @@ def create_mcp_server(
         ),
         annotations=ToolAnnotations(read_only_hint=True),
     )
-    async def search_documents(  # pyright: ignore[reportUnusedFunction]  # registered by the decorator
+    async def search_documents(
         ctx: Context,
         query: str = Field(min_length=1, max_length=2_000),
         limit: int = Field(default=5, ge=1, le=20),

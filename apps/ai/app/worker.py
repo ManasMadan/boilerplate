@@ -49,7 +49,7 @@ async def main() -> None:
     configure_logging(settings.log_level, json=settings.node_env == "production")
     start_telemetry("ai-worker")
     open_engine(settings.database_url, settings.database_pool_max)
-    redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]
+    redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]  # untyped options
     queue = IngestQueue(str(settings.redis_url))
     documents = Documents(
         create_embedder(settings.embeddings, settings.min_relevance),

@@ -4,6 +4,7 @@ however it ends, and reservations keep concurrent runs inside the monthly allowa
 import asyncio
 import json
 from collections.abc import AsyncIterator, Callable
+from dataclasses import replace
 from uuid import UUID
 
 import anyio
@@ -17,7 +18,7 @@ from app.assistant import Assistant, AssistantEvent, create_agent
 from app.documents import Documents, Summaries
 from app.summaries import COMBINE, build_summary_graph, local_summarizer
 from app.usage import reserve
-from tests.support import as_org, headers, index_all, new_org
+from tests.support import as_org, documents_of, headers, index_all, new_org, on_app_loop
 
 pytestmark = pytest.mark.integration
 
@@ -79,12 +80,11 @@ async def _provider_fails() -> AsyncIterator[str]:
 def assistant_with(
     client: TestClient, answer: Callable[[], AsyncIterator[str]], per_run: int
 ) -> Assistant:
-    from app.main import app
+    from app.main import services
 
-    documents: Documents = app.state.documents
     return Assistant(
         create_agent(model(answer)),
-        documents,
+        services().documents,
         model_name="test",
         monthly_tokens=MONTHLY,
         tokens_per_run=per_run,
@@ -96,7 +96,15 @@ def events_of(client: TestClient, assistant: Assistant, org: UUID, user: UUID) -
         reservation = await assistant.reserve(org, user)
         return [event.event.type async for event in assistant.answer(reservation, "Refunds?")]
 
-    return client.portal.call(run)  # pyright: ignore[reportOptionalMemberAccess]
+    return on_app_loop(client, run)
+
+
+def the_assistant() -> Assistant:
+    from app.main import services
+
+    assistant = services().assistant
+    assert assistant is not None
+    return assistant
 
 
 def with_a_document(
@@ -111,10 +119,8 @@ def with_a_document(
 
 
 def test_an_answer_the_client_abandons_is_still_counted(client: TestClient) -> None:
-    from app.main import app
-
     org, user = with_a_document(client)
-    assistant: Assistant = app.state.assistant
+    assistant = the_assistant()
 
     async def first_event_then_leave() -> AssistantEvent:
         reservation = await assistant.reserve(org, user)
@@ -123,7 +129,7 @@ def test_an_answer_the_client_abandons_is_still_counted(client: TestClient) -> N
         await stream.aclose()
         return first
 
-    first = client.portal.call(first_event_then_leave)  # pyright: ignore[reportOptionalMemberAccess]
+    first = on_app_loop(client, first_event_then_leave)
     assert first.event.type == "text"
     # What it spent, not nothing and not the whole reservation.
     assert 0 < spent(org) < 20_000
@@ -144,7 +150,7 @@ def test_an_answer_cancelled_mid_stream_is_still_counted(client: TestClient) -> 
                 scope.cancel()
         return seen
 
-    seen = client.portal.call(cancelled_after_the_first_word)  # pyright: ignore[reportOptionalMemberAccess]
+    seen = on_app_loop(client, cancelled_after_the_first_word)
     assert seen == ["text"]
     assert 0 < spent(org) < 20_000
 
@@ -172,10 +178,7 @@ def test_a_run_may_spend_only_what_is_left_of_the_month(client: TestClient) -> N
         " VALUES (%s, 'assistant', 'x', %s, 0)",
         (org, MONTHLY - 20),
     )
-    from app.main import app
-
-    assistant: Assistant = app.state.assistant
-    assert events_of(client, assistant, org, user)[-1] == "error"
+    assert events_of(client, the_assistant(), org, user)[-1] == "error"
 
 
 def test_concurrent_reservations_share_the_allowance(client: TestClient) -> None:
@@ -188,20 +191,17 @@ def test_concurrent_reservations_share_the_allowance(client: TestClient) -> None
 
         return list(await asyncio.gather(one(), one(), one()))
 
-    granted = client.portal.call(three_at_once)  # pyright: ignore[reportOptionalMemberAccess]
+    granted = on_app_loop(client, three_at_once)
     assert sorted(granted, key=lambda tokens: tokens or 0) == [None, 10_000, 20_000]
     assert spent(org) == 30_000
 
 
 def documents_with_summaries(per_run: int, summarizer: Model | None = None) -> Documents:
-    from app.main import app
+    from app.main import services
 
-    documents: Documents = app.state.documents
-    return Documents(
-        documents._embedder,  # pyright: ignore[reportPrivateUsage]
-        documents._queue,  # pyright: ignore[reportPrivateUsage]
-        documents._redis,  # pyright: ignore[reportPrivateUsage]
-        Summaries(
+    return replace(
+        services().documents,
+        summaries=Summaries(
             graph=build_summary_graph(summarizer or local_summarizer()),
             model_name="test",
             monthly_tokens=MONTHLY,
@@ -211,8 +211,8 @@ def documents_with_summaries(per_run: int, summarizer: Model | None = None) -> D
 
 
 def summarize(client: TestClient, documents: Documents, org: UUID, user: UUID) -> None:
-    [doc] = client.get("/v1/documents", headers=headers(org, user)).json()
-    client.portal.call(documents.summarize, org, UUID(doc["id"]), user)  # pyright: ignore[reportOptionalMemberAccess]
+    [doc] = documents_of(client.get("/v1/documents", headers=headers(org, user)))
+    on_app_loop(client, lambda: documents.summarize(org, doc.id, user))
 
 
 def test_a_summary_over_the_run_limit_is_counted_and_not_retried(client: TestClient) -> None:
@@ -220,8 +220,8 @@ def test_a_summary_over_the_run_limit_is_counted_and_not_retried(client: TestCli
     # Returns normally: a job that raised would be retried, and spend again.
     summarize(client, documents_with_summaries(per_run=10), org, user)
     assert spent(org, "summary") > 0
-    [listed] = client.get("/v1/documents", headers=headers(org, user)).json()
-    assert listed["summary"] is None
+    [listed] = documents_of(client.get("/v1/documents", headers=headers(org, user)))
+    assert listed.summary is None
 
 
 def test_a_failed_summary_is_counted_and_retried(client: TestClient) -> None:

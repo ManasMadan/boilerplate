@@ -25,6 +25,8 @@ server for documents. Internal only: callers sign a short-lived JWT with
   `packages/contracts` (job models and names, queue settings, the realtime message, the
   error model and codes); never edit.
 - `app/errors.py`: `AppError("CODE", params)`; the status comes from the catalog.
+- What the app builds at startup is `services()` in `app/main.py` (typed; routes and
+  tests use it instead of Starlette's untyped `app.state`).
 - `evals/`: pydantic-evals datasets over a fixed handbook.
 
 ## Gotchas

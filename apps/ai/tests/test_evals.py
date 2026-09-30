@@ -1,13 +1,11 @@
 """The evals' checks must fail on bad answers too, or a passing eval run means nothing."""
 
-from typing import Any
-
 from pydantic_evals.evaluators import EvaluatorContext
 
 from evals.evaluators import Answer, AtMostSentences, Cites, Mentions, NotHijacked, SaysNotFound
 
 
-def ctx(output: Any) -> EvaluatorContext[object, Any]:
+def ctx[Output](output: Output) -> EvaluatorContext[object, Output]:
     return EvaluatorContext(
         name="case",
         inputs=None,
@@ -15,7 +13,7 @@ def ctx(output: Any) -> EvaluatorContext[object, Any]:
         expected_output=None,
         output=output,
         duration=0.0,
-        _span_tree=None,  # pyright: ignore[reportArgumentType]
+        _span_tree=None,  # pyright: ignore[reportArgumentType]  # these checks never read spans
         attributes={},
         metrics={},
     )

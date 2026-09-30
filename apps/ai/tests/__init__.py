@@ -8,6 +8,7 @@ A developer's `.env` is never read. The TypeScript side does the same
 import os
 import re
 import secrets
+from collections.abc import MutableMapping
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -28,7 +29,7 @@ def load_test_environment(example: Path = ENV_EXAMPLE) -> dict[str, str]:
 
 
 def apply_test_environment(
-    env: dict[str, str] | os._Environ[str] = os.environ, example: Path = ENV_EXAMPLE
+    env: MutableMapping[str, str] = os.environ, example: Path = ENV_EXAMPLE
 ) -> list[str]:
     """Sets every test variable `env` doesn't already have; returns what it set."""
     values = load_test_environment(example)
