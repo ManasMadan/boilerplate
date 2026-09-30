@@ -40,6 +40,12 @@ interface Delivered {
 
 export const DEAD_APNS_TOKEN = "0".repeat(64);
 export const FLAKY_APNS_TOKEN = "f".repeat(64);
+/** Refused with ExpiredProviderToken for the first provider token used, then delivered. */
+export const EXPIRING_APNS_TOKEN = "e".repeat(64);
+/** Refused as a token that was never valid (400 BadDeviceToken). */
+export const BAD_APNS_TOKEN = "b".repeat(64);
+/** Delivered, then the connection is closed with GOAWAY, as Apple does for maintenance. */
+export const GOAWAY_APNS_TOKEN = "a0".repeat(32);
 
 function verifyJwt(jwt: string, key: KeyObject, algorithm: "RSA-SHA256" | "SHA256") {
   const [header, claims, signature] = jwt.split(".");
@@ -172,6 +178,7 @@ export async function startFakePush() {
 
   // APNs: HTTP/2 only (h2c here; TLS in production).
   const h2c: Http2Server = createH2cServer();
+  const expired = new Set<string>();
   h2c.on("stream", async (stream: ServerHttp2Stream, headers) => {
     const raw = await readBody(stream);
     const reply = (status: number, body?: unknown) => {
@@ -186,6 +193,12 @@ export async function startFakePush() {
     if (headers["apns-topic"] !== "dev.boilerplate.app")
       return reply(400, { reason: "TopicDisallowed" });
     if (token === DEAD_APNS_TOKEN) return reply(410, { reason: "Unregistered" });
+    if (token === BAD_APNS_TOKEN) return reply(400, { reason: "BadDeviceToken" });
+    // The first provider token that sends to it expires; a newly signed one works.
+    if (token === EXPIRING_APNS_TOKEN && (expired.size === 0 || expired.has(jwt))) {
+      expired.add(jwt);
+      return reply(403, { reason: "ExpiredProviderToken" });
+    }
     if (token === FLAKY_APNS_TOKEN && !healthy)
       return reply(500, { reason: "InternalServerError" });
     const { aps, link } = JSON.parse(raw.toString()) as {
@@ -194,6 +207,7 @@ export async function startFakePush() {
     };
     delivered.push({ provider: "apns", token, ...aps.alert, link, headers });
     reply(200);
+    if (token === GOAWAY_APNS_TOKEN) stream.session?.goaway();
   });
 
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));

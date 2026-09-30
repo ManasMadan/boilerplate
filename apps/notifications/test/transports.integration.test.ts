@@ -7,12 +7,18 @@ import { generateKeyPairSync } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { createServer as createH2cServer, type Http2Server } from "node:http2";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ApnsTransport } from "../src/channels/push/apns";
 import { FcmTransport } from "../src/channels/push/fcm";
 import { WebPushTransport } from "../src/channels/push/web-push";
 import { TwilioTransport } from "../src/channels/sms/twilio";
-import { type FakePush, startFakePush } from "./fake-push";
+import {
+  BAD_APNS_TOKEN,
+  EXPIRING_APNS_TOKEN,
+  type FakePush,
+  GOAWAY_APNS_TOKEN,
+  startFakePush,
+} from "./fake-push";
 import { type FakeTwilio, startFakeTwilio } from "./fake-twilio";
 
 let push: FakePush;
@@ -97,6 +103,33 @@ describe("FCM", () => {
 });
 
 describe("APNs", () => {
+  it("signs a new provider token and tries again when Apple says it expired", async () => {
+    const client = apns();
+    expect(await client.send(EXPIRING_APNS_TOKEN, message)).toEqual({ ok: true });
+    const tries = push.delivered.filter((sent) => sent.token === EXPIRING_APNS_TOKEN);
+    expect(tries).toHaveLength(1);
+    client.close();
+  });
+
+  it("forgets a device token Apple says was never valid", async () => {
+    const client = apns();
+    expect(await client.send(BAD_APNS_TOKEN, message)).toMatchObject({
+      ok: false,
+      gone: true,
+      error: expect.stringContaining("BadDeviceToken"),
+    });
+    client.close();
+  });
+
+  it("opens a new connection after Apple closes one with GOAWAY", async () => {
+    const client = apns();
+    expect(await client.send(GOAWAY_APNS_TOKEN, message)).toEqual({ ok: true });
+    await vi.waitFor(async () =>
+      expect(await client.send("c".repeat(64), message)).toEqual({ ok: true }),
+    );
+    client.close();
+  });
+
   it("gives up on a notification APNs doesn't answer", async () => {
     const stuck = apns({
       url: `http://127.0.0.1:${(silent.address() as AddressInfo).port}`,

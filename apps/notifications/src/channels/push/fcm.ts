@@ -1,9 +1,9 @@
 /**
  * Firebase Cloud Messaging, HTTP v1 API, authenticated as a service account: a JWT signed
- * with its private key is exchanged for an OAuth access token (cached until shortly
- * before it expires). No SDK: the protocol is two HTTPS calls.
+ * with its private key (jose) is exchanged for an OAuth access token (cached until
+ * shortly before it expires). No SDK: the protocol is two HTTPS calls.
  */
-import { createSign } from "node:crypto";
+import { importPKCS8, SignJWT } from "jose";
 import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
 
@@ -34,10 +34,9 @@ export interface FcmConfig {
   apiUrl?: string;
 }
 
-const base64url = (value: string | Buffer) => Buffer.from(value).toString("base64url");
-
 export class FcmTransport implements PushTransport {
   private accessToken: { value: string; expiresAt: number } | undefined;
+  private key: Promise<CryptoKey> | undefined;
 
   constructor(private readonly config: FcmConfig) {}
 
@@ -45,22 +44,22 @@ export class FcmTransport implements PushTransport {
     if (this.accessToken && this.accessToken.expiresAt > Date.now() + 60_000)
       return this.accessToken.value;
     const tokenUrl = this.config.tokenUrl ?? "https://oauth2.googleapis.com/token";
-    const now = Math.floor(Date.now() / 1000);
-    const claims = {
-      iss: this.config.clientEmail,
+    this.key ??= importPKCS8(this.config.privateKey, "RS256");
+    const assertion = await new SignJWT({
       scope: "https://www.googleapis.com/auth/firebase.messaging",
-      aud: tokenUrl,
-      iat: now,
-      exp: now + 3600,
-    };
-    const unsigned = `${base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${base64url(JSON.stringify(claims))}`;
-    const signature = createSign("RSA-SHA256").update(unsigned).sign(this.config.privateKey);
+    })
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setIssuer(this.config.clientEmail)
+      .setAudience(tokenUrl)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(await this.key);
     const response = await fetch(tokenUrl, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion: `${unsigned}.${base64url(signature)}`,
+        assertion,
       }),
       signal: AbortSignal.timeout(10_000),
     });

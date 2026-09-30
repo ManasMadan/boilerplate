@@ -24,6 +24,7 @@
     "@t3-oss/env-core": "catalog:",
     "bullmq": "catalog:",
     "ioredis": "catalog:",
+    "jose": "^6.2.12",
     "nodemailer": "^10.0.12",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
