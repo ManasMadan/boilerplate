@@ -221,16 +221,7 @@ export default function generator(plop: PlopTypes.NodePlopAPI): void {
         path: "packages/{{kebabCase name}}/src/index.ts",
         templateFile: "templates/package/index.ts.hbs",
       },
-      {
-        type: "modify",
-        path: "commitlint.config.ts",
-        pattern: /(\n\s*\],\n\s*\],\n\s*"subject-case")/,
-        template: '\n        "{{kebabCase name}}",$1',
-      },
-      format(({ name }) => [
-        `packages/${plop.getHelper("kebabCase")(name)}`,
-        "commitlint.config.ts",
-      ]),
+      format(({ name }) => [`packages/${plop.getHelper("kebabCase")(name)}`]),
       // Links the new workspace so other packages can depend on it.
       () => {
         run("bun", ["install"]);

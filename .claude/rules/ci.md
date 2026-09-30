@@ -26,8 +26,9 @@ paths:
   `scripts/changes.ts`), with the same areas in `ci-ok`'s `$gates`
   (`scripts/workflows.test.ts` fails when the two disagree). Jobs run the same commands a developer runs locally
   (`bun run lint`, `bun run test:integration`, …), never a CI-only variant.
-- The pull request title scopes in `ci.yml` repeat `commitlint.config.ts`: change both
-  together.
+- Commit and pull request title scopes are the workspace folder names plus a few
+  cross-cutting ones, all in `commitlint.config.ts`; CI checks titles with that config,
+  so there's no second list to keep in step.
 - Secrets reach only the steps that need them, as `env` on the step, and are never
   echoed. Code from a fork's pull request never runs with secrets: no
   `pull_request_target` job that checks out the pull request's head.

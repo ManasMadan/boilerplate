@@ -32,7 +32,7 @@ couldn't check.
    | Python service | `bun run --filter @repo/ai lint`, `check-types`, `test`, `coverage` |
    | Generated code is committed | `bun run gen`, then `git status` |
    | API compatibility | oasdiff against the base branch's `apps/api/openapi.json` |
-   | Pull request title | the title against `commitlint.config.ts`'s scopes and the list in `ci.yml` |
+   | Pull request title | the title against `commitlint.config.ts` (scopes: the workspace folders and the cross-cutting ones) |
    | Migration safety | `bun run db:lint` |
    | Helm charts and GitOps | `bun run charts:check` |
    | OpenTofu | `bun run infra:check` |

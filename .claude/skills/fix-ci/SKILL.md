@@ -27,7 +27,7 @@ the failure isn't obvious.
    | Python service | `bun run --filter @repo/ai lint`, `check-types`, `test`, `coverage` |
    | Generated code is committed | `bun run gen`, then `git status`: commit what changed |
    | API compatibility | a removed or narrowed field in `apps/api/openapi.json`: make it additive, or mark the title `!` |
-   | Pull request title | Conventional Commits with a scope from `commitlint.config.ts` (and the list in `ci.yml`) |
+   | Pull request title | Conventional Commits with a scope from `commitlint.config.ts`: `printf '%s\n' "<title>" \| bunx commitlint` checks it locally |
    | Migration safety | `bun run db:lint` |
    | Helm charts and GitOps | `bun run charts:check` |
    | OpenTofu | `bun run infra:check` |

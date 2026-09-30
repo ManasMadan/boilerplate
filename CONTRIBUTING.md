@@ -23,7 +23,8 @@ fixes for what usually goes wrong.
 
 ## Making a change
 
-1. Branch from `master`: `feat/<what>`, `fix/<what>`, `chore/<what>`.
+1. Branch from `master`: `<type>/<what>`, with a Conventional Commits type (`feat/`,
+   `fix/`, `chore/`, …); a team can add who owns it (`feat/ada/<what>`).
 2. Keep to the principles in `CLAUDE.md`: fix root causes, validate at every boundary,
    one implementation per concern, services never import each other, and every
    user-facing string goes through `packages/i18n`.

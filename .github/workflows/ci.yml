@@ -563,39 +563,18 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions: { pull-requests: read }
+    permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
-      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          # The same scopes commitlint allows (commitlint.config.ts).
-          scopes: |
-            repo
-            deps
-            ci
-            infra
-            claude
-            docs
-            web
-            mobile
-            api
-            webhooks
-            notifications
-            worker
-            ai
-            ui
-            client
-            contracts
-            db
-            email
-            i18n
-            jobs
-            logger
-            nest-common
-            ai-client
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      # The same check as each commit's (commitlint.config.ts, whose scopes are the
+      # workspaces): squash merges make the title the commit on master.
+      - name: Conventional Commits title
+        env: { TITLE: "${{ github.event.pull_request.title }}" }
+        run: printf '%s\n' "$TITLE" | bunx commitlint
 
   # New migrations must be safe to run while the previous release is still serving.
   migrations:
