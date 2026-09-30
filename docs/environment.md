@@ -104,6 +104,7 @@ that uses it.
 
 | Variable | Default | Service |
 |---|---|---|
+| `DOCKER_BIND_ADDRESS` | 127.0.0.1 | The address every local service listens on. `0.0.0.0` opens them to your network (for a phone, with `S3_ENDPOINT` at your LAN address); their passwords are well known, so only on a network you trust. |
 | `POSTGRES_PORT` | 55432 | Postgres (pgvector) |
 | `VALKEY_PORT` | 56379 | Valkey |
 | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT` | 51025, 58025 | Mailpit |
