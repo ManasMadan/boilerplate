@@ -108,7 +108,7 @@ test("switch workspace: each keeps its own todos", async ({ page }) => {
   await expect(page.getByText("Nothing to do. Add your first todo above.")).toBeVisible();
 });
 
-test("an invitation link joins the workspace", async ({ page, browser }) => {
+test("an invitation link joins the workspace once accepted", async ({ page, browser }) => {
   // An owner (on another device) invites this user.
   const invitee = await signUp(page);
   const owner = await browser.newContext({ baseURL: new URL(page.url()).origin });
@@ -126,6 +126,9 @@ test("an invitation link joins the workspace", async ({ page, browser }) => {
   await owner.close();
 
   await page.goto(`/invitations/${invitation.id}`);
+  // Opening the link only shows it: any app or page can open one.
+  await expect(page.getByText("Join Invited Co to start collaborating.")).toBeVisible();
+  await page.getByRole("button", { name: "Accept invitation" }).click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
   await page.getByRole("tab", { name: /Settings/ }).click();
   await expect(page.getByRole("radio", { name: "Invited Co" })).toBeChecked();

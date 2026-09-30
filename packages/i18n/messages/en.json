@@ -939,9 +939,6 @@
     "languages": {
       "en": "English",
       "es": "Español"
-    },
-    "invitation": {
-      "accepting": "Joining the workspace…"
     }
   }
 }

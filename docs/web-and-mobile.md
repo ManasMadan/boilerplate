@@ -154,7 +154,19 @@ credentials`). See [repository-settings.md](repository-settings.md).
 Today the app opens only for `boilerplate://` links (the `scheme` in `app.config.ts`):
 sign-in callbacks and invitations. A custom scheme isn't verified, so any other app can
 register the same one, and a link sent by email opens the browser rather than the app.
-Verified https links fix both; each platform checks a file on the site's own host:
+Verified https links fix both; each platform checks a file on the site's own host.
+Opening an invitation link only shows the invitation, whoever opened it: joining takes a
+tap on Accept.
+
+One case they don't cover: after social sign-in, better-auth's Expo plugin hands the
+session to the app in the `boilerplate://` redirect (`?cookie=`), and it only does so
+for a custom scheme, never an https link. On iOS the sign-in sheet
+(`ASWebAuthenticationSession`) returns that URL to the app that opened it; on Android
+the redirect goes through the OS, so another app claiming the scheme could catch it.
+Closing that needs the redirect to carry a one-time code the app exchanges with a
+verifier it kept, instead of the cookie; until then, prefer email codes and passkeys
+on Android.
+
 
 | Platform | File | What goes in it |
 |---|---|---|
