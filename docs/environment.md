@@ -231,7 +231,7 @@ both `AI_URL` and `AI_SERVICE_SECRET` are set.
 |---|---|---|---|
 | `AI_URL` | api, web | `http://localhost:8000` | Where the API calls the AI service. The web app forwards `/ai/mcp` there in local development. |
 | `AI_SERVICE_SECRET` | ai (req.), api | generated | At least 32 characters. The API signs a 60-second token for every call with it; the service verifies it. |
-| `API_URL` | web, ai, `apps/mobile/scripts/serve-web.ts` | `http://localhost:3001` | Web: where `/rpc`, `/api` and `/docs` are forwarded in local development (the gateway does it when deployed). AI: where its MCP server fetches the API's JWKS. |
+| `API_URL` | web, ai, `apps/mobile/scripts/serve-web.ts` | `http://localhost:3001` | Web: where `/rpc`, `/api` and `/docs` are forwarded in local development and e2e (the gateway does it when deployed). Read when the web app is built, not when it starts: the image keeps the default, which clusters never use. AI: where its MCP server fetches the API's JWKS. |
 | `AI_MODEL` | ai | unset (`local:extractive` in `.env.example`) | A Pydantic AI model name (`anthropic:claude-sonnet-5`, `openai:gpt-5`). Unset: the assistant is off. `local:extractive` quotes the best passage with no model (refused in production). |
 | `AI_FALLBACK_MODEL` | ai | unset | Used when the main model fails. |
 | `AI_EMBEDDINGS` | ai | `hashing` | An embedding model name (`openai:text-embedding-3-small`) giving 1536 dimensions, or `hashing` (lexical, refused in production). |
