@@ -448,7 +448,12 @@
     "APP_NOT_FOUND": "Esa aplicación no está conectada a tu cuenta.",
     "API_KEY_NOT_FOUND": "Esa clave de API no existe en este espacio de trabajo.",
     "API_KEY_LIMIT_REACHED": "Este espacio de trabajo ya tiene todas las claves de API que puede tener. Revoca alguna que ya no uses.",
-    "API_KEY_SCOPE_MISSING": "Esta clave de API no tiene el permiso {scope}."
+    "API_KEY_SCOPE_MISSING": "Esta clave de API no tiene el permiso {scope}.",
+    "METHOD_NOT_SUPPORTED": "Eso no se admite aquí.",
+    "TIMEOUT": "Tardó demasiado. Inténtalo de nuevo.",
+    "PAYLOAD_TOO_LARGE": "Son demasiados datos para enviar de una vez.",
+    "UNSUPPORTED_MEDIA_TYPE": "Aquí no se acepta ese tipo de contenido.",
+    "INVALID_SIGNATURE": "La firma de la solicitud no coincide."
   },
   "workspace": {
     "switcher": {

@@ -448,7 +448,12 @@
     "APP_NOT_FOUND": "That app isn't connected to your account.",
     "API_KEY_NOT_FOUND": "That API key doesn't exist in this workspace.",
     "API_KEY_LIMIT_REACHED": "This workspace has as many API keys as it can have. Revoke one you no longer use.",
-    "API_KEY_SCOPE_MISSING": "This API key doesn't have the {scope} scope."
+    "API_KEY_SCOPE_MISSING": "This API key doesn't have the {scope} scope.",
+    "METHOD_NOT_SUPPORTED": "That isn't supported here.",
+    "TIMEOUT": "That took too long. Try again.",
+    "PAYLOAD_TOO_LARGE": "That's too much data to send at once.",
+    "UNSUPPORTED_MEDIA_TYPE": "That kind of content isn't accepted here.",
+    "INVALID_SIGNATURE": "The request's signature doesn't match."
   },
   "workspace": {
     "switcher": {

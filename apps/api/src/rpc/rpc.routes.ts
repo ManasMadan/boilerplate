@@ -19,7 +19,7 @@
 
 import { OpenAPIHandler } from "@orpc/openapi/fastify";
 import { RPCHandler } from "@orpc/server/fastify";
-import { runWithContext } from "@repo/nest-common";
+import { runWithContext, sendError } from "@repo/nest-common";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { contextFor, toHeaders } from "../http-context";
 import { openApiDocument } from "./openapi";
@@ -75,7 +75,7 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
           prefix,
           context: { headers: toHeaders(request) },
         });
-        if (!matched) await reply.status(404).send({ code: "NOT_FOUND", requestId: request.id });
+        if (!matched) await sendError(reply, "NOT_FOUND");
       });
     };
 

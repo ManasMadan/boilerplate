@@ -26,6 +26,11 @@ export const ERROR_CODES = {
   RATE_LIMITED: 429,
   INTERNAL: 500,
   SERVICE_UNAVAILABLE: 503,
+  // HTTP (answered before a procedure runs: the server, or oRPC, refused the request)
+  METHOD_NOT_SUPPORTED: 405,
+  TIMEOUT: 408,
+  PAYLOAD_TOO_LARGE: 413,
+  UNSUPPORTED_MEDIA_TYPE: 415,
   // Platform
   IDEMPOTENCY_IN_PROGRESS: 409,
   FEATURE_DISABLED: 404,
@@ -54,6 +59,8 @@ export const ERROR_CODES = {
   FILE_NOT_READY: 409,
   // Notifications
   UNSUBSCRIBE_LINK_INVALID: 400,
+  // Inbound webhooks (Stripe, the mail server): the signature doesn't match the body
+  INVALID_SIGNATURE: 400,
   // Webhooks
   WEBHOOK_ENDPOINT_NOT_FOUND: 404,
   WEBHOOK_DELIVERY_NOT_FOUND: 404,

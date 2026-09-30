@@ -74,7 +74,16 @@ setups. Inbound Stripe webhooks go straight to `localhost:3004/webhooks/stripe`.
    queries through `withTenant` / `tenantTx`, so Postgres row-level security scopes it to
    the organization, and writes its domain events to the outbox in the same transaction.
 5. Errors leave as stable codes (`packages/contracts/src/errors.ts`) with parameters;
-   clients translate `errors.<code>` themselves.
+   clients translate `errors.<code>` themselves. Every HTTP surface answers an error in
+   the same JSON body, oRPC's: `{ code, status, message, data: { params, requestId,
+   issues? } }`, with the catalog's status. Procedures produce it; for the rest (a
+   malformed or oversized body, the wrong media type, an unknown route, raw routes such
+   as file downloads and inbound webhooks) `createServer` installs a filter and raw
+   routes call `sendError` (`packages/nest-common/src/http-errors.ts`). better-auth's
+   errors get the same envelope with their own codes, and OAuth's errors keep RFC
+   6749's. The Python service's body is generated from the same schema. It's
+   `application/json`, not RFC 9457's `application/problem+json`: one shape over RPC,
+   REST and auth matters more here than the standard's field names.
 
 Other routes on the API: `/api/auth/*` (better-auth), `/api/mcp` (MCP),
 `/api/v1/files/<id>/content` (redirect to a signed download),

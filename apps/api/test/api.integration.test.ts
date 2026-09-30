@@ -63,6 +63,57 @@ async function expectError(promise: Promise<unknown>, code: string) {
   return orpcError;
 }
 
+describe("error responses", () => {
+  const send = (path: string, init: RequestInit = {}) => fetch(`${harness.baseUrl}${path}`, init);
+  const json = (body: string, type = "application/json") => ({
+    method: "POST",
+    headers: { "content-type": type },
+    body,
+  });
+
+  it.each([
+    ["a malformed JSON body", "/api/v1/todos", json("{bad"), 400, "BAD_REQUEST"],
+    ["an unknown route under /api/v1", "/api/v1/nope", {}, 404, "NOT_FOUND"],
+    ["an unknown route anywhere else", "/v1/todos", {}, 404, "NOT_FOUND"],
+    [
+      "the wrong media type",
+      "/api/v1/todos",
+      json("x", "text/plain"),
+      415,
+      "UNSUPPORTED_MEDIA_TYPE",
+    ],
+    [
+      "a raw route without a session",
+      `/api/v1/files/${randomUUID()}/content`,
+      {},
+      401,
+      "UNAUTHENTICATED",
+    ],
+    ["no session on a procedure", "/api/v1/todos", {}, 401, "UNAUTHENTICATED"],
+  ])("answers %s in the contract's shape", async (_case, path, init, status, code) => {
+    const response = await send(path, init as RequestInit);
+    expect(response.status).toBe(status);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.json()).toMatchObject({
+      code,
+      status,
+      message: expect.any(String),
+      data: { params: {}, requestId: expect.any(String) },
+    });
+  });
+
+  it("gives better-auth's errors the same envelope, keeping their codes", async () => {
+    const response = await send("/api/auth/sign-in/email", json(JSON.stringify({ email: "x" })));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: expect.any(String),
+      status: 400,
+      message: expect.any(String),
+      data: { params: {}, requestId: expect.any(String) },
+    });
+  });
+});
+
 describe("request bodies", () => {
   const post = (path: string, type: string, body: BodyInit) =>
     fetch(`${harness.baseUrl}${path}`, { method: "POST", headers: { "content-type": type }, body });

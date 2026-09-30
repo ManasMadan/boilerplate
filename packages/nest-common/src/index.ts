@@ -7,6 +7,7 @@ export * from "./database";
 export * from "./env";
 export * from "./errors";
 export * from "./health";
+export * from "./http-errors";
 export * from "./i18n";
 export * from "./idempotency";
 export * from "./job-processor";

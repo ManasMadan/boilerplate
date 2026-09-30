@@ -11,6 +11,7 @@ import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { createLogger, type LogLevel } from "@repo/logger";
 import { Logger } from "nestjs-pino";
+import { ContractExceptionFilter } from "./http-errors";
 import { createRequestIdGenerator, REQUEST_ID_HEADER } from "./logging";
 import { redactQuery } from "./telemetry";
 
@@ -52,6 +53,9 @@ export async function createServer(
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
+  // Every error Nest handles (its routes, its 404, body parsing and load shedding, which
+  // Fastify hands to Nest) answers in the contract's shape.
+  app.useGlobalFilters(new ContractExceptionFilter());
 
   await app.register(helmet, {
     // JSON API: no HTML is served, so a locked-down CSP costs nothing.

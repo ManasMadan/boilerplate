@@ -10,6 +10,7 @@
  */
 import { type Prisma, transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";
+import { sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import Stripe from "stripe";
 import { emitEvent } from "../outbox";
@@ -28,17 +29,17 @@ export function mountStripe(
     );
 
     scope.post("/webhooks/stripe", async (request, reply) => {
-      if (!secret) return reply.status(404).send({ code: "NOT_FOUND" });
+      if (!secret) return sendError(reply, "NOT_FOUND");
       const signature = request.headers["stripe-signature"];
       if (typeof signature !== "string" || !Buffer.isBuffer(request.body)) {
-        return reply.status(400).send({ code: "BAD_REQUEST" });
+        return sendError(reply, "BAD_REQUEST");
       }
 
       let event: Stripe.Event;
       try {
         event = await Stripe.webhooks.constructEventAsync(request.body, signature, secret);
       } catch {
-        return reply.status(400).send({ code: "INVALID_SIGNATURE" });
+        return sendError(reply, "INVALID_SIGNATURE");
       }
 
       await transaction(database.write, async (tx) => {

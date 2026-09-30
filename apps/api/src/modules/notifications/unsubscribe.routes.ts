@@ -5,6 +5,8 @@
  * token in the URL says who and which category. People clicking the link in the email
  * body land on the web app's /unsubscribe page instead.
  */
+
+import { sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import type { NotificationsService } from "./notifications.service";
 
@@ -23,12 +25,12 @@ export function mountOneClickUnsubscribe(
       "/api/v1/notifications/unsubscribe",
       async (request, reply) => {
         const token = request.query.token;
-        if (!token) return reply.status(400).send({ code: "UNSUBSCRIBE_LINK_INVALID" });
+        if (!token) return sendError(reply, "UNSUBSCRIBE_LINK_INVALID");
         try {
           await notifications.unsubscribe(token);
           return reply.status(200).send({ unsubscribed: true });
         } catch {
-          return reply.status(400).send({ code: "UNSUBSCRIBE_LINK_INVALID" });
+          return sendError(reply, "UNSUBSCRIBE_LINK_INVALID");
         }
       },
     );

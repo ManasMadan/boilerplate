@@ -16,6 +16,30 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { contextFor, toHeaders } from "../http-context";
 import type { Auth } from "./auth";
 
+/**
+ * better-auth's error, in the envelope every other error has (status, request id,
+ * params), keeping its own code and message, which its clients read. OAuth errors
+ * (`{ error, error_description }`, RFC 6749) stay as the spec has them.
+ */
+export function authErrorBody(body: Buffer, status: number, requestId: string) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || "error" in parsed) return null;
+  const { code, message } = parsed as { code?: unknown; message?: unknown };
+  if (typeof code !== "string") return null;
+  return {
+    defined: false,
+    code,
+    status,
+    message: typeof message === "string" ? message : code,
+    data: { params: {}, requestId },
+  };
+}
+
 /** Authorization-server metadata sits under the issuer's path (RFC 8414 §3). */
 const DISCOVERY_PATHS = [
   "/.well-known/oauth-authorization-server/api/auth",
@@ -53,7 +77,16 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
       }
       const cookies = response.headers.getSetCookie();
       if (cookies.length) reply.header("set-cookie", cookies);
-      return reply.send(response.body ? Buffer.from(await response.arrayBuffer()) : null);
+      const answer = response.body ? Buffer.from(await response.arrayBuffer()) : null;
+      const error =
+        answer && response.status >= 400
+          ? authErrorBody(answer, response.status, request.id)
+          : null;
+      if (error) {
+        reply.removeHeader("content-length");
+        return reply.type("application/json").send(error);
+      }
+      return reply.send(answer);
     });
 
   fastify.register((scope, _options, done) => {
