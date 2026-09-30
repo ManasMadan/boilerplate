@@ -120,6 +120,12 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   tfvars and tfstate, load-test sessions) are denied to the Read tool; a shell command
   could still print them, so never try. There is no sandbox: Docker and the local
   services need the socket and the network.
+- `.claude/hooks/`: the Stop hook runs the fast checks on what the turn changed,
+  including the unit coverage of the changed lines; a reviewer or the verifier that
+  ends without its verdict is sent back, and a verdict that isn't a pass is put in front
+  of you; after a compaction you're told which files the tree changes. The Stop hook
+  can't tell two sessions' edits apart, so run one session per checkout and a worktree
+  for the next.
 - Worktrees: parallel branches and agents use Worktrunk (`wt`, `.config/wt.toml`), whose
   Claude Code plugin settings.json enables: an agent started with `isolation: worktree`
   gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),

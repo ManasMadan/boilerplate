@@ -103,3 +103,35 @@ describe("rules", () => {
     expect(Array.isArray(fields.paths)).toBe(true);
   });
 });
+
+describe("settings.json", () => {
+  type Hooks = Record<string, { matcher?: string; hooks: { command: string }[] }[]>;
+  const settings = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8")) as {
+    hooks: Hooks;
+    statusLine: { command: string };
+  };
+  const commands = (events: Hooks) =>
+    Object.values(events).flatMap((matchers) =>
+      matchers.flatMap((matcher) => matcher.hooks.map((hook) => hook.command)),
+    );
+  const scripts = (command: string) =>
+    [...command.matchAll(/\.claude\/hooks\/([\w-]+\.ts)/g)].map((match) => match[1]);
+
+  it("wires every hook entry point, and only files that exist", () => {
+    const wired = [...commands(settings.hooks), settings.statusLine.command].flatMap(scripts);
+    const entryPoints = readdirSync(join(CLAUDE, "hooks")).filter(
+      (file) =>
+        file.endsWith(".ts") &&
+        !file.endsWith(".test.ts") &&
+        readFileSync(join(CLAUDE, "hooks", file), "utf8").includes("if (import.meta.main)"),
+    );
+    expect([...new Set(wired)].sort()).toEqual(entryPoints.sort());
+  });
+
+  it("blocks a tool call when Bun is missing, instead of skipping the guard", () => {
+    for (const command of commands({ PreToolUse: settings.hooks.PreToolUse ?? [] })) {
+      expect(command).toStartWith("command -v bun >/dev/null 2>&1 || {");
+      expect(command).toContain("exit 2; }; bun ");
+    }
+  });
+});

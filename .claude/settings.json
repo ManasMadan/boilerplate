@@ -199,7 +199,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-files.ts\"",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'Bun is not on PATH, so this guard cannot run and the call is blocked. Install Bun (bun.sh) and restart Claude Code.' >&2; exit 2; }; bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-files.ts\"",
             "timeout": 5
           }
         ]
@@ -209,7 +209,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/bash-guard.ts\"",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'Bun is not on PATH, so this guard cannot run and the call is blocked. Install Bun (bun.sh) and restart Claude Code.' >&2; exit 2; }; bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/bash-guard.ts\"",
             "timeout": 5
           }
         ]
@@ -227,6 +227,29 @@
           {
             "type": "command",
             "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/suppressions.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/tool-failure.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/subagent-stop.ts\"",
             "timeout": 5
           }
         ]

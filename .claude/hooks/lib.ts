@@ -25,6 +25,11 @@ export interface HookInput {
   };
   stop_hook_active?: boolean;
   source?: string;
+  /** SubagentStop: which agent finished, and its final answer. */
+  agent_type?: string;
+  last_assistant_message?: string;
+  /** PostToolUseFailure: what the failed call said. */
+  error?: string;
 }
 
 /** What a hook answers: JSON for Claude Code, or nothing. */
@@ -104,6 +109,10 @@ export const turnFile = (session: string) => join(STATE_DIR, `turn-${session}.tx
 export const stopCountFile = (session: string) => join(STATE_DIR, `stop-${session}.count`);
 /** The tree the Stop hook last asked for the full checks on (so it asks once per state). */
 export const askedFile = (session: string) => join(STATE_DIR, `asked-${session}.txt`);
+/** Whether the session has had the hint about a failed repo command (tool-failure.ts). */
+export const hintedFile = (session: string) => join(STATE_DIR, `hinted-${session}.txt`);
+/** Every file of a session's state, which the session's end removes. */
+export const sessionFiles = [turnFile, stopCountFile, askedFile, hintedFile];
 
 /** Whether `path` is on `branch`, i.e. it has shipped. */
 export function isShipped(branch: string, path: string, cwd = ROOT): boolean {

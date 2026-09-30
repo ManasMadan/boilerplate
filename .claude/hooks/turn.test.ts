@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { Check } from "./checks";
-import { askedFile, type HookInput, ROOT, stopCountFile, turnFile } from "./lib";
+import { askedFile, type HookInput, ROOT, sessionFiles, stopCountFile, turnFile } from "./lib";
 import { sessionEnd } from "./session-end";
 import { turnStart } from "./turn-start";
 import { runCheck, verifyTurn } from "./verify-turn";
@@ -32,10 +32,9 @@ const result = (check: Check, code: number, timedOut = false) => ({
 describe("the session's end", () => {
   it("removes its turn state", () => {
     const input = turn({ hook_event_name: "SessionEnd" });
-    for (const file of [turnFile, stopCountFile, askedFile])
-      writeFileSync(file(input.session_id), "x");
+    for (const file of sessionFiles) writeFileSync(file(input.session_id), "x");
     expect(sessionEnd(input)).toBeUndefined();
-    for (const file of [turnFile, stopCountFile, askedFile]) {
+    for (const file of sessionFiles) {
       expect(existsSync(file(input.session_id))).toBe(false);
     }
   });
@@ -91,6 +90,13 @@ describe("the turn's end", () => {
       reason: expect.stringContaining("## knip\nknip said 1"),
     });
     expect(readFileSync(stopCountFile(input.session_id), "utf8")).toBe("2");
+    expect((output as { reason: string }).reason).not.toContain("bun run gen");
+    const inPackage = await verifyTurn(turn(), {
+      fingerprint,
+      changed: async () => ["apps/api/src/x.ts"],
+      run: async (check) => result(check, check.label === "knip" ? 1 : 0),
+    });
+    expect((inPackage as { reason: string }).reason).toContain("turbo ran `bun run gen` first");
   });
 
   it("stops after three re-checks and tells the user", async () => {

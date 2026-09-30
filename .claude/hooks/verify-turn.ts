@@ -58,6 +58,12 @@ const REAL: Turn = {
   budgetMs: BUDGET_MS,
 };
 
+/** Turbo's checks run `bun run gen` first (turbo.json), which Claude should know about. */
+const regenerated = (results: { check: Check }[]) =>
+  results.some((result) => result.check.command.includes("turbo"))
+    ? " (turbo ran `bun run gen` first, so the generated code matches the sources.)"
+    : "";
+
 /** Sends Claude back to fix what the fast checks find; nothing when they pass. */
 export async function verifyTurn(input: HookInput, given: Partial<Turn> = {}): Promise<HookOutput> {
   const turn = { ...REAL, ...given };
@@ -87,7 +93,7 @@ export async function verifyTurn(input: HookInput, given: Partial<Turn> = {}): P
       .map((result) => `## ${result.check.label}\n${result.log.split("\n").slice(-40).join("\n")}`)
       .join("\n\n");
     return block(
-      `Checks failed on what you changed. Fix them before finishing. If a failure isn't from this change, show it: run the same command on a clean checkout of ${await defaultBranch()} (a git worktree) and show it fails there too.\n\n${logs}`,
+      `Checks failed on what you changed. Fix them before finishing. If a failure isn't from this change, show it: run the same command on a clean checkout of ${await defaultBranch()} (a git worktree) and show it fails there too.${regenerated(results)}\n\n${logs}`,
     );
   }
   const asked = askedFile(input.session_id);

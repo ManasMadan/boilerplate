@@ -10,7 +10,8 @@ background: false
 
 This is the one list of checks; the verifier agent runs it, and CI runs the same
 commands. The Stop hook already runs the fast ones on changed files at the end of each
-turn, but not the boundary checks, coverage, integration or e2e tests.
+turn, with the unit coverage of the changed lines, but not the boundary checks, the full
+coverage, integration or e2e tests.
 
 ## What changed
 
