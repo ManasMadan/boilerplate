@@ -13,8 +13,10 @@
  *   signature somewhere else, and Standard Webhooks senders don't follow them);
  * - requires https unless `allowHttp` is set, and caps time and response size.
  *
- * The network layer adds a second wall: service egress NetworkPolicies only allow the
- * internet, not the cluster.
+ * The network layer adds a second wall: the services' egress NetworkPolicies allow DNS,
+ * their own namespace, the mail and observability namespaces, and the internet outside
+ * private ranges, so another namespace, a node and a metadata address stay unreachable
+ * even if a check here were wrong.
  */
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
