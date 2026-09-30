@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { eventSubscribers, queues } from "./queues";
+import { eventSubscribers, queues, type RoutedEvent } from "./queues";
+
+/** Whether a value of type `U` is accepted where `T` is expected. */
+type Takes<T, U> = [U] extends [T] ? true : false;
 
 describe("event routing", () => {
   it("sends the creation of a way into a workspace to the notification service", () => {
@@ -14,6 +17,19 @@ describe("event routing", () => {
     expect(eventSubscribers["events-audit"]("notification.requested.v1")).toBe(false);
     expect(eventSubscribers["events-webhooks"]("notification.requested.v1")).toBe(false);
     expect(eventSubscribers["events-audit"]("todo.created.v1")).toBe(true);
+  });
+
+  it("narrows a consumer's events to its route, so it can't handle one that never arrives", () => {
+    const billing: RoutedEvent<"events-billing">[] = [
+      "stripe.event_received.v1",
+      "org.member_added.v1",
+      "org.member_removed.v1",
+    ];
+    for (const name of billing) expect(eventSubscribers["events-billing"](name)).toBe(true);
+    // Checked by the compiler: an event the route doesn't list isn't a billing event.
+    const unrouted: Takes<RoutedEvent<"events-billing">, "todo.created.v1"> = false;
+    const bumped: Takes<RoutedEvent<"events-notifications">, "notification.requested.v2"> = false;
+    expect([unrouted, bumped]).toEqual([false, false]);
   });
 
   it("retries with jitter, so jobs that failed together don't all come back at once", () => {

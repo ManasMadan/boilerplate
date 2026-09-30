@@ -3,20 +3,31 @@
  * the idempotency key, so a redelivered event notifies nobody twice.
  *
  * To notify on another event: route it here (`eventSubscribers["events-notifications"]`
- * in packages/jobs), add a template, and map it below.
+ * in packages/jobs), add a template, and map it below. Only routed names compile below.
  *
  * Email feedback (a provider's bounce or spam complaint, from apps/webhooks) goes to the
  * suppression list instead, so the address is never emailed again.
  */
 import { Processor } from "@nestjs/bullmq";
 import { type EventEnvelope, events } from "@repo/contracts/events";
-import { type NotificationPayload, notificationPayload, parseJob, queuePrefix } from "@repo/jobs";
+import {
+  eventSubscribers,
+  type NotificationPayload,
+  notificationPayload,
+  parseJob,
+  queuePrefix,
+  type RoutedEvent,
+} from "@repo/jobs";
 import { JobProcessor, runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { Dispatcher } from "../dispatch/dispatcher";
 import { DeliveryPolicy } from "../dispatch/policy";
 
-function notificationFor(event: EventEnvelope): NotificationPayload | undefined {
+type Routed = EventEnvelope & {
+  name: Exclude<RoutedEvent<"events-notifications">, "email.feedback_received.v1">;
+};
+
+function notificationFor(event: Routed): NotificationPayload | undefined {
   switch (event.name) {
     // Asked for in the transaction of the change it's about (security alerts).
     case "notification.requested.v1":
@@ -43,8 +54,6 @@ function notificationFor(event: EventEnvelope): NotificationPayload | undefined 
         data: { kind: apiKey ? "api-key" : "webhook-endpoint", label },
       };
     }
-    default:
-      return undefined;
   }
 }
 
@@ -59,12 +68,15 @@ export class EventsProcessor extends JobProcessor {
 
   async process(job: Job) {
     const { meta, payload: event } = parseJob("events-notifications", "event", job.data);
-    if (event.name === "email.feedback_received.v1") {
-      const { address, kind } = events[event.name].parse(event.payload);
+    const { name } = event;
+    // An event routed here by a newer relay this build doesn't know yet.
+    if (!eventSubscribers["events-notifications"](name)) return;
+    if (name === "email.feedback_received.v1") {
+      const { address, kind } = events[name].parse(event.payload);
       await this.policy.suppress("email", address, kind);
       return;
     }
-    const notification = notificationFor(event);
+    const notification = notificationFor({ ...event, name });
     if (!notification) return;
     await runWithContext({ ...meta, requestId: meta.requestId ?? `event:${event.id}` }, () =>
       this.dispatcher.dispatch(notification, event.id),

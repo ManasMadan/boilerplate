@@ -12,7 +12,7 @@
  */
 import { Processor } from "@nestjs/bullmq";
 import { events } from "@repo/contracts/events";
-import { parseJob, queuePrefix } from "@repo/jobs";
+import { eventSubscribers, parseJob, queuePrefix, type RoutedEvent } from "@repo/jobs";
 import { JobProcessor, runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import * as z from "zod";
@@ -55,19 +55,20 @@ export class BillingEventsProcessor extends JobProcessor {
 
   async process(job: Job) {
     const { meta, payload: event } = parseJob("events-billing", "event", job.data);
-    if (!this.billing.enabled) return;
+    const { name } = event;
+    // An event routed here by a newer relay this build doesn't know yet.
+    if (!this.billing.enabled || !eventSubscribers["events-billing"](name)) return;
     await runWithContext({ ...meta, requestId: meta.requestId ?? `event:${event.id}` }, () =>
-      this.handle(event.id, event.name, event.payload),
+      this.handle(event.id, name, event.payload),
     );
   }
 
-  private async handle(eventId: string, name: string, raw: unknown) {
+  private async handle(eventId: string, name: RoutedEvent<"events-billing">, raw: unknown) {
     if (name === "org.member_added.v1" || name === "org.member_removed.v1") {
       const { organizationId } = events[name].parse(raw);
       await this.billing.syncSeats(organizationId);
       return;
     }
-    if (name !== "stripe.event_received.v1") return;
     const { type, object } = events[name].parse(raw);
     const stripeObject = object as StripeObject;
     const subscriptionId = SUBSCRIPTION_EVENTS.has(type)
