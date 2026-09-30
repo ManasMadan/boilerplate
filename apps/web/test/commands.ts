@@ -94,7 +94,17 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
     );
   }
   navigations.set(page, []);
+  if (!finished.has(page))
+    page.on("requestfinished", (request) => finished.get(page)?.push(request.url()));
+  finished.set(page, []);
 };
+
+/** The page's requests answered since its test started, by URL. */
+const finished = new WeakMap<Page, string[]>();
+
+/** How many of the page's requests to URLs containing `part` have been answered. */
+const answeredRequests: BrowserCommand<[part: string]> = ({ page }, part) =>
+  finished.get(page)?.filter((url) => url.includes(part)).length ?? 0;
 
 /** Each page's client IP for its current test, and the requests it makes fail. */
 const clientIps = new WeakMap<Page, string>();
@@ -387,6 +397,7 @@ const fakeStripe: BrowserCommand<[path: string, method?: string]> = async (
 };
 
 export const commands = {
+  answeredRequests,
   fakeStripe,
   publishRealtime,
   editSession,
@@ -410,6 +421,7 @@ export const commands = {
 
 declare module "vitest/browser" {
   interface BrowserCommands {
+    answeredRequests(part: string): Promise<number>;
     fakeStripe<T = unknown>(path: string, method?: string): Promise<T>;
     publishRealtime(channel: string, message: { type: string }): Promise<void>;
     storageCors(): Promise<void>;

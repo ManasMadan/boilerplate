@@ -17,11 +17,12 @@ describe("the app's providers", () => {
   it("stay on an auth page when the session ends there", async () => {
     await signUp();
     await signOut();
-    const page = await renderPage(<DashboardPage />, { url: "/sign-in" });
-    await expect.element(page.getByText("Todos")).toBeVisible();
-    // The failed call cleared the cache and signed out; nothing moved.
-    await expect.poll(() => page.getByRole("heading", { name: /^Hi / }).query()).toBeNull();
+    await renderPage(<DashboardPage />, { url: "/sign-in" });
+    // The failed calls signed out what was left of the session; nothing moved.
+    // The test signed out once itself; the rest are the app (once per failed call).
+    await expect.poll(() => commands.answeredRequests("/api/auth/sign-out")).toBeGreaterThan(1);
     expect(currentUrl()).toBe("/sign-in");
+    expect(await commands.hardNavigations()).toEqual([]);
   });
 
   it("reload the page when the API asks for a newer app", async () => {

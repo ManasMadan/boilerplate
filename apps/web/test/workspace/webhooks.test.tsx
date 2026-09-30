@@ -29,6 +29,8 @@ describe("webhook endpoints", () => {
 
   it("adds an endpoint for chosen events and shows its signing secret once", async () => {
     await proWorkspace();
+    // Its own address: other tests add endpoints to the same database.
+    const url = `http://127.0.0.1:9/hooks/${crypto.randomUUID()}`;
     const page = await render();
     await userEvent.fill(page.getByLabelText("Endpoint URL"), "not a url");
     await userEvent.click(page.getByRole("button", { name: "Add endpoint" }));
@@ -36,7 +38,7 @@ describe("webhook endpoints", () => {
       .element(page.getByLabelText("Endpoint URL"))
       .toHaveAttribute("aria-invalid", "true");
 
-    await userEvent.fill(page.getByLabelText("Endpoint URL"), "http://127.0.0.1:9/hooks");
+    await userEvent.fill(page.getByLabelText("Endpoint URL"), url);
     await userEvent.fill(page.getByLabelText("Description"), "Our receiver");
     await userEvent.click(page.getByRole("checkbox", { name: /^todo\.created\.v1/ }));
     await userEvent.click(page.getByRole("checkbox", { name: /^todo\.deleted\.v1/ }));
@@ -48,11 +50,12 @@ describe("webhook endpoints", () => {
       .toMatch(/^whsec_/);
     await userEvent.click(page.getByRole("button", { name: "I've saved it" }));
 
-    const link = page.getByRole("link", { name: "http://127.0.0.1:9/hooks" });
+    const link = page.getByRole("link", { name: url });
     await expect.element(link).toBeVisible();
     await expect.element(page.getByText("Active")).toBeVisible();
     const [endpoint] = await commands.sql<{ id: string; events: string[] }>(
-      "SELECT id::text, events FROM webhooks.endpoint WHERE url = 'http://127.0.0.1:9/hooks' ORDER BY created_at DESC LIMIT 1",
+      "SELECT id::text, events FROM webhooks.endpoint WHERE url = $1",
+      [url],
     );
     expect(endpoint?.events).toEqual(["todo.created.v1"]);
     await userEvent.click(link);
