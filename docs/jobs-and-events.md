@@ -166,8 +166,8 @@ internal.
 ## The Python worker
 
 `apps/ai` produces and consumes `ai-ingest` with the Python `bullmq` package. Its job
-payload is the Pydantic model generated from the zod schema
-(`app/contracts/ai_ingest_job.py`), and its prefix and retry options come from
+payloads are the Pydantic models generated from the zod schemas, one per job
+(`app/contracts/ai_ingest_ingest_job.py`, `ai_ingest_summarize_job.py`), and its prefix and retry options come from
 `app/contracts/queue_settings.json`, generated from `queues` (see
 [codegen.md](codegen.md)). Job ids are the document id (`ingest`) and
 `<document id>-summary` (`summarize`). It publishes live nudges on the same Redis

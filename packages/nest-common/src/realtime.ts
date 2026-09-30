@@ -17,10 +17,12 @@
  * don't change.
  */
 import { EventEmitter } from "node:events";
+import { REALTIME_REDIS_PREFIX } from "@repo/contracts/realtime";
 import type { Redis } from "ioredis";
 import type { z } from "zod";
 
-const PREFIX = "realtime:";
+// The Python service publishes on the same channels, named from this constant.
+const PREFIX = REALTIME_REDIS_PREFIX;
 /** Messages a slow stream may fall behind by before the oldest are dropped. */
 const MAX_BUFFERED = 100;
 

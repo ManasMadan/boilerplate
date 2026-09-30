@@ -28,11 +28,14 @@ sequence.
 A job the Python service consumes is defined once, in zod:
 
 1. `packages/jobs/scripts/export-schemas.ts` writes each entry of its `schemas` map as
-   JSON Schema (`ai_ingest_job.json` is `{ meta, payload }` of the `ai-ingest` queue;
-   `realtime_message.json` is the realtime message), and the shared queues' Redis prefix
-   and job options to `queue-settings.json`.
+   JSON Schema, one per job (`ai_ingest_ingest_job.json` and
+   `ai_ingest_summarize_job.json` are `{ meta, payload }` of the `ai-ingest` queue's two
+   jobs; `realtime_message.json` is the realtime message), the job and queue names as
+   Literals, the error response and codes, and the shared queues' Redis prefix and job
+   options to `queue-settings.json`. It clears stale files first.
 2. `apps/ai`'s `gen` turns them into Pydantic v2 models with `datamodel-codegen`
-   (`app/contracts/ai_ingest_job.py`, `realtime_message.py`), formats them with ruff and
+   (`app/contracts/ai_ingest_ingest_job.py`, `ai_ingest_summarize_job.py`,
+   `realtime_message.py`, `error_response.py`, ...), formats them with ruff and
    copies the queue settings next to them.
 
 Both languages then validate the same shape, and Python uses the same prefix and retry
