@@ -66,7 +66,7 @@ export class EventsProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     const { meta, payload: event } = parseJob("events-notifications", "event", job.data);
     const { name } = event;
     // An event routed here by a newer relay this build doesn't know yet.

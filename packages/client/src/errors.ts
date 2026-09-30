@@ -7,8 +7,12 @@ import { ORPCError } from "@orpc/client";
 import { errorData } from "@repo/contracts/api/base";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 
+/** `instanceof ORPCError`, typed: the bare check narrows to ORPCError<any, any>. */
+const isOrpcError = (error: unknown): error is ORPCError<string, unknown> =>
+  error instanceof ORPCError;
+
 export function errorCode(error: unknown): ErrorCode {
-  if (error instanceof ORPCError && isErrorCode(error.code)) return error.code;
+  if (isOrpcError(error) && isErrorCode(error.code)) return error.code;
   // Network failures, CORS, aborted requests: the API was not reached.
   if (error instanceof TypeError) return "SERVICE_UNAVAILABLE";
   return "INTERNAL";
@@ -19,7 +23,7 @@ export const errorMessageKey = (error: unknown) => `errors.${errorCode(error)}` 
 
 /** An error's data as the contract defines it, or nothing when it has none (or not that). */
 function dataOf(error: unknown) {
-  if (!(error instanceof ORPCError)) return undefined;
+  if (!isOrpcError(error)) return undefined;
   const parsed = errorData.safeParse(error.data);
   return parsed.success ? parsed.data : undefined;
 }
@@ -35,7 +39,7 @@ export function errorRequestId(error: unknown): string | undefined {
 
 /** Per-field validation problems: `{ title: "too_small" }`. */
 export function fieldErrors(error: unknown): Record<string, string> {
-  if (!(error instanceof ORPCError) || error.code !== "VALIDATION_FAILED") return {};
+  if (!isOrpcError(error) || error.code !== "VALIDATION_FAILED") return {};
   const issues = dataOf(error)?.issues ?? [];
   return Object.fromEntries(issues.map((issue) => [issue.path.join("."), issue.code]));
 }

@@ -12,11 +12,11 @@ import { Injectable } from "@nestjs/common";
 import type { WebhookDeliveryError } from "@repo/contracts/api";
 import { tenantTx, withTenant } from "@repo/db";
 import {
-  AppError,
   type Database,
   describeError,
   InjectDatabase,
   InjectPinoLogger,
+  isAppError,
   keysFromEnv,
   PinoLogger,
   SecretBox,
@@ -202,7 +202,7 @@ export class DeliveryService {
  * isn't about the endpoint is rethrown: it's our bug, and it fails the job instead.
  */
 export function deliveryError(cause: unknown): WebhookDeliveryError {
-  if (cause instanceof AppError) {
+  if (isAppError(cause)) {
     if (cause.code === "DESTINATION_NOT_ALLOWED") return "destination_not_allowed";
     if (cause.code === "RESPONSE_TOO_LARGE") return "response_too_large";
     throw cause;

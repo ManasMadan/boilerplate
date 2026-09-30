@@ -25,10 +25,20 @@ import { API_KEY_HEADER, type ApiKeyScope, contract, type ErrorData } from "@rep
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
-import { AppError, currentContext, fromPrismaError, updateContext } from "@repo/nest-common";
+import {
+  AppError,
+  currentContext,
+  fromPrismaError,
+  isAppError,
+  updateContext,
+} from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
 import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
+
+/** `instanceof ORPCError`, typed: the bare check narrows to ORPCError<any, any>. */
+const isOrpcError = (error: unknown): error is ORPCError<string, unknown> =>
+  error instanceof ORPCError;
 
 export interface RpcContext {
   headers: Headers;
@@ -67,7 +77,7 @@ export function toContractError(thrown: unknown, log: LogError): ORPCError<Error
   const requestId = currentContext()?.requestId;
   // A Prisma error a client can act on (a conflict, a row gone) becomes its catalog code.
   const error = fromPrismaError(thrown) ?? thrown;
-  if (error instanceof AppError) {
+  if (isAppError(error)) {
     if (error.status >= 500) log(error, "error");
     else if (error.cause !== undefined) log(error, "debug");
     return new ORPCError(error.code, {
@@ -75,7 +85,7 @@ export function toContractError(thrown: unknown, log: LogError): ORPCError<Error
       data: { params: error.params, requestId },
     });
   }
-  if (error instanceof ORPCError) {
+  if (isOrpcError(error)) {
     // Input validation failures carry the zod issues; send codes and paths, not English messages.
     if (error.code === "BAD_REQUEST" && error.cause instanceof ValidationError) {
       const issues = error.cause.issues.map((issue) => ({

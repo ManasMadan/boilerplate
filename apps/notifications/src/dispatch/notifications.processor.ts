@@ -12,7 +12,7 @@ import { Dispatcher } from "./dispatcher";
  * Failures throw: BullMQ retries with the queue's backoff and finally keeps the job in
  * the failed set for inspection and replay.
  */
-async function handle(queue: NotificationQueue, job: Job, dispatcher: Dispatcher) {
+async function handle(queue: NotificationQueue, job: Job<unknown>, dispatcher: Dispatcher) {
   // BullMQ gives every job an id; producers choose it (createProducer requires one).
   const jobId = job.id as string;
   if (job.name === "deferred") {
@@ -55,7 +55,7 @@ export class BulkNotificationsProcessor extends JobProcessor {
   ) {
     super();
   }
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     if (job.name === "digests") {
       parseJob("notifications-bulk", "digests", job.data);
       await this.digests.scheduleDue();

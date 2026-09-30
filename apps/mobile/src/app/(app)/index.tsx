@@ -98,7 +98,7 @@ export default function Todos() {
             <Checkbox
               accessibilityLabel={todo.title}
               checked={todo.completed}
-              onCheckedChange={(checked) =>
+              onCheckedChange={(checked: boolean) =>
                 setCompleted.mutate(
                   { id: todo.id, completed: checked, version: todo.version },
                   { onError },

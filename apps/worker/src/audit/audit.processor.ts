@@ -17,7 +17,7 @@ export class AuditProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     const { meta, payload: event } = parseJob("events-audit", "event", job.data);
     await runWithContext({ ...meta, requestId: meta.requestId ?? `event:${event.id}` }, () =>
       this.database.write.auditLog.createMany({

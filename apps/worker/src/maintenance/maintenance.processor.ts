@@ -65,7 +65,7 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
     }
   }
 
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     parseJob("maintenance", job.name as Task, job.data);
     await this.run(job.name as Task);
   }

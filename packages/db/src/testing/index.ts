@@ -102,7 +102,9 @@ export async function prepareTemplate(template = TEMPLATE) {
 }
 
 async function isStale(client: pg.Client) {
-  const table = await client.query("SELECT to_regclass('public._prisma_migrations') AS t");
+  const table = await client.query<{ t: string | null }>(
+    "SELECT to_regclass('public._prisma_migrations') AS t",
+  );
   if (!table.rows[0]?.t) return false;
   const { rows } = await client.query<{ migration_name: string; checksum: string }>(
     "SELECT migration_name, checksum FROM public._prisma_migrations WHERE finished_at IS NOT NULL",

@@ -402,7 +402,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     // A server's requests always have a URL and a method.
     const url = new URL(request.url as string, "http://fake");
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk as Buffer);
+    for await (const chunk of request as AsyncIterable<Buffer>) chunks.push(chunk);
     const form = parseForm(Buffer.concat(chunks).toString());
     const json = (status: number, body: unknown) => {
       response.writeHead(status, { "content-type": "application/json" });

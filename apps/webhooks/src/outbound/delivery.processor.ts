@@ -39,7 +39,7 @@ export class DeliveryProcessor extends JobProcessor {
     this.queue = createProducer("webhook-deliveries", redis);
   }
 
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     const meta = {
       requestId: `job:${job.id}`,
       ...parseJob("webhook-deliveries", job.name as JobName<"webhook-deliveries">, job.data).meta,
@@ -47,7 +47,7 @@ export class DeliveryProcessor extends JobProcessor {
     await runWithContext(meta, () => this.handle(job));
   }
 
-  private async handle(job: Job) {
+  private async handle(job: Job<unknown>) {
     switch (job.name as JobName<"webhook-deliveries">) {
       case "deliver": {
         const { deliveryId, orgId } = parseJob("webhook-deliveries", "deliver", job.data).payload;

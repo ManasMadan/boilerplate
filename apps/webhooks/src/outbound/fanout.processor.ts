@@ -30,7 +30,7 @@ export class FanoutProcessor extends JobProcessor {
     this.deliveries = createProducer("webhook-deliveries", redis);
   }
 
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     const { meta, payload } = parseJob("events-webhooks", "event", job.data);
     const event = eventEnvelope.parse(payload);
     // Customer webhooks are per organization; events without one have no audience.

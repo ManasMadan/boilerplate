@@ -17,7 +17,7 @@ import {
 } from "@nestjs/common";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
-import { AppError } from "./errors";
+import { isAppError } from "./errors";
 import { describeError } from "./job-processor";
 import { fromPrismaError } from "./prisma-errors";
 
@@ -62,7 +62,7 @@ export function codeForStatus(status: number): ErrorCode {
 
 /** What an error thrown outside a procedure means, as a catalog error. */
 export function toHttpError(error: unknown): { code: ErrorCode; params: Params } {
-  const known = error instanceof AppError ? error : fromPrismaError(error);
+  const known = isAppError(error) ? error : fromPrismaError(error);
   if (known) return { code: known.code, params: known.params };
   if (error instanceof HttpException) return { code: codeForStatus(error.getStatus()), params: {} };
   const status = (error as Partial<FastifyError>)?.statusCode;

@@ -74,19 +74,24 @@ function addWebhooks(spec: Spec, converter: ZodToJsonSchemaConverter) {
 
 type Spec = Awaited<ReturnType<OpenAPIGenerator["generate"]>>;
 
+/** A procedure's meta: the contract types it `any` once it's any procedure. */
+const metaOf = (procedure: { "~orpc": { meta: unknown } }) =>
+  procedure["~orpc"].meta as ProcedureMeta;
+
 /**
  * Every operation takes a signed-in session; those whose contract names an API key scope
  * take a key with that scope too, and say so.
  */
 export function markApiKeyOperations(spec: Spec, router: unknown) {
   if (isContractProcedure(router)) {
-    const { route, meta } = router["~orpc"];
+    const { route } = router["~orpc"];
+    const meta = metaOf(router);
     const operation =
       route.path && route.method
         ? spec.paths?.[route.path]?.[route.method.toLowerCase() as "get"]
         : undefined;
     if (!operation) return;
-    const scope = (meta as ProcedureMeta).apiKeyScope;
+    const scope = meta.apiKeyScope;
     operation.security = scope ? [{ session: [] }, { apiKey: [] }] : [{ session: [] }];
     if (scope) {
       const note = `API keys need the \`${scope}\` scope.`;
@@ -95,6 +100,7 @@ export function markApiKeyOperations(spec: Spec, router: unknown) {
     return;
   }
   if (typeof router === "object" && router !== null) {
-    for (const child of Object.values(router)) markApiKeyOperations(spec, child);
+    const children: unknown[] = Object.values(router);
+    for (const child of children) markApiKeyOperations(spec, child);
   }
 }

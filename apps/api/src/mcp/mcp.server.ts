@@ -14,7 +14,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createTodoInput, deleteTodoInput, setTodoCompletedInput } from "@repo/contracts/api";
 import { pageInput } from "@repo/contracts/pagination";
-import { AppError, currentContext } from "@repo/nest-common";
+import { AppError, currentContext, isAppError } from "@repo/nest-common";
 import type { TodoService } from "../modules/todo";
 import type { McpCaller } from "./mcp.tokens";
 
@@ -43,7 +43,7 @@ export function createMcpServer(caller: McpCaller, deps: McpServerDependencies) 
         content: [{ type: "text", text: JSON.stringify(result ?? { ok: true }) }],
       };
     } catch (error) {
-      if (error instanceof AppError) {
+      if (isAppError(error)) {
         return {
           isError: true,
           content: [{ type: "text", text: `${error.code}: ${await deps.describeError(error)}` }],

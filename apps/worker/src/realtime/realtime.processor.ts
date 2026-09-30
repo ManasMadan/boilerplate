@@ -31,7 +31,7 @@ export class RealtimeProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     const { payload: event } = parseJob("events-realtime", "event", job.data);
     const target = realtimeFor(event);
     if (target) await publishRealtime(this.redis, target.channel, target.message);

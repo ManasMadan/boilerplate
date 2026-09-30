@@ -58,7 +58,8 @@ export function scrub(value: unknown, depth = 0): unknown {
   if (Array.isArray(value)) return value.map((item) => scrub(item, depth + 1));
   if (value instanceof Error) return value;
   const out: Record<string, unknown> = {};
-  for (const [key, inner] of Object.entries(value)) {
+  const fields: [string, unknown][] = Object.entries(value);
+  for (const [key, inner] of fields) {
     out[key] = SENSITIVE_KEYS.has(key.toLowerCase()) ? CENSOR : scrub(inner, depth + 1);
   }
   return out;

@@ -68,7 +68,7 @@ export class FilesProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job) {
+  async process(job: Job<unknown>) {
     const { payload } = parseJob("files", "process", job.data);
     await this.check(payload.fileId);
   }

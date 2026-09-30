@@ -125,7 +125,8 @@ export async function safeFetch(
         continue;
       }
 
-      const reader = response.body?.getReader();
+      const reader: ReadableStreamDefaultReader<Uint8Array> | undefined =
+        response.body?.getReader();
       const chunks: Uint8Array[] = [];
       let size = 0;
       while (reader) {

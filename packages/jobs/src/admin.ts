@@ -19,7 +19,7 @@ export interface FailedJob {
 }
 
 /** The most recently failed jobs first. */
-export async function failedJobs(queue: Queue, limit = 50): Promise<FailedJob[]> {
+export async function failedJobs(queue: Queue<unknown>, limit = 50): Promise<FailedJob[]> {
   const jobs = await queue.getFailed(0, limit - 1);
   return jobs.map((job) => ({
     // A job read back from a queue always has its id (it's in the key).

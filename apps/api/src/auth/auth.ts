@@ -157,6 +157,12 @@ function jobMeta(): JobMeta {
   };
 }
 
+/** A hook's request body and query: better-auth types them `any`; read them as unknown. */
+const requestOf = (ctx: { body?: unknown; query?: unknown }) => ({
+  body: ctx.body,
+  query: ctx.query,
+});
+
 export function createAuth({
   env,
   db,
@@ -372,7 +378,10 @@ export function createAuth({
         // The mobile app's sign-in goes through this redirect; left alone it sends anyone
         // anywhere over https from our own domain (phishing, planted OAuth state).
         if (ctx.path === "/expo-authorization-proxy") {
-          const target = String(ctx.query?.authorizationURL ?? "");
+          const { query } = requestOf(ctx);
+          const target = String(
+            (query as { authorizationURL?: unknown } | undefined)?.authorizationURL ?? "",
+          );
           if (!URL.canParse(target) || !PROVIDER_ORIGINS.has(new URL(target).origin)) {
             throw new APIError("BAD_REQUEST", {
               message: "Not a sign-in provider's address.",
@@ -384,14 +393,14 @@ export function createAuth({
         // taken here, for new invitations and resends alike.
         if (ctx.path === "/organization/invite-member") {
           const session = await getSessionFromCtx(ctx);
-          const email = (ctx.body as { email?: unknown } | undefined)?.email;
+          const email = (requestOf(ctx).body as { email?: unknown } | undefined)?.email;
           if (session && typeof email === "string")
             await emailLimits.invitation(session.user.id, email);
         }
         // Per account, on top of the per-address limits above (account-limits.ts).
         await accountLimits({
           path: ctx.path,
-          body: ctx.body,
+          body: requestOf(ctx).body,
           secondFactor: ctx.getCookie(ctx.context.createAuthCookie("two_factor").name) ?? undefined,
         });
       }),
