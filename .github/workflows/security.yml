@@ -4,8 +4,11 @@
 # disallowed-license dependencies, and CodeQL alerts (through branch protection).
 name: Security
 
+# The merge queue too: its required checks (the secrets scan, dependency review, OSV)
+# must report there, or a queued pull request waits forever.
 on:
   pull_request:
+  merge_group:
   push:
     branches: [master]
   schedule:
@@ -42,8 +45,12 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
+  # Not in the merge queue, where it has nothing new to scan (the pull request's own run
+  # scanned the same commits) and the action doesn't know the event: skipped, the
+  # required check passes.
   secrets:
     name: Secrets in the history
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: { contents: read }
@@ -59,7 +66,8 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
   # New dependencies in a pull request: no known vulnerabilities, and only licenses
-  # compatible with shipping a proprietary product.
+  # compatible with shipping a proprietary product. Skipped (so passing) in the merge
+  # queue: the pull request's own run reviewed the same change.
   dependencies:
     name: Dependency review
     if: github.event_name == 'pull_request'

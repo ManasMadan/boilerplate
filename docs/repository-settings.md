@@ -143,7 +143,9 @@ To check: `gh api "repos/$REPO/rulesets" --jq '.[].name'` prints `master` and
   `security.yml`, **Secrets in the history**, **Dependency review** and **Known
   vulnerabilities (OSV)**.
 - Require code scanning results: **CodeQL**, blocking on high or higher.
-- Optional: **Require merge queue** (CI already runs on `merge_group`).
+- Optional: **Require merge queue** (CI and the Security workflow run on `merge_group`;
+  there the secrets scan and dependency review are skipped, which the ruleset counts as
+  passing, since the pull request's own run already did them).
 - Bypass list: the repository's GitHub App (below), so the staging bump can reach
   `master` without a pull request. Nobody else.
 

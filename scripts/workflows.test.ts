@@ -111,3 +111,17 @@ describe("the GitHub-only parts", () => {
     if (previews.includes("github:")) expect(table).toContain("`pullRequest.github`");
   });
 });
+
+describe("the merge queue", () => {
+  // The checks the ruleset requires come from these (docs/repository-settings.md).
+  it.each(["ci.yml", "security.yml"])("runs %s, so its required checks report there", (file) => {
+    expect(Object.keys(workflow(file).on)).toContain("merge_group");
+  });
+
+  it("skips what the pull request's own run already did, which counts as passing", () => {
+    const { jobs } = workflow("security.yml");
+    expect(jobs.secrets?.if).toBe("github.event_name != 'merge_group'");
+    expect(jobs.dependencies?.if).toBe("github.event_name == 'pull_request'");
+    expect(jobs.osv?.if).toBeUndefined();
+  });
+});
