@@ -56,7 +56,21 @@ describe("safeFetch", () => {
     await expect(safeFetch("http://169.254.169.254/", { allowHttp: true })).rejects.toBeInstanceOf(
       AppError,
     );
-    await expect(safeFetch("http://localhost:1/", { allowHttp: true })).rejects.toThrow();
+  });
+
+  it("checks the addresses a hostname resolves to, and connects to the one it checked", async () => {
+    const named = base.replace("127.0.0.1", "localhost");
+    await expect(safeFetch(`${named}/`, { allowHttp: true })).rejects.toMatchObject({
+      code: "DESTINATION_NOT_ALLOWED",
+      params: { hostname: "localhost" },
+    });
+    await expect(
+      safeFetch(`${named}/`, { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1"] }),
+    ).resolves.toMatchObject({ status: 200, body: "ok" });
+    // A name that doesn't resolve fails as the lookup did.
+    await expect(safeFetch("http://unknown-host.invalid/", { allowHttp: true })).rejects.toThrow(
+      /fetch failed/,
+    );
   });
 
   it("requires https unless http is explicitly allowed", async () => {

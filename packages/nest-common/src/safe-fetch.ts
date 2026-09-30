@@ -109,6 +109,10 @@ export async function safeFetch(
         redirect: "manual",
         dispatcher,
         signal: deadline,
+      }).catch((error: unknown) => {
+        // A lookup refused above reaches here as undici's "fetch failed", with the
+        // refusal as its cause: that's the answer, not a failure to connect.
+        throw (error as Error).cause instanceof AppError ? (error as Error).cause : error;
       });
 
       const location = response.headers.get("location");
