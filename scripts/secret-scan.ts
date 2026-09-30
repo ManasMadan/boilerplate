@@ -26,19 +26,28 @@ let command: [string, string[]];
 if (has("gitleaks", ["version"])) {
   command = ["gitleaks", [...ARGS, "."]];
 } else if (has("docker", ["info"])) {
+  // Mounted at their own paths: in a git worktree, .git is a file naming the main
+  // repository's git directory by absolute path, which must resolve in the container too.
+  const gitDir = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  }).stdout.trim();
+  const mounts = [ROOT, ...(gitDir.startsWith(`${ROOT}/`) ? [] : [gitDir])].flatMap((path) => [
+    "-v",
+    `${path}:${path}`,
+  ]);
   command = [
     "docker",
     [
       "run",
       "--rm",
       "--memory=256m",
-      "-v",
-      `${ROOT}:/repo`,
+      ...mounts,
       "-w",
-      "/repo",
+      ROOT,
       `ghcr.io/gitleaks/gitleaks:${VERSION}`,
       ...ARGS,
-      "/repo",
+      ROOT,
     ],
   ];
 } else {
@@ -47,5 +56,15 @@ if (has("gitleaks", ["version"])) {
   );
   process.exit(1);
 }
-const scan = spawnSync(command[0], command[1], { cwd: ROOT, stdio: "inherit" });
+const scan = spawnSync(command[0], command[1], {
+  cwd: ROOT,
+  stdio: ["inherit", "inherit", "pipe"],
+  encoding: "utf8",
+});
+process.stderr.write(scan.stderr ?? "");
+// gitleaks exits 0 when git itself fails (it then scanned nothing): that's no pass.
+if (scan.status === 0 && /\[git\] fatal/.test(scan.stderr ?? "")) {
+  fail("gitleaks couldn't read the staged changes (git failed above), so nothing was scanned");
+  process.exit(1);
+}
 process.exit(scan.status ?? 1);
