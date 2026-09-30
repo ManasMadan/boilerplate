@@ -334,7 +334,8 @@ OpenTofu installs Argo CD on each cluster with `argocd/argo-cd-values.yaml` and 
 
 - **platform**: every add-on in `platform/addons` on every cluster with an environment:
   operators, the gateway and its certificates (`platform/config`), the mail server, the
-  add-ons' Secrets.
+  add-ons' Secrets. They roll out in the order of their `wave` (a step per wave, each
+  once the one before is healthy), so what needs a CRD comes after what installs it.
 - **observability**: `platform/addons/observability` on clusters that opt in.
 - **envs**: the data and stack releases on the staging and production clusters, data
   first, and each environment's Secrets with the stack. A merge to master deploys

@@ -84,3 +84,31 @@ describe("what each environment deploys", () => {
     expect(read("deploy/environments/production/release.yaml")).toHaveProperty("revision");
   });
 });
+
+describe("the add-ons' order", () => {
+  const waves = (dir: string) =>
+    readdirSync(join(ROOT, dir))
+      .filter((file) => file.endsWith(".yaml"))
+      .map(
+        (file) =>
+          (Bun.YAML.parse(readFileSync(join(ROOT, dir, file), "utf8")) as { wave: string }).wave,
+      );
+  const steps = (file: string) =>
+    (
+      Bun.YAML.parse(readFileSync(join(APPSETS, file), "utf8")) as {
+        spec: {
+          strategy: { rollingSync: { steps: { matchExpressions: { values: string[] }[] }[] } };
+        };
+      }
+    ).spec.strategy.rollingSync.steps.flatMap((step) => step.matchExpressions[0]?.values ?? []);
+
+  it.each([
+    ["platform.yaml", "deploy/platform/addons"],
+    ["observability.yaml", "deploy/platform/addons/observability"],
+  ])("%s rolls out every wave of %s, in order", (appset, dir) => {
+    const expected = [...new Set(waves(dir))]
+      .sort((a, b) => Number(a) - Number(b))
+      .map((w) => `wave${w}`);
+    expect(steps(appset)).toEqual(expected);
+  });
+});

@@ -45,11 +45,39 @@ spec:
               pathParamPrefix: file
               files:
                 - path: deploy/platform/addons/*.yaml
+  # Add-ons roll out in the order of their waves, each once the one before is healthy
+  # (the CRDs an add-on needs are installed by one of an earlier wave). A sync-wave
+  # annotation on generated Applications orders nothing; progressive syncs do (OpenTofu's
+  # bootstrap turns them on). A new wave needs a step here.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-30"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-20"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-10"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave0"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave10"]
   template:
     metadata:
       name: "{{ .name }}-{{ .addon }}"
-      annotations:
-        argocd.argoproj.io/sync-wave: "{{ .wave }}"
+      labels:
+        wave: "wave{{ .wave }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
