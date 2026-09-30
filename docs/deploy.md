@@ -121,7 +121,10 @@ Adding the `preview` label to a pull request from this repository (not a fork) r
 `sha-<commit>` and comments the address, `https://pr-<number>.preview.<domain>` (the
 `PREVIEW_DOMAIN` repository variable). Argo CD's previews ApplicationSet deploys it to its
 own namespace with its own database and Valkey, and the Secrets every preview shares
-(`deploy/environments/preview/secrets/`). Argo CD notices a new head commit before its
+(`deploy/environments/preview/secrets/`). A preview's mail never leaves it: it goes to a
+Mailpit in its namespace (`kubectl -n pr-<number> port-forward svc/mailpit 8025`), so a
+pull request's code can't mail real people or spend the domain's reputation. Argo CD
+notices a new head commit before its
 images are pushed, so the first sync fails and retries with backoff for about half an
 hour until they are. New pushes rebuild; removing the label or closing the pull request
 deletes it.

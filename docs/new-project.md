@@ -135,7 +135,7 @@ metadata:
   name: boilerplate-notifications
 stringData:
   UNSUBSCRIBE_SECRET: ""   # the api's value
-  SMTP_URL: ""             # smtps://no-reply%40<email domain>:<SMTP_PASSWORD>@<mail host>:465
+  SMTP_URL: ""             # smtps://no-reply%40<email domain>:<SMTP_PASSWORD>@<mail host>:465 (not for previews: their mail stays in their own Mailpit)
   # SMS_PROVIDER: twilio           # with the three below
   # TWILIO_ACCOUNT_SID: ""         # AC…
   # TWILIO_AUTH_TOKEN: ""

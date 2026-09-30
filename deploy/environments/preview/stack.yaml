@@ -26,7 +26,10 @@ services:
     env:
       FILE_SCANNER: none
   notifications:
+    # Mail stays in the preview: its own Mailpit (the data chart's), over TLS with a
+    # certificate from the namespace's own authority, which this trusts. Mailpit takes
+    # any login, and nothing leaves.
+    caBundle: mailpit-tls
     env:
-      # Mail goes through the hosting cluster's mail server (SMTP_URL is in the
-      # Secrets). Your sender, on the hosting cluster's email domain.
+      SMTP_URL: smtps://no-reply%40preview.invalid:preview@mailpit:1025
       EMAIL_FROM: Boilerplate Preview <no-reply@example.com>

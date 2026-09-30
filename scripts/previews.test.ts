@@ -44,6 +44,18 @@ describe("the previews ApplicationSet", () => {
   });
 });
 
+describe("a preview's mail", () => {
+  const values = Bun.YAML.parse(read("deploy/environments/preview/stack.yaml")) as {
+    services: { notifications: { caBundle: string; env: { SMTP_URL: string } } };
+  };
+
+  it("goes to the preview's own Mailpit, never out", () => {
+    const { caBundle, env } = values.services.notifications;
+    expect(new URL(env.SMTP_URL).host).toBe("mailpit:1025");
+    expect(caBundle).toBe("mailpit-tls");
+  });
+});
+
 describe("the sops plugin", () => {
   const values = Bun.YAML.parse(read("deploy/argocd/argo-cd-values.yaml")) as {
     configs: { cmp: { plugins: { sops: { generate: { args: string[] } } } } };

@@ -138,7 +138,18 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "namespace": { "type": "string" },
-        "quota": { "type": "object", "additionalProperties": { "type": "string" } }
+        "quota": { "type": "object", "additionalProperties": { "type": "string" } },
+        "mailpit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "image", "tlsSecret"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "image": { "type": "string", "minLength": 1 },
+            "tlsSecret": { "type": "string", "minLength": 1 },
+            "resources": { "$ref": "#/$defs/resources" }
+          }
+        }
       }
     },
     "networkPolicy": {

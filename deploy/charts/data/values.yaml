@@ -161,3 +161,12 @@ preview:
     requests.memory: 8Gi
     limits.memory: 12Gi
     persistentvolumeclaims: "4"
+  # Where a preview's mail goes instead of out (templates/preview-mail.yaml).
+  mailpit:
+    enabled: true
+    image: docker.io/axllent/mailpit:v1.31.3
+    # Its certificate, with the authority the notifications service trusts (ca.crt).
+    tlsSecret: mailpit-tls
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }

@@ -360,6 +360,27 @@ tests:
       - equal: { path: 'spec.hard["requests.memory"]', value: 8Gi }
         documentSelector: { path: kind, value: ResourceQuota }
 
+  - it: catches a preview's mail in a Mailpit of its own, over TLS from its own authority
+    template: preview-mail.yaml
+    set:
+      preview.enabled: true
+      preview.namespace: pr-1
+    asserts:
+      - hasDocuments: { count: 7 }
+      - equal: { path: spec.dnsNames, value: [mailpit] }
+        documentIndex: 3
+      - equal: { path: spec.issuerRef, value: { name: mailpit-ca, kind: Issuer } }
+        documentIndex: 3
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: MP_SMTP_REQUIRE_TLS, value: "true" }
+        documentIndex: 4
+
+  - it: runs no Mailpit outside a preview
+    template: preview-mail.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
+
   - it: needs a namespace for a preview
     template: preview.yaml
     set:
