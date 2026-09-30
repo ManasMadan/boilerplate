@@ -1,6 +1,12 @@
-import { describe, expect, it } from "bun:test";
-import { join } from "node:path";
-import { type FileCoverage, isSource, mergeLcov, misses, toLcov } from "./coverage";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { $ } from "bun";
+import { checkCoverage, type FileCoverage, isSource, mergeLcov, misses, toLcov } from "./coverage";
+import { captureOutput } from "./stand-ins";
+
+afterEach(() => mock.restore());
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -63,7 +69,7 @@ describe("merging coverage", () => {
   it("writes the merged report back as LCOV that reads the same", () => {
     const coverage = mergeLcov(
       new Map(),
-      report("src/a.ts", ["FN:1,f", "FNDA:2,f", "BRDA:1,0,0,1", "DA:1,2"]),
+      report("src/a.ts", ["FN:1,f", "FNDA:2,f", "BRDA:1,0,0,1", "DA:3,0", "DA:1,2"]),
       join(ROOT, "packages/pkg"),
     );
     const again = mergeLcov(new Map(), toLcov(coverage), ROOT);
@@ -86,5 +92,76 @@ describe("which files the rule applies to", () => {
     ["apps/api/vitest.config.ts", false],
   ])("%s → %s", (path, expected) => {
     expect(isSource(path)).toBe(expected);
+  });
+});
+
+describe("the check", () => {
+  /** A repository holding `files` (path → content), all tracked. */
+  async function repo(files: Record<string, string>) {
+    const root = mkdtempSync(join(tmpdir(), "coverage-"));
+    await $`git init -q`.cwd(root);
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    await $`git add .`.cwd(root);
+    return root;
+  }
+
+  function run(scopes: string[], root: string) {
+    const printed = captureOutput();
+    const code = checkCoverage(scopes, root);
+    const output = printed();
+    mock.restore();
+    return { code, printed: output };
+  }
+
+  it("fails without reports to check", async () => {
+    const { code, printed } = run([], await repo({ "scripts/a.ts": "" }));
+    expect(code).toBe(1);
+    expect(printed).toContain("No coverage reports");
+  });
+
+  it("names what each file misses, and the files no test loads, except the listed ones", async () => {
+    const root = await repo({
+      "scripts/full.ts": "",
+      "scripts/short.ts": "",
+      "scripts/unloaded.ts": "",
+      "scripts/listed.ts": "",
+      "packages/pkg/src/index.ts": "",
+      "docs/testing.md": "## Coverage exceptions\n| `scripts/listed.ts` | native only | e2e |\n",
+      "coverage/bun/lcov.info": [
+        report("scripts/full.ts", ["DA:1,1"]),
+        report("scripts/short.ts", ["FN:2,run", "FNDA:0,run", "BRDA:3,0,0,0", "DA:4,0"]),
+        report("scripts/listed.ts", ["DA:1,0"]),
+        report("scripts/full.test.ts", ["DA:1,0"]),
+      ].join("\n"),
+      "packages/pkg/coverage/lcov.info": report("src/index.ts", ["DA:1,1"]),
+    });
+    const { code, printed } = run(["scripts"], root);
+    expect(code).toBe(1);
+    expect(printed).toContain("scripts/short.ts: lines 4; branches on 3; functions run");
+    expect(printed).toContain("scripts/unloaded.ts: no test loads it");
+    expect(printed).not.toContain("listed.ts");
+    expect(printed).not.toContain("packages/pkg");
+    expect(printed).toContain("4 source files, 2 reports: 2 below 100%.");
+    // The merged report keeps every source file, whatever the scope, and no tests.
+    const merged = readFileSync(join(root, "coverage/merged.lcov"), "utf8");
+    expect(merged).toContain("SF:packages/pkg/src/index.ts");
+    expect(merged).not.toContain("full.test.ts");
+  });
+
+  it("passes when every file in scope is covered", async () => {
+    const root = await repo({
+      "packages/pkg/src/index.ts": "",
+      "scripts/short.ts": "",
+      "packages/pkg/coverage/lcov.info": report("src/index.ts", ["DA:1,1"]),
+      "coverage/bun/lcov.info": report("scripts/short.ts", ["DA:1,0"]),
+    });
+    expect(run(["packages/pkg/"], root)).toEqual({
+      code: 0,
+      printed: "1 source files, 2 reports: 0 below 100%.",
+    });
+    expect(run([], root).code).toBe(1);
   });
 });

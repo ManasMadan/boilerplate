@@ -48,12 +48,17 @@ const add = <K>(map: Map<K, number>, key: K, hits: number) =>
  * become relative to the repository (`base` is the directory the report's relative
  * paths are relative to).
  */
-export function mergeLcov(coverage: Map<string, FileCoverage>, lcov: string, base: string) {
+export function mergeLcov(
+  coverage: Map<string, FileCoverage>,
+  lcov: string,
+  base: string,
+  root = ROOT,
+) {
   let file: FileCoverage | undefined;
   for (const line of lcov.split("\n")) {
     const [tag, rest = ""] = line.split(/:(.*)/s);
     if (tag === "SF") {
-      const path = relative(ROOT, rest.startsWith("/") ? rest : join(base, rest));
+      const path = relative(root, rest.startsWith("/") ? rest : join(base, rest));
       file = coverage.get(path) ?? empty();
       coverage.set(path, file);
       continue;
@@ -108,17 +113,19 @@ export function toLcov(coverage: Map<string, FileCoverage>) {
 }
 
 /** Where the suites leave their reports, and the directory each one's paths are from. */
-export const REPORTS: { path: string; base: string }[] = [
-  ...["apps", "packages"].flatMap((dir) =>
-    existsSync(join(ROOT, dir))
-      ? [...new Bun.Glob("*/coverage/lcov.info").scanSync(join(ROOT, dir))].map((path) => ({
-          path: join(dir, path),
-          base: join(ROOT, dir, path.split("/")[0] as string),
-        }))
-      : [],
-  ),
-  { path: "coverage/bun/lcov.info", base: ROOT },
-];
+export function reports(root = ROOT): { path: string; base: string }[] {
+  return [
+    ...["apps", "packages"].flatMap((dir) =>
+      existsSync(join(root, dir))
+        ? [...new Bun.Glob("*/coverage/lcov.info").scanSync(join(root, dir))].map((path) => ({
+            path: join(dir, path),
+            base: join(root, dir, path.split("/")[0] as string),
+          }))
+        : [],
+    ),
+    { path: "coverage/bun/lcov.info", base: root },
+  ];
+}
 
 /** Source files the rule applies to: tracked code, not tests, generated code or configs. */
 export function isSource(path: string) {
@@ -130,28 +137,31 @@ export function isSource(path: string) {
   );
 }
 
-if (import.meta.main) {
+/**
+ * Merges the reports under `root`, writes coverage/merged.lcov and names every source file
+ * under `scopes` (all of them when empty) below 100%; the exit code.
+ */
+export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): number {
   const coverage = new Map<string, FileCoverage>();
-  const found = REPORTS.filter(({ path }) => existsSync(join(ROOT, path)));
+  const found = reports(root).filter(({ path }) => existsSync(join(root, path)));
   if (found.length === 0) {
     console.error("No coverage reports: run `bun run test:coverage` first.");
-    process.exit(1);
+    return 1;
   }
   for (const { path, base } of found)
-    mergeLcov(coverage, readFileSync(join(ROOT, path), "utf8"), base);
-  mkdirSync(join(ROOT, "coverage"), { recursive: true });
+    mergeLcov(coverage, readFileSync(join(root, path), "utf8"), base, root);
+  mkdirSync(join(root, "coverage"), { recursive: true });
   const measured = new Map([...coverage].filter(([path]) => isSource(path)));
-  writeFileSync(join(ROOT, "coverage/merged.lcov"), `${toLcov(measured)}\n`);
-  const scopes = process.argv.slice(2);
+  writeFileSync(join(root, "coverage/merged.lcov"), `${toLcov(measured)}\n`);
   const inScope = (path: string) =>
     scopes.length === 0 || scopes.some((scope) => path.startsWith(scope.replace(/\/?$/, "/")));
   for (const path of measured.keys()) if (!inScope(path)) measured.delete(path);
 
   // A source file no test ever loads is in no report at all: it counts as uncovered.
-  const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: ROOT }).stdout.toString().split("\n");
+  const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: root }).stdout.toString().split("\n");
   const unloaded = tracked.filter((path) => isSource(path) && inScope(path) && !measured.has(path));
 
-  const exceptions = listedFiles(ROOT);
+  const exceptions = listedFiles(root);
   for (const path of unloaded.filter((path) => !exceptions.has(path))) {
     console.error(`  \x1b[31m✖\x1b[0m ${path}: no test loads it`);
   }
@@ -173,5 +183,7 @@ if (import.meta.main) {
   console.log(
     `${measured.size + unloaded.length} source files, ${found.length} reports: ${failing} below 100%.`,
   );
-  process.exit(failing > 0 ? 1 : 0);
+  return failing > 0 ? 1 : 0;
 }
+
+if (import.meta.main) process.exit(checkCoverage());
