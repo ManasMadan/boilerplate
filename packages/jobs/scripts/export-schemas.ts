@@ -84,12 +84,12 @@ for (const queue of shared) {
 }
 
 // Names for the Pydantic classes of the parts Python code refers to.
-const titles = new Map<z.ZodType, string>([
+const titles = new Map<z.core.$ZodType, string>([
   [errorCode, "ErrorCode"],
   [errorData, "ErrorData"],
   [errorIssue, "ErrorIssue"],
   // Each realtime message by what it says: "documents.changed" → DocumentsChanged.
-  ...realtimeMessage.options.map((option): [z.ZodType, string] => [
+  ...realtimeMessage.options.map((option): [z.core.$ZodType, string] => [
     option,
     pascal(option.shape.type.value.replace(".", "-")),
   ]),
