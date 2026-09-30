@@ -10,7 +10,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type { EventName } from "@repo/contracts/events";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer } from "@repo/jobs";
-import { createRedis, keysFromEnv, SecretBox } from "@repo/nest-common";
+import { createRedis, keysFromEnv, SecretBox, webhookSecretContext } from "@repo/nest-common";
 import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import { eventually } from "@repo/testing/eventually";
 import pg from "pg";
@@ -75,30 +75,32 @@ async function endpoint(
 ) {
   const orgId = randomUUID();
   const secret = `whsec_${randomBytes(24).toString("base64")}`;
-  const id = await asRole("app_api", async (client) => {
+  const endpointId = randomUUID();
+  const context = webhookSecretContext(endpointId);
+  await asRole("app_api", async (client) => {
     await client.query(
       `INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)`,
       [orgId],
     );
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
-    const { rows } = await client.query<{ id: string }>(
+    await client.query(
       `INSERT INTO webhooks.endpoint
-         (org_id, url, events, secret, previous_secret, previous_secret_expires_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id`,
+         (id, org_id, url, events, secret, previous_secret, previous_secret_expires_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
       [
+        endpointId,
         orgId,
         options.url ?? receiverUrl,
         options.events ?? [],
-        box.encrypt(secret),
-        options.previous ? box.encrypt(options.previous.secret) : null,
+        box.encrypt(secret, context),
+        options.previous ? box.encrypt(options.previous.secret, context) : null,
         options.previous?.expiresAt ?? null,
       ],
     );
     await client.query("COMMIT");
-    return rows[0]?.id as string;
   });
-  return { orgId, endpointId: id, secret };
+  return { orgId, endpointId, secret };
 }
 
 async function delivery(deliveryId: string) {

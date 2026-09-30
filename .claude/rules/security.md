@@ -35,7 +35,9 @@ paths:
   Compare secrets and signatures with `timingSafeEqual`.
 - Secrets live in `.env` (set with `bun run env:set`), never in code, fixtures, logs or
   error params. Secrets stored in the database are encrypted with `SecretBox`
-  (`ENCRYPTION_KEYS`). Signed links use `createSignedTokens`.
+  (`ENCRYPTION_KEYS`), bound to their row: `box.encrypt(value, "<table>:<id>")`, and
+  the same context to decrypt. better-auth encrypts its own columns under
+  BETTER_AUTH_SECRETS; don't reach into those. Signed links use `createSignedTokens`.
 - Rate-limit anything that sends messages, costs money or checks a secret: the
   procedure's `meta({ rateLimit })` in packages/contracts (fails closed by default),
   `createRateLimiter` elsewhere, better-auth's `rateLimit` for auth routes.

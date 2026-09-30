@@ -21,6 +21,7 @@ import {
   PinoLogger,
   SecretBox,
   safeFetch,
+  webhookSecretContext,
 } from "@repo/nest-common";
 import { env } from "../env";
 import { emitEvent } from "../outbox";
@@ -42,13 +43,15 @@ export class DeliveryService {
 
   /** The endpoint's signing secrets, newest first: the previous one until its overlap ends. */
   private secretsOf(endpoint: {
+    id: string;
     secret: string;
     previousSecret: string | null;
     previousSecretExpiresAt: Date | null;
   }) {
-    const secrets = [this.box.decrypt(endpoint.secret)];
+    const context = webhookSecretContext(endpoint.id);
+    const secrets = [this.box.decrypt(endpoint.secret, context)];
     if (endpoint.previousSecret && (endpoint.previousSecretExpiresAt ?? new Date(0)) > new Date())
-      secrets.push(this.box.decrypt(endpoint.previousSecret));
+      secrets.push(this.box.decrypt(endpoint.previousSecret, context));
     return secrets;
   }
 

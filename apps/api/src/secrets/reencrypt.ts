@@ -1,15 +1,15 @@
 /**
  * Moves every encrypted value to the newest key, so older keys can be retired:
  * better-auth's values (OAuth tokens, 2FA secrets and backup codes, JWT signing keys) to
- * the newest BETTER_AUTH_SECRETS version, and webhook endpoint secrets to the active
- * ENCRYPTION_KEYS key. Run by `bun run --filter @repo/api secrets:reencrypt` (src/reencrypt.ts).
+ * the newest BETTER_AUTH_SECRETS version, and webhook endpoint secrets (the current and
+ * the previous one) to the active ENCRYPTION_KEYS key and SecretBox's current format. Run by `bun run --filter @repo/api secrets:reencrypt` (src/reencrypt.ts).
  *
  * Safe while the services run and safe to repeat: each row is written only if it still
  * holds the value that was read (a token refreshed meanwhile is left alone and is
  * already on the newest key), and values already on the newest key are skipped.
  */
 import { type Database, tenantTx } from "@repo/db";
-import type { SecretBox } from "@repo/nest-common";
+import { type SecretBox, webhookSecretContext } from "@repo/nest-common";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import type { authEncryptionKey } from "../auth/secrets";
 
@@ -108,12 +108,23 @@ export async function reencryptSecrets(
   )) {
     result.webhookEndpoints += await tenantTx(db, org.id, async (tx) => {
       let count = 0;
-      const endpoints = await tx.webhookEndpoint.findMany({ select: { id: true, secret: true } });
-      for (const endpoint of endpoints) {
-        if (!box.needsRotation(endpoint.secret)) continue;
+      const endpoints = await tx.webhookEndpoint.findMany({
+        select: { id: true, secret: true, previousSecret: true },
+      });
+      for (const { id, secret, previousSecret } of endpoints) {
+        // The previous secret too: it still signs until its overlap ends, and would fail
+        // to decrypt once its key is dropped.
+        const context = webhookSecretContext(id);
+        const refresh = (value: string) =>
+          box.needsRotation(value) ? box.encrypt(box.decrypt(value, context), context) : value;
+        const data = {
+          secret: refresh(secret),
+          previousSecret: previousSecret && refresh(previousSecret),
+        };
+        if (data.secret === secret && data.previousSecret === previousSecret) continue;
         const updated = await tx.webhookEndpoint.updateMany({
-          where: { id: endpoint.id, secret: endpoint.secret },
-          data: { secret: box.encrypt(box.decrypt(endpoint.secret)) },
+          where: { id, secret, previousSecret },
+          data,
         });
         count += updated.count;
       }

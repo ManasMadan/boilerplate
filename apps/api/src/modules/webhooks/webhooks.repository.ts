@@ -39,6 +39,7 @@ export class WebhooksRepository {
   createEndpoint(
     tx: Tx,
     data: {
+      id: string;
       orgId: string;
       url: string;
       description: string;

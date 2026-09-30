@@ -22,6 +22,7 @@ import {
   keysFromEnv,
   newWebhookSecret,
   SecretBox,
+  webhookSecretContext,
 } from "@repo/nest-common";
 import { env } from "../../env";
 import { emitEvent } from "../../outbox";
@@ -65,16 +66,19 @@ export class WebhooksService implements OnApplicationShutdown {
     await this.billing.require(orgId, "webhooks");
     await assertDeliverableUrl(input.url);
     const secret = newWebhookSecret();
+    // Chosen here, not by the database: the secret is encrypted for its row.
+    const id = randomUUID();
     return tenantTx(this.database.write, orgId, async (tx) => {
       if ((await this.repository.countEndpoints(tx)) >= WEBHOOK_ENDPOINT_LIMIT) {
         throw new AppError("WEBHOOK_ENDPOINT_LIMIT", { params: { max: WEBHOOK_ENDPOINT_LIMIT } });
       }
       const endpoint = await this.repository.createEndpoint(tx, {
+        id,
         orgId,
         url: input.url,
         description: input.description ?? "",
         events: input.events ?? [],
-        secret: this.box.encrypt(secret),
+        secret: this.box.encrypt(secret, webhookSecretContext(id)),
         createdById: userId,
       });
       await emitEvent(tx, "webhook.endpoint_created.v1", endpoint.id, {
@@ -146,7 +150,8 @@ export class WebhooksService implements OnApplicationShutdown {
       const current = await this.repository.findSecret(tx, id);
       if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
       await this.repository.setSecret(tx, id, {
-        secret: this.box.encrypt(secret),
+        secret: this.box.encrypt(secret, webhookSecretContext(id)),
+        // Same row, so the same context: the ciphertext moves as it is.
         previousSecret: current.secret,
         previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000),
       });

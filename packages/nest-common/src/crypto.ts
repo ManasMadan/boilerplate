@@ -5,11 +5,24 @@
  *
  *   ENCRYPTION_KEYS="2026-09:base64key,2026-01:base64oldkey"   (first = active)
  *   const box = new SecretBox(keysFromEnv(env.ENCRYPTION_KEYS));
- *   const stored = box.encrypt("whsec_...");    // "v1.2026-09.<iv>.<ciphertext>"
- *   box.decrypt(stored);                        // any listed key id still decrypts
+ *   const stored = box.encrypt("whsec_...", `webhook_endpoint:${id}`);  // "v2.2026-09.<iv>.<ciphertext>"
+ *   box.decrypt(stored, `webhook_endpoint:${id}`);  // any listed key id still decrypts
+ *
+ * The second argument names the row the value belongs to and is bound to the
+ * ciphertext (GCM's additional data): a value copied into another row fails to decrypt,
+ * so someone who can write the table can't make one endpoint sign with another's
+ * secret. Values written before that (`v1`) still decrypt, without the check, and
+ * `needsRotation` reports them.
  *
  * Rotation: prepend a new key, deploy, re-encrypt in the background (decrypt + encrypt
- * with the active key), then drop the old key.
+ * with the active key: `bun run --filter @repo/api secrets:reencrypt`), then drop the
+ * old key.
+ *
+ * This is one of two schemes for secrets at rest. better-auth encrypts its own columns
+ * (OAuth tokens, 2FA secrets, JWT signing keys) with `symmetricEncrypt` under
+ * BETTER_AUTH_SECRETS; it has to, since better-auth reads and writes them itself.
+ * Everything the app stores itself uses this one, which a KMS can take over (below).
+ * The re-encryption job moves both onto their newest keys.
  *
  * Seam: keys come from a `KeyProvider`. Today it reads them from the environment (in a
  * cluster, the service's Secret, decrypted from SOPS by Argo CD). To use a KMS, implement
@@ -41,15 +54,18 @@ export function keysFromEnv(value: string): KeyProvider {
   return { active: () => first, get: (id) => byId.get(id) };
 }
 
-const VERSION = "v1";
+/** v1: no additional data (read only). v2: bound to the context passed to `encrypt`. */
+const VERSION = "v2";
 
 export class SecretBox {
   constructor(private readonly keys: KeyProvider) {}
 
-  encrypt(plaintext: string): string {
+  /** `context` names the row the value is stored in, like `webhook_endpoint:<id>`. */
+  encrypt(plaintext: string, context: string): string {
     const { id, key } = this.keys.active();
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", key, iv);
+    cipher.setAAD(Buffer.from(context, "utf8"));
     const body = Buffer.concat([
       cipher.update(plaintext, "utf8"),
       cipher.final(),
@@ -58,9 +74,10 @@ export class SecretBox {
     return [VERSION, id, iv.toString("base64url"), body.toString("base64url")].join(".");
   }
 
-  decrypt(stored: string): string {
+  /** Fails if `stored` was encrypted for another context, or tampered with. */
+  decrypt(stored: string, context: string): string {
     const [version, id, iv, body] = stored.split(".");
-    if (version !== VERSION || !id || !iv || !body)
+    if ((version !== VERSION && version !== "v1") || !id || !iv || !body)
       throw new Error("Unrecognised ciphertext format");
     const key = this.keys.get(id);
     if (!key)
@@ -69,6 +86,7 @@ export class SecretBox {
       );
     const data = Buffer.from(body, "base64url");
     const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));
+    if (version === VERSION) decipher.setAAD(Buffer.from(context, "utf8"));
     decipher.setAuthTag(data.subarray(data.length - 16));
     return Buffer.concat([
       decipher.update(data.subarray(0, data.length - 16)),
@@ -76,11 +94,15 @@ export class SecretBox {
     ]).toString("utf8");
   }
 
-  /** Whether a stored value was written with an older key and should be re-encrypted. */
+  /** Whether a stored value was written with an older key or format and should be re-encrypted. */
   needsRotation(stored: string): boolean {
-    return stored.split(".")[1] !== this.keys.active().id;
+    const [version, id] = stored.split(".");
+    return version !== VERSION || id !== this.keys.active().id;
   }
 }
+
+/** The context a webhook endpoint's signing secrets are encrypted for. */
+export const webhookSecretContext = (endpointId: string) => `webhook_endpoint:${endpointId}`;
 
 /**
  * A new webhook signing secret in the Standard Webhooks format (standardwebhooks.com):

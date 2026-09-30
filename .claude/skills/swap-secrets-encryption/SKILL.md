@@ -8,7 +8,8 @@ disable-model-invocation: true
 
 - **Interface:** `KeyProvider` (`active()`, `get(id)`) in `packages/nest-common/src/crypto.ts`.
 - **Today:** `keysFromEnv(ENCRYPTION_KEYS)`: `id:base64key` entries, first active.
-  `SecretBox` (AES-256-GCM, ciphertext `v1.<keyId>.<iv>.<data>`) uses it.
+  `SecretBox` (AES-256-GCM, ciphertext `v2.<keyId>.<iv>.<data>`, with the row it
+  belongs to as additional data; `v1` values, from before that, still decrypt) uses it.
 - **Used in:** `apps/api/src/modules/webhooks/webhooks.service.ts` (writes endpoint
   signing secrets) and `apps/webhooks/src/outbound/delivery.service.ts` (reads them), both
   `new SecretBox(keysFromEnv(env.ENCRYPTION_KEYS))`.

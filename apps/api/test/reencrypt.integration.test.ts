@@ -2,10 +2,10 @@
  * Retiring a key: values written under the old keys are moved to the newest, after
  * which the old keys can go and everything still decrypts.
  */
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createDatabase, type Database, tenantTx } from "@repo/db";
 import { createTestDatabase, factories, type TestDatabase } from "@repo/db/testing";
-import { keysFromEnv, SecretBox } from "@repo/nest-common";
+import { keysFromEnv, SecretBox, webhookSecretContext } from "@repo/nest-common";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { authEncryptionKey } from "../src/auth/secrets";
@@ -51,17 +51,22 @@ beforeAll(async () => {
     })
   ).id;
   const oldBox = new SecretBox(keysFromEnv(oldKey));
-  ids.endpoint = await tenantTx(db, org.id, async (tx) => {
-    const endpoint = await tx.webhookEndpoint.create({
+  ids.endpoint = randomUUID();
+  const context = webhookSecretContext(ids.endpoint);
+  await tenantTx(db, org.id, (tx) =>
+    tx.webhookEndpoint.create({
       data: {
+        id: ids.endpoint,
         orgId: org.id,
         url: "https://example.com/hook",
         events: [],
-        secret: oldBox.encrypt("whsec_x"),
+        secret: oldBox.encrypt("whsec_x", context),
+        // Rotated recently: the one it replaced still signs.
+        previousSecret: oldBox.encrypt("whsec_before", context),
+        previousSecretExpiresAt: new Date(Date.now() + 3_600_000),
       },
-    });
-    return endpoint.id;
-  });
+    }),
+  );
 });
 
 afterAll(async () => {
@@ -109,10 +114,13 @@ describe("re-encrypting secrets", () => {
     const jwks = await db.jwks.findUniqueOrThrow({ where: { id: ids.jwks } });
     expect(await open(JSON.parse(jwks.privateKey) as string)).toBe('{"d":"private"}');
 
-    const secret = await tenantTx(db, ids.org, (tx) =>
+    const endpoint = await tenantTx(db, ids.org, (tx) =>
       tx.webhookEndpoint.findUniqueOrThrow({ where: { id: ids.endpoint } }),
-    ).then((endpoint) => endpoint.secret);
-    expect(new SecretBox(keysFromEnv(newKey)).decrypt(secret)).toBe("whsec_x");
+    );
+    const newBox = new SecretBox(keysFromEnv(newKey));
+    const context = webhookSecretContext(ids.endpoint);
+    expect(newBox.decrypt(endpoint.secret, context)).toBe("whsec_x");
+    expect(newBox.decrypt(endpoint.previousSecret ?? "", context)).toBe("whsec_before");
   });
 
   it("leaves better-auth's values alone while it has a single secret", async () => {
