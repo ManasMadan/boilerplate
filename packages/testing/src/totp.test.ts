@@ -12,4 +12,10 @@ describe("totp", () => {
   ])("at %is is %s", (seconds, code) => {
     expect(totp(secret, seconds * 1000)).toBe(code);
   });
+
+  it("ignores trailing bits that don't make a whole byte", () => {
+    // "A" is 5 bits: no whole byte, so the same (empty) key as no secret at all.
+    expect(totp("A", 0)).toBe(totp("", 0));
+    expect(totp("gezdgnbvgy3tqojqgezdgnbvgy3tqojq===", 59_000)).toBe("287082");
+  });
 });
