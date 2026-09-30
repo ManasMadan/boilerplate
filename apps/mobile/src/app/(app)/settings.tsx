@@ -1,3 +1,4 @@
+import { useApiErrorMessage } from "@repo/client";
 import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
 import { useWorkspacesQuery } from "@repo/client/auth/workspaces";
 import { type Locale, locales } from "@repo/i18n/locales";
@@ -10,7 +11,6 @@ import { Screen } from "@/components/screen";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
-import { useApiErrorMessage } from "@/hooks/use-api-error";
 import { authClient } from "@/lib/auth-client";
 import { appVersion } from "@/lib/config";
 import { devicePushToken, type PushState, pushState } from "@/lib/push";

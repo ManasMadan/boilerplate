@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useApiErrorMessage } from "@repo/client";
 import { useCreateApiKeyMutation } from "@repo/client/api/api-keys/create";
 import { useApiKeysQuery } from "@repo/client/api/api-keys/list";
 import { useRevokeApiKeyMutation } from "@repo/client/api/api-keys/revoke";
@@ -53,7 +54,6 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { TextField } from "@/components/form-fields";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { SecretDialog } from "../components/secret-dialog";
 
 export function WorkspaceApiKeysPage() {

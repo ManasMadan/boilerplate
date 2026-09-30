@@ -1,5 +1,6 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
 import { useUnregisterDeviceMutation } from "@repo/client/api/notifications/unregister-device";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
@@ -16,7 +17,6 @@ import { Field, FieldLabel } from "@repo/ui/components/field";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import {
   type BrowserPushState,
   browserPushState,

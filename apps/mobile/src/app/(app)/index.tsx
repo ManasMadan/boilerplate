@@ -1,4 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useApiErrorMessage } from "@repo/client";
 import { useTodoCreateMutation } from "@repo/client/api/todo/create";
 import { useTodoDeleteMutation } from "@repo/client/api/todo/delete";
 import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list";
@@ -16,7 +17,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
-import { useApiErrorMessage } from "@/hooks/use-api-error";
 
 /** The workspace's todos: the same data, rules and hooks as the web dashboard. */
 export default function Todos() {

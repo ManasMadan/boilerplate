@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useApiErrorMessage } from "@repo/client";
 import { useTodoCreateMutation } from "@repo/client/api/todo/create";
 import { useTodoDeleteMutation } from "@repo/client/api/todo/delete";
 import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list";
@@ -23,7 +24,6 @@ import { useTranslations } from "next-intl";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import type * as z from "zod";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 export function TodoList() {
   const t = useTranslations("dashboard.todos");

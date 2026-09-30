@@ -1,5 +1,6 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useNotificationPreferencesQuery } from "@repo/client/api/notifications/preferences";
 import { useUpdateNotificationPreferencesMutation } from "@repo/client/api/notifications/update-preferences";
 import type { NotificationPreferences } from "@repo/contracts/api";
@@ -16,7 +17,6 @@ import { Input } from "@repo/ui/components/input";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { BrowserPushCard } from "../components/browser-push-card";
 
 const toTime = (minutes: number) =>

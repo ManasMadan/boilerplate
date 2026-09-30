@@ -23,7 +23,7 @@ Same API client and translations as the web app, its own primitives.
 4. **Text.** `useTranslations("<namespace>")` from `use-intl`, keys in every
    `packages/i18n/messages/*.json`, usually under `mobile.*`. They aren't type-checked
    here: confirm each key exists in `en.json`. Errors through `useApiErrorMessage()`
-   (`src/hooks/use-api-error.ts`).
+   from `@repo/client`, shared with web.
 5. **Native.** A new permission, config plugin or native dependency changes
    `app.config.ts` and needs a store build; say so in the pull request.
 6. **Tests.** Logic in `src/lib` or a hook gets a Jest test beside it

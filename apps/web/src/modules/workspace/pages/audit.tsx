@@ -1,5 +1,6 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useAuditLogInfiniteQuery } from "@repo/client/api/audit/list";
 import type { AuditEntry } from "@repo/contracts/api";
 import { loosely } from "@repo/i18n";
@@ -13,7 +14,6 @@ import {
 } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useFormatter, useTranslations } from "next-intl";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /** ICU arguments from an event payload: strings and numbers as they are, the rest as text. */
 function paramsOf(payload: Record<string, unknown>) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useDeleteWebhookEndpointMutation } from "@repo/client/api/webhooks/delete-endpoint";
 import { useWebhookDeliveriesInfiniteQuery } from "@repo/client/api/webhooks/list-deliveries";
 import { useWebhookEndpointsQuery } from "@repo/client/api/webhooks/list-endpoints";
@@ -33,7 +34,6 @@ import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { EndpointStatus } from "../components/endpoint-status";
 import { SecretDialog } from "../components/secret-dialog";
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useFileQuery } from "@repo/client/api/files/get";
 import {
   checkUpload,
@@ -26,7 +27,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /**
  * The profile picture. A chosen image is uploaded, checked by the worker (virus scan,

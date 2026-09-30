@@ -23,7 +23,9 @@
     "@orpc/contract": "catalog:",
     "@orpc/tanstack-query": "catalog:",
     "@repo/contracts": "workspace:*",
+    "@repo/i18n": "workspace:*",
     "better-auth": "catalog:",
+    "use-intl": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
