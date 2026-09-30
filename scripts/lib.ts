@@ -7,7 +7,8 @@ export const ENV_PATH = join(ROOT, ".env");
 export const ENV_EXAMPLE_PATH = join(ROOT, ".env.example");
 
 /** Values in .env.example that must never reach a real environment. */
-export const PLACEHOLDER = /^(change-me.*|replace-me.*)$/;
+// By path: scripts run before `bun install` (setup) and this module uses only Node built-ins.
+export { PLACEHOLDER } from "../packages/testing/src/secrets";
 
 export function parseEnv(text: string): Map<string, string> {
   const entries = new Map<string, string>();

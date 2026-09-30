@@ -128,9 +128,6 @@ jobs:
       REDIS_URL: redis://localhost:6379
       SMTP_URL: smtp://localhost:1025
       MAILPIT_URL: http://localhost:8025
-      # The api's origins, as the e2e job has them (its tests build the app in process).
-      BETTER_AUTH_URL: http://localhost:3000
-      WEB_URL: http://localhost:3000
       # The real mail path: submission to Stalwart (compose's `mail` profile), delivery to
       # compose's Mailpit, and bounces back as signed webhooks.
       STALWART_URL: http://localhost:58080
@@ -151,13 +148,7 @@ jobs:
       - name: Bootstrap database roles
         env: { PGPASSWORD: postgres }
         run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
-      - name: Generate throwaway secrets
-        run: |
-          {
-            echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
-            echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
-            echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
-          } >> "$GITHUB_ENV"
+      # The tests' secrets come from .env.example's placeholders (@repo/testing/environment).
       - name: Apply migrations
         run: bun run db:deploy
       # `migrate diff` exits 0 silently without a datasource, so the URLs above are required.

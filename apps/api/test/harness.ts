@@ -59,8 +59,8 @@ export async function startApi(
 ): Promise<Harness> {
   const testDb = await createTestDatabase();
   Object.assign(process.env, {
-    // Optional features start off whatever the local .env says; a test turns on what it
-    // exercises, so results don't depend on the developer's configuration.
+    // Optional features start off, whatever the environment says (a shell can still export
+    // .env's values); a test turns on what it exercises.
     ...OPTIONAL_FEATURES_OFF,
     // Several test files each run an API on this machine at once.
     LOAD_SHEDDING: "off",

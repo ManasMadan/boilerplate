@@ -171,6 +171,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@repo/testing": "workspace:*",
         "@repo/tsdown-config": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
@@ -246,6 +247,7 @@
       },
       "devDependencies": {
         "@nestjs/platform-fastify": "catalog:",
+        "@repo/testing": "workspace:*",
         "@repo/tsdown-config": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
@@ -281,6 +283,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@repo/testing": "workspace:*",
         "@repo/tsdown-config": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
@@ -359,6 +362,7 @@
         "pg": "^8.23.0",
       },
       "devDependencies": {
+        "@repo/testing": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
         "@types/node": "catalog:",
@@ -425,6 +429,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@repo/testing": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
         "@types/node": "catalog:",
@@ -484,6 +489,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@repo/testing": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
         "@types/node": "catalog:",

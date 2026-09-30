@@ -13,9 +13,9 @@
     "reset": "bun --env-file=../../.env run prisma migrate reset --force",
     "studio": "bun --env-file=../../.env run prisma studio",
     "check-types": "tsc",
-    "test:integration": "bun --env-file=../../.env run vitest run",
+    "test:integration": "vitest run",
     "drift": "bun --env-file=../../.env scripts/drift.ts",
-    "coverage": "bun --env-file=../../.env run vitest run --coverage"
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/adapter-pg": "catalog:",
@@ -23,6 +23,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",

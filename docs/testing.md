@@ -30,6 +30,13 @@ packages (the `unit` project in services), Jest with React Native Testing Librar
   fails here (see [database.md](database.md#test-databases)).
 - Each suite uses its own Redis database number (the TypeScript suites 4 and 7 to 15,
   Python 6; 0 is the dev stack).
+- Tests never read your `.env`: they run with `.env.example`'s values (the ports docker
+  compose publishes), its placeholder secrets replaced by fresh ones and its empty
+  values left unset, so they behave the same on every machine and in CI. Anything
+  already set in the environment wins, which is how CI points them at its own services
+  (`packages/testing/src/environment.ts`, applied by each package's `vitest.config.ts`,
+  and `apps/ai/tests/__init__.py` for Python). A test that needs a feature turns it on
+  itself.
 - Services are built in-process (`createApiServer()` and the like); emails are read
   back from Mailpit, push and Twilio go to local fakes (`apps/notifications/test`), and
   Stripe to `packages/fake-stripe`.

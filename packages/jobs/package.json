@@ -10,9 +10,9 @@
   "scripts": {
     "check-types": "tsc",
     "test": "vitest run --project unit",
-    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
+    "test:integration": "vitest run --project integration",
     "gen": "bun scripts/export-schemas.ts",
-    "coverage": "bun --env-file=../../.env run vitest run --coverage"
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@repo/contracts": "workspace:*",
@@ -22,6 +22,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
