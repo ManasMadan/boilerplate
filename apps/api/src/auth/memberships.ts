@@ -5,8 +5,9 @@
  * A session only remembers which organization is active; membership can change under it
  * (removed, role changed, organization deleted), so every request re-checks. The answer
  * is cached in Redis for a few minutes, and every membership change in the auth config
- * (organization hooks) forgets it immediately, so a removed member loses access on
- * their very next request.
+ * forgets it immediately (the organization hooks, and `memberRemoved` for leaving and
+ * account deletion, which better-auth's hooks miss), so a removed member loses access
+ * on their very next request.
  */
 import { type OrgRole, parseOrgRole } from "@repo/contracts/roles";
 import type { Db } from "@repo/db";

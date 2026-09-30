@@ -422,6 +422,41 @@ describe("organizations and the audit trail", () => {
     );
   });
 
+  it("a member who leaves loses access everywhere at once, and the leave is recorded", async () => {
+    const { member, orgId, memberId } = await team();
+    // A second session (another device), already holding the cached role.
+    const elsewhere = createSession(harness);
+    await elsewhere.auth("/sign-in/email", { email: member.email, password: member.password });
+    await elsewhere.auth("/organization/set-active", { organizationId: orgId });
+    await elsewhere.rpc.todo.list({ limit: 20 });
+
+    expect(
+      (await member.session.auth("/organization/leave", { organizationId: orgId })).status,
+    ).toBe(200);
+    await expectError(elsewhere.rpc.todo.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
+    const removed = await outbox("org_id = $1::uuid AND name = 'org.member_removed.v1'", [orgId]);
+    expect(removed).toEqual([
+      expect.objectContaining({
+        actor_id: memberId,
+        payload: expect.objectContaining({ userId: memberId }),
+      }),
+    ]);
+  });
+
+  it("records a member's departure when they delete their account", async () => {
+    const { member, orgId, memberId } = await team();
+    expect((await member.session.auth("/delete-user", { password: member.password })).status).toBe(
+      200,
+    );
+    const removed = await outbox("org_id = $1::uuid AND name = 'org.member_removed.v1'", [orgId]);
+    expect(removed).toEqual([
+      expect.objectContaining({
+        actor_id: memberId,
+        payload: expect.objectContaining({ userId: memberId }),
+      }),
+    ]);
+  });
+
   it("only owners and admins read the audit log, and only their organization's", async () => {
     const { owner, member, orgId } = await team();
     // The worker writes the audit log; here, rows are written directly as it would.

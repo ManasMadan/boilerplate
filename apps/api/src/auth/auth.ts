@@ -137,6 +137,30 @@ export function createAuth({
   /** The signed-in user performing an auth action, when there is one. */
   const actor = (fallback: string) => currentContext()?.userId ?? fallback;
 
+  interface RemovedMember {
+    id: string;
+    userId: string;
+    role: string;
+    organizationId: string;
+  }
+  /**
+   * A membership ended: removed by an admin, left, or gone with the account. The cached
+   * role is forgotten so access ends on the next request, and the event audits it and
+   * resyncs the plan's seats. better-auth runs afterRemoveMember only for removals, so
+   * leaving (the after hook) and account deletion (afterDelete) call this too.
+   */
+  async function memberRemoved(member: RemovedMember, actorId: string) {
+    await memberships.forget(member.organizationId, member.userId);
+    await record(
+      "org.member_removed.v1",
+      member.id,
+      { organizationId: member.organizationId, userId: member.userId, role: member.role },
+      { actorId, orgId: member.organizationId },
+    );
+  }
+  /** Shared workspaces an account being deleted belonged to, from beforeDelete to afterDelete. */
+  const leavingWithAccount = new Map<string, RemovedMember[]>();
+
   /** Language for an email address: the account's saved locale, else the browser's. */
   async function localeFor(email: string, headers: Headers | undefined): Promise<Locale> {
     const user = await db.user.findUnique({ where: { email }, select: { locale: true } });
@@ -246,6 +270,13 @@ export function createAuth({
               });
             }
           }
+          leavingWithAccount.set(
+            user.id,
+            await db.member.findMany({
+              where: { userId: user.id, organizationId: { notIn: soleMember } },
+              select: { id: true, userId: true, role: true, organizationId: true },
+            }),
+          );
           // Nothing may keep charging for a workspace that's going away.
           for (const organizationId of soleMember) await billing.cancelFor(organizationId);
           await transaction(db, async (tx) => {
@@ -260,6 +291,13 @@ export function createAuth({
               );
             }
           });
+        },
+        // The memberships went with the account (the rows cascade), past the organization
+        // hooks: end them the same way a removal does.
+        afterDelete: async (user) => {
+          const left = leavingWithAccount.get(user.id) ?? [];
+          leavingWithAccount.delete(user.id);
+          for (const member of left) await memberRemoved(member, user.id);
         },
       },
       // Email changes go only through the code-based flow in emailOTP below; the
@@ -294,6 +332,12 @@ export function createAuth({
       }),
       after: createAuthMiddleware(async (ctx) => {
         if (isAPIError(ctx.context.returned)) return;
+        // Hooks get no session; the member who left is the one returned.
+        if (ctx.path === "/organization/leave") {
+          const member = ctx.context.returned as RemovedMember;
+          await memberRemoved(member, member.userId);
+          return;
+        }
         const alert = securityAlertFor(ctx);
         if (!alert) return;
         const account = await db.user.findUnique({
@@ -549,13 +593,7 @@ export function createAuth({
             );
           },
           afterRemoveMember: async ({ member, organization: org }) => {
-            await memberships.forget(org.id, member.userId);
-            await record(
-              "org.member_removed.v1",
-              member.id,
-              { organizationId: org.id, userId: member.userId, role: member.role },
-              { actorId: actor(member.userId), orgId: org.id },
-            );
+            await memberRemoved({ ...member, organizationId: org.id }, actor(member.userId));
           },
           afterUpdateMemberRole: async ({ member, previousRole, organization: org }) => {
             await memberships.forget(org.id, member.userId);
