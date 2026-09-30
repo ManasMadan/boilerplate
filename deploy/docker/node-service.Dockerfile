@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 #
 # One image per Node service: api, worker, notifications, webhooks.
 #
@@ -9,7 +9,7 @@
 # inlined) and the service's production npm dependencies on a distroless Node base: no
 # shell, no package manager, running as an unprivileged user.
 
-ARG BUN_IMAGE=oven/bun:1.3.6-slim
+ARG BUN_IMAGE=oven/bun:1.3.6-slim@sha256:9d20d1b535596c4a021ba2087d2d303c4098e96be15f47775729cf7a259bb41e
 # renovate: datasource=npm depName=turbo
 ARG TURBO_VERSION=2.11.5
 
@@ -48,7 +48,7 @@ RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules \
  && cp -r apps/${SERVICE}/dist /out/apps/${SERVICE}/dist \
  && if [ -d apps/${SERVICE}/node_modules ]; then cp -r apps/${SERVICE}/node_modules /out/apps/${SERVICE}/; fi
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
 ARG SERVICE
 ARG RELEASE=dev
 ENV NODE_ENV=production \

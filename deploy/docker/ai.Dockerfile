@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 #
 # The Python AI service. One image, two processes: the HTTP service (default command)
 # and the queue worker (`python -m app.worker`, set by the Helm chart).
@@ -8,10 +8,10 @@
 # Dependencies come from uv.lock exactly (no dev group), into a virtualenv that the
 # runtime image copies as is. Python matches the lockfile's, so compiled wheels load.
 
-ARG PYTHON_IMAGE=python:3.14-slim-trixie
-ARG UV_VERSION=0.12.17
+ARG PYTHON_IMAGE=python:3.14-slim-trixie@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.17@sha256:10787c682e4184e4f290de1171fd4703dc63de99221f10fe1c99002ce7fa9acc
 
-FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+FROM ${UV_IMAGE} AS uv
 
 FROM ${PYTHON_IMAGE} AS build
 COPY --from=uv /uv /usr/local/bin/uv

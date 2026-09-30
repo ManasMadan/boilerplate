@@ -31,7 +31,8 @@ a real cluster or cloud account. The checks below are offline.
   managers or mail services. Third-party APIs (AI providers, Twilio, push, Stripe,
   Google, Turnstile) and Cloudflare in front are the exceptions; ask before adding a
   managed dependency.
-- Pin every version: images by tag, charts and providers by exact version. Anything
+- Pin every version: images by tag (the Dockerfiles' base images by tag and digest,
+  `scripts/dockerfiles.test.ts`), charts and providers by exact version. Anything
   Renovate cannot find on its own gets a comment on the line above:
   `# renovate: datasource=<docker|helm|github-releases|npm> depName=<name>` (see
   `infra/tofu/modules/bootstrap/variables.tf` and `.github/workflows/ci.yml`). A new
