@@ -15,8 +15,8 @@ that fits one of them goes there. Code for one service stays in that service.
    `./src/index.ts`, `check-types`/`test`/`coverage` scripts, `@repo/typescript-config`
    and `@repo/vitest-config`), adds `<name>` to the commit scopes in
    `commitlint.config.ts`, formats, and runs `bun install` to link it.
-2. Write the code in `src/`, with a `*.test.ts` beside each file with logic. Raise the
-   coverage floor in `vitest.config.ts` to what the tests reach.
+2. Write the code in `src/`, with a `*.test.ts` beside each file. Every file is at 100%
+   coverage (`bun run test:coverage`; docs/testing.md, "Coverage").
 3. Dependencies: `"catalog:"` when the root `package.json` catalog has the package,
    otherwise a normal range. Node types: add `@types/node` (`"catalog:"`) and
    `"compilerOptions": { "types": ["node"] }` to its `tsconfig.json`, like `packages/logger`.

@@ -13,7 +13,7 @@ const env = { NODE_ENV: "test", LOG_LEVEL: "silent" };
 
 export default defineConfig({
   test: {
-    coverage: coverage({ lines: 93, functions: 97, branches: 81, statements: 91 }),
+    coverage: coverage(),
     projects: [
       { test: { name: "unit", include: ["src/**/*.test.ts"], env } },
       {

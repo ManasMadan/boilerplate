@@ -35,12 +35,12 @@ Which kind goes where:
   `packages/fake-stripe`, `apps/notifications/test/fake-twilio.ts` and `fake-push.ts`,
   Mailpit for email, the `local:extractive` model and `hashing` embeddings for AI. New
   providers get a fake like these, not `vi.mock`.
-- Coverage floors are per package in its `vitest.config.ts` (unit and integration
-  counted together), `apps/mobile/jest.config.js` and `fail_under` in
-  `apps/ai/pyproject.toml`. `bun run test:coverage` checks them all (it needs the full
-  Docker profile and takes minutes: run it in the background);
-  `bun run --filter @repo/<name> coverage` checks one package. Raise a floor to what the
-  suite reaches when you add tests; lowering one needs a reason in the PR. The
-  `test-writer` agent writes missing tests and raises floors.
+- Every source file is at 100% (lines, branches, functions), every suite merged.
+  `bun run test:coverage` runs them all and names what each file misses (it needs the
+  full Docker profile and takes minutes: run it in the background); `bun run --filter
+  @repo/<name> coverage && bun scripts/coverage.ts` rechecks after one package's run. A
+  file below 100% is either tested, trimmed, or listed with its reason in "Coverage
+  exceptions" in docs/testing.md. No coverage pragmas. The `test-writer` agent writes
+  missing tests.
 - A bug fix starts with a test that fails without the fix.
 - Tenancy changes need a test that a second organization cannot see or change the row.

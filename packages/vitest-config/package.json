@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "UNLICENSED",
-  "description": "Test settings every package shares: coverage and its thresholds.",
+  "description": "Test settings every package shares: coverage, reported as LCOV for the repository-wide merge.",
   "type": "module",
   "exports": {
     ".": "./index.ts"

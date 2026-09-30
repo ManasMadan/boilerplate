@@ -1,6 +1,6 @@
 ---
 name: test-writer
-description: Writes the missing tests for a change and raises coverage toward 100%, with tests of the right kind (unit, integration against real services, e2e) and no mocks where a real service or local fake exists. Use proactively after a feature or fix lands without tests, when coverage drops below a floor, or when asked to raise coverage.
+description: Writes the missing tests for a change and raises coverage toward 100%, with tests of the right kind (unit, integration against real services, e2e) and no mocks where a real service or local fake exists. Use proactively after a feature or fix lands without tests, when a file is below 100% coverage, or when asked to raise coverage.
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: opus
 permissionMode: default
@@ -43,8 +43,6 @@ Follow `.claude/rules/tests.md` (it loads when you open a test file):
 ## Finish
 
 1. Run the new tests on their own first, then the package's coverage again.
-2. Raise the package's floor (its `vitest.config.ts` `coverage({...})`,
-   `apps/mobile/jest.config.js`, or `fail_under` in `apps/ai/pyproject.toml`) to what
-   the suite now reaches, rounded down. Never lower one.
+2. `bun scripts/coverage.ts` on the fresh reports: every file you touched is at 100%.
 3. Report: the tests added (file and what each covers), coverage before and after per
    package, and anything still uncovered with the reason.

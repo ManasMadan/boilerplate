@@ -1,6 +1,6 @@
 ---
 name: write-tests
-description: Write missing tests for existing code, or raise a package's coverage toward 100%, with the right kind of test for each path. Use when the user asks for tests or more coverage, when coverage falls below a floor, or when code landed without tests.
+description: Write missing tests for existing code, or raise a package's coverage toward 100%, with the right kind of test for each path. Use when the user asks for tests or more coverage, when `bun run test:coverage` names a file below 100%, or when code landed without tests.
 argument-hint: <package or file>
 ---
 
@@ -29,13 +29,14 @@ hand or checking its work. `.claude/rules/tests.md` has which kind of test goes 
 4. **Can't be tested automatically?** Write the test anyway, skipped with the reason
    (`it.skipIf(!process.env.<CREDENTIAL>)`), and add a row to "Not tested automatically"
    in `docs/testing.md` saying why and how to run it by hand.
-5. **Raise the floor** to what the suite now reaches, rounded down: `coverage({...})` in
-   the package's `vitest.config.ts`, `coverageThreshold` in `apps/mobile/jest.config.js`,
-   `fail_under` in `apps/ai/pyproject.toml`. Never lower one.
+5. **Reach 100%.** `bun run test:coverage` merges every suite and names each file below
+   100%, with the lines, branches and functions no test reaches. A shared package counts
+   what its callers' tests reach too. A line that truly can't be tested is either deleted
+   or listed, with the reason, in "Coverage exceptions" in `docs/testing.md`.
 
 ## Done when
 
 - The new tests pass on their own and in the package's suite.
-- Coverage is up, and the floor matches it.
+- Every file you touched is at 100% in `bun run test:coverage`.
 - `bun run lint`, `bun run check-types` pass; the verify skill for anything that ran
   integration tests.

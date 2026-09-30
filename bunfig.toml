@@ -18,3 +18,10 @@ peer = false
 # `bun install --minimum-release-age=0` and check that the lockfile diff holds just your
 # change; never with `bun add`.
 minimumReleaseAge = 259200
+
+[test]
+# `bun test --coverage` (bun run test:coverage) writes LCOV for scripts/ and the Claude
+# Code hooks, merged with every other suite's by scripts/coverage.ts.
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage/bun"
+coverageSkipTestFiles = true

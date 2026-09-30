@@ -15,7 +15,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | Types | `bun run check-types` |
 | Unit tests (fast, cached) | `bun run test` |
 | Integration tests (real Postgres/Valkey/Mailpit) | `bun run test:integration` |
-| Coverage against every package's floor (needs the full profile) | `bun run test:coverage` |
+| Coverage: every suite merged, every file at 100% (needs the full profile) | `bun run test:coverage` |
 | Tests of `scripts/` and the Claude Code hooks | `bun test ./scripts/ ./.claude/hooks/` |
 | Every check that applies to a change | the `verify` skill |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |

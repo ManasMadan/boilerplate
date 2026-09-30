@@ -22,15 +22,11 @@ import {
   type ServerHttp2Stream,
 } from "node:http2";
 import type { AddressInfo } from "node:net";
-// http_ece ships no types; this is the one function the fake needs.
-// @ts-expect-error untyped CommonJS module
+// Typed by ./http_ece.d.ts (the package ships none).
 import ece from "http_ece";
 import webPush from "web-push";
 
-const decrypt = ece.decrypt as (
-  body: Buffer,
-  options: { version: "aes128gcm"; privateKey: ECDH; authSecret: string },
-) => Buffer;
+const { decrypt } = ece;
 
 interface Delivered {
   provider: "fcm" | "apns" | "web";

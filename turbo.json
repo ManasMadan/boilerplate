@@ -41,8 +41,8 @@
       "dependsOn": ["gen", "^gen"],
       "cache": false
     },
-    // Unit and integration tests with coverage thresholds (needs the services, like
-    // test:integration).
+    // Unit and integration tests with coverage, as LCOV for scripts/coverage.ts (needs the
+    // services, like test:integration).
     "coverage": {
       "dependsOn": ["gen", "^gen"],
       "cache": false

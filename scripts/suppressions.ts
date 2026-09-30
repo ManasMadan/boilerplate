@@ -1,8 +1,9 @@
 /**
  * Suppressions, skipped tests and coverage pragmas: each one hides a problem instead of
- * fixing it, so a new one is refused unless docs/testing.md lists it with its reason
- * (the "Coverage exceptions" and "Skipped tests" tables). The Claude Code hook
- * (.claude/hooks/suppressions.ts) applies this to every edit.
+ * fixing it, so one is refused unless docs/testing.md lists its file with the reason
+ * (the "Coverage exceptions", "Skipped tests" and "Suppressions" tables). The Claude Code
+ * hook (.claude/hooks/suppressions.ts) applies this to every edit, and
+ * `bun scripts/suppressions.ts` (in `bun run lint`, so in CI) to every tracked file.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -49,7 +50,7 @@ export function addedSuppressions(before: string, after: string): string[] {
 }
 
 /** The sections of docs/testing.md whose tables allow a suppression. */
-export const EXCEPTION_SECTIONS = ["## Coverage exceptions", "## Skipped tests"];
+export const EXCEPTION_SECTIONS = ["## Coverage exceptions", "## Skipped tests", "## Suppressions"];
 
 /**
  * The files the exceptions tables in docs/testing.md name (a backticked path in a row
@@ -69,4 +70,31 @@ export function listedFiles(root: string): Set<string> {
     [...row.matchAll(/`([^`\s]+\.[a-z]+)(:\d+)?`/g)].map((m) => m[1] as string),
   );
   return new Set(paths);
+}
+
+/** Tracked source files with a suppression that no exceptions table lists. */
+export function unlisted(root: string, files: string[]): { path: string; kinds: string[] }[] {
+  const listed = listedFiles(root);
+  return files
+    .filter((path) => CODE.test(path) && !DEFINES_THEM.has(path) && !/\/generated\//.test(path))
+    .filter((path) => !listed.has(path))
+    .map((path) => ({
+      path,
+      kinds: [...countSuppressions(readFileSync(join(root, path), "utf8")).keys()],
+    }))
+    .filter(({ kinds }) => kinds.length > 0);
+}
+
+if (import.meta.main) {
+  const root = join(import.meta.dir, "..");
+  const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: root }).stdout.toString().split("\n");
+  const found = unlisted(root, tracked);
+  for (const { path, kinds } of found)
+    console.error(`  \x1b[31m✖\x1b[0m ${path}: ${kinds.join(", ")}`);
+  if (found.length) {
+    console.error(
+      "\nFix the cause, or list the file with the reason in docs/testing.md (Coverage exceptions, Skipped tests or Suppressions).",
+    );
+    process.exit(1);
+  }
 }

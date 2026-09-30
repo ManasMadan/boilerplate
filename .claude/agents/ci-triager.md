@@ -27,7 +27,7 @@ couldn't check.
    | Type-check | `bun run check-types` |
    | Unit tests | `bun run test`, `bun test ./scripts/ ./.claude/hooks/` |
    | Components | `bun run --cwd packages/ui test:stories`, `test:visual` |
-   | Integration tests | `bun run test:integration`, then `bun run test:coverage` (floors) |
+   | Integration tests | `bun run test:integration`, then `bun run test:coverage` (100% per file) |
    | End-to-end tests | `bun run test:e2e` (sharded in CI: `--shard=<n>/4`) |
    | Python service | `bun run --filter @repo/ai lint`, `check-types`, `test`, `coverage` |
    | Generated code is committed | `bun run gen`, then `git status` |

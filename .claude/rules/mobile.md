@@ -30,8 +30,9 @@ gotchas; these are the rules.
   come from the Expo SDK (the dependency-update skill).
 - `eas.json` has the build profiles and channels; don't add secrets there (EAS
   environments hold them).
-- Tests: Jest with React Native Testing Library for `src/lib` and hooks
-  (`*.test.ts(x)` next to the file; its floor is in `jest.config.js`), Playwright
+- Tests: Jest with React Native Testing Library for everything in `src`, at 100% like
+  every file: `*.test.ts(x)` next to the file, except screens, whose tests live in
+  `src/screens-tests/` (a file in `src/app` is a route). Playwright
   against the web build for screens (`bun run test:e2e --app mobile`), Maestro for what
   only a native build shows (`maestro/`, run by hand).
 - The API must keep serving old installed builds: a breaking change raises

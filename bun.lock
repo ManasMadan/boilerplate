@@ -214,6 +214,7 @@
         "@repo/jobs": "workspace:*",
         "@repo/testing": "workspace:*",
         "@repo/typescript-config": "workspace:*",
+        "@repo/vitest-config": "workspace:*",
         "@tanstack/react-query-devtools": "^5.104.0",
         "@types/node": "catalog:",
         "@types/react": "catalog:",
@@ -313,7 +314,9 @@
         "@hey-api/openapi-ts": "0.99.0",
         "@repo/ai": "workspace:*",
         "@repo/typescript-config": "workspace:*",
+        "@repo/vitest-config": "workspace:*",
         "typescript": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "packages/client": {
@@ -539,6 +542,7 @@
       "devDependencies": {
         "@playwright/test": "1.63.0",
         "@repo/typescript-config": "workspace:*",
+        "@repo/vitest-config": "workspace:*",
         "@storybook/addon-a11y": "^10.6.0",
         "@storybook/addon-themes": "^10.6.0",
         "@storybook/addon-vitest": "^10.6.0",

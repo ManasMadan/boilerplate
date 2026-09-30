@@ -4,7 +4,9 @@
     "@hey-api/openapi-ts": "0.99.0",
     "@repo/ai": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "typescript": "catalog:"
+    "@repo/vitest-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -13,7 +15,8 @@
   "private": true,
   "scripts": {
     "gen": "openapi-ts",
-    "check-types": "tsc"
+    "check-types": "tsc",
+    "coverage": "vitest run --coverage --passWithNoTests"
   },
   "type": "module",
   "dependencies": {

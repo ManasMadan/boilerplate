@@ -88,7 +88,14 @@ jobs:
       - name: Install the browser
         run: bunx playwright install --with-deps chromium
       - name: Every story renders, passes its play function and axe, in both themes
-        run: bun run --cwd packages/ui test:stories
+        run: bun run --cwd packages/ui coverage
+      - name: Keep the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-components
+          path: packages/ui/coverage/lcov.info
+          retention-days: 3
       - name: Screenshots match the baselines
         run: bun run --cwd packages/ui test:visual
       - name: Keep the screenshot diffs
@@ -165,10 +172,22 @@ jobs:
         run: |
           docker compose --profile mail up -d --wait stalwart mailpit
           docker compose --profile mail run --rm stalwart-init
-      # Unit and integration tests together, failing below each package's coverage floor
-      # (see packages/vitest-config). The Python service's run is in its own job.
+      # Unit and integration tests together, with coverage: the coverage job merges these
+      # reports with the stories' and the Python service's and checks every file.
       - name: Tests with coverage
-        run: bunx turbo run coverage --filter=!@repo/ai
+        run: bunx turbo run coverage --filter=!@repo/ai --filter=!@repo/ui
+      - name: The repo's scripts and Claude Code hooks, with coverage
+        run: bun test --coverage ./scripts/ ./.claude/hooks/
+      - name: Keep the coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-integration
+          path: |
+            apps/*/coverage/lcov.info
+            packages/*/coverage/lcov.info
+            coverage/bun/lcov.info
+          retention-days: 3
 
   # Split across four runners, each with the whole stack and a quarter of the browser
   # tests: on one runner the suite alone took over ten minutes, the slowest job by far.
@@ -343,9 +362,16 @@ jobs:
           psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
           bun run db:deploy
       # Routes, tenancy, indexing, the assistant, the worker, and models vs database, with
-      # every test counted toward the coverage floor (pyproject.toml, tool.coverage).
+      # every line and branch covered (pyproject.toml, tool.coverage).
       - name: All tests with coverage
-        run: uv run pytest -m "integration or not integration" --cov --cov-report=term
+        run: bun run coverage
+      - name: Keep the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-python
+          path: apps/ai/coverage/lcov.info
+          retention-days: 3
 
   # The evals against a real model, nightly: set the EVAL_MODEL variable (and optionally
   # EVAL_EMBEDDINGS, EVAL_JUDGE_MODEL, EVAL_MIN_PASS_RATE, EVAL_MIN_RELEVANCE) and the
@@ -598,10 +624,38 @@ jobs:
       # In place: this checkout is thrown away afterwards.
       - run: bun scripts/generators.ts --in-place
 
+  # Every suite's report merged: each source file must be at 100% (scripts/coverage.ts,
+  # with the exceptions docs/testing.md lists), and a pull request's changed lines too.
+  coverage:
+    name: Coverage
+    needs: [components, integration, python]
+    runs-on: ubuntu-24.04
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      # A single file uploads without its directories, so each report goes back to its own.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: coverage-integration }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: coverage-components, path: packages/ui/coverage }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: coverage-python, path: apps/ai/coverage }
+      - name: Every file at 100%
+        run: bun scripts/coverage.ts
+      - name: Every changed line covered
+        if: github.event_name == 'pull_request'
+        env: { BASE: "${{ github.base_ref }}" }
+        run: uvx diff-cover@10.6.0 coverage/merged.lcov --compare-branch "origin/$BASE" --fail-under 100
+
   ci-ok:
     name: CI passed
     if: always()
-    needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images, generators]
+    needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images, generators, coverage]
     runs-on: ubuntu-24.04
     permissions: {}
     steps:

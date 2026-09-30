@@ -37,7 +37,7 @@ tools colour their output, so a search for "error TS" can miss real errors.
 |---|---|
 | `packages/contracts`, `packages/jobs`, the Prisma schema, `apps/ai` routes or models | `bun run gen`, then `git status --short`: the regenerated files must be part of the change (CI's codegen job fails otherwise). It only rewrites generated files |
 | `packages/db`, any service's code, queues, auth, email, webhooks, HTTP | `bun run test:integration` (starts the full Docker profile; needs about 3.9 GB free in Docker) |
-| Anything with a coverage floor (every package's `vitest.config.ts`, `apps/mobile/jest.config.js`, `apps/ai/pyproject.toml`) | `bun run test:coverage`: unit and integration together against each floor. If the change raises coverage, raise the floor to match |
+| Any source file | `bun run test:coverage`: every suite, merged, with every file at 100%. It names each line, branch or function no test reaches |
 | `packages/db/prisma/migrations` | `bun run db:lint` and `bun run --filter @repo/db drift` |
 | `packages/ui` components | `bun run --cwd packages/ui test:stories` (and `test:visual`, which needs Docker) |
 | `apps/web` or `apps/mobile` user flows | `bun run test:e2e --app web` or `--app mobile` (needs the full profile and nothing listening on the stack's ports: stop `bun dev` first, or say it wasn't run) |

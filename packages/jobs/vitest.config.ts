@@ -11,7 +11,7 @@ applyTestEnvironment();
 
 export default defineConfig({
   test: {
-    coverage: coverage({ lines: 74, functions: 41, branches: 44, statements: 73 }),
+    coverage: coverage(),
     projects: [
       { test: { name: "unit", include: ["src/**/*.test.ts"] } },
       { test: { name: "integration", include: ["test/**/*.test.ts"], testTimeout: 20_000 } },

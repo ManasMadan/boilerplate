@@ -19,7 +19,7 @@ production release. `CLAUDE.md` is the same material condensed for Claude Code.
 | [files-and-billing.md](files-and-billing.md) | the upload pipeline and storage; Stripe billing, plans and the fake Stripe |
 | [python-services.md](python-services.md) | apps/ai: the assistant, retrieval, summaries, the worker, the MCP server, evals |
 | [web-and-mobile.md](web-and-mobile.md) | the render-only web app, packages/client and ui, the Expo app, EAS and OTA updates |
-| [testing.md](testing.md) | every test layer and its command, coverage floors, what CI runs and when |
+| [testing.md](testing.md) | every test layer and its command, the coverage rule, what CI runs and when |
 | [deploy.md](deploy.md) | images, environments, staging and production releases, rollback, previews |
 | [new-project.md](new-project.md) | everything a new app made from this boilerplate needs once, in order |
 | [repository-settings.md](repository-settings.md) | the GitHub settings (and the `gh` commands that apply them), App, environments and secrets the workflows need |
@@ -59,7 +59,7 @@ them, but each is a plain Markdown checklist you can follow by hand.
 | [add-helm-value](../.claude/skills/add-helm-value/SKILL.md) | a chart setting, or a cluster add-on |
 | [add-load-test](../.claude/skills/add-load-test/SKILL.md) | a k6 scenario and its latency budget |
 | [remove-feature](../.claude/skills/remove-feature/SKILL.md) | removing an optional feature completely, tables last |
-| [write-tests](../.claude/skills/write-tests/SKILL.md) | missing tests, and raising coverage floors |
+| [write-tests](../.claude/skills/write-tests/SKILL.md) | missing tests, and getting a file to 100% coverage |
 | [fix-ci](../.claude/skills/fix-ci/SKILL.md) | a red CI run: find the failing step, reproduce it, fix the cause |
 | [open-pr](../.claude/skills/open-pr/SKILL.md) | preparing, opening or reviewing a pull request, with the reviewer agents |
 | [dependency-update](../.claude/skills/dependency-update/SKILL.md) | Renovate pull requests, the Bun catalog, the Expo SDK |

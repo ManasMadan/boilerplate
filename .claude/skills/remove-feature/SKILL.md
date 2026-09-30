@@ -59,9 +59,9 @@ error codes, events, queues and i18n namespaces. The table is where each one liv
    rows and their `swap-*` skills if the seam goes too), `docs/README.md`, the doc that
    covers it, the relevant `CLAUDE.md` files and rules.
 8. **Tests**: its unit, integration and e2e tests go with the code; tests of other
-   features that used it as a fixture move to something that stays. Keep coverage
-   floors where they are; if a package's coverage drops, the remaining code lacks
-   tests (the write-tests skill).
+   features that used it as a fixture move to something that stays. Every remaining
+   file stays at 100%; if one drops, the remaining code lacks tests (the write-tests
+   skill).
 9. **Dependencies** only it used: `bun remove <pkg> --cwd <workspace>` (the user
    approves dependency changes); knip lists what's left unused.
 
