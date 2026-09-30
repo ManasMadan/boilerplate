@@ -82,7 +82,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -92,6 +92,8 @@ jobs:
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - run: bun run check-types
+      # No `any` in the source, every workspace (scripts/type-coverage.ts).
+      - run: bun run type-coverage
 
   unit:
     name: Unit tests

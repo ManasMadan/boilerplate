@@ -12,7 +12,10 @@ The principles in `CLAUDE.md` apply everywhere; this is what they mean line by l
 - **No escape hatches.** No `any`, `as any`, `as unknown as`, `@ts-ignore`,
   `@ts-expect-error`, non-null `!` on a value that can be missing, `# type: ignore`,
   bare `# pyright: ignore`, `# noqa`, or `biome-ignore`. A new one is refused by the edit
-  hook unless `docs/testing.md` lists the file with its reason. Fix the type instead.
+  hook unless `docs/testing.md` lists the file with its reason. Fix the type instead. An
+  implicit `any` counts too (a library's loose result, `instanceof` on a generic class,
+  a `Job` without its type argument): `bun run type-coverage` fails on any in the source,
+  in CI's type-check job. Make it `unknown` and parse it, or give it its type.
 - **Parse, don't cast.** Data from outside the process (HTTP, queues, env, files, third
   parties, the database's JSON columns, other services) goes through a schema (zod,
   Pydantic) at the boundary; inside, types come from those schemas. No hand-written
