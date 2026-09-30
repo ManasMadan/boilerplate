@@ -91,6 +91,20 @@ jobs:
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
         with: { python: "true" }
+      # What the last type-check found in each package (tsBuildInfoFile in
+      # packages/typescript-config/base.json): a package turbo has to check again only
+      # re-checks the files the change can affect.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/*/node_modules/.cache/tsc
+            packages/*/node_modules/.cache/tsc
+            load/node_modules/.cache/tsc
+            scripts/node_modules/.cache/tsc
+            .claude/hooks/node_modules/.cache/tsc
+            turbo/generators/node_modules/.cache/tsc
+          key: tsc-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+          restore-keys: tsc-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
       - run: bun run check-types
       # No `any` in the source, every workspace (scripts/type-coverage.ts).
       - run: bun run type-coverage
@@ -193,9 +207,24 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      # ClamAV's signatures (hundreds of MB from a rate-limited CDN), kept for a day: with
+      # them in place clamd starts at once, and its updater fetches only what's newer.
+      - name: The day, for the signatures' cache key
+        id: day
+        run: |
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+          echo "CLAMAV_DATA=$HOME/.cache/clamav" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/clamav
+          key: clamav-db-${{ steps.day.outputs.day }}
+          restore-keys: clamav-db-
       # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
+      # Its own user writes them, so the directory is open to it.
       - name: Start object storage and virus scanning
-        run: docker compose --profile files up -d rustfs clamav
+        run: |
+          mkdir -p "$CLAMAV_DATA" && chmod 777 "$CLAMAV_DATA"
+          docker compose --profile files up -d rustfs clamav
       # Compose's Valkey, not a service container: the suites need more logical databases
       # than the default 16 (docs/testing.md), which only its command line can set.
       - name: Start Valkey
@@ -318,9 +347,24 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      # ClamAV's signatures (hundreds of MB from a rate-limited CDN), kept for a day: with
+      # them in place clamd starts at once, and its updater fetches only what's newer.
+      - name: The day, for the signatures' cache key
+        id: day
+        run: |
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+          echo "CLAMAV_DATA=$HOME/.cache/clamav" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/clamav
+          key: clamav-db-${{ steps.day.outputs.day }}
+          restore-keys: clamav-db-
       # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
+      # Its own user writes them, so the directory is open to it.
       - name: Start object storage and virus scanning
-        run: docker compose --profile files up -d rustfs clamav
+        run: |
+          mkdir -p "$CLAMAV_DATA" && chmod 777 "$CLAMAV_DATA"
+          docker compose --profile files up -d rustfs clamav
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - name: Bootstrap database roles
@@ -679,7 +723,10 @@ jobs:
       - uses: ./.github/actions/free-disk
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Reads the layers deploy.yml caches on master for this image (amd64, like this
-      # runner) and writes none, so pull requests don't crowd the repository's cache.
+      # runner). Pull requests write none, so they don't crowd the repository's cache; a
+      # push to master writes this build's, the same scope and build arguments deploy.yml
+      # uses, so its amd64 build of the commit that just passed is all cache hits instead
+      # of a second build.
       - uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           source: .
@@ -688,6 +735,7 @@ jobs:
           set: |
             *.cache-from=type=gha,scope=${{ matrix.image }}-amd64
             *.args.RELEASE=${{ github.sha }}
+            ${{ github.event_name == 'push' && format('*.cache-to=type=gha,mode=max,scope={0}-amd64', matrix.image) || '' }}
       # Trivy's vulnerability database (hundreds of MB), fetched once a day rather than by
       # each of the seven jobs, from a mirror without GHCR's rate limit.
       - name: The day, for the database's cache key

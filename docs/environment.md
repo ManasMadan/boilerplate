@@ -118,6 +118,7 @@ that uses it.
 | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT` | 51025, 58025 | Mailpit |
 | `S3_PORT`, `S3_CONSOLE_PORT` | 59000, 59001 | RustFS (`files` profile) |
 | `CLAMAV_PORT` | 53310 | ClamAV (`files` profile) |
+| `CLAMAV_DATA` | the `clamav` volume | Where ClamAV keeps its signatures: an absolute directory instead of the volume. CI points it at a directory it caches, so each run doesn't download them again. |
 | `STALWART_SMTPS_PORT`, `STALWART_HTTP_PORT` | 51465, 58080 | Stalwart (`mail` profile): submission over implicit TLS, management API |
 | `JAEGER_OTLP_PORT`, `JAEGER_UI_PORT` | 54318, 56686 | Jaeger (`telemetry` profile, and part of `full`): OTLP/HTTP in, traces at http://localhost:56686 |
 

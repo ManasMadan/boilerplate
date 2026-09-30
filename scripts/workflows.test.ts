@@ -407,6 +407,61 @@ describe("CI's caches", () => {
     );
     expect(cached(ci.jobs.images?.steps)).toContain("~/.cache/trivy");
   });
+
+  it("keeps ClamAV's signatures where compose's ClamAV reads them", () => {
+    const compose = readFileSync(join(ROOT, "docker-compose.yml"), "utf8");
+    expect(compose).toContain(`"\${CLAMAV_DATA:-clamav}:/var/lib/clamav"`);
+    for (const job of ["integration", "e2e"]) {
+      const steps = ci.jobs[job]?.steps ?? [];
+      expect(cached(steps)).toContain("~/.cache/clamav");
+      const day = steps.find((step) => step.name === "The day, for the signatures' cache key");
+      expect(day?.run).toContain('echo "CLAMAV_DATA=$HOME/.cache/clamav" >> "$GITHUB_ENV"');
+      // Restored before ClamAV starts, or it downloads them anyway.
+      const cache = steps.findIndex((step) => step.with?.path === "~/.cache/clamav");
+      const start = steps.findIndex(
+        (step) => step.name === "Start object storage and virus scanning",
+      );
+      expect(cache).toBeLessThan(start);
+    }
+  });
+
+  it("keeps each package's incremental type-check state, where tsc writes it", () => {
+    const base = readFileSync(join(ROOT, "packages/typescript-config/base.json"), "utf8");
+    expect(base).toContain('"incremental": true');
+    expect(base).toContain(`"tsBuildInfoFile": "\${configDir}/node_modules/.cache/tsc/`);
+    const paths = String(cached(ci.jobs.types?.steps)[0]).split("\n").filter(Boolean);
+    for (const dir of [
+      "apps/*",
+      "packages/*",
+      "load",
+      "scripts",
+      ".claude/hooks",
+      "turbo/generators",
+    ])
+      expect(paths).toContain(`${dir}/node_modules/.cache/tsc`);
+  });
+
+  it("builds the component library's Storybook through turbo, whose cache CI keeps", () => {
+    const ui = JSON.parse(readFileSync(join(ROOT, "packages/ui/package.json"), "utf8"));
+    expect(ui.scripts["test:visual"]).toStartWith("turbo run build-storybook --filter=@repo/ui");
+    const turbo = readFileSync(join(ROOT, "turbo.json"), "utf8");
+    expect(turbo).toMatch(/"build-storybook": \{\s*"outputs": \["storybook-static\/\*\*"\]/);
+  });
+
+  it("writes master's image layers where deploy.yml's amd64 build reads them, and no pull request's", () => {
+    const bake = ci.jobs.images?.steps?.find((step) =>
+      step.uses?.startsWith("docker/bake-action@"),
+    );
+    const set = String(bake?.with?.set);
+    expect(set).toContain(
+      `\${{ github.event_name == 'push' && format('*.cache-to=type=gha,mode=max,scope={0}-amd64', matrix.image) || '' }}`,
+    );
+    const deploy = readFileSync(join(ROOT, ".github/workflows/deploy.yml"), "utf8");
+    expect(deploy).toContain(
+      `*.cache-from=type=gha,scope=\${{ matrix.image }}-\${{ matrix.arch }}`,
+    );
+    expect(deploy).toContain(`RELEASE: \${{ env.SHA }}`);
+  });
 });
 
 describe("ci.yml's images job", () => {

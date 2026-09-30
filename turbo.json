@@ -30,6 +30,11 @@
     "check-types": {
       "dependsOn": ["gen", "^gen"]
     },
+    // The component library's static Storybook, which the screenshot tests run against
+    // (packages/ui test:visual): rebuilt only when the library changed.
+    "build-storybook": {
+      "outputs": ["storybook-static/**"]
+    },
     "lint": {},
     // Unit tests are pure (no network, no services), so their results are cacheable.
     "test": {

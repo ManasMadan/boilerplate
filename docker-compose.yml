@@ -126,7 +126,8 @@ services:
     environment:
       CLAMD_CONF_ConcurrentDatabaseReload: "no"
     mem_limit: 1536m
-    volumes: [clamav:/var/lib/clamav]
+    # The signatures; CLAMAV_DATA puts them in a directory instead (CI caches it).
+    volumes: ["${CLAMAV_DATA:-clamav}:/var/lib/clamav"]
     healthcheck:
       test: ["CMD-SHELL", "clamdcheck.sh"]
       interval: 10s

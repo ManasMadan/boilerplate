@@ -46,7 +46,14 @@
     "target": "ES2024",
     "lib": ["ES2024"],
     // Skip type-checking third-party .d.ts files. Our own code is still fully checked.
-    "skipLibCheck": true
+    "skipLibCheck": true,
+
+    // --- Speed ----------------------------------------------------------------
+    // What the last check found, per package: the next one re-checks only the files a
+    // change can affect. In each package's own node_modules (`${configDir}`), which CI
+    // caches between runs (the types job).
+    "incremental": true,
+    "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/tsconfig.tsbuildinfo"
   },
   // Relative to this file, so every package that extends it gets the stricter built-ins.
   "files": ["./reset.d.ts"]
