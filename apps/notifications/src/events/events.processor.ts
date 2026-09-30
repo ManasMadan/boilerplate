@@ -10,7 +10,7 @@
  */
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { type EventEnvelope, events } from "@repo/contracts/events";
-import { type NotificationPayload, parseJob, queuePrefix } from "@repo/jobs";
+import { type NotificationPayload, notificationPayload, parseJob, queuePrefix } from "@repo/jobs";
 import { runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { Dispatcher } from "../dispatch/dispatcher";
@@ -18,6 +18,9 @@ import { DeliveryPolicy } from "../dispatch/policy";
 
 function notificationFor(event: EventEnvelope): NotificationPayload | undefined {
   switch (event.name) {
+    // Asked for in the transaction of the change it's about (security alerts).
+    case "notification.requested.v1":
+      return notificationPayload.parse(events[event.name].parse(event.payload).notification);
     case "webhook.endpoint_disabled.v1": {
       if (!event.orgId) return undefined;
       const payload = events[event.name].parse(event.payload);

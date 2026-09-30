@@ -337,6 +337,41 @@ describe("account security", () => {
     });
   });
 
+  it("writes the alert with the audit entry, not straight to Redis, so it can't be lost", async () => {
+    const { session, email, password } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    await session.auth("/change-password", {
+      currentPassword: password,
+      newPassword: newPassword(),
+    });
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client
+      .query<{ name: string; payload: { notification?: { to: { email: string } } } }>(
+        `SELECT name, payload FROM app.outbox_event
+          WHERE actor_id = $1::uuid AND name IN ('auth.password_changed.v1', 'notification.requested.v1')
+          ORDER BY id`,
+        [userId],
+      )
+      .finally(() => client.end());
+    expect(rows.map((row) => row.name)).toEqual([
+      "auth.password_changed.v1",
+      "notification.requested.v1",
+    ]);
+    expect(rows[1]?.payload.notification?.to.email).toBe(email);
+    // Nothing went to the queue directly.
+    const queue = new Queue("notifications-critical", {
+      connection: harness.redis,
+      prefix: queuePrefix("notifications-critical"),
+    });
+    const queued = (await queue.getJobs(["waiting", "delayed", "prioritized"])).filter(
+      (job) =>
+        job.data.payload.template === "auth.security-alert" && job.data.payload.to.email === email,
+    );
+    await queue.close();
+    expect(queued).toEqual([]);
+  });
+
   it("a failed change sends no alert", async () => {
     const { session, email } = await signedInUser();
     const failed = await session.auth("/change-password", {

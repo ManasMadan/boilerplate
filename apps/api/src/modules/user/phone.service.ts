@@ -32,7 +32,11 @@ import {
   type Redis,
 } from "@repo/nest-common";
 import { env } from "../../env";
-import { type CriticalNotifications, InjectCriticalNotifications } from "../../notifications";
+import {
+  type CriticalNotifications,
+  InjectCriticalNotifications,
+  requestNotification,
+} from "../../notifications";
 import { emitEvent } from "../../outbox";
 
 const MAX_ATTEMPTS = 5;
@@ -145,7 +149,7 @@ export class PhoneService {
   }
 
   private async change(userId: string, phoneNumber: string | null) {
-    const { previous, user } = await transaction(this.database.write, async (tx) => {
+    return transaction(this.database.write, async (tx) => {
       const before = await tx.user.findUniqueOrThrow({
         where: { id: userId },
         select: { phoneNumber: true },
@@ -157,37 +161,38 @@ export class PhoneService {
           if (error.code === "P2002") throw new AppError("PHONE_NUMBER_TAKEN");
           throw error;
         });
-      if (before.phoneNumber !== phoneNumber) {
+      const previous = before.phoneNumber;
+      if (previous !== phoneNumber) {
+        const origin = { actorId: userId, orgId: null };
         await emitEvent(
           tx,
           "auth.phone_changed.v1",
           userId,
           { userId, change: phoneNumber ? "added" : "removed" },
-          { actorId: userId, orgId: null },
+          origin,
+        );
+        // With the change, in its transaction: sent exactly when it commits.
+        await requestNotification(
+          tx,
+          userId,
+          {
+            template: "auth.security-alert",
+            to: {
+              email: updated.email,
+              locale: (isLocale(updated.locale) ? updated.locale : "en") as Locale,
+              // The number that was on the account: after a change, the old one hears of it.
+              ...((previous ?? phoneNumber) && { phone: (previous ?? phoneNumber) as string }),
+            },
+            data: {
+              event: phoneNumber ? "phone-added" : "phone-removed",
+              securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
+            },
+          },
+          origin,
         );
       }
-      return { previous: before.phoneNumber, user: updated };
+      return updated;
     });
-    if (previous !== phoneNumber && (phoneNumber || previous)) {
-      await this.notifications.add(
-        "send",
-        {
-          template: "auth.security-alert",
-          to: {
-            email: user.email,
-            locale: (isLocale(user.locale) ? user.locale : "en") as Locale,
-            // The number that was on the account: after a change, the old one hears of it.
-            ...((previous ?? phoneNumber) && { phone: (previous ?? phoneNumber) as string }),
-          },
-          data: {
-            event: phoneNumber ? "phone-added" : "phone-removed",
-            securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
-          },
-        },
-        { jobId: randomUUID(), meta: jobMeta() },
-      );
-    }
-    return user;
   }
 }
 

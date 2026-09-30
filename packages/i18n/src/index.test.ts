@@ -49,11 +49,11 @@ describe("catalog completeness", () => {
   });
 
   it("describes every domain event in the audit log", async () => {
-    const { eventNames } = await import("@repo/contracts/events");
+    const { eventNames, unauditedEvents } = await import("@repo/contracts/events");
     for (const locale of ["en", "es"] as const) {
       const i18n = createI18n(bundledMessages);
       const t = await i18n.getTranslator(locale);
-      for (const name of eventNames) {
+      for (const name of eventNames.filter((event) => !unauditedEvents.has(event))) {
         const key = `workspace.audit.events.${name}` as Parameters<typeof t>[0];
         expect(t.has(key), `${locale} is missing workspace.audit.events.${name}`).toBe(true);
       }

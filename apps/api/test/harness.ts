@@ -15,6 +15,7 @@ import { type NotificationPayload, parseJob, queuePrefix } from "@repo/jobs";
 import { redisDatabase } from "@repo/nest-common/testing";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
+import pg from "pg";
 
 export interface Harness {
   baseUrl: string;
@@ -153,32 +154,56 @@ export function createSession(
  * Takes the first queued notification matching `match` (no worker runs in these tests),
  * waiting up to 5 seconds for it to be enqueued.
  */
+/** Notification requests (outbox rows) already handed to a test, by event id. */
+const takenRequests = new Set<string>();
+
 export async function takeNotification<T extends NotificationPayload["template"]>(
   harness: Harness,
   template: T,
   /** The email address or phone number it's sent to. */
   address: string,
 ): Promise<Extract<NotificationPayload, { template: T }>> {
+  const matches = (payload: NotificationPayload) => {
+    const to = payload.to as { email?: string; phone?: string };
+    return payload.template === template && (to.email === address || to.phone === address);
+  };
   const queue = new Queue("notifications-critical", {
     connection: harness.redis,
     prefix: queuePrefix("notifications-critical"),
   });
+  // Security alerts leave through the outbox instead (notification.requested.v1), which
+  // no relay drains here: they're read from its table.
+  const database = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+  await database.connect();
   try {
     for (let attempt = 0; attempt < 50; attempt++) {
       const jobs = await queue.getJobs(["waiting", "delayed", "prioritized"]);
       for (const job of jobs.reverse()) {
         const { payload } = parseJob("notifications-critical", "send", job.data);
-        const to = payload.to as { email?: string; phone?: string };
-        if (payload.template === template && (to.email === address || to.phone === address)) {
+        if (matches(payload)) {
           await job.remove();
           return payload as Extract<NotificationPayload, { template: T }>;
         }
+      }
+      const { rows } = await database.query<{
+        id: string;
+        payload: { notification: NotificationPayload };
+      }>(
+        "SELECT id::text, payload FROM app.outbox_event WHERE name = 'notification.requested.v1' ORDER BY id DESC",
+      );
+      const request = rows.find(
+        (row) => !takenRequests.has(row.id) && matches(row.payload.notification),
+      );
+      if (request) {
+        takenRequests.add(request.id);
+        return request.payload.notification as Extract<NotificationPayload, { template: T }>;
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error(`No ${template} queued for ${address}`);
   } finally {
     await queue.close();
+    await database.end();
   }
 }
 

@@ -15,7 +15,12 @@
  * Python consumers (apps/ai) read the same queues; their Pydantic models are generated
  * from these schemas (see docs/jobs-and-events.md).
  */
-import { type EventName, eventEnvelope, webhookEvents } from "@repo/contracts/events";
+import {
+  type EventName,
+  eventEnvelope,
+  unauditedEvents,
+  webhookEvents,
+} from "@repo/contracts/events";
 import { locales } from "@repo/i18n";
 import type { JobsOptions } from "bullmq";
 import { z } from "zod";
@@ -320,7 +325,7 @@ export type JobPayload<Q extends QueueName, J extends JobName<Q>> = z.infer<
  */
 const customerFacing: ReadonlySet<string> = new Set<EventName>(webhookEvents);
 export const eventSubscribers = {
-  "events-audit": () => true,
+  "events-audit": (name: string) => !unauditedEvents.has(name),
   "events-webhooks": (name: string) => customerFacing.has(name),
   // Stripe's events, and membership changes (paid plans are billed per seat).
   "events-billing": (name: string) =>
@@ -332,6 +337,7 @@ export const eventSubscribers = {
     name === "webhook.endpoint_disabled.v1" ||
     name === "org.api_key_created.v1" ||
     name === "webhook.endpoint_created.v1" ||
+    name === "notification.requested.v1" ||
     name === "email.feedback_received.v1",
   "events-realtime": (name: string) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: string) => boolean>>;

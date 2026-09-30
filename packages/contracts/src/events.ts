@@ -75,6 +75,13 @@ export const events = {
    * Our mail server says an address hard-bounced (or, from a feedback loop, that its
    * owner marked our mail as spam): apps/notifications never emails it again.
    */
+  /**
+   * A notification to send, written in the same transaction as the change it's about,
+   * so it can't be lost when Redis is down or be sent for a change that rolled back
+   * (security alerts). Only the notification service reads it (it validates the
+   * notification); the audit log and webhooks never copy it, since it holds addresses.
+   */
+  "notification.requested.v1": z.object({ notification: z.record(z.string(), z.unknown()) }),
   "email.feedback_received.v1": z.object({
     provider: z.enum(["stalwart"]),
     kind: z.enum(["bounce", "complaint"]),
@@ -114,6 +121,11 @@ export type EventName = keyof typeof events;
 export type EventPayload<N extends EventName> = z.infer<(typeof events)[N]>;
 
 export const eventNames = Object.keys(events) as [EventName, ...EventName[]];
+
+/** Events the audit log doesn't record: their payloads hold addresses, and the change they're about has its own event. */
+export const unauditedEvents: ReadonlySet<string> = new Set<EventName>([
+  "notification.requested.v1",
+]);
 
 /**
  * Events customers can receive on their webhook endpoints: product facts about their

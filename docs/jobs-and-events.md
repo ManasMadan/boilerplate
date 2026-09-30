@@ -148,7 +148,9 @@ for 24 hours.
 
 Names are versioned (`todo.completed.v1`). Adding an optional field is compatible;
 anything else is a new version, published alongside the old one until every consumer
-has moved. The audit log records every event.
+has moved. The audit log records every event except `notification.requested.v1`
+(`unauditedEvents`): its payload is a whole notification, addresses included, and the
+change it's about has its own event.
 
 | Events | Emitted by | Also consumed by |
 |---|---|---|

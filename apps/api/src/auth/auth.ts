@@ -70,6 +70,7 @@ import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Redis } from "ioredis";
 import type { Env } from "../env";
 import { features } from "../features";
+import { requestNotification } from "../notifications";
 import { type EventOrigin, emitAnyEvent, emitEvent } from "../outbox";
 import { createAccountLimits, createEmailLimits } from "./account-limits";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
@@ -375,36 +376,48 @@ export function createAuth({
         }
         const alert = securityAlertFor(ctx);
         if (!alert) return;
-        const account = await db.user.findUnique({
-          where: ctx.context.session ? { id: ctx.context.session.user.id } : { email: alert.email },
-          select: { id: true, phoneNumber: true },
-        });
-        const userId = account?.id;
-        if (userId) {
-          await transaction(db, (tx) =>
-            emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
-              actorId: userId,
-              orgId: null,
-            }),
-          );
+        // better-auth has committed the change by now: whatever fails here is logged, and
+        // never turns a change that happened into an error for the user.
+        try {
+          const account = await db.user.findUnique({
+            where: ctx.context.session
+              ? { id: ctx.context.session.user.id }
+              : { email: alert.email },
+            select: { id: true, phoneNumber: true },
+          });
+          const userId = account?.id ?? null;
+          const locale = await localeFor(alert.email, ctx.headers);
+          // The audit entry and the alert in one transaction: both or neither, and the
+          // alert leaves through the outbox, so Redis being down delays it, never loses it.
+          await transaction(db, async (tx) => {
+            if (userId) {
+              await emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
+                actorId: userId,
+                orgId: null,
+              });
+            }
+            await requestNotification(
+              tx,
+              userId ?? alert.email,
+              {
+                template: "auth.security-alert",
+                to: {
+                  email: alert.email,
+                  locale,
+                  ...(account?.phoneNumber && { phone: account.phoneNumber }),
+                },
+                data: {
+                  event: alert.event,
+                  ...("newEmail" in alert && alert.newEmail && { newEmail: alert.newEmail }),
+                  securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
+                },
+              },
+              { actorId: userId, orgId: null },
+            );
+          });
+        } catch (error) {
+          ctx.context.logger.error("security alert not recorded", error);
         }
-        await notifications.add(
-          "send",
-          {
-            template: "auth.security-alert",
-            to: {
-              email: alert.email,
-              locale: await localeFor(alert.email, ctx.headers),
-              ...(account?.phoneNumber && { phone: account.phoneNumber }),
-            },
-            data: {
-              event: alert.event,
-              ...("newEmail" in alert && alert.newEmail && { newEmail: alert.newEmail }),
-              securityUrl: new URL("/settings/security", env.WEB_URL).toString(),
-            },
-          },
-          { jobId: randomUUID(), meta: jobMeta() },
-        );
       }),
     },
 

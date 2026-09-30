@@ -484,6 +484,42 @@ describe("notifications service", () => {
     expect(await subjects(member.email)).toEqual([]);
   });
 
+  it("sends a notification asked for in the outbox, once however often it arrives", async () => {
+    const email = `user-${randomUUID()}@test.dev`;
+    const events = createProducer(
+      "events-notifications",
+      createRedis(process.env.REDIS_URL as string),
+    );
+    const id = randomUUID();
+    const event = {
+      id,
+      name: "notification.requested.v1",
+      key: randomUUID(),
+      payload: {
+        notification: {
+          template: "auth.security-alert",
+          to: { email, locale: "en" },
+          data: { event: "password-changed", securityUrl: "https://app.test/settings/security" },
+        },
+      },
+      orgId: null,
+      actorId: null,
+      requestId: null,
+      occurredAt: new Date().toISOString(),
+      source: "app",
+    };
+    await events.add("event", event, { jobId: id });
+    await events.add("event", event, { jobId: `${id}-again` });
+    await events.close();
+    await settle(id, 1);
+    expect((await waitForEmail(email)).Subject).toBe("Your password was changed");
+    const sent = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM notifications.delivery WHERE idempotency_key LIKE $1",
+      [`${id}:%`],
+    );
+    expect(sent[0]?.n).toBe(1);
+  });
+
   it("keeps each user's inbox private at the database level", async () => {
     const user = await newUser();
     await settle(await reminder(user.id), 2);
