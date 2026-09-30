@@ -48,16 +48,18 @@ digest, Helm charts, OpenTofu providers, and versions marked with a `# renovate:
 
 The root `package.json` forces a few transitive versions (`overrides`) and patches one
 package (`patchedDependencies`), each to fix a known vulnerability that its parent pins
-exactly. Every entry has a row here, which `scripts/overrides.test.ts` checks. When the
-"drop when" holds, remove the entry and its row, run `bun install`, and check that the
-Security workflow's OSV scan still passes.
+exactly. Every entry has a row here, which `scripts/overrides.test.ts` checks, and the
+test fails once a row's "review by" date has passed, as `osv-scanner.toml`'s ignores
+expire. When the "drop when" holds, remove the entry and its row, run `bun install`,
+and check that the Security workflow's OSV scan still passes; otherwise move the date
+on.
 
-| Package | Pinned to | Why | Drop when |
-| --- | --- | --- | --- |
-| `mysql2` | 3.23.1 | A credential leak and a decompression bomb in the version the Prisma CLI pins; the migrate image ships it. | Prisma requires 3.23.1 or later. |
-| `deepmerge-ts` | 8.0.0 | An advisory in the version `@prisma/config` pins; the migrate image ships it. | `@prisma/config` requires 8.0.0 or later. |
-| `js-yaml` | 4.3.2 | An advisory in the version `@hey-api/json-schema-ref-parser` pins (code generation). | `@hey-api/openapi-ts` depends on js-yaml 4.3.2 or later. |
-| `uuid` | 11.1.1 | An advisory in the version `xcode` asks for (Expo's native project tooling, its only user). | `xcode`, through `@expo/config-plugins`, allows uuid 11.1.1 or later. |
-| `decode-uri-component` | patched 0.2.2 | Its fix, 0.5.0, is ESM-only and query-string 7 (Expo Router) requires it, so the patch backports 0.5.0's linear-time decoder instead. `osv-scanner.toml` ignores the advisory until the entry expires. | Expo Router moves off query-string 7: drop the patch and the ignore together. |
+| Package | Pinned to | Why | Drop when | Review by |
+| --- | --- | --- | --- | --- |
+| `mysql2` | 3.23.1 | A credential leak and a decompression bomb in the version the Prisma CLI pins; the migrate image ships it. | Prisma requires 3.23.1 or later. | 2027-03-31 |
+| `deepmerge-ts` | 8.0.0 | An advisory in the version `@prisma/config` pins; the migrate image ships it. | `@prisma/config` requires 8.0.0 or later. | 2027-03-31 |
+| `js-yaml` | 4.3.2 | An advisory in the version `@hey-api/json-schema-ref-parser` pins (code generation). | `@hey-api/openapi-ts` depends on js-yaml 4.3.2 or later. | 2027-03-31 |
+| `uuid` | 11.1.1 | An advisory in the version `xcode` asks for (Expo's native project tooling, its only user). | `xcode`, through `@expo/config-plugins`, allows uuid 11.1.1 or later. | 2027-03-31 |
+| `decode-uri-component` | patched 0.2.2 | Its fix, 0.5.0, is ESM-only and query-string 7 (Expo Router) requires it, so the patch backports 0.5.0's linear-time decoder instead. `osv-scanner.toml` ignores the advisory until the entry expires. | Expo Router moves off query-string 7: drop the patch and the ignore together. | 2027-03-31 |
 
 After merging, the deploy skill covers the rollout to staging.
