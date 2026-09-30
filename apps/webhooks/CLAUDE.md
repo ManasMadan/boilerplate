@@ -3,6 +3,12 @@
 NestJS on Fastify, port 3004. Receives provider webhooks (Stripe, and Stalwart's bounces) and delivers
 customers' outbound webhooks.
 
+Outbound delivery is built here rather than on Svix (which does the same, self-hosted):
+it's a few processors over tables and queues the stack already runs, where Svix would be
+another stateful service with its own database to deploy, back up and upgrade. Signing
+follows Standard Webhooks through its reference library, so receivers can use Svix's
+libraries anyway, and a move to Svix later keeps the same headers.
+
 ## Commands (from the repo root)
 
 - Unit tests: `bun run --filter @repo/webhooks test`

@@ -16,7 +16,11 @@ every query is scoped to that organization by row-level security
 (`tenant(org_id)` in `app/db/session.py`).
 
 The one route reachable from outside is the MCP server at `/ai/mcp`, which checks OAuth
-tokens itself (below).
+tokens itself (below). It's a second MCP server next to the api's (`/api/mcp`, todos) on
+purpose: the document tools need retrieval and the model, which live here, so serving
+them from the api would put a hop and a second copy of their inputs in between. Both
+trust the same OAuth server (the api's JWKS), so one connected app can use both; a
+client connects to each URL it's given.
 
 | Route | What it does |
 |---|---|
