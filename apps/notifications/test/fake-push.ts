@@ -100,6 +100,8 @@ export async function startFakePush() {
           data: { link?: string };
         };
       };
+      // A provider that drops the connection: the transport's fetch throws.
+      if (message.token.startsWith("crash")) return request.socket.destroy();
       if (message.token.startsWith("dead"))
         return reply(404, {
           error: { status: "NOT_FOUND", details: [{ errorCode: "UNREGISTERED" }] },

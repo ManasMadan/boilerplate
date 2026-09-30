@@ -112,9 +112,14 @@ export class Dispatcher implements OnApplicationShutdown {
       if (!renders(template, channel) || !reaches(recipient, channel)) continue;
       const key = `${idempotencyKey}:${channel}:${recipient.userId ?? recipient.email ?? recipient.phone}`;
       if (channel === "push" && recipient.userId && template.push) {
-        failures.push(
-          ...(await this.deliverPush(recipient, name, template, context, policy, key, false)),
-        );
+        // Caught like every other channel: a push that throws must not skip the rest.
+        try {
+          failures.push(
+            ...(await this.deliverPush(recipient, name, template, context, policy, key, false)),
+          );
+        } catch (error) {
+          failures.push(error);
+        }
         continue;
       }
       if (!(await this.log.claim(key, channel, name, recipient.userId))) continue;
@@ -232,7 +237,17 @@ export class Dispatcher implements OnApplicationShutdown {
     for (const device of devices) {
       const deviceKey = `${key}:${device.id}`;
       if (!(await this.log.claim(deviceKey, "push", name, userId))) continue;
-      const result = await this.push.send(userId, device, message);
+      let result: Awaited<ReturnType<typeof this.push.send>>;
+      try {
+        result = await this.push.send(userId, device, message);
+      } catch (error) {
+        // A provider that throws (network) fails this device only; the others still go.
+        await this.log.finish(deviceKey, "failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        failures.push(error);
+        continue;
+      }
       if (result.ok) {
         await this.log.finish(
           deviceKey,

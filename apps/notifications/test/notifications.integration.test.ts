@@ -624,6 +624,29 @@ describe("notifications service", () => {
     expect(await devices(user.id)).toEqual([]);
   });
 
+  it("keeps going when a push provider throws: other devices and channels still get it", async () => {
+    const user = await newUser();
+    const live = `android-${randomUUID()}`;
+    await addDevice(user.id, "android", `crash-${randomUUID()}`);
+    await addDevice(user.id, "android", live);
+    const { Dispatcher } = await import("../src/dispatch/dispatcher");
+    const dispatcher = app.get(Dispatcher);
+    const key = randomUUID();
+    await expect(
+      dispatcher.dispatch(
+        {
+          template: "todo.reminder",
+          to: { userId: user.id },
+          data: { todoId: randomUUID(), title: "Still" },
+        },
+        key,
+      ),
+    ).rejects.toThrow(/1 deliveries failed/);
+    expect((await pushStatuses(key)).map((row) => row.status).sort()).toEqual(["failed", "sent"]);
+    expect(deliveredTo(live)).toHaveLength(1);
+    expect((await waitForEmail(user.email)).Subject).toBe("Reminder: Still");
+  });
+
   it("retries a push the provider failed, without resending the ones that went out", async () => {
     const user = await newUser();
     const good = `android-${randomUUID()}`;
