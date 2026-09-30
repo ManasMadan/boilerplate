@@ -35,6 +35,23 @@ import type Stripe from "stripe";
 import { env } from "../../env";
 import { STRIPE } from "./stripe";
 
+/**
+ * Runs a Stripe call; Stripe failing (down, slow, refusing our request) becomes
+ * UPSTREAM_UNAVAILABLE, with Stripe's error as the cause (logged: it's a 5xx), instead
+ * of an unexplained INTERNAL. Anything else is ours and passes through.
+ */
+export async function fromStripe<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    const type = (error as { type?: unknown })?.type;
+    if (typeof type === "string" && type.startsWith("Stripe")) {
+      throw new AppError("UPSTREAM_UNAVAILABLE", { cause: error });
+    }
+    throw error;
+  }
+}
+
 /** How long Stripe keeps a checkout session open (its default, 24 hours). */
 const CHECKOUT_SESSION_SECONDS = 24 * 60 * 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -135,25 +152,26 @@ export class BillingService {
     // the same key), and a new one, say for the other interval, expires the one before:
     // a workspace has one open checkout at a time, so it can't end up paying twice.
     const hour = Math.floor(Date.now() / 3_600_000);
-    const session = await stripe.checkout.sessions.create(
-      {
-        mode: "subscription",
-        customer,
-        client_reference_id: orgId,
-        line_items: [
-          { price: price as string, quantity: Math.max(1, await this.memberCount(orgId)) },
-        ],
-        subscription_data: {
-          metadata: { orgId },
-          // One free trial per organization.
-          ...(env.STRIPE_TRIAL_DAYS > 0 &&
-            hadOne === 0 && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
+    const seats = Math.max(1, await this.memberCount(orgId));
+    const session = await fromStripe(() =>
+      stripe.checkout.sessions.create(
+        {
+          mode: "subscription",
+          customer,
+          client_reference_id: orgId,
+          line_items: [{ price: price as string, quantity: seats }],
+          subscription_data: {
+            metadata: { orgId },
+            // One free trial per organization.
+            ...(env.STRIPE_TRIAL_DAYS > 0 &&
+              hadOne === 0 && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
+          },
+          allow_promotion_codes: true,
+          success_url: `${settings.toString()}?checkout=done`,
+          cancel_url: settings.toString(),
         },
-        allow_promotion_codes: true,
-        success_url: `${settings.toString()}?checkout=done`,
-        cancel_url: settings.toString(),
-      },
-      { idempotencyKey: `checkout-${orgId}-${interval}-${hour}` },
+        { idempotencyKey: `checkout-${orgId}-${interval}-${hour}` },
+      ),
     );
     if (!session.url) throw new Error("Stripe returned a checkout session without a URL");
     // Atomic swap: of two checkouts at once, the later one sees (and expires) the earlier.
@@ -179,10 +197,12 @@ export class BillingService {
       where: { orgId },
     });
     if (!row) throw new AppError("NO_SUBSCRIPTION");
-    const session = await stripe.billingPortal.sessions.create({
-      customer: row.stripeCustomerId,
-      return_url: new URL("/settings/billing", env.WEB_URL).toString(),
-    });
+    const session = await fromStripe(() =>
+      stripe.billingPortal.sessions.create({
+        customer: row.stripeCustomerId,
+        return_url: new URL("/settings/billing", env.WEB_URL).toString(),
+      }),
+    );
     return { url: session.url };
   }
 
@@ -192,7 +212,9 @@ export class BillingService {
       where: { orgId },
     });
     if (!row) return [];
-    const list = await stripe.invoices.list({ customer: row.stripeCustomerId, limit: 24 });
+    const list = await fromStripe(() =>
+      stripe.invoices.list({ customer: row.stripeCustomerId, limit: 24 }),
+    );
     return list.data.map((invoice) => ({
       id: invoice.id as string,
       number: invoice.number ?? null,
@@ -215,11 +237,13 @@ export class BillingService {
       where: { id: orgId },
       select: { name: true },
     });
-    const created = await stripe.customers.create(
-      { name: org.name, metadata: { orgId } },
-      // The same organization always maps to the same customer, even when two admins
-      // click at once or a request is retried.
-      { idempotencyKey: `customer-${orgId}` },
+    const created = await fromStripe(() =>
+      stripe.customers.create(
+        { name: org.name, metadata: { orgId } },
+        // The same organization always maps to the same customer, even when two admins
+        // click at once or a request is retried.
+        { idempotencyKey: `customer-${orgId}` },
+      ),
     );
     await withTenant(this.database.write, orgId).billingCustomer.createMany({
       data: [{ orgId, stripeCustomerId: created.id }],
