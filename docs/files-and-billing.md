@@ -90,7 +90,8 @@ brings it back (it keeps its signatures, so it's quick).
 ## Billing
 
 Billing is per organization, on Stripe (`apps/api/src/modules/billing`). Stripe is the
-source of truth; `billing.customer` and `billing.subscription` mirror it.
+source of truth; `billing.customer` and `billing.subscription` mirror it, and
+`billing.trial_card` remembers which cards have had a free trial.
 
 ### Plans and entitlements
 
@@ -119,15 +120,23 @@ is used, and hide or badge it in the clients.
 
 - Every `billing.*` procedure is for owners and admins (`orgAdmin`).
 - `billing.checkout` creates the Stripe customer the first time, with
-  the organization id in its metadata, and returns a Checkout URL. The first subscription
-  gets a `STRIPE_TRIAL_DAYS` trial. A workspace has one checkout open at a time: asking
-  again within the hour for the same interval returns the same session (an idempotency
-  key), and a new session expires the one before, so two admins or two tabs can't end up
-  paying for two subscriptions. If two live subscriptions appear anyway, sync logs an
-  error naming both, for someone to refund one. The trial is per workspace, so a new
-  workspace gets a new one; tying it to a card would take Stripe Radar rules or card
-  fingerprints. `billing.portal` opens Stripe's billing portal;
-  `billing.invoices` lists past invoices.
+  the organization id in its metadata, and returns a Checkout URL. A workspace has one
+  checkout open at a time, kept in Redis (`billing:checkout:<org>`): asking again for the
+  same offer (price, seats, trial) returns that session while it's open, and a new session
+  (another interval, or the member count changed) expires the one before, so two admins
+  or two tabs can't end up paying for two subscriptions. Requests that race each other send
+  the same idempotency key, which names the previous session and the offer, so Stripe
+  answers them with one session and never replays a closed one. If two live subscriptions
+  appear anyway, sync logs an error naming both, for someone to refund one.
+- The first subscription of a workspace gets a `STRIPE_TRIAL_DAYS` trial, and each card
+  gets one trial: when sync sees a trialing subscription, it claims the card's Stripe
+  fingerprint (the same for a card in every customer) in `billing.trial_card`, and a
+  subscription whose card was already claimed by another has its trial ended at once
+  (`trial_end: "now"`, so Stripe charges the card), so new workspaces or accounts can't
+  farm trials. Only cards have fingerprints; a trial paid another way, or started without
+  a card (`payment_method_collection: "if_required"`), keeps it, and Stripe Radar rules
+  can cover those.
+- `billing.portal` opens Stripe's billing portal; `billing.invoices` lists past invoices.
 - Stripe's events arrive at apps/webhooks, `POST /webhooks/stripe`: the signature is
   checked against `STRIPE_WEBHOOK_SECRET`, the event is stored once in
   `webhooks.inbound_event` (unique on Stripe's id) together with a
@@ -142,11 +151,13 @@ is used, and hide or badge it in the clients.
 ### Locally without a Stripe account
 
 `packages/fake-stripe` is a stateful stand-in for the parts of Stripe the app uses:
-customers, Checkout, the billing portal, subscriptions and invoices. It checks the secret
-key, honours `Idempotency-Key`, sends signed webhooks to apps/webhooks like Stripe does,
+customers, Checkout, the billing portal, subscriptions, invoices and the cards they're
+paid with. It checks the secret key, honours `Idempotency-Key` (and refuses a key reused
+with other parameters, as Stripe does), sends signed webhooks to apps/webhooks like Stripe does,
 and answers 404 to anything it doesn't implement, so a new Stripe call fails loudly until
 it's added. Hosted pages at `/checkout/<session>` (pay, pay with a declined card, go back)
-and `/portal/<session>` (cancel or resume); test hooks under `/__fake/` make a renewal fail
+(a posted `card` names the card, so tests can pay twice with the same one) and
+`/portal/<session>` (cancel or resume); test hooks under `/__fake/` make a renewal fail
 or a subscription lapse.
 
 ```sh

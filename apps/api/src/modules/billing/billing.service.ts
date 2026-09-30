@@ -142,46 +142,56 @@ export class BillingService {
       throw new AppError("ALREADY_SUBSCRIBED");
     }
     const customer = await this.customer(orgId);
-    const hadOne = await this.repository.hadSubscription(orgId);
+    // One free trial per organization (and per card: see oneTrialPerCard).
+    const trial = env.STRIPE_TRIAL_DAYS > 0 && !(await this.repository.hadSubscription(orgId));
     const price = interval === "month" ? env.STRIPE_PRICE_PRO_MONTHLY : env.STRIPE_PRICE_PRO_YEARLY;
-    const settings = new URL("/settings/billing", env.WEB_URL);
-    // A double click or a second tab gets the same session (Stripe replays the answer for
-    // the same key), and a new one, say for the other interval, expires the one before:
-    // a workspace has one open checkout at a time, so it can't end up paying twice.
-    const hour = Math.floor(Date.now() / 3_600_000);
     const seats = Math.max(1, await this.repository.memberCount(orgId));
+    // What the session sells. A workspace has one checkout open at a time, so it can't end
+    // up paying twice: asking again for the same offer gets the open session back, and a
+    // new session (another interval, or the seats changed) expires the one before.
+    const offer = `${price}x${seats}${trial ? `+${env.STRIPE_TRIAL_DAYS}d` : ""}`;
+    const slot = `billing:checkout:${orgId}`;
+    const previous = await this.redis.get(slot);
+    if (previous) {
+      // Whatever keeps us from reading it back (gone, Stripe down), a new session is made
+      // instead, and that call surfaces an outage.
+      const open = await stripe.checkout.sessions.retrieve(previous).catch(() => null);
+      if (open?.status === "open" && open.metadata?.offer === offer) {
+        return { url: open.url as string };
+      }
+    }
+    const settings = new URL("/settings/billing", env.WEB_URL);
+    const hour = Math.floor(Date.now() / 3_600_000);
     const session = await fromStripe(() =>
       stripe.checkout.sessions.create(
         {
           mode: "subscription",
           customer,
           client_reference_id: orgId,
+          metadata: { orgId, offer },
           line_items: [{ price: price as string, quantity: seats }],
           subscription_data: {
             metadata: { orgId },
-            // One free trial per organization.
-            ...(env.STRIPE_TRIAL_DAYS > 0 &&
-              !hadOne && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
+            ...(trial && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
           },
           allow_promotion_codes: true,
           success_url: `${settings.toString()}?checkout=done`,
           cancel_url: settings.toString(),
         },
-        { idempotencyKey: `checkout-${orgId}-${interval}-${hour}` },
+        // Requests racing each other (a double click, two tabs) saw the same previous
+        // session, so they send the same key and Stripe answers all of them with one
+        // session. The key names that previous session and the offer, so it's never
+        // replayed for a closed session or for other parameters (Stripe refuses those);
+        // the hour bounds a replay should Redis lose the slot.
+        { idempotencyKey: `checkout-${orgId}-${offer}-${previous ?? "none"}-${hour}` },
       ),
     );
     // Atomic swap: of two checkouts at once, the later one sees (and expires) the earlier.
-    const previous = await this.redis.set(
-      `billing:checkout:${orgId}`,
-      session.id,
-      "EX",
-      CHECKOUT_SESSION_SECONDS,
-      "GET",
-    );
-    if (previous && previous !== session.id) {
-      await stripe.checkout.sessions.expire(previous).catch((error: unknown) => {
+    const replaced = await this.redis.set(slot, session.id, "EX", CHECKOUT_SESSION_SECONDS, "GET");
+    if (replaced && replaced !== session.id) {
+      await stripe.checkout.sessions.expire(replaced).catch((error: unknown) => {
         // Already paid or expired: nothing left to close.
-        this.log.info({ sessionId: previous, error }, "earlier checkout session not expired");
+        this.log.info({ sessionId: replaced, error }, "earlier checkout session not expired");
       });
     }
     // A hosted checkout session always has one.
@@ -265,6 +275,7 @@ export class BillingService {
       await this.repository.saveSubscription(tx, subscription.id, orgId, data);
       return this.repository.otherPaid(tx, orgId, subscription.id);
     });
+    if (data.status === "trialing") await this.oneTrialPerCard(subscription);
     // Checkout keeps one session open per workspace, so this shouldn't happen; if it does
     // (a session paid in the moment before it was expired), someone must refund one.
     if (paid.has(data.status) && others.length > 0) {
@@ -273,6 +284,29 @@ export class BillingService {
         "workspace has more than one live subscription: refund one in Stripe",
       );
     }
+  }
+
+  /**
+   * One free trial per card: a trial paid for with a card that already had one, in any
+   * workspace, ends now (Stripe charges the card at once). A card's fingerprint is the
+   * same in every Stripe customer, so a new workspace or a new account doesn't reset it.
+   */
+  private async oneTrialPerCard(subscription: Stripe.Subscription) {
+    const stripe = this.client;
+    const method = subscription.default_payment_method;
+    // A trial started without a card on file (Checkout's "if_required") has nothing to check.
+    if (typeof method !== "string") return;
+    const card = (await stripe.paymentMethods.retrieve(method)).card?.fingerprint;
+    // Only cards have fingerprints; other methods keep their trial (Stripe Radar rules can
+    // cover them).
+    if (!card) return;
+    if ((await this.repository.claimTrial(card, subscription.id)) === subscription.id) return;
+    await stripe.subscriptions.update(
+      subscription.id,
+      { trial_end: "now" },
+      { idempotencyKey: `end-trial-${subscription.id}` },
+    );
+    this.log.info({ subscriptionId: subscription.id }, "this card already had a trial: ended it");
   }
 
   /** Paid plans are per seat: keeps the subscription's quantity at the member count. */

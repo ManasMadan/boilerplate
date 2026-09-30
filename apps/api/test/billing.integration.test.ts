@@ -214,14 +214,18 @@ async function join(owner: ReturnType<typeof createSession>, orgId: string, role
   return member;
 }
 
-/** Subscribes through the fake Stripe's hosted checkout, as a browser would. */
+/**
+ * Subscribes through the fake Stripe's hosted checkout, as a browser would, with a card
+ * of its own unless given one (a card has one free trial, in any workspace).
+ */
 async function subscribe(
   session: ReturnType<typeof createSession>,
   interval: "month" | "year" = "month",
+  card: string = randomUUID(),
 ) {
   const { url } = await session.rpc.billing.checkout({ interval });
   expect(url).toMatch(new RegExp(`^${stripe.url}/checkout/cs_`));
-  const paid = await fetch(`${url}/pay`, { method: "POST", redirect: "manual" });
+  const paid = await pay(url, card);
   expect(paid.status).toBe(303);
   expect(paid.headers.get("location")).toContain("/settings/billing?checkout=done");
   return eventually(
@@ -229,6 +233,10 @@ async function subscribe(
     (overview) => overview.plan === "pro",
   );
 }
+
+/** Pays on the fake's hosted checkout page with `card`; the page's answer. */
+const pay = (url: string, card: string = randomUUID()) =>
+  fetch(`${url}/pay`, { method: "POST", body: new URLSearchParams({ card }), redirect: "manual" });
 
 async function expectError(promise: Promise<unknown>, code: string) {
   const error = await promise.then(
@@ -313,6 +321,8 @@ describe("subscribing", () => {
       owner.session.rpc.billing.checkout({ interval: "month" }),
     ]);
     expect(again.url).toBe(first.url);
+    // Or a click later on, while that session is still open.
+    expect((await owner.session.rpc.billing.checkout({ interval: "month" })).url).toBe(first.url);
     const customers = [...stripe.customers.values()].filter((c) => c.metadata.orgId === orgId);
     expect(customers).toHaveLength(1);
     expect(
@@ -340,6 +350,29 @@ describe("subscribing", () => {
     ).toHaveLength(1);
   });
 
+  it("opens a new checkout when the seats change, and closes the old one", async () => {
+    const { owner, orgId } = await workspace();
+    const alone = await owner.session.rpc.billing.checkout({ interval: "month" });
+    await join(owner.session, orgId);
+    // The same interval within the hour, for two seats now: a new session, not a replay.
+    const two = await owner.session.rpc.billing.checkout({ interval: "month" });
+    expect(two.url).not.toBe(alone.url);
+    expect(await (await fetch(two.url)).text()).toContain("2 × 12.00 USD / month");
+    expect((await pay(alone.url)).status).toBe(410);
+    expect((await pay(two.url)).status).toBe(303);
+  });
+
+  it("changing one's mind back and forth leaves the latest checkout payable", async () => {
+    const { owner } = await workspace();
+    const monthly = await owner.session.rpc.billing.checkout({ interval: "month" });
+    const yearly = await owner.session.rpc.billing.checkout({ interval: "year" });
+    const monthlyAgain = await owner.session.rpc.billing.checkout({ interval: "month" });
+    expect(new Set([monthly.url, yearly.url, monthlyAgain.url]).size).toBe(3);
+    expect((await pay(monthly.url)).status).toBe(410);
+    expect((await pay(yearly.url)).status).toBe(410);
+    expect((await pay(monthlyAgain.url)).status).toBe(303);
+  });
+
   it("a declined card leaves the workspace on Free", async () => {
     const { owner } = await workspace();
     const { url } = await owner.session.rpc.billing.checkout({ interval: "month" });
@@ -365,12 +398,79 @@ describe("subscribing", () => {
       () => owner.session.rpc.billing.overview(),
       (overview) => overview.plan === "free",
     );
-    const again = await subscribe(owner.session, "year");
+    // The same interval again within the hour: a new checkout, not the one already paid.
+    const again = await subscribe(owner.session, "month");
     expect(again.subscription).toMatchObject({
       status: "active",
-      interval: "year",
+      interval: "month",
       trialEnd: null,
     });
+  });
+});
+
+describe("one free trial per card", () => {
+  it("a new workspace paying with a card that had a trial is charged at once", async () => {
+    const card = randomUUID();
+    const first = await workspace();
+    await subscribe(first.owner.session, "month", card);
+    const second = await workspace();
+    await subscribe(second.owner.session, "month", card);
+    const ended = await eventually(
+      () => second.owner.session.rpc.billing.overview(),
+      (overview) => overview.subscription?.status === "active",
+    );
+    expect(ended.plan).toBe("pro");
+    const { data } = await sdk().invoices.list({
+      customer: stripe.subscriptionFor(second.orgId)?.customer as string,
+    });
+    expect(data[0]?.amount_due).toBe(1_200);
+
+    // The first keeps its trial, however often it's synced again (a member joining).
+    await join(first.owner.session, first.orgId);
+    expect(await settled(await relayMembership(first.orgId))).not.toContain("failed");
+    expect((await first.owner.session.rpc.billing.overview()).subscription).toMatchObject({
+      status: "trialing",
+      seats: 2,
+    });
+    // Another card is another trial.
+    const third = await workspace();
+    expect((await subscribe(third.owner.session)).subscription?.status).toBe("trialing");
+  });
+
+  it("a trial paid without a card keeps it", async () => {
+    const { owner, orgId } = await workspace();
+    const { url } = await owner.session.rpc.billing.checkout({ interval: "month" });
+    const paid = await handled(() =>
+      fetch(`${url}/pay`, {
+        method: "POST",
+        body: new URLSearchParams({ method: "sepa_debit" }),
+        redirect: "manual",
+      }),
+    );
+    expect(paid).not.toContain("failed");
+    expect(await sql("SELECT status FROM billing.subscription WHERE org_id = $1", [orgId])).toEqual(
+      [{ status: "trialing" }],
+    );
+  });
+
+  it("a trial started without a card keeps it", async () => {
+    const { orgId } = await workspace();
+    const client = sdk();
+    const customer = await client.customers.create({ metadata: { orgId } });
+    const session = await client.checkout.sessions.create({
+      customer: customer.id,
+      mode: "subscription",
+      payment_method_collection: "if_required",
+      line_items: [{ price: MONTHLY, quantity: 1 }],
+      subscription_data: { metadata: { orgId }, trial_period_days: 14 },
+      success_url: "http://elsewhere.test/done",
+    });
+    expect(await handled(() => pay(`${stripe.url}/checkout/${session.id}`))).not.toContain(
+      "failed",
+    );
+    expect(await sql("SELECT status FROM billing.subscription WHERE org_id = $1", [orgId])).toEqual(
+      [{ status: "trialing" }],
+    );
   });
 });
 
@@ -617,6 +717,14 @@ describe("keeping in sync, edge cases", () => {
     );
     const [draft] = await owner.session.rpc.billing.invoices();
     expect(draft).toMatchObject({ status: "draft", number: null, url: null });
+  });
+
+  it("opens a new checkout when the one on record can't be read back", async () => {
+    const { owner, orgId } = await workspace();
+    // Say, one made with another Stripe key before the keys were rotated.
+    await harness.redis.set(`billing:checkout:${orgId}`, "cs_unknown", "EX", 60);
+    const { url } = await owner.session.rpc.billing.checkout({ interval: "month" });
+    expect((await pay(url)).status).toBe(303);
   });
 
   it("opens a new checkout even when the earlier one can't be closed any more", async () => {

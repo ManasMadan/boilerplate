@@ -1,11 +1,13 @@
 /**
  * A local, stateful stand-in for the parts of Stripe the app uses: customers, Checkout,
- * the billing portal, subscriptions and invoices. It keeps state between calls (unlike
- * stripe-mock), checks the secret key, honours Idempotency-Key, and sends signed webhooks
+ * the billing portal, subscriptions, invoices and the cards subscriptions are paid with.
+ * It keeps state between calls (unlike stripe-mock), checks the secret key, honours
+ * Idempotency-Key (refusing a key reused for other parameters), and sends signed webhooks
  * to apps/webhooks exactly like Stripe does, so billing can be tested end to end, in
  * integration tests and in the browser.
  *
- * Hosted pages: `/checkout/<session>` (pay, pay with a declined card, or go back) and
+ * Hosted pages: `/checkout/<session>` (pay, pay with a declined card, or go back; a
+ * posted `card` names the card, so a test can pay twice with the same one) and
  * `/portal/<session>` (cancel or resume the plan, then return). Test hooks under
  * `/__fake/` make a renewal fail, a subscription lapse, or add an invoice in any status.
  *
@@ -35,7 +37,14 @@ type Form = Record<string, unknown>;
 interface Subscription
   extends Pick<
     Stripe.Subscription,
-    "id" | "object" | "metadata" | "cancel_at_period_end" | "trial_end" | "canceled_at" | "created"
+    | "id"
+    | "object"
+    | "metadata"
+    | "cancel_at_period_end"
+    | "trial_end"
+    | "canceled_at"
+    | "created"
+    | "default_payment_method"
   > {
   customer: string;
   status: Stripe.Subscription.Status;
@@ -72,6 +81,15 @@ interface Invoice
    */
   status: string;
   currency: "usd";
+}
+
+/**
+ * How a subscription is paid, as far as the app reads it: a card, whose fingerprint is the
+ * same for every use of it, or a SEPA debit, which has no card.
+ */
+interface PaymentMethod extends Pick<Stripe.PaymentMethod, "id" | "object"> {
+  type: "card" | "sepa_debit";
+  card?: { fingerprint: string; last4: string };
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -112,7 +130,9 @@ export async function startFakeStripe(options: FakeStripeOptions) {
   const portals = new Map<string, { customer: string; return_url: string }>();
   const subscriptions = new Map<string, Subscription>();
   const invoices: Invoice[] = [];
-  const idempotent = new Map<string, { status: number; body: unknown }>();
+  const paymentMethods = new Map<string, PaymentMethod>();
+  /** Each key's answer, and the request body it answered (a key is for one request). */
+  const idempotent = new Map<string, { request: string; status: number; body: unknown }>();
   const events: { type: string; object: unknown }[] = [];
   let baseUrl = "";
 
@@ -162,7 +182,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     return invoice;
   }
 
-  function subscribe(session: Form & { id: string }) {
+  function subscribe(session: Form & { id: string }, paymentMethod: string | null) {
     const lines = session.line_items as { price: string; quantity: string }[];
     const line = lines[0] as { price: string; quantity: string };
     const price = options.prices[line.price];
@@ -184,6 +204,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
       trial_end: trialDays > 0 ? start + trialDays * 86_400 : null,
       canceled_at: null,
       created: start,
+      default_payment_method: paymentMethod,
       items: {
         object: "list",
         data: [
@@ -207,6 +228,30 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     return subscription;
   }
 
+  /**
+   * The payment method a completed checkout saves on its subscription. `card` names the card
+   * (any value but "declined"): the same name is the same card, so the same fingerprint;
+   * `method=sepa_debit` pays without one. A trial with `payment_method_collection:
+   * "if_required"` takes none, as Stripe's does.
+   */
+  function takeCard(session: Form, form: Form) {
+    const trial = (session.subscription_data as { trial_period_days?: string } | undefined)
+      ?.trial_period_days;
+    if (session.payment_method_collection === "if_required" && trial) return null;
+    const card = typeof form.card === "string" ? form.card : "4242";
+    const paymentMethod: PaymentMethod =
+      form.method === "sepa_debit"
+        ? { id: id("pm"), object: "payment_method", type: "sepa_debit" }
+        : {
+            id: id("pm"),
+            object: "payment_method",
+            type: "card",
+            card: { fingerprint: `fp_${card}`, last4: card.slice(-4).padStart(4, "0") },
+          };
+    paymentMethods.set(paymentMethod.id, paymentMethod);
+    return paymentMethod.id;
+  }
+
   async function api(method: string, path: string, form: Form, query: URLSearchParams) {
     if (method === "POST" && path === "/v1/customers") {
       const customer = {
@@ -222,6 +267,16 @@ export async function startFakeStripe(options: FakeStripeOptions) {
       const session = { ...form, id: id("cs"), object: "checkout.session", status: "open" };
       sessions.set(session.id, session);
       return { ...session, url: `${baseUrl}/checkout/${session.id}` };
+    }
+    const sessionPath = /^\/v1\/checkout\/sessions\/(cs_\w+)$/.exec(path);
+    if (method === "GET" && sessionPath) {
+      const session = sessions.get(sessionPath[1] as string);
+      if (!session) return notFound("checkout session");
+      return { ...session, url: `${baseUrl}/checkout/${session.id}` };
+    }
+    const paymentMethod = /^\/v1\/payment_methods\/(pm_\w+)$/.exec(path);
+    if (method === "GET" && paymentMethod) {
+      return paymentMethods.get(paymentMethod[1] as string) ?? notFound("payment method");
     }
     const expire = /^\/v1\/checkout\/sessions\/(cs_\w+)\/expire$/.exec(path);
     if (method === "POST" && expire) {
@@ -270,6 +325,12 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         }
         if (form.cancel_at_period_end !== undefined)
           subscription.cancel_at_period_end = form.cancel_at_period_end === "true";
+        // Ending a trial now charges the card at once, as Stripe does.
+        if (form.trial_end === "now" && subscription.status === "trialing") {
+          subscription.status = "active";
+          subscription.trial_end = now();
+          invoiceFor(subscription, "paid");
+        }
         await emit("customer.subscription.updated", subscription);
         return subscription;
       }
@@ -329,7 +390,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         }
         if (session.status !== "open") return redirect(session.success_url as string);
         session.status = "complete";
-        const subscription = subscribe(session);
+        const subscription = subscribe(session, takeCard(session, form));
         invoiceFor(subscription, "paid");
         await emit("checkout.session.completed", {
           ...session,
@@ -414,7 +475,8 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     const url = new URL(request.url as string, "http://fake");
     const chunks: Buffer[] = [];
     for await (const chunk of request as AsyncIterable<Buffer>) chunks.push(chunk);
-    const form = parseForm(Buffer.concat(chunks).toString());
+    const raw = Buffer.concat(chunks).toString();
+    const form = parseForm(raw);
     const json = (status: number, body: unknown) => {
       response.writeHead(status, { "content-type": "application/json" });
       response.end(JSON.stringify(body));
@@ -430,6 +492,15 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         const cacheKey =
           typeof key === "string" ? `${request.method} ${url.pathname} ${key}` : null;
         const cached = cacheKey ? idempotent.get(cacheKey) : undefined;
+        // Stripe refuses a key reused for a different request instead of replaying it.
+        if (cached && cached.request !== raw) {
+          return json(400, {
+            error: {
+              type: "idempotency_error",
+              message: `Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '${key}' if you meant to execute a different request.`,
+            },
+          });
+        }
         if (cached) return json(cached.status, cached.body);
         const result = await api(request.method as string, url.pathname, form, url.searchParams);
         const answer =
@@ -446,7 +517,8 @@ export async function startFakeStripe(options: FakeStripeOptions) {
                 "body" in result
               ? (result as { status: number; body: unknown })
               : { status: 200, body: result };
-        if (cacheKey && request.method === "POST") idempotent.set(cacheKey, answer);
+        if (cacheKey && request.method === "POST")
+          idempotent.set(cacheKey, { request: raw, ...answer });
         return json(answer.status, answer.body);
       }
       if (url.pathname.startsWith("/__fake/")) {

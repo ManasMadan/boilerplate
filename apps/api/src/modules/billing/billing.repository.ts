@@ -1,7 +1,7 @@
 /**
  * Data access for billing: the subscription rows mirrored from Stripe and each
- * organization's Stripe customer (tenant tables, scoped by withTenant/tenantTx), plus
- * the organization and member counts billing reads.
+ * organization's Stripe customer (tenant tables, scoped by withTenant/tenantTx), the
+ * cards that have had a trial, plus the organization and member counts billing reads.
  */
 import { Injectable } from "@nestjs/common";
 import { PAID_STATUSES } from "@repo/contracts/billing";
@@ -62,6 +62,22 @@ export class BillingRepository {
       where: { orgId, id: { not: id }, status: { in: [...PAID_STATUSES] } },
       select: { id: true },
     });
+  }
+
+  /**
+   * Claims the card's one free trial for `subscriptionId`, unless another subscription
+   * claimed it first; returns the subscription the trial belongs to.
+   */
+  async claimTrial(fingerprint: string, subscriptionId: string) {
+    await this.database.write.trialCard.createMany({
+      data: [{ fingerprint, subscriptionId }],
+      skipDuplicates: true,
+    });
+    const claim = await this.database.write.trialCard.findUniqueOrThrow({
+      where: { fingerprint },
+      select: { subscriptionId: true },
+    });
+    return claim.subscriptionId;
   }
 
   customer(orgId: string) {

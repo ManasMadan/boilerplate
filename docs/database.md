@@ -62,10 +62,15 @@ means something more specific (`PHONE_NUMBER_TAKEN`) still catches its own.
 Tenant tables have `ENABLE` and `FORCE ROW LEVEL SECURITY` (FORCE applies the policy to
 the table owner too) and a policy on a transaction-local setting:
 
-- **Organization data** (`app.todo`, `webhooks.endpoint`/`delivery`, `billing.*`, `ai.*`,
-  reads of `audit.audit_log`): `org_id = nullif(current_setting('app.org_id', true), '')::uuid`.
+- **Organization data** (`app.todo`, `webhooks.endpoint`/`delivery`,
+  `billing.customer`/`subscription`, `ai.*`, reads of `audit.audit_log`):
+  `org_id = nullif(current_setting('app.org_id', true), '')::uuid`.
 - **Per-user data** (`notifications.notification`/`preference`/`settings`/`device`/`digest_item`,
   `files.file`): the same on `user_id` and `app.user_id`.
+
+`billing.trial_card` has neither: the one-trial-per-card check has to see every
+workspace's cards, and a row holds only Stripe's ids (a card fingerprint and a
+subscription), no workspace's data.
 
 `nullif` keeps the policy valid when the setting is unset: it resets to `''`, and
 `''::uuid` would raise instead of matching nothing. A query without the setting sees no

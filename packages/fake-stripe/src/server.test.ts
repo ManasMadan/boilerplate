@@ -124,6 +124,26 @@ describe("the API", () => {
     expect(await list()).toEqual({ object: "list", data: [], has_more: false });
   });
 
+  it("refuses an idempotency key reused for a different request", async () => {
+    await stripe.customers.create({ name: "A" }, { idempotencyKey: "one-request" });
+    await expect(
+      stripe.customers.create({ name: "B" }, { idempotencyKey: "one-request" }),
+    ).rejects.toMatchObject({ statusCode: 400, type: "StripeIdempotencyError" });
+  });
+
+  it("reads a Checkout session back, and 404s an unknown one", async () => {
+    const { session } = await checkout();
+    expect(await stripe.checkout.sessions.retrieve(session.id)).toMatchObject({
+      id: session.id,
+      status: "open",
+      url: session.url,
+    });
+    await expect(stripe.checkout.sessions.retrieve("cs_missing")).rejects.toMatchObject({
+      statusCode: 404,
+      message: "No such checkout session",
+    });
+  });
+
   it("needs a known customer for Checkout and the portal", async () => {
     const missing = { customer: "cus_missing" };
     await expect(
@@ -253,6 +273,62 @@ describe("Checkout", () => {
     ]);
     // Paying again only sends the browser back.
     expect(await pay(session.id)).toBe("http://app.test/billing?session={CHECKOUT_SESSION_ID}");
+  });
+
+  it("records the card paid with: the same card has the same fingerprint", async () => {
+    const card = async (form: Record<string, string>) => {
+      const { customer, session } = await checkout();
+      expect((await post(`/checkout/${session.id}/pay`, form)).status).toBe(303);
+      const [subscription] = (await stripe.subscriptions.list({ customer: customer.id })).data;
+      return stripe.paymentMethods.retrieve(subscription?.default_payment_method as string);
+    };
+    const first = await card({});
+    expect(first).toMatchObject({ type: "card", card: { fingerprint: "fp_4242", last4: "4242" } });
+    expect((await card({})).card?.fingerprint).toBe("fp_4242");
+    expect((await card({ card: "5555555555554444" })).card).toMatchObject({
+      fingerprint: "fp_5555555555554444",
+      last4: "4444",
+    });
+    const sepa = await card({ method: "sepa_debit" });
+    expect(sepa).toMatchObject({ type: "sepa_debit" });
+    expect(sepa.card).toBeUndefined();
+    await expect(stripe.paymentMethods.retrieve("pm_missing")).rejects.toMatchObject({
+      statusCode: 404,
+      message: "No such payment method",
+    });
+  });
+
+  it("takes no card for a trial that doesn't require one", async () => {
+    const { customer, session } = await checkout({
+      payment_method_collection: "if_required",
+      subscription_data: { trial_period_days: 14 },
+    });
+    await pay(session.id);
+    const [subscription] = (await stripe.subscriptions.list({ customer: customer.id })).data;
+    expect(subscription).toMatchObject({ status: "trialing", default_payment_method: null });
+    // Without a trial there's something to pay, so it takes the card.
+    const paid = await checkout({ payment_method_collection: "if_required" });
+    await pay(paid.session.id);
+    const [charged] = (await stripe.subscriptions.list({ customer: paid.customer.id })).data;
+    expect(charged?.default_payment_method).toMatch(/^pm_/);
+  });
+
+  it("ends a trial now: the plan is active and the card is charged", async () => {
+    const { customer, session } = await checkout({
+      subscription_data: { trial_period_days: 14 },
+    });
+    await pay(session.id);
+    const [trial] = (await stripe.subscriptions.list({ customer: customer.id })).data;
+    const ended = await stripe.subscriptions.update(trial?.id as string, { trial_end: "now" });
+    expect(ended.status).toBe("active");
+    expect(ended.trial_end).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+    const { data } = await stripe.invoices.list({ customer: customer.id });
+    expect(data.map((invoice) => invoice.amount_due)).toEqual([2_400, 0]);
+    expect(types().at(-1)).toBe("customer.subscription.updated");
+    // Only a trial can end: an active plan is left as it is.
+    const again = await stripe.subscriptions.update(ended.id, { trial_end: "now" });
+    expect(again.trial_end).toBe(ended.trial_end);
+    expect((await stripe.invoices.list({ customer: customer.id })).data).toHaveLength(2);
   });
 
   it("declines a declined card and lets the customer try again", async () => {
