@@ -182,7 +182,6 @@ export class BillingService {
         { idempotencyKey: `checkout-${orgId}-${interval}-${hour}` },
       ),
     );
-    if (!session.url) throw new Error("Stripe returned a checkout session without a URL");
     // Atomic swap: of two checkouts at once, the later one sees (and expires) the earlier.
     const previous = await this.redis.set(
       `billing:checkout:${orgId}`,
@@ -197,7 +196,8 @@ export class BillingService {
         this.log.info({ sessionId: previous, error }, "earlier checkout session not expired");
       });
     }
-    return { url: session.url };
+    // A hosted checkout session always has one.
+    return { url: session.url as string };
   }
 
   async portal(orgId: string) {
@@ -227,7 +227,8 @@ export class BillingService {
     return list.data.map((invoice) => ({
       id: invoice.id as string,
       number: invoice.number ?? null,
-      status: invoice.status ?? "draft",
+      // Always set on a listed invoice (draft, open, paid, uncollectible or void).
+      status: invoice.status as Stripe.Invoice.Status,
       amount: invoice.amount_due,
       currency: invoice.currency,
       createdAt: new Date(invoice.created * 1000),
@@ -282,7 +283,8 @@ export class BillingService {
       status: subscription.status,
       priceId: item.price.id,
       interval: price.interval,
-      quantity: item.quantity ?? 1,
+      // Per-seat (licensed) prices always carry one.
+      quantity: item.quantity as number,
       currentPeriodEnd: new Date(item.current_period_end * 1000),
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,

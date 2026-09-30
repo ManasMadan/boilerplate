@@ -10,10 +10,10 @@ import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
 import { type FakeStripe, startFakeStripe } from "@repo/fake-stripe";
 import { createProducer, queuePrefix } from "@repo/jobs";
-import { Queue } from "bullmq";
+import { type Job, Queue } from "bullmq";
 import pg from "pg";
 import Stripe from "stripe";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   createSession,
   type Harness,
@@ -28,11 +28,15 @@ const SECRET_KEY = `sk_test_${randomUUID().replaceAll("-", "")}`;
 const WEBHOOK_SECRET = `whsec_${randomUUID().replaceAll("-", "")}`;
 const MONTHLY = "price_pro_monthly_test";
 const YEARLY = "price_pro_yearly_test";
+/** A price in the same Stripe account that isn't one of the app's plans. */
+const OTHER = "price_other_product_test";
 
 let harness: Harness;
 let stripe: FakeStripe;
 let receiver: Server;
 let events: ReturnType<typeof createProducer<"events-billing">>;
+/** Every Stripe event the receiver passed on, in order. */
+const forwarded: Job[] = [];
 
 beforeAll(async () => {
   // Stands in for apps/webhooks + the outbox relay: verify, then queue for billing.
@@ -44,12 +48,14 @@ beforeAll(async () => {
       String(request.headers["stripe-signature"]),
       WEBHOOK_SECRET,
     );
-    await queueEvent("stripe.event_received.v1", event.id, {
-      inboundEventId: randomUUID(),
-      stripeEventId: event.id,
-      type: event.type,
-      object: event.data.object as unknown as Record<string, unknown>,
-    });
+    forwarded.push(
+      await queueEvent("stripe.event_received.v1", event.id, {
+        inboundEventId: randomUUID(),
+        stripeEventId: event.id,
+        type: event.type,
+        object: event.data.object as unknown as Record<string, unknown>,
+      }),
+    );
     response.writeHead(200).end();
   });
   await new Promise<void>((resolve) => receiver.listen(0, "127.0.0.1", resolve));
@@ -60,6 +66,7 @@ beforeAll(async () => {
     prices: {
       [MONTHLY]: { interval: "month", unitAmount: 1_200 },
       [YEARLY]: { interval: "year", unitAmount: 12_000 },
+      [OTHER]: { interval: "month", unitAmount: 500 },
     },
   });
   harness = await startApi(10, {
@@ -86,7 +93,7 @@ async function queueEvent(
   orgId: string | null = null,
 ) {
   const id = randomUUID();
-  await events.add(
+  return events.add(
     "event",
     {
       id,
@@ -120,7 +127,48 @@ async function relayMembership(orgId: string) {
      WHERE org_id = $1 AND name IN ('org.member_added.v1', 'org.member_removed.v1')`,
     [orgId],
   );
-  for (const row of rows) await queueEvent(row.name, row.key, row.payload, orgId);
+  const jobs: Job[] = [];
+  for (const row of rows) jobs.push(await queueEvent(row.name, row.key, row.payload, orgId));
+  return jobs;
+}
+
+/** Waits until the billing consumer has handled these events; how each one ended. */
+async function settled(jobs: Job[]) {
+  const states = () => Promise.all(jobs.map((job) => job.getState()));
+  return eventually(states, (all) =>
+    all.every((state) => state === "completed" || state === "failed"),
+  );
+}
+
+/** What the receiver forwards while `work` runs, once the billing consumer is done with it. */
+async function handled(work: () => Promise<unknown>) {
+  const from = forwarded.length;
+  await work();
+  return settled(forwarded.slice(from));
+}
+
+/** Stripe's API itself (the fake), as something other than this app would call it. */
+const sdk = () =>
+  new Stripe(SECRET_KEY, { host: "127.0.0.1", port: stripe.port, protocol: "http" });
+
+/** A subscription paid for through Checkout, made outside the app. */
+async function outsideSubscription(
+  { price = MONTHLY, metadata }: { price?: string; metadata?: Record<string, string> } = {},
+  customer?: string,
+) {
+  const client = sdk();
+  const customerId = customer ?? (await client.customers.create()).id;
+  const session = await client.checkout.sessions.create({
+    customer: customerId,
+    mode: "subscription",
+    line_items: [{ price, quantity: 1 }],
+    success_url: "http://elsewhere.test/done",
+    cancel_url: "http://elsewhere.test/",
+    ...(metadata && { subscription_data: { metadata } }),
+  });
+  await fetch(`${stripe.url}/checkout/${session.id}/pay`, { method: "POST", redirect: "manual" });
+  const [subscription] = (await client.subscriptions.list({ customer: customerId })).data.slice(-1);
+  return subscription as Stripe.Subscription;
 }
 
 async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean) {
@@ -484,5 +532,116 @@ describe("keeping in sync with Stripe", () => {
     expect(await sql("SELECT 1 FROM billing.subscription WHERE org_id = $1", [orgId])).toHaveLength(
       1,
     );
+  });
+});
+
+describe("what isn't the app's", () => {
+  it("ignores subscriptions made outside the app, and their failed payments", async () => {
+    const { orgId } = await workspace();
+    const foreign: Stripe.Subscription[] = [];
+    const states = await handled(async () => {
+      foreign.push(
+        await outsideSubscription(),
+        await outsideSubscription({ metadata: { orgId: "not-a-workspace" } }),
+        await outsideSubscription({ metadata: { orgId: randomUUID() } }),
+        await outsideSubscription({ price: OTHER, metadata: { orgId } }),
+      );
+      for (const subscription of foreign) {
+        await fetch(`${stripe.url}/__fake/subscriptions/${subscription.id}/payment-failed`, {
+          method: "POST",
+        });
+      }
+    });
+    expect(states.length).toBeGreaterThan(0);
+    expect(new Set(states)).toEqual(new Set(["completed"]));
+    expect(
+      await sql("SELECT id FROM billing.subscription WHERE id = ANY($1)", [
+        foreign.map((subscription) => subscription.id),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("takes events it has nothing to do with, and does nothing", async () => {
+    const stripeEvent = (type: string, object: Record<string, unknown>) =>
+      queueEvent("stripe.event_received.v1", `evt_${randomUUID()}`, {
+        inboundEventId: randomUUID(),
+        stripeEventId: `evt_${randomUUID()}`,
+        type,
+        object,
+      });
+    const jobs = [
+      await queueEvent("todo.created.v1", randomUUID(), { todoId: randomUUID(), title: "x" }),
+      await stripeEvent("customer.created", { id: "cus_elsewhere" }),
+      await stripeEvent("invoice.paid", { id: "in_one_off", parent: null }),
+      await stripeEvent("checkout.session.completed", { id: "cs_payment", subscription: null }),
+    ];
+    expect(await settled(jobs)).toEqual(["completed", "completed", "completed", "completed"]);
+  });
+});
+
+describe("keeping in sync, edge cases", () => {
+  it("warns when a workspace ends up with two live subscriptions", async () => {
+    const { owner, orgId } = await workspace();
+    await subscribe(owner.session);
+    const first = stripe.subscriptionFor(orgId);
+    const { BillingService } = await import("../src/modules/billing");
+    const billing = harness.app.get(BillingService) as unknown as {
+      log: { error: (...args: unknown[]) => void };
+    };
+    const error = vi.spyOn(billing.log, "error");
+    // A second one, paid in the moment before the first checkout closed it.
+    await handled(() =>
+      outsideSubscription({ price: YEARLY, metadata: { orgId } }, first?.customer),
+    );
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId, others: [first?.id] }),
+      expect.stringContaining("refund one"),
+    );
+    error.mockRestore();
+  });
+
+  it("leaves Stripe alone when the seats already match, or there's no paid plan", async () => {
+    const free = await workspace();
+    await join(free.owner.session, free.orgId);
+    const freeJobs = await relayMembership(free.orgId);
+    const paid = await workspace();
+    await subscribe(paid.owner.session);
+    const updates = () =>
+      stripe.events.filter(
+        (event) =>
+          event.type === "customer.subscription.updated" &&
+          (event.object as { metadata: { orgId?: string } }).metadata.orgId === paid.orgId,
+      ).length;
+    const before = updates();
+    expect(await settled([...freeJobs, ...(await relayMembership(paid.orgId))])).not.toContain(
+      "failed",
+    );
+    expect(stripe.subscriptionFor(free.orgId)).toBeUndefined();
+    expect(stripe.subscriptionFor(paid.orgId)?.items.data[0]?.quantity).toBe(1);
+    expect(updates()).toBe(before);
+  });
+
+  it("lists a drafted renewal, which has no number or page yet", async () => {
+    const { owner, orgId } = await workspace();
+    await subscribe(owner.session);
+    await fetch(
+      `${stripe.url}/__fake/subscriptions/${stripe.subscriptionFor(orgId)?.id}/draft-invoice`,
+      {
+        method: "POST",
+      },
+    );
+    const [draft] = await owner.session.rpc.billing.invoices();
+    expect(draft).toMatchObject({ status: "draft", number: null, url: null });
+  });
+
+  it("opens a new checkout even when the earlier one can't be closed any more", async () => {
+    const { owner } = await workspace();
+    const monthly = await owner.session.rpc.billing.checkout({ interval: "month" });
+    // It expired on its own meanwhile.
+    await sdk().checkout.sessions.expire(new URL(monthly.url).pathname.split("/").at(-1) as string);
+    const yearly = await owner.session.rpc.billing.checkout({ interval: "year" });
+    expect(yearly.url).not.toBe(monthly.url);
+    const paid = await fetch(`${yearly.url}/pay`, { method: "POST", redirect: "manual" });
+    expect(paid.status).toBe(303);
   });
 });
