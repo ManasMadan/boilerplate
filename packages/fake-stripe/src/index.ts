@@ -393,7 +393,8 @@ export async function startFakeStripe(options: FakeStripeOptions) {
   }
 
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? "/", "http://fake");
+    // A server's requests always have a URL and a method.
+    const url = new URL(request.url as string, "http://fake");
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(chunk as Buffer);
     const form = parseForm(Buffer.concat(chunks).toString());
@@ -413,7 +414,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
           typeof key === "string" ? `${request.method} ${url.pathname} ${key}` : null;
         const cached = cacheKey ? idempotent.get(cacheKey) : undefined;
         if (cached) return json(cached.status, cached.body);
-        const result = await api(request.method ?? "GET", url.pathname, form, url.searchParams);
+        const result = await api(request.method as string, url.pathname, form, url.searchParams);
         const answer =
           result === undefined
             ? {
