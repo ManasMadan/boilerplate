@@ -298,6 +298,42 @@ describe("maintenance", () => {
     expect(remaining).toEqual([recent, pending].sort());
   });
 
+  it("purges old webhook deliveries, but keeps pending and recent ones", async () => {
+    const orgId = randomUUID();
+    const ids = await asRole("postgres", async (client) => {
+      await client.query(
+        `INSERT INTO auth.organization (id, name, slug, created_at) VALUES ($1::uuid, 'W', $1::text, now())`,
+        [orgId],
+      );
+      const endpoint = await client.query<{ id: string }>(
+        `INSERT INTO webhooks.endpoint (org_id, url, secret, updated_at)
+         VALUES ($1, 'https://example.com/hook', 's', now()) RETURNING id`,
+        [orgId],
+      );
+      const deliveries = await client.query<{ id: string; event_name: string }>(
+        `INSERT INTO webhooks.delivery (endpoint_id, org_id, event_id, event_name, body, status, created_at)
+         VALUES ($1, $2, uuidv7(), 'old-sent', '{}', 'succeeded', now() - interval '200 days'),
+                ($1, $2, uuidv7(), 'old-pending', '{}', 'pending', now() - interval '200 days'),
+                ($1, $2, uuidv7(), 'recent', '{}', 'failed', now())
+         RETURNING id, event_name`,
+        [endpoint.rows[0]?.id, orgId],
+      );
+      return deliveries.rows;
+    });
+    expect(ids).toHaveLength(3);
+
+    const result = await maintenance.run("outbox-retention");
+    expect(result["webhooks.history"]).toBeGreaterThanOrEqual(1);
+    const left = await asRole("postgres", async (client) => {
+      const { rows } = await client.query<{ event_name: string }>(
+        "SELECT event_name FROM webhooks.delivery WHERE org_id = $1 ORDER BY event_name",
+        [orgId],
+      );
+      return rows.map((row) => row.event_name);
+    });
+    expect(left).toEqual(["old-pending", "recent"]);
+  });
+
   it("purges old notification history, but keeps unread notifications", async () => {
     const userId = randomUUID();
     await asRole("app_api", (client) =>

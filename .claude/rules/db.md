@@ -40,7 +40,8 @@ paths:
 - `SECURITY DEFINER` functions: `SET search_path = pg_catalog, pg_temp`,
   `CREATE OR REPLACE`, `REVOKE EXECUTE ... FROM PUBLIC`, then grant to the one role
   that calls it. A table such a function touches under forced RLS needs an
-  `owner_functions` policy `TO migrator` (see `20260929090000_push_devices`).
+  `owner_functions` policy `TO migrator` (see `20260929090000_push_devices`);
+  `packages/db/test/security.test.ts` fails on any that lacks one.
 - Extensions need a superuser: add them to `infra/postgres/init` and to the cloud
   setup, not to a migration.
 - Checks: `bun run db:lint` (Squawk on migrations changed since master; a justified

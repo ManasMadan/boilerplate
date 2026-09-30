@@ -45,7 +45,10 @@ grant fails there first.
 When a service needs something outside its grants (creating audit partitions, purging
 another schema's history, registering a device), a migration adds a narrow
 `SECURITY DEFINER` function and grants `EXECUTE` on it (see the
-`audit_log_and_retention` and `push_devices` migrations).
+`audit_log_and_retention` and `push_devices` migrations). Forced row-level security
+applies to the function's owner too, so every table it reads or writes under FORCE needs
+an `owner_functions` policy for `migrator`, or it silently sees no rows; the database's
+security tests fail on any that lacks one.
 
 ## Row-level security
 

@@ -176,3 +176,45 @@ describe("least privilege", () => {
     });
   });
 });
+
+describe("functions that run as their owner", () => {
+  // Only create or drop partitions of the table: they never read its rows.
+  const DDL_ONLY = new Set(["audit.ensure_partitions", "audit.drop_partitions_before"]);
+
+  it("see the rows of every forced row-level security table they touch", async () => {
+    // FORCE ROW LEVEL SECURITY applies to the owner too, so a SECURITY DEFINER function
+    // with no tenant set sees nothing unless the table has a policy for its owner.
+    const { functions, tables } = await asRole("postgres", async (client) => ({
+      functions: (
+        await client.query<{ name: string; owner: string; body: string }>(
+          `SELECT n.nspname || '.' || p.proname AS name, pg_get_userbyid(p.proowner) AS owner,
+                  p.prosrc AS body
+             FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE p.prosecdef AND n.nspname NOT IN ('pg_catalog', 'information_schema')`,
+        )
+      ).rows,
+      tables: (
+        await client.query<{ name: string; roles: string[] }>(
+          `SELECT n.nspname || '.' || c.relname AS name,
+                  coalesce(array_agg(r.rolname) FILTER (WHERE r.rolname IS NOT NULL), '{}') AS roles
+             FROM pg_class c
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             LEFT JOIN pg_policy p ON p.polrelid = c.oid
+             LEFT JOIN pg_roles r ON r.oid = ANY (p.polroles)
+            WHERE c.relforcerowsecurity
+            GROUP BY 1`,
+        )
+      ).rows,
+    }));
+    expect(functions.length).toBeGreaterThan(0);
+    const blind = functions
+      .filter((fn) => !DDL_ONLY.has(fn.name))
+      .flatMap((fn) =>
+        tables
+          .filter((table) => new RegExp(`\\b${table.name.replace(".", "\\.")}\\b`).test(fn.body))
+          .filter((table) => !table.roles.includes(fn.owner))
+          .map((table) => `${fn.name} → ${table.name} (no policy for ${fn.owner})`),
+      );
+    expect(blind).toEqual([]);
+  });
+});
