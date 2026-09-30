@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { InvitationPage } from "@/modules/invitations";
 import { currentUrl, renderPage } from "../render";
-import { auth, newUser, signOut, signUp } from "../users";
+import { auth, currentSession, newUser, signOut, signUp } from "../users";
 
 /** A workspace that invited a new user, who is signed in on the page. */
 async function invited() {
@@ -36,7 +36,7 @@ describe("an invitation", () => {
     await userEvent.click(page.getByRole("button", { name: "Accept invitation" }));
     await expect.element(page.getByText(`You joined ${name}`)).toBeVisible();
     await expect.poll(currentUrl).toBe("/dashboard");
-    const session = await fetch("/api/auth/get-session").then((r) => r.json());
+    const session = await currentSession();
     expect(session.session.activeOrganizationId).toBe(workspaceId);
   });
 

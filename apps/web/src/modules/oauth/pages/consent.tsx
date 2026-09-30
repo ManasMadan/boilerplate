@@ -1,5 +1,6 @@
 "use client";
 
+import type { Workspace } from "@repo/client/auth";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -105,7 +106,7 @@ export function OAuthConsentPage() {
               onValueChange={(id) => {
                 if (id && id !== activeId) void switchWorkspace(id);
               }}
-              items={workspaces.data.map((workspace) => ({
+              items={workspaces.data.map((workspace: Workspace) => ({
                 value: workspace.id,
                 label: workspaceName(workspace),
               }))}
@@ -114,7 +115,7 @@ export function OAuthConsentPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {workspaces.data.map((workspace) => (
+                {workspaces.data.map((workspace: Workspace) => (
                   <SelectItem key={workspace.id} value={workspace.id}>
                     {workspaceName(workspace)}
                   </SelectItem>

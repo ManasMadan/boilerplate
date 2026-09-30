@@ -17,6 +17,7 @@ import { apiKeyClient } from "@better-auth/api-key/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { userAdditionalFields } from "@repo/contracts/auth-settings";
+import type { Session, User } from "better-auth";
 import {
   adminClient,
   emailOTPClient,
@@ -24,6 +25,7 @@ import {
   organizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
+import type { Invitation, Member, Organization } from "better-auth/plugins";
 import { createAuthClient } from "better-auth/react";
 
 export const authClientPlugins = (options: { onTwoFactorRequired?: () => void } = {}) => [
@@ -55,3 +57,14 @@ export function createAppAuthClient({ baseUrl, onTwoFactorRequired }: AuthClient
 
 export type AuthClient = ReturnType<typeof createAppAuthClient>;
 export type AuthSession = AuthClient["$Infer"]["Session"];
+
+// better-auth's client types the plugins' answers as any (listing workspaces, members,
+// sessions, passkeys). These are the server's own model types for them: give a query
+// its result type with them, so what the page reads from it is checked.
+export type Workspace = Organization;
+export type FullWorkspace = Organization & {
+  members: (Member & { user: Pick<User, "id" | "name" | "email" | "image"> })[];
+  invitations: Invitation[];
+};
+export type SignedInSession = Session;
+export type { Passkey as UserPasskey } from "@better-auth/passkey";

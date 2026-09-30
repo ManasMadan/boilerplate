@@ -4,7 +4,7 @@ import { commands } from "vitest/browser";
 import { AssistantPage } from "@/modules/assistant";
 import { DashboardPage } from "@/modules/dashboard";
 import { currentUrl, renderPage } from "../render";
-import { auth, signOut, signUp } from "../users";
+import { auth, currentSession, signOut, signUp } from "../users";
 
 describe("the app's providers", () => {
   it("send a signed-out user to sign in, and back to this page afterwards", async () => {
@@ -47,7 +47,7 @@ describe("the app's providers", () => {
       { url: "/settings" },
     );
     await expect.poll(commands.hardNavigations).toEqual([`${window.location.origin}/dashboard`]);
-    const session = await fetch("/api/auth/get-session").then((r) => r.json());
+    const session = await currentSession();
     expect(session.session.activeOrganizationId).toEqual(expect.any(String));
   });
 });

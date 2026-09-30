@@ -24,7 +24,9 @@ describe("keeping this browser's push registration current", () => {
     const user = await signUp();
     await renderPage(<PushSync />, { url: "/dashboard" });
     await expect
-      .poll(async () => (await devices(user.id)).map((d) => JSON.parse(d.token).endpoint))
+      .poll(async () =>
+        (await devices(user.id)).map((d) => (JSON.parse(d.token) as { endpoint: string }).endpoint),
+      )
       .toEqual([push.current?.endpoint]);
   });
 

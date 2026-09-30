@@ -28,9 +28,11 @@ describe("push on this browser", () => {
     await userEvent.click(toggle(page));
     await expect.element(page.getByText(ON)).toBeVisible();
     await expect.element(toggle(page)).toBeChecked();
-    expect((await devices(user.id)).map((device) => JSON.parse(device.token).endpoint)).toEqual([
-      push.current?.endpoint,
-    ]);
+    expect(
+      (await devices(user.id)).map(
+        (device) => (JSON.parse(device.token) as { endpoint: string }).endpoint,
+      ),
+    ).toEqual([push.current?.endpoint]);
 
     await userEvent.click(toggle(page));
     await expect.element(page.getByText(OFF)).toBeVisible();

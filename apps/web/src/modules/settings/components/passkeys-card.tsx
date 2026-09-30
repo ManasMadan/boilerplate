@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserPasskey } from "@repo/client/auth";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -26,7 +27,7 @@ export function PasskeysCard() {
   const queryClient = useQueryClient();
   const passkeys = useQuery({
     queryKey: PASSKEYS_KEY,
-    queryFn: async () => {
+    queryFn: async (): Promise<UserPasskey[]> => {
       const { data, error } = await authClient.passkey.listUserPasskeys();
       if (error) throw error;
       return data;

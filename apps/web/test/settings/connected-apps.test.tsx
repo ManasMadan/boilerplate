@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { ConnectedAppsCard } from "@/modules/settings/components/connected-apps-card";
 import { renderPage } from "../render";
-import { signOut, signUp } from "../users";
+import { currentSession, signOut, signUp } from "../users";
 
 /** An app the user approved over OAuth in their active workspace (what consent records). */
 async function connect(userId: string, name: string | null, options: { used?: boolean } = {}) {
-  const session = await fetch("/api/auth/get-session").then((response) => response.json());
-  const workspace = session.session.activeOrganizationId as string;
+  const session = await currentSession();
+  const workspace = String(session.session.activeOrganizationId);
   const clientId = `client-${crypto.randomUUID()}`;
   await commands.sql(
     `INSERT INTO auth.oauth_client (client_id, name, scopes, contacts, redirect_uris, post_logout_redirect_uris, grant_types, response_types)

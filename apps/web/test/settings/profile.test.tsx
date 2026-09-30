@@ -5,7 +5,7 @@ import { ProfileSettingsPage } from "@/modules/settings";
 import { EmailCard } from "@/modules/settings/components/email-card";
 import { ProfileCard } from "@/modules/settings/components/profile-card";
 import { renderPage, router } from "../render";
-import { rateLimit, signOut, signUp, takeOtp, type User } from "../users";
+import { currentSession, rateLimit, signOut, signUp, takeOtp, type User } from "../users";
 
 const other = (code: string) => (code === "000000" ? "111111" : "000000");
 
@@ -43,7 +43,7 @@ describe("the profile", () => {
     expect(router.refreshes).toBe(1);
     await expect.element(save).toBeDisabled();
 
-    const me = await fetch("/api/auth/get-session").then((response) => response.json());
+    const me = await currentSession();
     expect(me.user).toMatchObject({
       name: "Ada Lovelace",
       locale: "es",

@@ -5,6 +5,7 @@
  * active one, as TanStack queries, plus switching. Switching changes which workspace
  * every API call works in, so all cached data is refetched.
  */
+import type { FullWorkspace, Workspace } from "@repo/client/auth";
 import { canManageWorkspace, parseOrgRole } from "@repo/contracts/roles";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -34,7 +35,10 @@ export function isPersonal(organization: { metadata?: unknown }) {
 }
 
 export function useWorkspaces() {
-  return useQuery({ queryKey: keys.list, queryFn: () => unwrap(authClient.organization.list()) });
+  return useQuery({
+    queryKey: keys.list,
+    queryFn: () => unwrap<Workspace[]>(authClient.organization.list()),
+  });
 }
 
 /** The active workspace with its members and invitations, and the user's role in it. */
@@ -45,7 +49,7 @@ export function useActiveWorkspace() {
   const query = useQuery({
     queryKey: keys.active(activeId),
     enabled: Boolean(activeId),
-    queryFn: () => unwrap(authClient.organization.getFullOrganization()),
+    queryFn: () => unwrap<FullWorkspace>(authClient.organization.getFullOrganization()),
   });
   // Parsed, not cast: a role the app doesn't know grants nothing (@repo/contracts/roles).
   const role = parseOrgRole(query.data?.members.find((member) => member.userId === userId)?.role);

@@ -24,16 +24,21 @@ interface Doc {
   createdAt: string;
 }
 
-async function body(request: IncomingMessage) {
+async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(chunk as Buffer);
-  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+  return chunks.length
+    ? (JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>)
+    : {};
 }
 
 /** The caller the API signed the token for (its signature is the API's own tests' job). */
 function caller(request: IncomingMessage) {
   const token = String(request.headers.authorization ?? "").split(".")[1] ?? "";
-  const claims = JSON.parse(Buffer.from(token, "base64url").toString() || "{}");
+  const claims = JSON.parse(Buffer.from(token, "base64url").toString() || "{}") as {
+    org?: unknown;
+    sub?: unknown;
+  };
   return { org: String(claims.org), user: String(claims.sub) };
 }
 

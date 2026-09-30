@@ -52,9 +52,8 @@ export async function takeOtp(email: string) {
 /** A new, verified user, signed in on this page. */
 export async function signUp(details: Partial<ReturnType<typeof newUser>> = {}): Promise<User> {
   const user = { ...newUser(), ...details };
-  // Sign-up calls out over the internet (Have I Been Pwned for the password, Cloudflare
-  // for the captcha token) and answers 500 when one of those calls fails. Only that is
-  // retried.
+  // On the API with captcha on, sign-up checks the token with Cloudflare over the
+  // internet and answers 500 when that call fails. Only that is retried.
   for (let attempt = 1; ; attempt++) {
     const failed = await auth("/sign-up/email", user).then(
       () => undefined,
@@ -64,11 +63,21 @@ export async function signUp(details: Partial<ReturnType<typeof newUser>> = {}):
     if (attempt === 3 || !failed.message.includes("answered 500")) throw failed;
   }
   await auth("/email-otp/verify-email", { email: user.email, otp: await takeOtp(user.email) });
-  const session = await fetch("/api/auth/get-session").then((r) => r.json());
+  const session = await currentSession();
   return { ...user, id: session.user.id };
 }
 
 export const signOut = () => auth("/sign-out");
+
+/** The signed-in session, as better-auth's get-session answers it. */
+export const currentSession = () =>
+  fetch("/api/auth/get-session").then(
+    (response) =>
+      response.json() as Promise<{
+        session: { activeOrganizationId: string | null };
+        user: { id: string; name: string; email: string } & Record<string, unknown>;
+      }>,
+  );
 
 /** Signs `user` in on the page (replacing whoever was). */
 export const signIn = (user: Pick<User, "email" | "password">) =>

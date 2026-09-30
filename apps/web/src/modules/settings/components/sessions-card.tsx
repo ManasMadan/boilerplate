@@ -1,5 +1,6 @@
 "use client";
 
+import type { SignedInSession } from "@repo/client/auth";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -55,7 +56,7 @@ export function SessionsCard() {
   const { data: current } = authClient.useSession();
   const sessions = useQuery({
     queryKey: SESSIONS_KEY,
-    queryFn: async () => {
+    queryFn: async (): Promise<SignedInSession[]> => {
       const { data, error } = await authClient.listSessions();
       if (error) throw error;
       return data;
