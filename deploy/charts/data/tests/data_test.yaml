@@ -209,6 +209,23 @@ tests:
             - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } } }]
               ports: [{ port: 9187 }]
 
+  - it: keeps Valkey's maxmemory to 60% of its limit, for the rewrite's fork
+    template: valkey.yaml
+    set:
+      valkey.maxmemory: 400mb
+    asserts:
+      - failedTemplate:
+          errorPattern: valkey.maxmemory \(400mb\) must be at most 60% of limits.memory \(512Mi\)
+
+  - it: takes maxmemory in any unit against a limit in any unit
+    template: valkey.yaml
+    set:
+      valkey.maxmemory: 1gb
+      valkey.resources.limits.memory: 2Gi
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].args", content: 1gb }
+
   - it: runs the uploads server with its keys from the storage Secret
     template: storage.yaml
     documentSelector: { path: kind, value: StatefulSet }

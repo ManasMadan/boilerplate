@@ -251,6 +251,23 @@ cluster when it creates it, so restoring means a new cluster from the backups.
 `bun run db:restore-drill` proves locally that a backup restores to the same data,
 grants and policies (docs/database.md).
 
+## What a lost node takes down
+
+Some parts run once, on one node's disk (`local-path`), and some run twice but share a
+disk on a one-node cluster. What each one needs to survive losing a node:
+
+| Part | Now | When its node is lost | The way to more |
+|---|---|---|---|
+| Postgres | `postgres.instances` (2 in production), placed on different nodes where there are several | on one node, both instances go with the disk: restore from the backups (and the offsite copy) | three nodes or more, so the instances really are on different disks; CloudNativePG fails over by itself |
+| Valkey | one pod, append-only file on its node | it stays Pending until the node is back, and queues, sessions and rate limits stop with it | Valkey with Sentinel (a primary, two replicas, three sentinels), with the services' `REDIS_URL` pointing at the sentinels; or Valkey Cluster (every queue key already has a hash tag) |
+| RustFS (uploads, backups) | one server each | uploads stop, and are only in the offsite copy | RustFS in distributed mode (four or more drives across nodes), or any S3 outside the cluster |
+| Stalwart | one pod on the mail node, which SPF and reverse DNS name | no mail leaves: sign-in codes, resets and invitations stop | a second mail node in SPF and the MX records, or a relay (`relay`, see Mail) |
+| The services | two replicas or more, spread across nodes | nothing, on two nodes or more | more replicas and nodes |
+
+Valkey's `maxmemory` stays at 60% of its memory limit or less (the chart refuses more):
+rewriting the append-only file forks the server, and whatever is written meanwhile is
+copied, so a rewrite under load with no headroom gets it OOM-killed.
+
 ## Mail
 
 Stalwart runs on every cluster (`platform/mail`, namespace `mail`), on the node

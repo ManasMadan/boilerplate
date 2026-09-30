@@ -67,8 +67,9 @@ valkey:
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 512Mi }
-  # BullMQ needs every key kept: never evict, and persist to disk.
-  maxmemory: 400mb
+  # BullMQ needs every key kept: never evict, and persist to disk. At most 60% of the
+  # memory limit: the append-only rewrite forks, and copies what's written meanwhile.
+  maxmemory: 300mb
 
 # Object storage with RustFS (S3 API). Two separate servers: `uploads`, which the
 # browser reaches at `host` through the gateway (presigned URLs), and `backups`, which
