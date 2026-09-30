@@ -1,6 +1,6 @@
 import { exportJWK, generateKeyPair, type JSONWebKeySet, SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
-import { createTokenVerifier } from "./mcp.tokens";
+import { createTokenVerifier, KEY_RELOAD_MS } from "./mcp.tokens";
 
 const ISSUER = "https://site.test/api/auth";
 const AUDIENCE = "https://site.test/api/mcp";
@@ -25,9 +25,10 @@ async function sign(
     .sign(key.privateKey);
 }
 
-function verifierFor(keys: () => JSONWebKeySet, grant = true) {
+function verifierFor(keys: () => JSONWebKeySet, grant = true, now = () => 0) {
   const calls: string[][] = [];
   const verify = createTokenVerifier({
+    now,
     keys: async () => keys(),
     issuer: ISSUER,
     audience: AUDIENCE,
@@ -90,14 +91,41 @@ describe("MCP access tokens", () => {
     const second = await keyPair("k2");
     let published: JSONWebKeySet = { keys: [first.jwk] };
     let loads = 0;
-    const { verify } = verifierFor(() => {
-      loads++;
-      return published;
-    });
+    let clock = 0;
+    const { verify } = verifierFor(
+      () => {
+        loads++;
+        return published;
+      },
+      true,
+      () => clock,
+    );
     expect((await verify(await sign(first))).ok).toBe(true);
     published = { keys: [first.jwk, second.jwk] };
+    clock = KEY_RELOAD_MS;
     expect((await verify(await sign(second))).ok).toBe(true);
     expect((await verify(await sign(second))).ok).toBe(true);
+    expect(loads).toBe(2);
+  });
+
+  it("reload at most every half minute, so made-up key ids don't each cost a query", async () => {
+    const ours = await keyPair("k1");
+    const unknown = await keyPair("made-up");
+    let loads = 0;
+    let clock = 0;
+    const { verify } = verifierFor(
+      () => {
+        loads++;
+        return { keys: [ours.jwk] };
+      },
+      true,
+      () => clock,
+    );
+    expect((await verify(await sign(ours))).ok).toBe(true);
+    for (let i = 0; i < 20; i++) expect((await verify(await sign(unknown))).ok).toBe(false);
+    expect(loads).toBe(1);
+    clock = KEY_RELOAD_MS;
+    await verify(await sign(unknown));
     expect(loads).toBe(2);
   });
 });
