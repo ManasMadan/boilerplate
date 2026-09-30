@@ -90,6 +90,15 @@ tests:
           path: 'data["plan.ndjson"]'
           pattern: '(?m)^\{"@type":"update","object":"SystemSettings","value":\{"maxConnections":1000\}\}$'
 
+  - it: takes connections on the mail ports only, never the management port
+    template: networkpolicy.yaml
+    asserts:
+      - equal: { path: spec.policyTypes, value: [Ingress] }
+      - equal:
+          path: spec.ingress
+          value: [{ ports: [{ port: 25 }, { port: 465 }, { port: 587 }, { port: 993 }] }]
+      - equal: { path: spec.podSelector.matchLabels, value: { app.kubernetes.io/name: stalwart, app.kubernetes.io/instance: stalwart } }
+
   - it: delivers directly unless a relay is set
     template: configmap.yaml
     asserts:

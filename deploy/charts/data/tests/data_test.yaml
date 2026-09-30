@@ -187,6 +187,27 @@ tests:
                   podSelector: { matchLabels: { app.kubernetes.io/name: keda-operator } }
               ports: [{ port: 6379 }]
 
+  - it: accepts nothing in the namespace that a policy of its own doesn't allow
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-default-deny }
+    asserts:
+      - equal: { path: spec, value: { podSelector: {}, policyTypes: [Ingress] } }
+
+  - it: lets only this namespace, the operator and the metrics scraper reach Postgres
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-postgres }
+    asserts:
+      - equal: { path: spec.podSelector, value: { matchLabels: { cnpg.io/cluster: demo-postgres } } }
+      - equal:
+          path: spec.ingress
+          value:
+            - from: [{ podSelector: {} }]
+              ports: [{ port: 5432 }]
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: cnpg-system } } }]
+              ports: [{ port: 5432 }, { port: 8000 }]
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } } }]
+              ports: [{ port: 9187 }]
+
   - it: runs the uploads server with its keys from the storage Secret
     template: storage.yaml
     documentSelector: { path: kind, value: StatefulSet }

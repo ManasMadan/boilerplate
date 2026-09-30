@@ -33,6 +33,22 @@ an Argo CD PreSync hook), so the database must already be up. Keeping it in its 
 release is what guarantees that, and it means redeploying the application never touches
 the database.
 
+## Network policies
+
+Each environment's namespace accepts nothing a policy doesn't allow (the data chart's
+default deny). Each service accepts connections from the gateway if it has routes, and
+from the services and namespaces its `allowFrom` and `allowFromNamespaces` name. It
+connects only to DNS, its own namespace (the other services, Postgres, Valkey, object
+storage, ClamAV), the mail server's and the telemetry namespaces
+(`networkPolicy.egressNamespaces`), ServiceLB on the gateway's and mail ports, and the
+internet outside the private ranges: so a request forged to reach something internal,
+another environment's namespace, a node or a metadata address goes nowhere. Postgres
+takes connections from its own namespace, CloudNativePG's operator and the metrics
+scraper only, so a preview can't reach staging's database. The mail server takes
+connections on its mail ports only; its management port is reachable from inside its
+pod alone. The data services' own pods and the Jobs (migration, buckets, offsite copy)
+aren't limited in where they connect.
+
 ## Credentials: generated, or in git encrypted
 
 There are two kinds of secret, and each has one home:

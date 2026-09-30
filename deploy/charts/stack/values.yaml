@@ -31,6 +31,28 @@ gateway:
   namespaceSelector:
     kubernetes.io/metadata.name: envoy-gateway-system
 
+# Where the services may connect (their egress network policies). Besides these: DNS,
+# every pod of this namespace (the other services, Postgres, Valkey, object storage,
+# ClamAV), and ServiceLB's pods in kube-system on the gateway's and mail server's ports
+# (a pod reaching a node's own public address lands there). The internet is every
+# address outside `privateRanges`, so a request forged to reach something internal
+# (another namespace, a node, the cloud's metadata address) goes nowhere.
+networkPolicy:
+  # The mail server's (SMTP submission) and the telemetry backends'.
+  egressNamespaces: [mail, observability]
+  privateRanges:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    - 0.0.0.0/8
+  privateRangesV6:
+    - fc00::/7
+    - fe80::/10
+    - ::1/128
+
 # Settings every service gets. Values are templates, so they can refer to the site or
 # to other services (`{{ include "stack.url" (list $ "api") }}`).
 env:

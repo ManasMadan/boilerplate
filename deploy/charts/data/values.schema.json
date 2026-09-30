@@ -141,6 +141,15 @@
         "quota": { "type": "object", "additionalProperties": { "type": "string" } }
       }
     },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operatorNamespace", "metricsNamespace"],
+      "properties": {
+        "operatorNamespace": { "type": "string", "minLength": 1 },
+        "metricsNamespace": { "type": "string", "minLength": 1 }
+      }
+    },
     "offsite": {
       "type": "object",
       "additionalProperties": false,

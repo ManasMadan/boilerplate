@@ -119,6 +119,13 @@ gateway:
   namespaceSelector:
     kubernetes.io/metadata.name: envoy-gateway-system
 
+# Where CloudNativePG's operator runs (it reaches each instance's status port and
+# Postgres) and where Prometheus scrapes Postgres's metrics from: the platform's
+# (deploy/platform/addons/cloudnative-pg.yaml, the observability add-ons).
+networkPolicy:
+  operatorNamespace: cnpg-system
+  metricsNamespace: observability
+
 # A copy of the backups and the uploads outside the cluster, so losing the cluster (or
 # the one disk of a one-node cluster) doesn't take the database, its backups and every
 # upload together. Any S3-compatible storage you run somewhere else will do: a RustFS
