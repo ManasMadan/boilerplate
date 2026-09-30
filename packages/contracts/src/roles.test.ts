@@ -7,6 +7,7 @@ describe("workspace roles", () => {
     ["member", "member"],
     ["member,admin", "admin"],
     ["admin, owner", "owner"],
+    ["owner,member", "owner"],
     ["viewer", null],
     ["member,viewer", null],
     ["", null],
