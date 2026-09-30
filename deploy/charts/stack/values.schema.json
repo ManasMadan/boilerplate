@@ -40,8 +40,14 @@
       "required": ["egressNamespaces", "privateRanges", "privateRangesV6"],
       "properties": {
         "egressNamespaces": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "privateRanges": { "type": "array", "items": { "type": "string", "pattern": "^[0-9.]+/[0-9]+$" } },
-        "privateRangesV6": { "type": "array", "items": { "type": "string", "pattern": "^[0-9a-f:]+/[0-9]+$" } }
+        "privateRanges": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9.]+/[0-9]+$" }
+        },
+        "privateRangesV6": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9a-f:]+/[0-9]+$" }
+        }
       }
     },
     "gateway": {

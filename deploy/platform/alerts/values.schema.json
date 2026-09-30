@@ -22,7 +22,13 @@
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["walArchiveStale", "backupStale", "certificateExpiresWithin", "errorRatio", "queueBacklog"],
+      "required": [
+        "walArchiveStale",
+        "backupStale",
+        "certificateExpiresWithin",
+        "errorRatio",
+        "queueBacklog"
+      ],
       "properties": {
         "walArchiveStale": { "type": "string", "pattern": "^[0-9]+[smhd]$" },
         "backupStale": { "type": "string", "pattern": "^[0-9]+[smhd]$" },
