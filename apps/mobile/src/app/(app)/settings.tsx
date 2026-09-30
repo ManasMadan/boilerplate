@@ -1,6 +1,7 @@
 import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
+import { useWorkspacesQuery } from "@repo/client/auth/workspaces";
 import { type Locale, locales } from "@repo/i18n/locales";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
@@ -20,15 +21,7 @@ export default function Settings() {
   const errorMessage = useApiErrorMessage();
   const queryClient = useQueryClient();
   const { data: session, refetch } = authClient.useSession();
-  const workspaces = useQuery({
-    queryKey: ["auth", "workspace", "list"],
-    queryFn: async (): Promise<{ id: string; name: string }[]> => {
-      // An error stays an error (the screen shows it), not an empty list of workspaces.
-      const { data, error } = await authClient.organization.list();
-      if (error) throw error;
-      return data;
-    },
-  });
+  const workspaces = useWorkspacesQuery(authClient);
   const register = useRegisterDeviceMutation();
   const [push, setPush] = useState<PushState>();
   const [failure, setFailure] = useState<string>();

@@ -1,9 +1,10 @@
 "use client";
 
+import { useInvitationQuery } from "@repo/client/auth/invitation";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -16,15 +17,7 @@ export function InvitationPage({ id }: { id: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const errorMessage = useAuthErrorMessage();
-  const invitation = useQuery({
-    queryKey: ["auth", "invitation", id],
-    queryFn: async () => {
-      const { data, error } = await authClient.organization.getInvitation({ query: { id } });
-      if (error) throw error;
-      return data;
-    },
-    retry: false,
-  });
+  const invitation = useInvitationQuery(authClient, id);
 
   const data = invitation.data;
 

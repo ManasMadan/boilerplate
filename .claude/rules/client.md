@@ -19,6 +19,13 @@ call `fetch` against the API.
   `.mutationOptions(...)`. Name them `use<Thing>Query`, `use<Thing>InfiniteQuery`,
   `use<Thing>Mutation`, matching the neighbouring files in the same area.
 - Query keys come from the utils (`api.todo.list.key()`), never hand-written arrays.
+- Queries on better-auth (workspaces, the active workspace, invitations, sessions,
+  passkeys, an OAuth app's name) are hooks in `src/auth/<thing>.ts` too. They take the
+  app's auth client as their first argument (`useWorkspacesQuery(authClient)`), since web
+  and mobile build different ones, and their keys come from `authKeys` in
+  `src/auth/query.ts`, which is also what an app invalidates after a change. better-auth
+  types these answers as `any`, so each hook names its result with the model types in
+  `src/auth/client.ts`.
 - Optimistic updates keep the cache transform as a pure function in its own file with a
   unit test (see `src/api/todo/optimistic.ts`), then snapshot in `onMutate`, restore in
   `onError`, and invalidate in `onSettled`.

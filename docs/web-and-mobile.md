@@ -52,8 +52,10 @@ Every call goes through `packages/client`:
 - Hooks live one per procedure and are imported by exact path:
   `import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list"`. Each file
   exports one hook, which `lint:boundaries` checks.
-- `@repo/client/auth` is the better-auth client (with its plugins), `@repo/client/auth/forms`
-  the shared form schemas, `useLiveUpdates` the realtime stream that invalidates queries,
+- `@repo/client/auth` is the better-auth client (with its plugins), and
+  `@repo/client/auth/<thing>` the queries on it (workspaces, the active workspace,
+  invitations, sessions, passkeys), which take the app's auth client and build their keys
+  with `authKeys`. `@repo/client/auth/forms` holds the shared form schemas, `useLiveUpdates` the realtime stream that invalidates queries,
   and `errorMessageKey`/`fieldErrors` turn API error codes into translated messages.
 
 A new procedure gets its hook in `packages/client/src/api/<feature>/`; apps never call

@@ -10,7 +10,7 @@ gotchas; these are the rules.
 
 - Screens are routes in `src/app/` (`(auth)`, `(app)` behind `Stack.Protected` in the
   root `_layout.tsx`). Data only through `@repo/client` hooks, the same as web; query
-  keys from the generated utils, never hand-written arrays.
+  keys from the generated utils or `authKeys`, never hand-written arrays.
 - UI primitives are in `src/components/ui/` (React Native Reusables, copied in): not
   `packages/ui`, which is for the web. Styling with Uniwind classes and the shared
   tokens.

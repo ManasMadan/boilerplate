@@ -58,6 +58,15 @@ export function createAppAuthClient({ baseUrl, onTwoFactorRequired }: AuthClient
 export type AuthClient = ReturnType<typeof createAppAuthClient>;
 export type AuthSession = AuthClient["$Infer"]["Session"];
 
+/**
+ * What the auth hooks (`src/auth/*`) call. Web's client and mobile's (which adds Expo's
+ * plugin) both have it, so each app passes its own: `useWorkspacesQuery(authClient)`.
+ */
+export type AuthQueryClient = Pick<
+  AuthClient,
+  "useSession" | "organization" | "listSessions" | "passkey" | "oauth2"
+>;
+
 // better-auth's client types the plugins' answers as any (listing workspaces, members,
 // sessions, passkeys). These are the server's own model types for them: give a query
 // its result type with them, so what the page reads from it is checked.

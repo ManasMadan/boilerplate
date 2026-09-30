@@ -8,8 +8,7 @@
     ".": "./src/index.ts",
     "./auth": "./src/auth/client.ts",
     "./api/*": "./src/api/*.ts",
-    "./auth/forms": "./src/auth/forms.ts",
-    "./auth/errors": "./src/auth/errors.ts"
+    "./auth/*": "./src/auth/*.ts"
   },
   "scripts": {
     "check-types": "tsc",
