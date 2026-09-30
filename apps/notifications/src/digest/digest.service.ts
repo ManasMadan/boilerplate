@@ -30,12 +30,16 @@ import {
   type Redis,
 } from "@repo/nest-common";
 import type { Queue } from "bullmq";
+import * as z from "zod";
 import { EmailChannel } from "../channels/email/email.channel";
 import { DeliveryLog } from "../dispatch/delivery-log";
 import { DeliveryPolicy } from "../dispatch/policy";
 import { RecipientResolver } from "../dispatch/recipients";
 import { env } from "../env";
 import { wallClock } from "../wall-clock";
+
+/** An in-app message's data: the arguments of its copy. */
+const messageData = z.record(z.string(), z.string());
 
 // A few minutes past the hour, away from the top-of-the-hour rush.
 const SCHEDULE = "5 * * * *";
@@ -118,8 +122,8 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
 
     const t = await this.i18n.getTranslator(recipient.locale, recipient.timeZone);
     const lines = items.map((item) => {
-      // Written from an in-app message's data, always an object (see the dispatcher).
-      const data = item.data as Record<string, string>;
+      // Written from an in-app message's data (see the dispatcher): ICU arguments.
+      const data = messageData.parse(item.data);
       const base = `notification.${item.template}`;
       return {
         title: loosely(t)(`${base}.title`, data),

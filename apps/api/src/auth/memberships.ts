@@ -9,7 +9,7 @@
  * account deletion, which better-auth's hooks miss), so a removed member loses access
  * on their very next request.
  */
-import { type OrgRole, parseOrgRole } from "@repo/contracts/roles";
+import { type OrgRole, orgRoleSchema, parseOrgRole } from "@repo/contracts/roles";
 import type { Db } from "@repo/db";
 import { CacheService, type Redis } from "@repo/nest-common";
 
@@ -25,7 +25,7 @@ export function createMemberships(db: Db, redis: Redis) {
      * stored role isn't one this knows (see @repo/contracts/roles: it fails closed).
      */
     role(orgId: string, userId: string): Promise<OrgRole | null> {
-      return cache.wrap(key(orgId, userId), TTL_SECONDS, async () => {
+      return cache.wrap(key(orgId, userId), TTL_SECONDS, orgRoleSchema.nullable(), async () => {
         const member = await db.member.findFirst({
           where: { organizationId: orgId, userId },
           select: { role: true },

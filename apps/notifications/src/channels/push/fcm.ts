@@ -4,7 +4,26 @@
  * before it expires). No SDK: the protocol is two HTTPS calls.
  */
 import { createSign } from "node:crypto";
+import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
+
+// What FCM answers, checked: a changed response fails here, by name, not as undefined later.
+const tokenResponse = z.object({ access_token: z.string(), expires_in: z.number() });
+const sendResponse = z.object({ name: z.string() });
+const errorResponse = z
+  .object({
+    error: z.object({
+      status: z.string().optional(),
+      details: z
+        .array(
+          z.object({
+            fieldViolations: z.array(z.object({ field: z.string().optional() })).optional(),
+          }),
+        )
+        .optional(),
+    }),
+  })
+  .catch({ error: {} });
 
 export interface FcmConfig {
   projectId: string;
@@ -47,7 +66,7 @@ export class FcmTransport implements PushTransport {
     });
     if (!response.ok)
       throw new Error(`FCM auth failed: ${response.status} ${await response.text()}`);
-    const body = (await response.json()) as { access_token: string; expires_in: number };
+    const body = tokenResponse.parse(await response.json());
     this.accessToken = { value: body.access_token, expiresAt: Date.now() + body.expires_in * 1000 };
     return body.access_token;
   }
@@ -71,7 +90,7 @@ export class FcmTransport implements PushTransport {
       signal: AbortSignal.timeout(10_000),
     });
     if (response.ok)
-      return { ok: true, providerMessageId: ((await response.json()) as { name: string }).name };
+      return { ok: true, providerMessageId: sendResponse.parse(await response.json()).name };
     const text = await response.text();
     return {
       ok: false,
@@ -88,14 +107,15 @@ export class FcmTransport implements PushTransport {
  */
 export function tokenIsDead(status: number, body: string): boolean {
   if (status === 404 || body.includes("UNREGISTERED")) return true;
-  let error: { status?: string; details?: { fieldViolations?: { field?: string }[] }[] };
+  let json: unknown;
   try {
-    ({ error } = JSON.parse(body) as { error: typeof error });
+    json = JSON.parse(body);
   } catch {
     return false;
   }
+  const { error } = errorResponse.parse(json);
   return (
-    error?.status === "INVALID_ARGUMENT" &&
+    error.status === "INVALID_ARGUMENT" &&
     (error.details ?? []).some((detail) =>
       (detail.fieldViolations ?? []).some((violation) => violation.field === "message.token"),
     )

@@ -38,11 +38,16 @@ const failedInvoice = z.object({
   currency: z.string().length(3),
 });
 
-interface StripeObject {
-  id?: string;
-  subscription?: string | null;
-  parent?: { subscription_details?: { subscription?: string } | null } | null;
-}
+/** The fields of a Stripe event's object that lead to its subscription, whichever it is. */
+const stripeObject = z.object({
+  id: z.string().optional(),
+  subscription: z.string().nullish(),
+  parent: z
+    .object({
+      subscription_details: z.object({ subscription: z.string().optional() }).nullish(),
+    })
+    .nullish(),
+});
 
 @Processor("events-billing", { concurrency: 5, prefix: queuePrefix("events-billing") })
 export class BillingEventsProcessor extends JobProcessor {
@@ -70,13 +75,13 @@ export class BillingEventsProcessor extends JobProcessor {
       return;
     }
     const { type, object } = events[name].parse(raw);
-    const stripeObject = object as StripeObject;
+    const found = stripeObject.parse(object);
     const subscriptionId = SUBSCRIPTION_EVENTS.has(type)
-      ? stripeObject.id
+      ? found.id
       : type === "checkout.session.completed"
-        ? stripeObject.subscription
+        ? found.subscription
         : type.startsWith("invoice.")
-          ? stripeObject.parent?.subscription_details?.subscription
+          ? found.parent?.subscription_details?.subscription
           : undefined;
     if (!subscriptionId) return;
     await this.billing.sync(subscriptionId);

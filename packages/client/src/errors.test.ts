@@ -43,4 +43,10 @@ describe("what an error carries", () => {
     expect(errorRequestId(other)).toBeUndefined();
     expect(fieldErrors(other)).toEqual({});
   });
+
+  it("ignores data that isn't in the contract's shape, from a newer or broken server", () => {
+    const odd = new ORPCError("RATE_LIMITED", { data: { params: "30 seconds", requestId: 7 } });
+    expect(errorParams(odd)).toEqual({});
+    expect(errorRequestId(odd)).toBeUndefined();
+  });
 });

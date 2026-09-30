@@ -132,6 +132,15 @@ describe("Web Push", () => {
     });
   });
 
+  it("forgets a stored subscription without the keys a browser gives", async () => {
+    const token = JSON.stringify({ endpoint: "https://fcm.googleapis.com/fcm/send/x" });
+    expect(await webPush().send(token, message)).toEqual({
+      ok: false,
+      gone: true,
+      error: "stored subscription is malformed",
+    });
+  });
+
   it("reports a push service it can't reach, keeping the subscription", async () => {
     const origin = `http://127.0.0.1:${closedPort}`;
     const { token } = push.webSubscription(`${origin}/push/x`);
