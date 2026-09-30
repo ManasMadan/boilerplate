@@ -66,6 +66,15 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        # Argo CD sees a new head commit within two minutes, but its images take about
+        # ten to build: the first sync fails on images that aren't pushed yet. Retrying
+        # for about half an hour lets it pick them up instead of waiting for the next push.
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
   templatePatch: |
     spec:
       sources:

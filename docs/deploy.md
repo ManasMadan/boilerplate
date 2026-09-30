@@ -113,8 +113,10 @@ Adding the `preview` label to a pull request from this repository (not a fork) r
 `sha-<commit>` and comments the address, `https://pr-<number>.preview.<domain>` (the
 `PREVIEW_DOMAIN` repository variable). Argo CD's previews ApplicationSet deploys it to its
 own namespace with its own database and Valkey, and the Secrets every preview shares
-(`deploy/environments/preview/secrets/`). New pushes rebuild; removing the label or
-closing the pull request deletes it.
+(`deploy/environments/preview/secrets/`). Argo CD notices a new head commit before its
+images are pushed, so the first sync fails and retries with backoff for about half an
+hour until they are. New pushes rebuild; removing the label or closing the pull request
+deletes it.
 
 A preview runs the pull request's images with the charts, values and Secrets of the
 branch it targets, never the pull request's own: a fork's charts could otherwise run any

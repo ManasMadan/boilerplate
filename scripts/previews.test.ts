@@ -12,11 +12,22 @@ const ROOT = join(import.meta.dir, "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 describe("the previews ApplicationSet", () => {
-  const patch = (
-    Bun.YAML.parse(read("deploy/argocd/appsets/previews.yaml")) as {
-      spec: { templatePatch: string };
-    }
-  ).spec.templatePatch;
+  const { spec } = Bun.YAML.parse(read("deploy/argocd/appsets/previews.yaml")) as {
+    spec: {
+      templatePatch: string;
+      template: {
+        spec: { syncPolicy: { retry?: { limit: number; backoff: { maxDuration: string } } } };
+      };
+    };
+  };
+  const patch = spec.templatePatch;
+
+  it("keeps retrying a sync until the pull request's images are pushed", () => {
+    // preview.yml takes about ten minutes to push them; the retries have to outlast it.
+    const retry = spec.template.spec.syncPolicy.retry;
+    expect(retry?.limit).toBeGreaterThanOrEqual(5);
+    expect(retry?.backoff.maxDuration).toBe("5m");
+  });
 
   it("takes charts, values and Secrets from the target branch, never the pull request's", () => {
     const revisions = [...patch.matchAll(/targetRevision:\s*(.+)/g)].map((m) => m[1]?.trim());
