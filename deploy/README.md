@@ -49,6 +49,16 @@ connections on its mail ports only; its management port is reachable from inside
 pod alone. The data services' own pods and the Jobs (migration, buckets, offsite copy)
 aren't limited in where they connect.
 
+## Postgres over TLS
+
+Postgres refuses connections without TLS (`hostnossl … reject` in the data chart).
+CloudNativePG serves TLS with a certificate authority of its own, the `<cluster>-ca`
+Secret; the stack mounts it in every service with a database (`database.caSecret`) and
+adds `sslmode=verify-full` and the CA's path to the URL from the role's Secret, so the
+services check they're talking to this cluster's Postgres. The migration Job uses the
+Secret's URL as it is: Prisma's migration engine negotiates TLS, since Postgres requires
+it, but doesn't check the certificate.
+
 ## Credentials: generated, or in git encrypted
 
 There are two kinds of secret, and each has one home:

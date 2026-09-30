@@ -11,6 +11,7 @@ tests:
       - equal: { path: spec.bootstrap.initdb.owner, value: migrator }
       - equal: { path: spec.bootstrap.initdb.secret.name, value: db-migrator }
       - equal: { path: spec.enableSuperuserAccess, value: false }
+      - equal: { path: spec.postgresql.pg_hba, value: [hostnossl all all all reject] }
       - equal: { path: spec.storage.storageClass, value: local-path }
       - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE EXTENSION IF NOT EXISTS vector }
       - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE ROLE app_api NOLOGIN NOBYPASSRLS NOINHERIT }

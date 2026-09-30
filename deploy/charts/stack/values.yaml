@@ -75,6 +75,11 @@ observability:
 # straight to the primary). The data chart generates them.
 database:
   secretPrefix: db-
+  # Connections are TLS, verified against CloudNativePG's certificate authority: the
+  # Secret <cluster>-ca it creates (the data release's name, then -postgres-ca). The
+  # services' URLs get sslmode=verify-full with that CA mounted; empty leaves the URLs as
+  # the Secret has them.
+  caSecret: boilerplate-postgres-ca
 
 # The Secret with Valkey's connection details: keys `url`, `host`, `port`, `password`.
 redis:

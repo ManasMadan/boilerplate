@@ -79,7 +79,10 @@
     "database": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "secretPrefix": { "type": "string" } }
+      "properties": {
+        "secretPrefix": { "type": "string" },
+        "caSecret": { "type": "string" }
+      }
     },
     "redis": {
       "type": "object",

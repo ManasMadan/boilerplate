@@ -29,24 +29,49 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: RELEASE, value: sha-abc123 }
 
-  - it: gives each service its database role and Valkey
+  - it: gives each service its database role over verified TLS, and Valkey
     documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: DATABASE_SECRET_URL
+            valueFrom: { secretKeyRef: { name: db-app-worker, key: url } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: WORKER_DATABASE_URL
+            value: "$(DATABASE_SECRET_URL)?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt"
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: WORKER_DATABASE_DIRECT_URL
+            value: "$(DATABASE_SECRET_DIRECT_URL)?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt"
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: postgres-ca, secret: { secretName: boilerplate-postgres-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: REDIS_URL
+            valueFrom: { secretKeyRef: { name: valkey, key: url } }
+
+  - it: passes the Secret's URL through as it is without a certificate authority
+    documentSelector: { path: metadata.name, value: demo-worker }
+    set:
+      database.caSecret: ""
     asserts:
       - contains:
           path: "spec.template.spec.containers[0].env"
           content:
             name: WORKER_DATABASE_URL
             valueFrom: { secretKeyRef: { name: db-app-worker, key: url } }
-      - contains:
-          path: "spec.template.spec.containers[0].env"
-          content:
-            name: WORKER_DATABASE_DIRECT_URL
-            valueFrom: { secretKeyRef: { name: db-app-worker, key: directUrl } }
-      - contains:
-          path: "spec.template.spec.containers[0].env"
-          content:
-            name: REDIS_URL
-            valueFrom: { secretKeyRef: { name: valkey, key: url } }
+      - notContains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
 
   - it: loads a service's own Secret, and none for services without secrets
     documentSelector: { path: metadata.name, value: demo-notifications }

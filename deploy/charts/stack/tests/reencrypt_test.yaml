@@ -22,7 +22,10 @@ tests:
           path: "spec.jobTemplate.spec.template.spec.containers[0].env"
           content:
             name: API_DATABASE_URL
-            valueFrom: { secretKeyRef: { name: db-app-api, key: url } }
+            value: "$(DATABASE_SECRET_URL)?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt"
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].volumeMounts"
+          content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
       - contains:
           path: "spec.jobTemplate.spec.template.spec.containers[0].env"
           content:
