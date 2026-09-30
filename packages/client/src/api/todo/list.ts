@@ -6,13 +6,12 @@
  *   todos.fetchNextPage()   // when todos.hasNextPage
  */
 
-import type { Todo } from "@repo/contracts/api";
+import type { TodoPage } from "@repo/contracts/api";
 import { type InfiniteData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 
 export const TODO_PAGE_SIZE = 20;
 
-export type TodoPage = { items: Todo[]; nextCursor: string | null };
 export type TodoListData = InfiniteData<TodoPage, string | undefined>;
 
 export function useTodoListInfiniteQuery(limit = TODO_PAGE_SIZE) {

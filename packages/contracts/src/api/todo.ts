@@ -18,6 +18,9 @@ export const todoSchema = z.object({
 });
 export type Todo = z.infer<typeof todoSchema>;
 
+const todoPageSchema = page(todoSchema);
+export type TodoPage = z.infer<typeof todoPageSchema>;
+
 export const todoTitle = z.string().trim().min(1).max(TODO_TITLE_MAX_LENGTH);
 
 export const createTodoInput = z.object({ title: todoTitle });
@@ -39,7 +42,7 @@ export const todoContract = {
       summary: "List the organization's todos, newest first",
     })
     .input(pageInput)
-    .output(page(todoSchema)),
+    .output(todoPageSchema),
   create: base
     .errors(errors)
     .meta({ apiKeyScope: "todos:write" })
