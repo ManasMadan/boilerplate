@@ -269,7 +269,7 @@ for those areas.
 | Python service | ruff, basedpyright, pytest, the evals with stand-ins, then every test with coverage |
 | Coverage | the reports of the three jobs above merged: `bun scripts/coverage.ts`, then diff-cover at 100% against the base branch (pull requests) |
 | Generated code is committed | `bun run gen`, then no diff |
-| API compatibility | oasdiff against the base branch's `apps/api/openapi.json` (pull requests) |
+| API compatibility | oasdiff against the base branch's `apps/api/openapi.json` and `apps/ai/openapi.json`, and the event catalog's compatibility (pull requests) |
 | Pull request title | Conventional Commits with an allowed scope (pull requests) |
 | Migration safety | `bun run db:lint` |
 | Helm charts and GitOps | `bun run charts:check` |

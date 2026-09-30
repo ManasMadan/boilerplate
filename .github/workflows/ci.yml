@@ -518,21 +518,28 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      # The public API, and the AI service's, which the api calls and which rolls out on
+      # its own: a newer api must still work with the running AI service and back.
       - name: Breaking changes
         run: |
           git fetch --quiet --depth=1 origin "$BASE"
-          if ! git cat-file -e "$BASE:apps/api/openapi.json" 2>/dev/null; then
-            echo "The base branch has no API document yet."
-            exit 0
-          fi
-          git show "$BASE:apps/api/openapi.json" > "$RUNNER_TEMP/base.json"
           fail=(--fail-on ERR)
           if [[ "$TITLE" =~ ^[a-z]+(\([a-z-]+\))?!: ]]; then
             echo "The title declares a breaking change: reporting only."
             fail=()
           fi
-          docker run --rm -v "$RUNNER_TEMP:/base:ro" -v "$PWD/apps/api:/head:ro" "$OASDIFF" \
-            breaking /base/base.json /head/openapi.json --format githubactions "${fail[@]}"
+          status=0
+          for app in api ai; do
+            if ! git cat-file -e "$BASE:apps/$app/openapi.json" 2>/dev/null; then
+              echo "The base branch has no apps/$app/openapi.json yet."
+              continue
+            fi
+            git show "$BASE:apps/$app/openapi.json" > "$RUNNER_TEMP/$app.json"
+            docker run --rm -v "$RUNNER_TEMP:/base:ro" -v "$PWD/apps/$app:/head:ro" "$OASDIFF" \
+              breaking "/base/$app.json" /head/openapi.json --format githubactions "${fail[@]}" ||
+              status=1
+          done
+          exit "$status"
       - uses: ./.github/actions/setup
       # Domain events (the audit log, notifications, customers' webhooks) may only gain
       # optional fields; a breaking title reports without failing, as above.

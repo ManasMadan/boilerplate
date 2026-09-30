@@ -11,11 +11,12 @@
  * Each call carries a token signed for that call (60 seconds, AI_SERVICE_SECRET) naming
  * the user and organization it's for: the service trusts nothing else.
  */
+import { EventSourceParserStream } from "eventsource-parser/stream";
 import { SignJWT } from "jose";
 import type { z } from "zod";
 import { createClient } from "./generated/client";
 import { createDocument, deleteDocument, listDocuments, sentiment } from "./generated/sdk.gen";
-import type { ErrorCode, ErrorIssue } from "./generated/types.gen";
+import type { AnswerData, ErrorCode, ErrorIssue } from "./generated/types.gen";
 import { zAssistantEvent, zErrorResponse } from "./generated/zod.gen";
 
 export type { DocumentOut as AiDocument, SentimentResponse } from "./generated/types.gen";
@@ -134,12 +135,16 @@ export function createAiClient(options: {
       question: string,
       signal?: AbortSignal,
     ): Promise<AsyncGenerator<AssistantEvent>> {
+      // From the service's OpenAPI document: a changed route or body fails to compile. The
+      // generated SDK can't be used here: it reads the whole body, and this streams it.
+      const path: AnswerData["url"] = "/v1/assistant/answers";
+      const body: AnswerData["body"] = { question };
       let response: Response;
       try {
-        response = await fetch(new URL("/v1/assistant/answers", options.baseUrl), {
+        response = await fetch(new URL(path, options.baseUrl), {
           method: "POST",
           headers: { ...(await headers(caller)), "content-type": "application/json" },
-          body: JSON.stringify({ question }),
+          body: JSON.stringify(body),
           // The caller's signal (the client went away) or the answer's own limit.
           signal: AbortSignal.any([
             AbortSignal.timeout(options.answerTimeoutMs ?? 120_000),
@@ -157,24 +162,13 @@ export function createAiClient(options: {
   };
 }
 
-/** Server-Sent Events from a response body, each `data:` payload one AssistantEvent. */
-async function* events(body: ReadableStream<Uint8Array>): AsyncGenerator<AssistantEvent> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for await (const chunk of body) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let end = buffer.indexOf("\n\n");
-    while (end !== -1) {
-      const frame = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      const data = frame
-        .split("\n")
-        .filter((line) => line.startsWith("data: "))
-        .map((line) => line.slice(6))
-        .join("\n");
-      if (data) yield zAssistantEvent.parse(JSON.parse(data)).event;
-      end = buffer.indexOf("\n\n");
-    }
+/** Server-Sent Events from a response body, each one's data one AssistantEvent. */
+async function* events(body: ReadableStream<BufferSource>): AsyncGenerator<AssistantEvent> {
+  const stream = body
+    .pipeThrough(new TextDecoderStream())
+    .pipeThrough(new EventSourceParserStream());
+  for await (const message of stream) {
+    yield zAssistantEvent.parse(JSON.parse(message.data)).event;
   }
 }
 

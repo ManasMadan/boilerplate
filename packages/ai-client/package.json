@@ -22,6 +22,7 @@
   },
   "type": "module",
   "dependencies": {
+    "eventsource-parser": "3.1.1",
     "jose": "^6.2.12",
     "zod": "catalog:"
   }
