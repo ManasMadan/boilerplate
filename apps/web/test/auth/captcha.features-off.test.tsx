@@ -39,6 +39,15 @@ describe("with captcha on", () => {
     await expect.poll(currentUrl).toBe(`/reset-password?email=${encodeURIComponent(email)}`);
   });
 
+  it("can't be sent before the page knows a security check is needed", async () => {
+    const page = await renderPage(<SignUpPage />, { url: "/sign-up" });
+    const submit = page.getByRole("button", { name: "Create account" });
+    // Still asking the API whether captcha is on: a submit now would be refused.
+    expect((submit.element() as HTMLButtonElement).disabled).toBe(true);
+    await expect.element(page.getByTestId("captcha")).toHaveAttribute("data-widget");
+    await expect.element(submit).toBeEnabled();
+  });
+
   it.each(["expire", "fail"] as const)(
     "holds the form when the token is gone (%s)",
     async (outcome) => {
