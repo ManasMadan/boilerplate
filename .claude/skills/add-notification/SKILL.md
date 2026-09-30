@@ -35,3 +35,6 @@ decides which channels it may use and whether users can turn it off.
    `packages/email/src/render.test.tsx`), then `bun run test:integration`
    (`apps/notifications/test/notifications.integration.test.ts` sends through Mailpit and
    the fake push and SMS servers).
+9. **Finish.** The verify skill, then the `i18n-checker` agent on the new copy and the
+   `reviewer` agent on the change (delivery through `DeliveryLog.claim()`, preferences,
+   the category's `mutable` flag).

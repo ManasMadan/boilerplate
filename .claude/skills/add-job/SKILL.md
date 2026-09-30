@@ -52,3 +52,9 @@ transaction as its effect and skips when the row already exists. New events are 
 `bun run test` (payload schemas in `packages/jobs/src/producer.test.ts`), then
 `bun run test:integration`: the consuming service's suite in its `test/` folder drives
 the queue against real Redis.
+
+## Finish
+
+The verify skill, then the `reviewer` agent (idempotency, `jobId`, `parseJob`, no
+awaits inside a transaction). A Python producer or consumer: the `python-reviewer` agent
+too.

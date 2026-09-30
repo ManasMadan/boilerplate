@@ -1,6 +1,7 @@
 ---
 name: add-feature
 description: Add a product feature end to end (API contract, apps/api module, client hook, web page, tests). Use when the user asks for a new resource, endpoint, screen or CRUD flow backed by the database.
+argument-hint: <name> <item> <model> '<row json>'
 ---
 
 # Add a feature
@@ -44,3 +45,8 @@ The todo feature is the reference for every layer: copy its shape, not just its 
    happy path, typed errors, and another organization seeing nothing. A user flow gets
    a spec in `apps/web/e2e/` (see `todos.spec.ts`).
 8. `bun run gen` (the OpenAPI document changes), then the verify skill.
+9. Reviews, before calling it done: the `reviewer` agent on the whole change; the
+   `security-reviewer` agent, since new procedures are new entry points; the
+   `migration-reviewer` agent if step 1 added a migration; the `frontend-reviewer` agent
+   for the web page; the `i18n-checker` agent for the new copy. Fix what they report and
+   run the verify skill again.
