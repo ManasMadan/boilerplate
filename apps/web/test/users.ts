@@ -2,7 +2,12 @@
  * Accounts for browser tests, made through the API's own auth endpoints from the test
  * page, so the session cookie lands in the browser like after a real sign-up.
  */
+import { createApiClient } from "@repo/client";
 import { commands } from "vitest/browser";
+import { authClient } from "@/lib/auth-client";
+
+/** The typed API client, as the page's signed-in user (for setup the UI doesn't offer). */
+export const api = createApiClient().client;
 
 export interface User {
   id: string;
@@ -33,6 +38,8 @@ export async function auth<T = unknown>(path: string, body: unknown = {}): Promi
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`${path} answered ${response.status}: ${text}`);
+  // The page's auth client learns of it, as after its own calls (useSession refetches).
+  authClient.$store.notify("$sessionSignal");
   return (text ? JSON.parse(text) : null) as T;
 }
 
@@ -45,13 +52,27 @@ export async function takeOtp(email: string) {
 /** A new, verified user, signed in on this page. */
 export async function signUp(details: Partial<ReturnType<typeof newUser>> = {}): Promise<User> {
   const user = { ...newUser(), ...details };
-  await auth("/sign-up/email", user);
+  // Sign-up calls out over the internet (Have I Been Pwned for the password, Cloudflare
+  // for the captcha token) and answers 500 when one of those calls fails. Only that is
+  // retried.
+  for (let attempt = 1; ; attempt++) {
+    const failed = await auth("/sign-up/email", user).then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    if (!failed) break;
+    if (attempt === 3 || !failed.message.includes("answered 500")) throw failed;
+  }
   await auth("/email-otp/verify-email", { email: user.email, otp: await takeOtp(user.email) });
   const session = await fetch("/api/auth/get-session").then((r) => r.json());
   return { ...user, id: session.user.id };
 }
 
 export const signOut = () => auth("/sign-out");
+
+/** Signs `user` in on the page (replacing whoever was). */
+export const signIn = (user: Pick<User, "email" | "password">) =>
+  auth("/sign-in/email", { email: user.email, password: user.password });
 
 /** Turns on two-step verification for the signed-in user; returns its secret and backup codes. */
 export async function enableTwoFactor(user: User) {
@@ -78,4 +99,37 @@ export async function rateLimit(path: string, body: unknown) {
     if (response.status === 429) return;
   }
   throw new Error(`${path} was never rate limited`);
+}
+
+/**
+ * A shared workspace owned by `owner` (signed in on the page), with `member` invited to
+ * it as `role` and joined. Leaves `member` signed in with the workspace active.
+ */
+export async function sharedWorkspace(
+  owner: User,
+  member: User,
+  role: "member" | "admin" = "member",
+) {
+  await auth("/sign-in/email", { email: owner.email, password: owner.password });
+  const workspace = await auth<{ id: string; name: string }>("/organization/create", {
+    name: `Team ${crypto.randomUUID().slice(0, 6)}`,
+    slug: `team-${crypto.randomUUID().slice(0, 8)}`,
+  });
+  await auth("/organization/set-active", { organizationId: workspace.id });
+  await auth("/organization/invite-member", {
+    email: member.email,
+    role,
+    organizationId: workspace.id,
+  });
+  const { acceptUrl } = await commands.takeNotification<{ acceptUrl: string }>(
+    "org.invitation",
+    member.email,
+  );
+  await signOut();
+  await auth("/sign-in/email", { email: member.email, password: member.password });
+  await auth("/organization/accept-invitation", {
+    invitationId: acceptUrl.split("/").at(-1),
+  });
+  await auth("/organization/set-active", { organizationId: workspace.id });
+  return workspace;
 }

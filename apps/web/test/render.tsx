@@ -27,8 +27,10 @@ import type { NextRouter } from "next/router";
 import { type ReactNode, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { toast } from "sonner";
 import { page } from "vitest/browser";
 import { Providers } from "@/app/providers";
+import { authClient } from "@/lib/auth-client";
 
 const mounted: { root: Root; container: HTMLElement }[] = [];
 
@@ -69,6 +71,21 @@ function TestRouter({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The auth client keeps its session for the life of the test page, while tests sign
+ * people in and out with plain requests: give it the page's current one before
+ * rendering. Bumping its signal afterwards drops any older fetch still in flight.
+ */
+async function syncSession() {
+  const { data } = await authClient.getSession({ query: { disableCookieCache: true } });
+  const session = authClient.$store.atoms.session as unknown as {
+    get(): object;
+    set(value: object): void;
+  };
+  session.set({ ...session.get(), data, error: null, isPending: false, isRefetching: false });
+  authClient.$store.notify("$sessionSignal");
+}
+
 /** The page, while the URL is still on it: navigating to another path leaves it, as in the app. */
 function Route({ path, children }: { path: string; children: ReactNode }) {
   return usePathname() === path ? children : null;
@@ -86,6 +103,7 @@ export async function renderPage(
   const root = createRoot(container);
   mounted.push({ root, container });
   const messages = await bundledMessages.load(locale);
+  await syncSession();
   flushSync(() =>
     root.render(
       <TestRouter>
@@ -105,6 +123,8 @@ export async function renderPage(
 
 /** Unmounts what the test rendered (setup.ts calls it after each test). */
 export function cleanup() {
+  // Toasts live in sonner's module state: without this, the next test's Toaster shows them.
+  toast.dismiss();
   for (const { root, container } of mounted.splice(0)) {
     root.unmount();
     container.remove();

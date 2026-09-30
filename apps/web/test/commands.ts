@@ -8,10 +8,13 @@ import { randomInt } from "node:crypto";
 import type { NotificationPayload } from "@repo/jobs";
 import { totp as totpCode } from "@repo/testing/totp";
 import { Queue } from "bullmq";
+import { Redis } from "ioredis";
 import pg from "pg";
-import type { CDPSession, Page } from "playwright";
+import type { CDPSession, Page, Route } from "playwright";
 import type { BrowserCommand } from "vitest/node";
-import { REDIS_URL, services } from "./services";
+// The API's own token format (a relative import: nest-common's entry pulls in Nest).
+import { createSignedTokens } from "../../../packages/nest-common/src/signed-token";
+import { API, REDIS_URL, SITE, services } from "./services";
 
 /** Full-page navigations each page tried since its test started, in order. */
 const navigations = new WeakMap<Page, string[]>();
@@ -42,7 +45,7 @@ const FAKE_TURNSTILE = `window.turnstile = (() => {
 })();`;
 
 /** How the Turnstile script answers on each page: the stand-in, blocked, or broken. */
-const turnstileModes = new WeakMap<Page, "fake" | "blocked" | "empty">();
+const turnstileModes = new WeakMap<Page, "fake" | "blocked" | "empty" | "held">();
 
 /**
  * Every test starts signed out, from a client IP of its own (the API rate-limits auth
@@ -52,12 +55,15 @@ const turnstileModes = new WeakMap<Page, "fake" | "blocked" | "empty">();
  */
 const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   await context.clearCookies();
-  await page.setExtraHTTPHeaders({
-    "x-forwarded-for": `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`,
-  });
+  const ip = `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
+  clientIps.set(page, ip);
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": ip });
   turnstileModes.set(page, "fake");
+  failing.set(page, []);
   if (!navigations.has(page)) {
-    await page.route("https://challenges.cloudflare.com/turnstile/**", (route) => {
+    await page.route("https://challenges.cloudflare.com/turnstile/**", async (route) => {
+      // Held: answered once the test picks another mode (a slow network, under control).
+      while (turnstileModes.get(page) === "held") await new Promise((r) => setTimeout(r, 20));
       const mode = turnstileModes.get(page);
       if (mode === "blocked") return route.abort();
       return route.fulfill({
@@ -66,9 +72,20 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
       });
     });
     await page.route(
-      (url) => !url.pathname.startsWith("/__vitest") && !url.pathname.startsWith("/@"),
+      // Not vitest's own pages: the runner loads each test file at /?sessionId=….
+      (url) =>
+        !url.pathname.startsWith("/__vitest") &&
+        !url.pathname.startsWith("/@") &&
+        !url.searchParams.has("sessionId"),
       (route) => {
         const request = route.request();
+        const failure = failing.get(page)?.find(({ part }) => request.url().includes(part));
+        if (failure) {
+          failure.hits += 1;
+          return failure.status
+            ? route.fulfill({ status: failure.status, body: "" })
+            : route.abort();
+        }
         if (!request.isNavigationRequest() || request.frame() === page.mainFrame())
           return route.fallback();
         navigations.get(page)?.push(request.url());
@@ -78,6 +95,37 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   }
   navigations.set(page, []);
 };
+
+/** Each page's client IP for its current test, and the requests it makes fail. */
+const clientIps = new WeakMap<Page, string>();
+const failing = new WeakMap<Page, { part: string; status?: number; hits: number }[]>();
+
+/** Sends these headers with the page's requests for the rest of the test (an app version, say). */
+const requestHeaders: BrowserCommand<[headers: Record<string, string>]> = async (
+  { page },
+  headers,
+) => {
+  await page.setExtraHTTPHeaders({ ...headers, "x-forwarded-for": clientIps.get(page) ?? "" });
+};
+
+/**
+ * Makes the page's requests to URLs containing `part` fail for the rest of the test: as
+ * if the network dropped them, or with `status` (a gateway's 502 when the API is down).
+ * Returns nothing; `failedRequests(part)` says how many there have been.
+ */
+const failRequests: BrowserCommand<[part: string, options?: { status?: number }]> = (
+  { page },
+  part,
+  options = {},
+) => {
+  failing.get(page)?.push({ part, ...options, hits: 0 });
+};
+
+const failedRequests: BrowserCommand<[part: string]> = ({ page }, part) =>
+  failing
+    .get(page)
+    ?.filter((failure) => failure.part === part)
+    .reduce((total, failure) => total + failure.hits, 0) ?? 0;
 
 /** The full-page navigations the page tried since the test started. */
 const hardNavigations: BrowserCommand<[]> = ({ page }) => navigations.get(page) ?? [];
@@ -179,9 +227,13 @@ const virtualAuthenticator: BrowserCommand<[options?: { verified?: boolean }]> =
 
 /**
  * How Turnstile's script loads for the rest of the test: the stand-in (the default),
- * blocked (an extension, or offline), or loading without defining the widget.
+ * blocked (an extension, or offline), loading without defining the widget, or held
+ * until the test sets another mode.
  */
-const turnstile: BrowserCommand<[mode: "fake" | "blocked" | "empty"]> = ({ page }, mode) => {
+const turnstile: BrowserCommand<[mode: "fake" | "blocked" | "empty" | "held"]> = (
+  { page },
+  mode,
+) => {
   turnstileModes.set(page, mode);
 };
 
@@ -197,7 +249,155 @@ const grantPermissions: BrowserCommand<[permissions: string[]]> = async (
 /** The code an authenticator app shows for `secret` now. */
 const totp: BrowserCommand<[secret: string]> = (_context, secret) => totpCode(secret);
 
+/**
+ * Changes the page's stored session in place: `createdAt` (to make it older than the
+ * API's fresh-session window, as if the tab had been left open), what it recorded about
+ * the device, or the user it caches (a value saved before the app changed, say).
+ * Sessions live in Redis (better-auth's secondary storage, "auth:" keys).
+ */
+const editSession: BrowserCommand<
+  [fields: Record<string, unknown>, userFields?: Record<string, unknown>]
+> = async ({ context }, fields, userFields = {}) => {
+  const cookie = (await context.cookies()).find((c) => c.name === "better-auth.session_token");
+  if (!cookie) throw new Error("not signed in");
+  const key = `auth:${decodeURIComponent(cookie.value).split(".")[0]}`;
+  const redis = new Redis(REDIS_URL);
+  try {
+    const stored = JSON.parse((await redis.get(key)) ?? "null");
+    if (!stored) throw new Error(`no session at ${key}`);
+    Object.assign(stored.session, fields);
+    Object.assign(stored.user, userFields);
+    await redis.set(key, JSON.stringify(stored), "KEEPTTL");
+  } finally {
+    redis.disconnect();
+  }
+};
+
+/** The page's session signed in three hours ago: "sudo mode" actions need a new sign-in. */
+const ageSession: BrowserCommand<[]> = (context) =>
+  editSession(context, { createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() });
+
+/** The signed link an email's "Unsubscribe" carries (UNSUBSCRIBE_SECRET, as the API has it). */
+const unsubscribeToken: BrowserCommand<[userId: string, category: string]> = (
+  _context,
+  userId,
+  category,
+) =>
+  createSignedTokens(process.env.UNSUBSCRIBE_SECRET as string).sign("unsubscribe", [
+    userId,
+    category,
+  ]);
+
+/**
+ * Signs the user in on another device (a request from Node with that device's user
+ * agent), from a client IP of its own, or with none at all.
+ */
+const signInElsewhere: BrowserCommand<
+  [email: string, password: string, userAgent: string, options?: { withoutIp?: boolean }]
+> = async ({ project }, email, password, userAgent, options = {}) => {
+  const variant = project.name.includes("features off") ? "bare" : "full";
+  const response = await fetch(`${API[variant].url}/api/auth/sign-in/email`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: SITE[variant].url,
+      "user-agent": userAgent,
+      ...(!options.withoutIp && {
+        "x-forwarded-for": `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`,
+      }),
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) throw new Error(`sign-in answered ${response.status}`);
+};
+
+/**
+ * The next PUT to a URL containing `part` is answered with `status`, as when storage
+ * refuses an upload; later requests go through again.
+ */
+const refuseNextPut: BrowserCommand<[part: string, status: number]> = async (
+  { page },
+  part,
+  status,
+) => {
+  const matches = (url: URL) => url.href.includes(part);
+  const handler = async (route: Route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await page.unroute(matches, handler);
+    return route.fulfill({ status, headers: { "access-control-allow-origin": "*" } });
+  };
+  await page.route(matches, handler);
+};
+
+/**
+ * Lets the test page upload to the local object storage. Its bucket allows the dev site's
+ * origin only (docker-compose.yml, s3-init), not the test pages' port, so requests to it
+ * are sent from Node instead, to the same presigned URL, and answered with the CORS
+ * headers the bucket gives the real site. What storage does with them is unchanged.
+ */
+const withStorageCors = new WeakSet<Page>();
+const storageCors: BrowserCommand<[]> = async ({ page }) => {
+  if (withStorageCors.has(page)) return;
+  withStorageCors.add(page);
+  const storage = new URL(process.env.S3_ENDPOINT ?? "http://localhost:59000").host;
+  await page.route(
+    (url) => url.host === storage,
+    async (route) => {
+      const origin = route.request().headers().origin ?? "*";
+      const cors = {
+        "access-control-allow-origin": origin,
+        "access-control-allow-methods": "PUT, GET",
+        "access-control-allow-headers": "*",
+        "access-control-expose-headers": "ETag",
+      };
+      if (route.request().method() === "OPTIONS")
+        return route.fulfill({ status: 204, headers: cors });
+      const response = await route.fetch();
+      return route.fulfill({ response, headers: { ...response.headers(), ...cors } });
+    },
+  );
+};
+
+/**
+ * Publishes a realtime message the way the worker does after an outbox event (no worker
+ * runs here): `channel` is `user:<id>` or `org:<id>` (realtimeChannel in contracts).
+ */
+const publishRealtime: BrowserCommand<[channel: string, message: { type: string }]> = async (
+  _context,
+  channel,
+  message,
+) => {
+  const redis = new Redis(REDIS_URL);
+  try {
+    await redis.publish(`realtime:${channel}`, JSON.stringify(message));
+  } finally {
+    redis.disconnect();
+  }
+};
+
+/** Calls one of the fake Stripe's test hooks (`/__fake/...`) and returns its answer. */
+const fakeStripe: BrowserCommand<[path: string, method?: string]> = async (
+  _context,
+  path,
+  method = "GET",
+) => {
+  const response = await fetch(`${(await services()).stripeUrl}${path}`, { method });
+  if (!response.ok) throw new Error(`the fake Stripe answered ${path} with ${response.status}`);
+  return response.json();
+};
+
 export const commands = {
+  fakeStripe,
+  publishRealtime,
+  editSession,
+  storageCors,
+  refuseNextPut,
+  signInElsewhere,
+  unsubscribeToken,
+  ageSession,
+  requestHeaders,
+  failRequests,
+  failedRequests,
   totp,
   startTest,
   hardNavigations,
@@ -210,13 +410,32 @@ export const commands = {
 
 declare module "vitest/browser" {
   interface BrowserCommands {
+    fakeStripe<T = unknown>(path: string, method?: string): Promise<T>;
+    publishRealtime(channel: string, message: { type: string }): Promise<void>;
+    storageCors(): Promise<void>;
+    refuseNextPut(part: string, status: number): Promise<void>;
+    signInElsewhere(
+      email: string,
+      password: string,
+      userAgent: string,
+      options?: { withoutIp?: boolean },
+    ): Promise<void>;
+    unsubscribeToken(userId: string, category: string): Promise<string>;
+    ageSession(): Promise<void>;
+    editSession(
+      fields: Record<string, unknown>,
+      userFields?: Record<string, unknown>,
+    ): Promise<void>;
     startTest(): Promise<void>;
+    requestHeaders(headers: Record<string, string>): Promise<void>;
+    failRequests(part: string, options?: { status?: number }): Promise<void>;
+    failedRequests(part: string): Promise<number>;
     totp(secret: string): Promise<string>;
     hardNavigations(): Promise<string[]>;
     takeNotification<T = Record<string, unknown>>(template: string, address: string): Promise<T>;
     sql<T = Record<string, unknown>>(query: string, params?: unknown[]): Promise<T[]>;
     virtualAuthenticator(options?: { verified?: boolean }): Promise<void>;
-    turnstile(mode: "fake" | "blocked" | "empty"): Promise<void>;
+    turnstile(mode: "fake" | "blocked" | "empty" | "held"): Promise<void>;
     grantPermissions(permissions: string[]): Promise<void>;
   }
 }

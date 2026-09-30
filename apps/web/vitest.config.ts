@@ -35,6 +35,12 @@ const browserProject = (
   server: {
     proxy: { "/rpc": API[services].url, "/api": API[services].url },
   },
+  // Every dependency the app uses, bundled before the first test: one found later makes
+  // Vite reload the page mid-run.
+  // (Not the server-only files: the root layout's fonts exist only in Next's compiler.)
+  optimizeDeps: {
+    entries: ["src/**/*.tsx", "test/**/*.tsx", "!src/app/layout.tsx", "!src/**/*.test.tsx"],
+  },
   test: {
     name,
     include,

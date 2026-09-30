@@ -16,6 +16,13 @@ import { API, CAPTCHA, REDIS_URL, type Services, SITE, STRIPE, VAPID_PUBLIC_KEY 
 const ROOT = join(import.meta.dirname, "../../..");
 const API_DIR = join(ROOT, "apps/api");
 
+/**
+ * The API exits when this process does, even if it's killed before its teardown runs:
+ * its stdin is a pipe from here, which closes then.
+ */
+const EXIT_WITH_PARENT =
+  "--import=data:text/javascript,process.stdin.on('end',()=>process.exit()).resume()";
+
 async function waitUntilReady(url: string, child: ChildProcess, log: string) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
@@ -76,6 +83,8 @@ async function start(): Promise<Services> {
     LOAD_SHEDDING: "off",
     // Two APIs per run, and other suites share the database server.
     API_DATABASE_POOL_MAX: "4",
+    // The web app sends no version, so this only affects tests that send an older one.
+    MINIMUM_CLIENT_VERSION: "1.0.0",
     API_DATABASE_URL: database.urlFor("app_api"),
     REDIS_URL,
     VAPID_PUBLIC_KEY,
@@ -115,20 +124,24 @@ async function start(): Promise<Services> {
 
   const children: ChildProcess[] = [];
   for (const [name, env] of Object.entries(variants) as [keyof typeof API, object][]) {
-    const log = join(logs, `web-tests-api-${name}.log`);
+    const log = join(logs, `web-tests-api-${name}-${process.pid}.log`);
     const out = openSync(log, "w");
-    const child = spawn(process.execPath, ["--enable-source-maps", join(dist, "main.mjs")], {
-      cwd: API_DIR,
-      env: {
-        ...process.env,
-        ...common,
-        ...env,
-        PORT: String(API[name].port),
-        WEB_URL: SITE[name].url,
-        BETTER_AUTH_URL: SITE[name].url,
+    const child = spawn(
+      process.execPath,
+      ["--enable-source-maps", EXIT_WITH_PARENT, join(dist, "main.mjs")],
+      {
+        cwd: API_DIR,
+        env: {
+          ...process.env,
+          ...common,
+          ...env,
+          PORT: String(API[name].port),
+          WEB_URL: SITE[name].url,
+          BETTER_AUTH_URL: SITE[name].url,
+        },
+        stdio: ["pipe", out, out],
       },
-      stdio: ["ignore", out, out],
-    });
+    );
     children.push(child);
     await waitUntilReady(API[name].url, child, log);
   }

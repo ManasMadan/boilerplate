@@ -72,7 +72,7 @@ export async function startFakeAi() {
         org,
         title,
         status,
-        error: status === "failed" ? "FILE_TYPE_NOT_ALLOWED" : null,
+        error: status === "failed" ? "DOCUMENT_INDEXING_FAILED" : null,
         chunkCount: status === "ready" ? 3 : 0,
         summary: status === "ready" ? `A summary of ${title}` : null,
         createdBy: user,

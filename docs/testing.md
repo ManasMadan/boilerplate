@@ -98,8 +98,14 @@ verified user in on the page). Next.js's router exists only inside a Next server
 navigations (`window.location.assign`, a redirect to Stripe or Google) are answered
 "204 No Content" so the test page stays, and `commands.hardNavigations()` lists them.
 
+Only the API runs, so what the other services would do is done by the test: the
+worker's realtime messages (`publishRealtime`), the notification service's in-app rows
+(SQL), a Stripe webhook's effect on the subscription (SQL; the fake Stripe's test hooks
+make invoices in any status). Uploads go to the real RustFS, sent from Node because its
+bucket allows only the dev site's origin (`storageCors`).
+
 Each test starts signed out, with a client IP of its own (the API's auth rate limits
-are per IP).
+are per IP), and nothing left on screen from the test before it (toasts included).
 
 ## Not tested automatically
 

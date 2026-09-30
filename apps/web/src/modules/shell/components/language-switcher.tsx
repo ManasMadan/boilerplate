@@ -15,8 +15,9 @@ import { authClient } from "@/lib/auth-client";
 import { setPreferenceCookie } from "@/lib/cookies";
 
 /** Each language is named in itself ("Español"), so everyone can find theirs. */
+// A language code the browser doesn't know comes back as the code itself.
 const nativeName = (locale: string) =>
-  new Intl.DisplayNames([locale], { type: "language" }).of(locale) ?? locale;
+  String(new Intl.DisplayNames([locale], { type: "language" }).of(locale));
 
 export function LanguageSwitcher() {
   const t = useTranslations("common");

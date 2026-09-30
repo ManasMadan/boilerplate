@@ -32,10 +32,11 @@ export function VerifyEmailPage() {
     if (!email) router.replace("/sign-in");
   }, [email, router]);
   if (!email) return null;
+  // The handlers below only exist once an address is known.
+  const address = email;
 
   async function onSubmit({ otp }: z.infer<typeof schema>) {
-    if (!email) return;
-    const { data, error } = await authClient.emailOtp.verifyEmail({ email, otp });
+    const { data, error } = await authClient.emailOtp.verifyEmail({ email: address, otp });
     if (error) {
       // Clear the rejected code so the next one can be typed straight in.
       form.setValue("otp", "");
@@ -48,9 +49,8 @@ export function VerifyEmailPage() {
   }
 
   async function resend() {
-    if (!email) return;
     const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email,
+      email: address,
       type: "email-verification",
       fetchOptions: { headers: captcha.headers() },
     });
