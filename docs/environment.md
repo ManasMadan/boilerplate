@@ -46,8 +46,11 @@ in quotes and Node never does, so no spelling works for both.
 
 `bun run doctor` reports `.env` drift against `.env.example`.
 
-A new variable goes in the service's `src/env.ts`, `.env.example` and this file, in the
-same change.
+A new variable goes in the service's `src/env.ts` (or `apps/ai/app/settings.py`),
+`.env.example` (set, or commented out with its default) and this file, in the same
+change. The unit tests fail otherwise (`scripts/env-docs.test.ts`, and
+`apps/ai/tests/test_settings_documented.py`), and a change to a service's variables runs
+the kind deploy, which fails if the charts don't provide one it requires.
 
 In the tables, "req." means the service won't start without it; a default in the second
 column applies when it's unset.
@@ -94,7 +97,7 @@ Each service connects as its own Postgres role (see [database.md](database.md)).
 | `NOTIFICATIONS_DATABASE_URL` | notifications (req.) | `postgresql://app_notifications:…/app` | |
 | `WEBHOOKS_DATABASE_URL` | webhooks (req.) | `postgresql://app_webhooks:…/app` | |
 | `AI_DATABASE_URL` | ai (req.) | `postgresql://app_ai:…/app` | |
-| `<SERVICE>_DATABASE_POOL_MAX` | each service | 10 (ai: 5) | Connections per process. The sum over all replicas must fit the server's limit. |
+| `API_DATABASE_POOL_MAX`, `WORKER_DATABASE_POOL_MAX`, `NOTIFICATIONS_DATABASE_POOL_MAX`, `WEBHOOKS_DATABASE_POOL_MAX`, `AI_DATABASE_POOL_MAX` | each service | 10 (ai: 5) | Connections per process. The sum over all replicas must fit the server's limit. |
 
 ## Redis (Valkey)
 
