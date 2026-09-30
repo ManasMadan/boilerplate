@@ -41,6 +41,7 @@ export function NotificationSettingsPage() {
 
   if (!preferences.data) return <Skeleton className="h-64" />;
   const data: NotificationPreferences = preferences.data;
+  const quiet = data.quietHours;
 
   return (
     <>
@@ -122,7 +123,7 @@ export function NotificationSettingsPage() {
               {t("quietHours.enable")}
             </FieldLabel>
           </Field>
-          {data.quietHours ? (
+          {quiet ? (
             <div className="flex gap-4">
               {(["start", "end"] as const).map((edge) => (
                 <Field key={edge} className="w-36">
@@ -130,13 +131,12 @@ export function NotificationSettingsPage() {
                   <Input
                     id={`quiet-${edge}`}
                     type="time"
-                    defaultValue={toTime(data.quietHours?.[edge] ?? 0)}
+                    defaultValue={toTime(quiet[edge])}
                     onBlur={(event) => {
-                      const current = data.quietHours;
-                      if (!current || !event.target.value) return;
+                      if (!event.target.value) return;
                       const minutes = toMinutes(event.target.value);
-                      if (minutes !== current[edge])
-                        save({ quietHours: { ...current, [edge]: minutes } });
+                      if (minutes !== quiet[edge])
+                        save({ quietHours: { ...quiet, [edge]: minutes } });
                     }}
                   />
                 </Field>
