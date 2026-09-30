@@ -23,6 +23,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@repo/contracts": "workspace:*",
     "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",

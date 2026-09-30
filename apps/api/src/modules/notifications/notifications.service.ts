@@ -4,13 +4,14 @@
  * scoped to the user by row-level security (withUser / userTx).
  */
 import { Injectable } from "@nestjs/common";
-import type {
-  AppNotification,
-  NotificationPreferences,
-  PushDeviceInput,
+import {
+  type AppNotification,
+  type NotificationPreferences,
+  notificationCategorySchema,
+  notificationSchema,
+  type PushDeviceInput,
 } from "@repo/contracts/api";
 import {
-  type InAppNotificationType,
   mutableCategories,
   type NotificationCategory,
   type NotificationChannel,
@@ -67,14 +68,9 @@ export class NotificationsService {
       take: limit + 1,
       select: { id: true, template: true, data: true, link: true, readAt: true, createdAt: true },
     });
-    const items: AppNotification[] = rows.map((row) => ({
-      id: row.id,
-      type: row.template as InAppNotificationType,
-      data: (row.data ?? {}) as Record<string, string>,
-      link: row.link,
-      readAt: row.readAt,
-      createdAt: row.createdAt,
-    }));
+    const items: AppNotification[] = rows.map((row) =>
+      notificationSchema.parse({ ...row, type: row.template, data: row.data ?? {} }),
+    );
     return toPage(items, limit);
   }
 
@@ -199,10 +195,10 @@ export class NotificationsService {
   /** Turns off a category's email for the user a signed unsubscribe link names. */
   async unsubscribe(token: string) {
     const [userId, category] = this.tokens.verify("unsubscribe", token) ?? [];
-    if (!userId || !category || !(category in notificationCategories))
+    const parsed = notificationCategorySchema.safeParse(category);
+    if (!userId || !parsed.success || !notificationCategories[parsed.data].mutable)
       throw new AppError("UNSUBSCRIBE_LINK_INVALID");
-    const name = category as NotificationCategory;
-    if (!notificationCategories[name].mutable) throw new AppError("UNSUBSCRIBE_LINK_INVALID");
+    const name = parsed.data;
     await this.updatePreferences(userId, {
       channels: [{ category: name, channel: "email", enabled: false }],
     });

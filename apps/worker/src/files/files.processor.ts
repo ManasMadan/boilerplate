@@ -17,7 +17,12 @@
 import { createHash } from "node:crypto";
 import { Processor } from "@nestjs/bullmq";
 import { Inject } from "@nestjs/common";
-import { type FileRejection, type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
+import {
+  type FileRejection,
+  type UploadPurpose,
+  uploadPurposeNames,
+  uploadPurposes,
+} from "@repo/contracts/files";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { parseJob, queuePrefix } from "@repo/jobs";
 import {
@@ -34,9 +39,12 @@ import {
 import type { Job } from "bullmq";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
+import * as z from "zod";
 import { env } from "../env";
 import { publishRealtime } from "../realtime/publish";
 import { FILE_SCANNER, type FileScanner } from "./file-scanner";
+
+const uploadPurpose = z.enum(uploadPurposeNames);
 
 const AVATAR_SIZE = 512;
 // Decoding bombs: refuse images claiming more pixels than a large photo has.
@@ -83,7 +91,7 @@ export class FilesProcessor extends JobProcessor {
     try {
       const stored = await this.inspect(
         this.storage,
-        file.purpose as UploadPurpose,
+        uploadPurpose.parse(file.purpose),
         quarantine,
         file.declaredSize,
       );

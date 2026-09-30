@@ -18,7 +18,7 @@ const inAppType = z.enum(
     ...(keyof typeof inAppNotifications)[],
   ],
 );
-const category = z.enum(
+export const notificationCategorySchema = z.enum(
   Object.keys(notificationCategories) as [
     keyof typeof notificationCategories,
     ...(keyof typeof notificationCategories)[],
@@ -44,7 +44,7 @@ export const notificationPreferencesSchema = z.object({
   /** Every category users can change, with each channel's state. */
   categories: z.array(
     z.object({
-      name: category,
+      name: notificationCategorySchema,
       channels: z.array(z.object({ channel: z.enum(notificationChannels), enabled: z.boolean() })),
     }),
   ),
@@ -100,7 +100,11 @@ export const notificationsContract = {
       z.object({
         channels: z
           .array(
-            z.object({ category, channel: z.enum(notificationChannels), enabled: z.boolean() }),
+            z.object({
+              category: notificationCategorySchema,
+              channel: z.enum(notificationChannels),
+              enabled: z.boolean(),
+            }),
           )
           .max(50)
           .optional(),
@@ -137,5 +141,5 @@ export const notificationsContract = {
     "Unsubscribe from a category's email",
   )
     .input(z.object({ token: z.string().min(10).max(1000) }))
-    .output(z.object({ category })),
+    .output(z.object({ category: notificationCategorySchema })),
 };

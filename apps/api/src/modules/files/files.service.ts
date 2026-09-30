@@ -5,13 +5,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import type { FileInfo } from "@repo/contracts/api";
-import {
-  type FileRejection,
-  type FileStatus,
-  type UploadPurpose,
-  uploadPurposes,
-} from "@repo/contracts/files";
+import { type FileInfo, fileSchema } from "@repo/contracts/api";
+import { type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
 import { withUser } from "@repo/db";
 import type { Producer } from "@repo/jobs";
 import {
@@ -56,16 +51,8 @@ const select = {
   createdAt: true,
 } as const;
 
-const toInfo = (row: FileRow): FileInfo => ({
-  id: row.id,
-  purpose: row.purpose as UploadPurpose,
-  status: row.status as FileStatus,
-  filename: row.filename,
-  contentType: row.contentType,
-  size: row.size,
-  rejectReason: row.rejectReason as FileRejection | null,
-  createdAt: row.createdAt,
-});
+// Parsed, not cast: a value the column holds but the contract doesn't know fails here.
+const toInfo = (row: FileRow): FileInfo => fileSchema.parse(row);
 
 @Injectable()
 export class FilesService {

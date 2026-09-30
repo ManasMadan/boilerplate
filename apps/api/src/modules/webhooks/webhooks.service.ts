@@ -9,6 +9,7 @@ import {
   WEBHOOK_SECRET_OVERLAP_HOURS,
   type WebhookEndpoint,
   webhookDeliverySchema,
+  webhookEndpointSchema,
 } from "@repo/contracts/api";
 import type { EventPayload, WebhookEventName } from "@repo/contracts/events";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
@@ -35,15 +36,7 @@ export const WEBHOOK_DELIVERIES = Symbol("WEBHOOK_DELIVERIES");
 
 type EndpointRow = Awaited<ReturnType<WebhooksRepository["listEndpoints"]>>[number];
 
-const toEndpoint = (row: EndpointRow): WebhookEndpoint => ({
-  id: row.id,
-  url: row.url,
-  description: row.description,
-  events: row.events as WebhookEventName[],
-  createdAt: row.createdAt,
-  disabledAt: row.disabledAt,
-  disabledReason: row.disabledReason as WebhookEndpoint["disabledReason"],
-});
+const toEndpoint = (row: EndpointRow): WebhookEndpoint => webhookEndpointSchema.parse(row);
 
 /** Standard Webhooks secret format: whsec_ + base64 of 24 random bytes. */
 const newSecret = () => `whsec_${randomBytes(24).toString("base64")}`;

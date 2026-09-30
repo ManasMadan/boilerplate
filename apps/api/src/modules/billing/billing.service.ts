@@ -13,12 +13,14 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { BillingOverview } from "@repo/contracts/api";
 import {
   type BillingInterval,
+  billingIntervals,
   type Entitlement,
   type Entitlements,
   PAID_STATUSES,
   type PlanName,
+  planNames,
   plans,
-  type SubscriptionStatus,
+  subscriptionStatuses,
   unlimited,
 } from "@repo/contracts/billing";
 import { tenantTx, withTenant } from "@repo/db";
@@ -32,8 +34,15 @@ import {
   type Redis,
 } from "@repo/nest-common";
 import type Stripe from "stripe";
+import * as z from "zod";
 import { env } from "../../env";
 import { STRIPE } from "./stripe";
+
+// The subscription row's text columns, parsed rather than cast.
+const paid: ReadonlySet<string> = new Set(PAID_STATUSES);
+const planName = z.enum(planNames);
+const subscriptionStatus = z.enum(subscriptionStatuses);
+const billingInterval = z.enum(billingIntervals);
 
 /**
  * Runs a Stripe call; Stripe failing (down, slow, refusing our request) becomes
@@ -92,8 +101,8 @@ export class BillingService {
   async plan(orgId: string): Promise<PlanName> {
     if (!this.enabled) return "pro";
     const subscription = await this.current(orgId);
-    return subscription && PAID_STATUSES.includes(subscription.status as SubscriptionStatus)
-      ? (subscription.plan as PlanName)
+    return subscription && paid.has(subscription.status)
+      ? planName.parse(subscription.plan)
       : "free";
   }
 
@@ -126,8 +135,8 @@ export class BillingService {
       entitlements,
       members,
       subscription: subscription && {
-        status: subscription.status as SubscriptionStatus,
-        interval: subscription.interval as BillingInterval,
+        status: subscriptionStatus.parse(subscription.status),
+        interval: billingInterval.parse(subscription.interval),
         seats: subscription.quantity,
         currentPeriodEnd: subscription.currentPeriodEnd,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
@@ -139,7 +148,7 @@ export class BillingService {
   async checkout(orgId: string, interval: BillingInterval) {
     const stripe = this.client;
     const current = await this.current(orgId);
-    if (current && PAID_STATUSES.includes(current.status as SubscriptionStatus)) {
+    if (current && paid.has(current.status)) {
       throw new AppError("ALREADY_SUBSCRIBED");
     }
     const customer = await this.customer(orgId);
@@ -291,7 +300,7 @@ export class BillingService {
     });
     // Checkout keeps one session open per workspace, so this shouldn't happen; if it does
     // (a session paid in the moment before it was expired), someone must refund one.
-    if (PAID_STATUSES.includes(data.status as SubscriptionStatus) && others.length > 0) {
+    if (paid.has(data.status) && others.length > 0) {
       this.log.error(
         { orgId, subscriptionId: subscription.id, others: others.map((other) => other.id) },
         "workspace has more than one live subscription: refund one in Stripe",
@@ -303,7 +312,7 @@ export class BillingService {
   async syncSeats(orgId: string) {
     const stripe = this.client;
     const current = await this.current(orgId);
-    if (!current || !PAID_STATUSES.includes(current.status as SubscriptionStatus)) return;
+    if (!current || !paid.has(current.status)) return;
     const seats = Math.max(1, await this.memberCount(orgId));
     if (seats === current.quantity) return;
     const subscription = await stripe.subscriptions.retrieve(current.id);
