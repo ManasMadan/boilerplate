@@ -645,8 +645,9 @@ jobs:
       # fmt, validate and every module's tests, against mocked providers (no credentials).
       - run: bun run infra:check
 
-  # Every image builds, and none ships a known critical or high vulnerability that has a
-  # fix. Publishing happens in the deploy workflow, from master.
+  # Every image builds, none ships a known critical or high vulnerability that has a
+  # fix, and each one starts and answers (scripts/image-smoke.ts). Publishing happens in
+  # the deploy workflow, from master.
   # One job per image: loading all seven into one runner's Docker runs it out of disk.
   images:
     name: Container images (${{ matrix.image }})
@@ -659,6 +660,17 @@ jobs:
       fail-fast: false
       matrix:
         image: [api, worker, notifications, webhooks, web, ai, migrate]
+    # What the smoke test's services connect to.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
@@ -699,6 +711,18 @@ jobs:
             "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed --ignorefile /trivyignore.yaml \
             --db-repository mirror.gcr.io/aquasec/trivy-db \
             --severity CRITICAL,HIGH "$IMAGE"
+      # The image started the way a cluster starts it: the services must reach Postgres
+      # and Valkey, the api answer an RPC and the web app render a page. The migrate
+      # image migrates the empty database itself; the others get it migrated first.
+      - uses: ./.github/actions/setup
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      - name: Apply migrations
+        if: matrix.image != 'migrate'
+        run: bun run db:deploy
+      - name: Smoke-test the image
+        run: bun scripts/image-smoke.ts ${{ matrix.image }}
 
   # The code generators (turbo/generators): each one's output must pass lint, types and
   # its own tests, or the next feature starts from broken code (scripts/generators.ts).

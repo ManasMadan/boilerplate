@@ -27,6 +27,10 @@ describe("which CI jobs a pull request needs", () => {
     expect(areasOf("deploy/docker/web.Dockerfile")).toEqual(["images"]);
   });
 
+  it("builds and starts the images for their smoke test", () => {
+    expect(areasOf("scripts/image-smoke.ts")).toEqual(["images", "scripts"]);
+  });
+
   it("checks both for what the bootstrap and charts:check share", () => {
     expect(areasOf("deploy/argocd/argo-cd-values.yaml")).toEqual(["charts", "infra", "scripts"]);
   });

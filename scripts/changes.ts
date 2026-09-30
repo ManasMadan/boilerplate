@@ -9,7 +9,7 @@
  *            e2e, Python, codegen, migrations, generators, API compatibility, images
  *   charts   deploy/ and what checks it (charts:check)
  *   infra    infra/tofu and what checks it (infra:check)
- *   images   the Dockerfiles, besides the app itself
+ *   images   the Dockerfiles and the images' smoke test, besides the app itself
  *   scripts  scripts/ and the Claude Code hooks, whose tests read all of the above
  *
  * A change to CI itself, the toolchain or the lockfile runs everything. Outside pull
@@ -50,6 +50,7 @@ export function areasOf(file: string): Area[] {
   if (file.startsWith("infra/tofu/")) return ["infra", "scripts"];
   if (/^scripts\/(charts|secrets-check)\.ts$/.test(file)) return ["charts", "scripts"];
   if (file === "scripts/infra.ts") return ["infra", "scripts"];
+  if (file === "scripts/image-smoke.ts") return ["images", "scripts"];
   if (file.startsWith("scripts/")) return ["scripts"];
   return ["app"];
 }

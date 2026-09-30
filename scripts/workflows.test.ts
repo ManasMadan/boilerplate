@@ -408,3 +408,19 @@ describe("CI's caches", () => {
     expect(cached(ci.jobs.images?.steps)).toContain("~/.cache/trivy");
   });
 });
+
+describe("ci.yml's images job", () => {
+  const images = workflow("ci.yml").jobs.images as Job & {
+    strategy: { matrix: { image: string[] } };
+  };
+
+  it("starts every image it builds and checks it answers", async () => {
+    const { IMAGES } = await import("./image-smoke");
+    expect(images.strategy.matrix.image.sort()).toEqual(Object.keys(IMAGES).sort());
+    const steps = images.steps ?? [];
+    const scan = steps.findIndex((step) => step.name === "Scan the image");
+    const smoke = steps.findIndex((step) => step.name === "Smoke-test the image");
+    expect(steps[smoke]?.run).toBe(`bun scripts/image-smoke.ts \${{ matrix.image }}`);
+    expect(smoke).toBeGreaterThan(scan);
+  });
+});
