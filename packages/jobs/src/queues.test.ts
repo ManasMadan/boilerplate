@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventSubscribers } from "./queues";
+import { eventSubscribers, queues } from "./queues";
 
 describe("event routing", () => {
   it("sends the creation of a way into a workspace to the notification service", () => {
@@ -14,5 +14,12 @@ describe("event routing", () => {
     expect(eventSubscribers["events-audit"]("notification.requested.v1")).toBe(false);
     expect(eventSubscribers["events-webhooks"]("notification.requested.v1")).toBe(false);
     expect(eventSubscribers["events-audit"]("todo.created.v1")).toBe(true);
+  });
+
+  it("retries with jitter, so jobs that failed together don't all come back at once", () => {
+    for (const [name, queue] of Object.entries(queues)) {
+      const backoff = queue.options.backoff as { type?: string; jitter?: number } | undefined;
+      if (backoff?.type === "exponential") expect(backoff.jitter, name).toBeGreaterThan(0);
+    }
   });
 });

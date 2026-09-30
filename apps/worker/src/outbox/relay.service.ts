@@ -25,7 +25,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
-import type { EventEnvelope } from "@repo/contracts/events";
+import { type EventEnvelope, eventEnvelope } from "@repo/contracts/events";
 import { Prisma } from "@repo/db";
 import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import pg from "pg";
@@ -45,7 +45,8 @@ interface OutboxRow {
   occurred_at: Date;
 }
 
-const RECONNECT_DELAY_MS = 2_000;
+/** Between 1 and 3 seconds: replicas that lost the database together don't return together. */
+const reconnectDelayMs = () => 1_000 + Math.random() * 2_000;
 
 @Injectable()
 export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -120,7 +121,24 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
           LIMIT ${env.RELAY_BATCH_SIZE}
           FOR UPDATE SKIP LOCKED`;
         if (rows.length === 0) return 0;
-        await this.bus.publish(rows.map((row) => toEnvelope(row, source)));
+        // A row that isn't a valid event never will be: publishing it would fail this
+        // batch, and every batch after it, forever. It's logged and set aside (marked
+        // published, so it stays in the table until retention, for someone to look at).
+        const envelopes = rows.map((row) => ({
+          row,
+          parsed: eventEnvelope.safeParse(toEnvelope(row, source)),
+        }));
+        for (const { row, parsed } of envelopes) {
+          if (!parsed.success) {
+            this.log.error(
+              { source, eventId: row.id, name: row.name, issues: parsed.error.issues },
+              "outbox row isn't a valid event; set aside",
+            );
+          }
+        }
+        await this.bus.publish(
+          envelopes.flatMap(({ parsed }) => (parsed.success ? [parsed.data] : [])),
+        );
         await tx.$executeRaw`
           UPDATE ${table} SET published_at = now()
           WHERE id = ANY(${rows.map((row) => row.id)}::uuid[])`;
@@ -159,7 +177,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     this.reconnect = setTimeout(() => {
       this.reconnect = undefined;
       void this.listen();
-    }, RECONNECT_DELAY_MS);
+    }, reconnectDelayMs());
   }
 }
 

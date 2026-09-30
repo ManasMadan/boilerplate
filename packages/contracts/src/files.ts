@@ -28,6 +28,7 @@ export type FileStatus = (typeof fileStatuses)[number];
 export const fileRejections = [
   "FILE_TYPE_NOT_ALLOWED",
   "FILE_TOO_LARGE",
+  "FILE_SIZE_MISMATCH",
   "FILE_INFECTED",
   "FILE_UNREADABLE",
 ] as const;

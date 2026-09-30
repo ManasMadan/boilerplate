@@ -70,6 +70,7 @@ export const zErrorCode = z.enum([
     'FILE_NOT_FOUND',
     'FILE_TYPE_NOT_ALLOWED',
     'FILE_TOO_LARGE',
+    'FILE_SIZE_MISMATCH',
     'FILE_INFECTED',
     'FILE_UNREADABLE',
     'FILE_NOT_UPLOADED',

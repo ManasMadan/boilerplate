@@ -179,8 +179,15 @@ export const WEBHOOK_RETRY_DELAYS_MS = [
 
 const aiDocumentJob = z.object({ documentId: z.uuid(), orgId: z.uuid() });
 
-/** Retries with exponential backoff; the defaults every queue starts from. */
-const retrying: JobsOptions = { attempts: 5, backoff: { type: "exponential", delay: 2_000 } };
+/**
+ * Retries with exponential backoff; the defaults every queue starts from. The jitter
+ * spreads retries out, so jobs that failed together (a provider's outage) don't all come
+ * back at the same moment.
+ */
+const retrying: JobsOptions = {
+  attempts: 5,
+  backoff: { type: "exponential", delay: 2_000, jitter: 0.5 },
+};
 
 export const queues = {
   /**
@@ -292,7 +299,7 @@ export const queues = {
     },
     options: {
       attempts: 3,
-      backoff: { type: "exponential", delay: 60_000 },
+      backoff: { type: "exponential", delay: 60_000, jitter: 0.5 },
       removeOnComplete: { count: 100 },
       removeOnFail: { age: 30 * DAY },
     },

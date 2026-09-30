@@ -453,7 +453,8 @@
     "TIMEOUT": "That took too long. Try again.",
     "PAYLOAD_TOO_LARGE": "That's too much data to send at once.",
     "UNSUPPORTED_MEDIA_TYPE": "That kind of content isn't accepted here.",
-    "INVALID_SIGNATURE": "The request's signature doesn't match."
+    "INVALID_SIGNATURE": "The request's signature doesn't match.",
+    "FILE_SIZE_MISMATCH": "The uploaded file isn't the size that was announced. Try uploading it again."
   },
   "workspace": {
     "switcher": {

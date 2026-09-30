@@ -17,6 +17,12 @@ const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
 
 /**
+ * Half the delay plus up to as much again at random: tabs that lost the stream together
+ * (a deploy) come back spread out, not all at once.
+ */
+export const withJitter = (delay: number) => delay / 2 + Math.random() * (delay / 2);
+
+/**
  * Waits `ms`, or until `signal` aborts. Each wait removes its own abort listener, so a
  * long session of reconnects doesn't pile them up on the signal.
  */
@@ -65,7 +71,7 @@ export function useRealtime(
           const code = errorCode(error);
           if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") return;
         }
-        await abortableSleep(delay, controller.signal);
+        await abortableSleep(withJitter(delay), controller.signal);
         delay = Math.min(delay * 2, RETRY_MAX_MS);
       }
     })();

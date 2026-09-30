@@ -69,18 +69,26 @@ export class FilesProcessor extends JobProcessor {
     if (!this.storage) throw new Error("files are off (no S3_BUCKET) but a file was queued");
     const db = this.database.write;
     const file = await db.file.findUnique({ where: { id: fileId } });
-    if (!file || (file.status !== "pending" && file.status !== "processing")) return;
+    const quarantine = `quarantine/${fileId}`;
+    if (!file) return;
+    // Decided already, maybe by an attempt that crashed before removing the original:
+    // only the cleanup is left (deleting is idempotent).
+    if (file.status === "ready" || file.status === "rejected") {
+      await this.storage.delete(quarantine);
+      return;
+    }
+    if (file.status !== "pending" && file.status !== "processing") return;
     await db.file.update({ where: { id: fileId }, data: { status: "processing" } });
 
-    const quarantine = `quarantine/${fileId}`;
     try {
       const stored = await this.inspect(
         file.purpose as UploadPurpose,
         quarantine,
         file.declaredSize,
       );
+      // Stored, then recorded, then the original removed: a crash at any point leaves a
+      // retry either the original to check again or nothing but the cleanup.
       await this.storage.write(`files/${fileId}`, stored.body, stored.contentType);
-      await this.storage.delete(quarantine);
       await db.file.update({
         where: { id: fileId },
         data: {
@@ -91,14 +99,15 @@ export class FilesProcessor extends JobProcessor {
           readyAt: new Date(),
         },
       });
+      await this.storage.delete(quarantine);
       this.log.info({ fileId, purpose: file.purpose }, "upload accepted");
     } catch (error) {
       if (!(error instanceof Rejected)) throw error;
-      await this.storage.delete(quarantine);
       await db.file.update({
         where: { id: fileId },
         data: { status: "rejected", rejectReason: error.reason },
       });
+      await this.storage.delete(quarantine);
       this.log.warn({ fileId, purpose: file.purpose, reason: error.reason }, "upload rejected");
     }
     await publishRealtime(this.redis, realtimeChannel.user(file.userId), { type: "files.changed" });
@@ -109,8 +118,9 @@ export class FilesProcessor extends JobProcessor {
     const storage = this.storage as Storage;
     const head = await storage.head(key);
     if (!head) throw new Rejected("FILE_UNREADABLE");
-    if (head.size !== declaredSize || head.size > rules.maxBytes)
-      throw new Rejected("FILE_TOO_LARGE");
+    if (head.size > rules.maxBytes) throw new Rejected("FILE_TOO_LARGE");
+    // Not what the client said it would upload (smaller or larger): refused as such.
+    if (head.size !== declaredSize) throw new Rejected("FILE_SIZE_MISMATCH");
     const bytes = await storage.read(key, rules.maxBytes);
 
     const scan = await this.scanner.scan(bytes);

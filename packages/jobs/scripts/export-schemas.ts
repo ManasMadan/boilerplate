@@ -43,7 +43,12 @@ const queueSetting = z.strictObject({
     .strictObject({
       attempts: z.number().int(),
       backoff: z
-        .strictObject({ type: z.string(), delay: z.number().int().optional() })
+        .strictObject({
+          type: z.string(),
+          delay: z.number().int().optional(),
+          // Python's bullmq ignores it (it reads type and delay): only Node consumers jitter.
+          jitter: z.number().min(0).max(1).optional(),
+        })
         .meta({ title: "Backoff" }),
       removeOnComplete: keep,
       removeOnFail: keep,

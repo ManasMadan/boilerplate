@@ -2,6 +2,7 @@
  * Consumes webhook-deliveries. Retries use the Standard Webhooks schedule through a
  * custom backoff (WEBHOOK_RETRY_DELAYS_MS), so a job's attempts map to delivery attempts.
  */
+import { randomUUID } from "node:crypto";
 import { Processor } from "@nestjs/bullmq";
 import {
   createProducer,
@@ -65,7 +66,8 @@ export class DeliveryProcessor extends JobProcessor {
       }
       case "send-test": {
         const { endpointId, orgId } = parseJob("webhook-deliveries", "send-test", job.data).payload;
-        const deliveryId = await this.deliveries.createTest(orgId, endpointId);
+        // Keyed on the job: a retried send-test finds its delivery instead of adding one.
+        const deliveryId = await this.deliveries.createTest(orgId, endpointId, testEventId(job.id));
         await this.enqueue(deliveryId, orgId, deliveryId);
         return;
       }
@@ -80,3 +82,8 @@ export class DeliveryProcessor extends JobProcessor {
     await this.queue.close();
   }
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The test event's id: the job's own (the api gives each send-test a UUID), else a new one. */
+const testEventId = (jobId: string | undefined) =>
+  jobId && UUID.test(jobId) ? jobId : randomUUID();

@@ -10,6 +10,7 @@ class Backoff(BaseModel):
     )
     type: str
     delay: int | None = None
+    jitter: float | None = Field(None, ge=0.0, le=1.0)
 
 
 class KeepJobs(BaseModel):

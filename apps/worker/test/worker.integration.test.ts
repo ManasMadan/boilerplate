@@ -174,6 +174,32 @@ describe("outbox relay", () => {
     expect(rows.sort()).toEqual(ids.sort());
   });
 
+  it("sets aside a row that isn't a valid event, instead of blocking every batch after it", async () => {
+    const [poison] = await asRole("app_api", async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO app.outbox_event (name, key, payload, org_id)
+         VALUES ('Not a valid name!', 'k', '{}', $1) RETURNING id`,
+        [randomUUID()],
+      );
+      return rows.map((row) => row.id);
+    });
+    const later = await emit(2);
+    const rows = await eventually(
+      () => audited(later),
+      (found) => found.length === later.length,
+    );
+    expect(rows.sort()).toEqual([...later].sort());
+    const setAside = await asRole("postgres", async (client) => {
+      const { rows: left } = await client.query(
+        "SELECT published_at FROM app.outbox_event WHERE id = $1",
+        [poison],
+      );
+      return left[0]?.published_at as Date | null;
+    });
+    expect(setAside).toBeInstanceOf(Date);
+    expect(await audited([poison as string])).toEqual([]);
+  });
+
   it("republishing a batch (a crash before commit) doesn't duplicate audit rows", async () => {
     const [id] = await emit(1);
     await eventually(
@@ -567,6 +593,18 @@ describe("uploads", () => {
     expect(await storage.head(`files/${fileId}`)).toBeNull();
   });
 
+  it("only cleans up after an attempt that decided but crashed before removing the original", async () => {
+    const { fileId } = await upload(Buffer.from("already checked"));
+    await asRole("postgres", (client) =>
+      client.query("UPDATE files.file SET status = 'ready', ready_at = now() WHERE id = $1", [
+        fileId,
+      ]),
+    );
+    await files.check(fileId);
+    expect(await row(fileId)).toMatchObject({ status: "ready" });
+    expect(await storage.head(`quarantine/${fileId}`)).toBeNull();
+  });
+
   it("judges the type by the bytes, not by what the client said", async () => {
     const { fileId } = await upload(Buffer.from("<svg onload=alert(1)></svg>"), "image/png");
     await files.check(fileId);
@@ -596,9 +634,10 @@ describe("uploads", () => {
       .toBuffer();
     const { fileId } = await upload(png, "image/png", png.length + 10);
     await files.check(fileId);
+    // Smaller than declared isn't "too large": it has its own reason.
     expect(await row(fileId)).toMatchObject({
       status: "rejected",
-      reject_reason: "FILE_TOO_LARGE",
+      reject_reason: "FILE_SIZE_MISMATCH",
     });
   });
 

@@ -453,7 +453,8 @@
     "TIMEOUT": "Tardó demasiado. Inténtalo de nuevo.",
     "PAYLOAD_TOO_LARGE": "Son demasiados datos para enviar de una vez.",
     "UNSUPPORTED_MEDIA_TYPE": "Aquí no se acepta ese tipo de contenido.",
-    "INVALID_SIGNATURE": "La firma de la solicitud no coincide."
+    "INVALID_SIGNATURE": "La firma de la solicitud no coincide.",
+    "FILE_SIZE_MISMATCH": "El archivo subido no tiene el tamaño anunciado. Vuelve a subirlo."
   },
   "workspace": {
     "switcher": {

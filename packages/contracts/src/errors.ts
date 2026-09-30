@@ -53,6 +53,8 @@ export const ERROR_CODES = {
   FILE_NOT_FOUND: 404,
   FILE_TYPE_NOT_ALLOWED: 422,
   FILE_TOO_LARGE: 413,
+  /** The upload isn't the size the client declared when it asked to upload. */
+  FILE_SIZE_MISMATCH: 422,
   FILE_INFECTED: 422,
   FILE_UNREADABLE: 422,
   FILE_NOT_UPLOADED: 409,

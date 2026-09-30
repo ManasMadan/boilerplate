@@ -21,9 +21,12 @@ check before anyone can see it:
    it was given.
 3. **Complete.** `files.completeUpload` queues a `files` job with the file id as job id,
    so completing twice checks once.
-4. **Check** (`apps/worker/src/files/files.processor.ts`): the stored size matches what was
-   declared and is within the limit; ClamAV finds nothing (before anything parses the
-   bytes); the real type, sniffed from the bytes, is allowed.
+4. **Check** (`apps/worker/src/files/files.processor.ts`): the stored size is within the
+   limit (`FILE_TOO_LARGE`) and matches what was declared (`FILE_SIZE_MISMATCH`); ClamAV
+   finds nothing (before anything parses the bytes); the real type, sniffed from the
+   bytes, is allowed. The checked file is stored, then its row updated, then the
+   quarantined original removed, so a retry after a crash either checks the original
+   again or only cleans up.
 5. **Re-encode.** Per purpose: avatars are decoded and re-encoded as a 512 px WebP (at
    most 50 megapixels in), which drops everything but pixels (EXIF, GPS, embedded
    payloads).

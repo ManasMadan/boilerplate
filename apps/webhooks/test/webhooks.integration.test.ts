@@ -343,6 +343,14 @@ describe("outbound deliveries", () => {
     expect(received).toEqual([]);
   });
 
+  it("creates a test delivery once per send-test job, however often the job runs", async () => {
+    const { orgId, endpointId } = await endpoint();
+    const jobEventId = randomUUID();
+    const first = await deliveries.createTest(orgId, endpointId, jobEventId);
+    const retried = await deliveries.createTest(orgId, endpointId, jobEventId);
+    expect(retried).toBe(first);
+  });
+
   it("treats a redirect as a failed delivery, and never sends the signed body on", async () => {
     const { orgId, endpointId } = await endpoint({ url: receiverUrl.replace("/hook", "/moved") });
     const deliveryId = await deliveries.createTest(orgId, endpointId);

@@ -145,16 +145,17 @@ export class DeliveryService {
     return count === 1;
   }
 
-  /** Creates a delivery of a test event to one endpoint; returns its id. */
-  async createTest(orgId: string, endpointId: string) {
-    const eventId = randomUUID();
+  /** Creates (once per `eventId`) a delivery of a test event to one endpoint; returns its id. */
+  async createTest(orgId: string, endpointId: string, eventId: string = randomUUID()) {
     const body = JSON.stringify({
       type: "webhook.test",
       timestamp: new Date().toISOString(),
       data: { message: "This is a test event from your webhook settings." },
     });
-    const delivery = await withTenant(this.database.write, orgId).webhookDelivery.create({
-      data: { endpointId, orgId, eventId, eventName: "webhook.test", body },
+    const delivery = await withTenant(this.database.write, orgId).webhookDelivery.upsert({
+      where: { endpointId_eventId: { endpointId, eventId } },
+      create: { endpointId, orgId, eventId, eventName: "webhook.test", body },
+      update: {},
       select: { id: true },
     });
     return delivery.id;

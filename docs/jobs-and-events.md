@@ -73,7 +73,8 @@ Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.process
 
 ## Retries and failed jobs
 
-Most queues retry 5 times with exponential backoff from 2 s. `events-realtime` retries 3
+Most queues retry 5 times with exponential backoff from 2 s, with jitter (each delay
+somewhere in its upper half) so jobs that failed together don't all return at once. `events-realtime` retries 3
 times, 1 s apart (a nudge is worthless later). `webhook-deliveries` retries 8 times on
 the Standard Webhooks schedule (`WEBHOOK_RETRY_DELAYS_MS`: 5 s, 5 min, 30 min, 2 h,
 5 h, 10 h, 10 h), about a day in all; a delivery answered with a redirect counts as
@@ -147,6 +148,12 @@ At least once, unordered. Consumers are idempotent:
 
 Each outbox schema also has `processed_event (event_id, consumer)` for a consumer that
 can't be idempotent by construction; the current consumers don't need it.
+
+An outbox row that isn't a valid event (a bad name, say) would fail its batch, and every
+batch after it, forever: the relay logs it ("outbox row isn't a valid event; set
+aside") and marks it published, so it stays in the table for someone to look at until
+retention removes it. A webhook test send creates its delivery once per job, however
+often the job runs.
 
 An event's name is accepted by the relay even if that build doesn't know it (a newer
 service can emit it mid-deploy); each consumer ignores names it doesn't handle.
