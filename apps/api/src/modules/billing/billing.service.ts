@@ -27,12 +27,16 @@ import {
   type Database,
   InjectDatabase,
   InjectPinoLogger,
+  InjectRedis,
   PinoLogger,
+  type Redis,
 } from "@repo/nest-common";
 import type Stripe from "stripe";
 import { env } from "../../env";
 import { STRIPE } from "./stripe";
 
+/** How long Stripe keeps a checkout session open (its default, 24 hours). */
+const CHECKOUT_SESSION_SECONDS = 24 * 60 * 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
@@ -41,6 +45,7 @@ export class BillingService {
     @Inject(STRIPE) private readonly stripe: Stripe | null,
     @InjectDatabase() private readonly database: Database,
     @InjectPinoLogger(BillingService.name) private readonly log: PinoLogger,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
   get enabled() {
@@ -126,24 +131,45 @@ export class BillingService {
     });
     const price = interval === "month" ? env.STRIPE_PRICE_PRO_MONTHLY : env.STRIPE_PRICE_PRO_YEARLY;
     const settings = new URL("/settings/billing", env.WEB_URL);
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer,
-      client_reference_id: orgId,
-      line_items: [
-        { price: price as string, quantity: Math.max(1, await this.memberCount(orgId)) },
-      ],
-      subscription_data: {
-        metadata: { orgId },
-        // One free trial per organization.
-        ...(env.STRIPE_TRIAL_DAYS > 0 &&
-          hadOne === 0 && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
+    // A double click or a second tab gets the same session (Stripe replays the answer for
+    // the same key), and a new one, say for the other interval, expires the one before:
+    // a workspace has one open checkout at a time, so it can't end up paying twice.
+    const hour = Math.floor(Date.now() / 3_600_000);
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "subscription",
+        customer,
+        client_reference_id: orgId,
+        line_items: [
+          { price: price as string, quantity: Math.max(1, await this.memberCount(orgId)) },
+        ],
+        subscription_data: {
+          metadata: { orgId },
+          // One free trial per organization.
+          ...(env.STRIPE_TRIAL_DAYS > 0 &&
+            hadOne === 0 && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
+        },
+        allow_promotion_codes: true,
+        success_url: `${settings.toString()}?checkout=done`,
+        cancel_url: settings.toString(),
       },
-      allow_promotion_codes: true,
-      success_url: `${settings.toString()}?checkout=done`,
-      cancel_url: settings.toString(),
-    });
+      { idempotencyKey: `checkout-${orgId}-${interval}-${hour}` },
+    );
     if (!session.url) throw new Error("Stripe returned a checkout session without a URL");
+    // Atomic swap: of two checkouts at once, the later one sees (and expires) the earlier.
+    const previous = await this.redis.set(
+      `billing:checkout:${orgId}`,
+      session.id,
+      "EX",
+      CHECKOUT_SESSION_SECONDS,
+      "GET",
+    );
+    if (previous && previous !== session.id) {
+      await stripe.checkout.sessions.expire(previous).catch((error: unknown) => {
+        // Already paid or expired: nothing left to close.
+        this.log.info({ sessionId: previous, error }, "earlier checkout session not expired");
+      });
+    }
     return { url: session.url };
   }
 
@@ -228,13 +254,25 @@ export class BillingService {
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
     };
-    await tenantTx(this.database.write, orgId, (tx) =>
-      tx.subscription.upsert({
+    const others = await tenantTx(this.database.write, orgId, async (tx) => {
+      await tx.subscription.upsert({
         where: { id: subscription.id },
         create: { id: subscription.id, orgId, ...data },
         update: data,
-      }),
-    );
+      });
+      return tx.subscription.findMany({
+        where: { orgId, id: { not: subscription.id }, status: { in: [...PAID_STATUSES] } },
+        select: { id: true },
+      });
+    });
+    // Checkout keeps one session open per workspace, so this shouldn't happen; if it does
+    // (a session paid in the moment before it was expired), someone must refund one.
+    if (PAID_STATUSES.includes(data.status as SubscriptionStatus) && others.length > 0) {
+      this.log.error(
+        { orgId, subscriptionId: subscription.id, others: others.map((other) => other.id) },
+        "workspace has more than one live subscription: refund one in Stripe",
+      );
+    }
   }
 
   /** Paid plans are per seat: keeps the subscription's quantity at the member count. */

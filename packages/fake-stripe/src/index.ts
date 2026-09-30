@@ -213,6 +213,24 @@ export async function startFakeStripe(options: FakeStripeOptions) {
       sessions.set(session.id, session);
       return { ...session, url: `${baseUrl}/checkout/${session.id}` };
     }
+    const expire = /^\/v1\/checkout\/sessions\/(cs_\w+)\/expire$/.exec(path);
+    if (method === "POST" && expire) {
+      const session = sessions.get(expire[1] as string);
+      if (!session) return notFound("checkout session");
+      if (session.status !== "open") {
+        return {
+          status: 400,
+          body: {
+            error: {
+              type: "invalid_request_error",
+              message: "Only Checkout Sessions with a status of open can be expired.",
+            },
+          },
+        };
+      }
+      session.status = "expired";
+      return session;
+    }
     if (method === "POST" && path === "/v1/billing_portal/sessions") {
       if (!customers.has(form.customer as string)) return notFound("customer");
       const portal = id("bps");
@@ -286,6 +304,9 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     if (checkout) {
       const session = sessions.get(checkout[1] as string);
       if (!session) return html(404, page("Not found", ""));
+      if (session.status === "expired") {
+        return html(410, page("Fake Stripe Checkout", "<p>This checkout session has expired.</p>"));
+      }
       if (request.method === "POST" && checkout[2]) {
         if (form.card === "declined") {
           return html(

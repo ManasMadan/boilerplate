@@ -265,20 +265,28 @@ describe("subscribing", () => {
     expect(stripe.subscriptionFor(orgId)?.metadata).toEqual({ orgId });
   });
 
-  it("refuses a second subscription, and makes one Stripe customer per workspace", async () => {
+  it("keeps one checkout open per workspace, so it can't pay twice", async () => {
     const { owner, orgId } = await workspace();
-    const [first, second] = await Promise.all([
+    // A double click, or two tabs: the same session.
+    const [first, again] = await Promise.all([
       owner.session.rpc.billing.checkout({ interval: "month" }),
-      owner.session.rpc.billing.checkout({ interval: "year" }),
+      owner.session.rpc.billing.checkout({ interval: "month" }),
     ]);
-    expect(first.url).not.toBe(second.url);
+    expect(again.url).toBe(first.url);
     const customers = [...stripe.customers.values()].filter((c) => c.metadata.orgId === orgId);
     expect(customers).toHaveLength(1);
     expect(
       await sql("SELECT stripe_customer_id FROM billing.customer WHERE org_id = $1", [orgId]),
     ).toEqual([{ stripe_customer_id: customers[0]?.id }]);
 
-    await fetch(`${first.url}/pay`, { method: "POST", redirect: "manual" });
+    // Changing one's mind: the new session closes the old one.
+    const yearly = await owner.session.rpc.billing.checkout({ interval: "year" });
+    expect(yearly.url).not.toBe(first.url);
+    expect((await fetch(`${first.url}/pay`, { method: "POST", redirect: "manual" })).status).toBe(
+      410,
+    );
+
+    await fetch(`${yearly.url}/pay`, { method: "POST", redirect: "manual" });
     await eventually(
       () => owner.session.rpc.billing.overview(),
       (overview) => overview.plan === "pro",
@@ -287,6 +295,9 @@ describe("subscribing", () => {
       owner.session.rpc.billing.checkout({ interval: "year" }),
       "ALREADY_SUBSCRIBED",
     );
+    expect(
+      [...stripe.subscriptions.values()].filter((s) => s.metadata.orgId === orgId),
+    ).toHaveLength(1);
   });
 
   it("a declined card leaves the workspace on Free", async () => {

@@ -114,7 +114,13 @@ is used, and hide or badge it in the clients.
 - Every `billing.*` procedure is for owners and admins (`orgAdmin`).
 - `billing.checkout` creates the Stripe customer the first time, with
   the organization id in its metadata, and returns a Checkout URL. The first subscription
-  gets a `STRIPE_TRIAL_DAYS` trial. `billing.portal` opens Stripe's billing portal;
+  gets a `STRIPE_TRIAL_DAYS` trial. A workspace has one checkout open at a time: asking
+  again within the hour for the same interval returns the same session (an idempotency
+  key), and a new session expires the one before, so two admins or two tabs can't end up
+  paying for two subscriptions. If two live subscriptions appear anyway, sync logs an
+  error naming both, for someone to refund one. The trial is per workspace, so a new
+  workspace gets a new one; tying it to a card would take Stripe Radar rules or card
+  fingerprints. `billing.portal` opens Stripe's billing portal;
   `billing.invoices` lists past invoices.
 - Stripe's events arrive at apps/webhooks, `POST /webhooks/stripe`: the signature is
   checked against `STRIPE_WEBHOOK_SECRET`, the event is stored once in
