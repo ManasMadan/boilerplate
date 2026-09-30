@@ -11,7 +11,7 @@
 # Blocking: the worktree isn't handed over until it can run commands.
 [[pre-start]]
 # .env only (.worktreeinclude): secrets and ports, never caches or build output.
-env = "wt step copy-ignored --require-include"
+env = "wt step copy-ignored"
 [[pre-start]]
 install = "bun install --frozen-lockfile"
 
