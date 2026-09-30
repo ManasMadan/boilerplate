@@ -39,4 +39,23 @@ describe("SecretBox", () => {
   it("refuses keys of the wrong length", () => {
     expect(() => keysFromEnv(`k1:${randomBytes(16).toString("base64")}`)).toThrow(/32 bytes/);
   });
+
+  it("refuses entries that aren't `id:base64key`, and an empty list", () => {
+    for (const value of ["", key(), `:${key()}`, "k1:", `bad id:${key()}`, `k1:${key()},`]) {
+      expect(() => keysFromEnv(value)).toThrow(/id:base64key/);
+    }
+  });
+
+  it("refuses ciphertexts in a format it doesn't write", () => {
+    const box = new SecretBox(keysFromEnv(`k1:${key()}`));
+    const [, id, iv, body] = box.encrypt("secret").split(".");
+    for (const stored of [
+      "plaintext",
+      `v2.${id}.${iv}.${body}`,
+      `v1.${id}.${iv}`,
+      `v1..${iv}.${body}`,
+    ]) {
+      expect(() => box.decrypt(stored)).toThrow(/Unrecognised ciphertext format/);
+    }
+  });
 });

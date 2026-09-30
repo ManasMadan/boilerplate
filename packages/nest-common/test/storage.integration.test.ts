@@ -49,4 +49,12 @@ describe("S3Storage", () => {
     expect(put.ok).toBe(false);
     expect(await storage.head(key)).toBeNull();
   });
+
+  it("reads an object back, but not one larger than the caller will take", async () => {
+    const key = `files/test/${randomUUID()}.bin`;
+    await storage.write(key, Buffer.from("twelve bytes"), "application/octet-stream");
+    expect((await storage.read(key, 12)).toString()).toBe("twelve bytes");
+    await expect(storage.read(key, 11)).rejects.toThrow(/larger than 11 bytes/);
+    await storage.delete(key);
+  });
 });

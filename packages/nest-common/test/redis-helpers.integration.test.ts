@@ -46,6 +46,18 @@ describe("rate limiter", () => {
     expect((await limiter.consume("ip-2")).allowed).toBe(true);
   });
 
+  it("forgets what a key used once it's reset", async () => {
+    const limiter = createRateLimiter(redis, {
+      name: `test-reset-${randomUUID()}`,
+      points: 1,
+      windowSeconds: 60,
+    });
+    expect((await limiter.consume("k")).allowed).toBe(true);
+    expect((await limiter.consume("k")).allowed).toBe(false);
+    await limiter.reset("k");
+    expect((await limiter.consume("k")).allowed).toBe(true);
+  });
+
   it("take() throws RATE_LIMITED with when to retry, past the limit", async () => {
     const limiter = createRateLimiter(redis, {
       name: `test-take-${randomUUID()}`,

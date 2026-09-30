@@ -35,8 +35,8 @@ export function keysFromEnv(value: string): KeyProvider {
       throw new Error(`Encryption key "${id}" must be 32 bytes (openssl rand -base64 32)`);
     return { id, key };
   });
-  const [first] = keys;
-  if (!first) throw new Error("ENCRYPTION_KEYS must list at least one key");
+  // split() always yields an entry, and each one was checked above.
+  const first = keys[0] as { id: string; key: Buffer };
   const byId = new Map(keys.map(({ id, key }) => [id, key]));
   return { active: () => first, get: (id) => byId.get(id) };
 }

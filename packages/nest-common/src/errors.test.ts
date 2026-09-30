@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { AppError, type ErrorCode } from "./errors";
+import { AppError, type ErrorCode, isAppError } from "./errors";
 
 describe("AppError", () => {
   it("takes its status from the catalog, and the params it's given", () => {
@@ -20,5 +20,11 @@ describe("AppError", () => {
     expectTypeOf<
       Takes<"RATE_LIMITED", ["RATE_LIMITED", { params: { wrong: number } }]>
     >().toEqualTypeOf<false>();
+  });
+
+  it("tells an expected failure from any other error", () => {
+    expect(isAppError(new AppError("TODO_NOT_FOUND"))).toBe(true);
+    expect(isAppError(new Error("TODO_NOT_FOUND"))).toBe(false);
+    expect(isAppError({ code: "TODO_NOT_FOUND", status: 404 })).toBe(false);
   });
 });

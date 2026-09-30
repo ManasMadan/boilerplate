@@ -57,7 +57,8 @@ export function isPublicAddress(address: string): boolean {
 const permitted = (address: string, allowlist: readonly string[]) =>
   isPublicAddress(address) || allowlist.includes(address);
 
-function guardedLookup(allowlist: readonly string[]): LookupFunction {
+/** A DNS lookup that answers only with an address `permitted` allows (exported for tests). */
+export function guardedLookup(allowlist: readonly string[]): LookupFunction {
   return (hostname, options, callback) => {
     lookup(hostname, { all: true })
       .then((addresses) => {

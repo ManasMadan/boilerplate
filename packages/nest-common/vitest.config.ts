@@ -1,6 +1,6 @@
 /**
  * Two projects: `unit` (src/, no services needed) and `integration` (test/, against
- * the docker compose Redis and RustFS).
+ * the docker compose Postgres, Redis and RustFS).
  */
 import { applyTestEnvironment } from "@repo/testing/environment";
 import { coverage, decoratorMetadata } from "@repo/vitest-config";
@@ -15,7 +15,16 @@ export default defineConfig({
     coverage: coverage(),
     projects: [
       { test: { name: "unit", include: ["src/**/*.test.ts"] } },
-      { test: { name: "integration", include: ["test/**/*.test.ts"], testTimeout: 20_000 } },
+      {
+        test: {
+          name: "integration",
+          include: ["test/**/*.test.ts"],
+          // A file that needs a database clones its own from the migrated template.
+          globalSetup: ["./test/global-setup.ts"],
+          hookTimeout: 60_000,
+          testTimeout: 20_000,
+        },
+      },
     ],
   },
 });

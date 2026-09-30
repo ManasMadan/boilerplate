@@ -58,7 +58,8 @@ class HealthController {
       }
       return status.up();
     } catch (error) {
-      return status.down({ message: error instanceof Error ? error.message : String(error) });
+      // Prisma, ioredis and the checks above all throw Errors.
+      return status.down({ message: (error as Error).message });
     }
   }
 }

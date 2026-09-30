@@ -37,6 +37,21 @@ async function collect(channels: string[], count: number, publish: () => Promise
   return received;
 }
 
+async function subscribers(channel: string) {
+  const [, count] = (await redis.call("PUBSUB", "NUMSUB", `realtime:${channel}`)) as [
+    string,
+    number,
+  ];
+  return count;
+}
+
+/** Waits until Redis counts `count` subscriptions to the channel. */
+async function subscribed(channel: string, count: number) {
+  const deadline = Date.now() + 2_000;
+  while ((await subscribers(channel)) < count && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 10));
+}
+
 describe("RealtimeHub", () => {
   it("keeps one abort listener however long the stream runs", async () => {
     const channel = `user:${randomUUID()}`;
@@ -91,6 +106,68 @@ describe("RealtimeHub", () => {
       number,
     ];
     expect(subscribers).toBe(0);
+  });
+
+  it("keeps a channel subscribed until the last of its streams ends", async () => {
+    const channel = `org:${randomUUID()}`;
+    const first = new AbortController();
+    const second = new AbortController();
+    const firstStream = hub.stream([channel], first.signal);
+    const secondStream = hub.stream([channel], second.signal);
+    const firstNext = firstStream.next();
+    const secondNext = secondStream.next();
+    await subscribed(channel, 1);
+    await publishRealtime(redis, channel, { type: "todos.changed" });
+    expect((await firstNext).value).toEqual({ type: "todos.changed" });
+    expect((await secondNext).value).toEqual({ type: "todos.changed" });
+
+    first.abort();
+    await firstStream.return(undefined);
+    expect(await subscribers(channel)).toBe(1);
+    const stillOpen = secondStream.next();
+    await publishRealtime(redis, channel, { type: "notifications.changed" });
+    expect((await stillOpen).value).toEqual({ type: "notifications.changed" });
+    second.abort();
+    await secondStream.return(undefined);
+    expect(await subscribers(channel)).toBe(0);
+  });
+
+  it("keeps only the latest messages for a stream that falls behind", async () => {
+    const channel = `user:${randomUUID()}`;
+    const controller = new AbortController();
+    const slow = hub.stream([channel], controller.signal);
+    // Takes the first message, then reads nothing while 149 more arrive.
+    const first = slow.next();
+    const fast = await collect([channel], 150, async () => {
+      for (let i = 0; i < 50; i++)
+        await publishRealtime(redis, channel, { type: "notifications.changed" });
+      for (let i = 0; i < 100; i++)
+        await publishRealtime(redis, channel, { type: "todos.changed" });
+    });
+    expect(fast).toHaveLength(150);
+    expect((await first).value).toEqual({ type: "notifications.changed" });
+    // Room for 100: the other 49 notifications were dropped, oldest first.
+    const behind: unknown[] = [];
+    for await (const message of slow) {
+      behind.push(message);
+      if (behind.length === 100) controller.abort();
+    }
+    expect(behind).toEqual(Array.from({ length: 100 }, () => ({ type: "todos.changed" })));
+  });
+
+  it("drops what isn't in the contract quietly when nobody asked to hear about it", async () => {
+    const quiet = new RealtimeHub(redis);
+    const channel = `user:${randomUUID()}`;
+    const controller = new AbortController();
+    const stream = quiet.stream([channel], controller.signal);
+    const next = stream.next();
+    await subscribed(channel, 1);
+    await redis.publish(`realtime:${channel}`, JSON.stringify({ type: "unknown" }));
+    await publishRealtime(redis, channel, { type: "todos.changed" });
+    expect((await next).value).toEqual({ type: "todos.changed" });
+    controller.abort();
+    await stream.return(undefined);
+    await quiet.close();
   });
 
   it("refuses to publish a message outside the contract", async () => {

@@ -78,13 +78,13 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
       try {
         // Inside the try: if subscribing fails, the finally still undoes the rest.
         await Promise.all(channels.map((channel) => this.retain(channel)));
+        // The buffer is empty each time round: the inner loop drains it, and nothing
+        // arrives between that and setting `wake` (no await in between).
         while (!signal.aborted) {
-          if (buffer.length === 0) {
-            await new Promise<void>((resolve) => {
-              wake = resolve;
-            });
-            wake = undefined;
-          }
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          wake = undefined;
           while (buffer.length > 0 && !signal.aborted) yield buffer.shift() as Message;
         }
       } finally {
@@ -101,7 +101,8 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
     }
 
     private async release(channel: string) {
-      const count = (this.refs.get(channel) ?? 1) - 1;
+      // retain() counted it before its first await, so it's there.
+      const count = (this.refs.get(channel) as number) - 1;
       if (count > 0) {
         this.refs.set(channel, count);
         return;

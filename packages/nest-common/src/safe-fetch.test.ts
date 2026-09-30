@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppError } from "./errors";
-import { isPublicAddress, safeFetch } from "./safe-fetch";
+import { guardedLookup, isPublicAddress, safeFetch } from "./safe-fetch";
 
 describe("isPublicAddress", () => {
   it.each([
@@ -40,6 +40,14 @@ describe("safeFetch", () => {
       } else if (req.url === "/elsewhere") {
         hitElsewhere++;
         res.end("followed");
+      } else if (req.url === "/echo") {
+        let body = "";
+        req.on("data", (chunk) => {
+          body += chunk;
+        });
+        req.on("end", () => res.end(`${req.method} ${req.headers["x-test"]} ${body}`));
+      } else if (req.url === "/loop") {
+        res.writeHead(302, { location: "/loop" }).end();
       } else if (req.url === "/big") {
         res.end("x".repeat(2_000));
       } else {
@@ -106,6 +114,23 @@ describe("safeFetch", () => {
     });
   });
 
+  it("sends the method, headers and body it's given", async () => {
+    const response = await safeFetch(`${base}/echo`, {
+      allowHttp: true,
+      allowedPrivateAddresses: ["127.0.0.1"],
+      method: "PUT",
+      headers: { "x-test": "yes" },
+      body: "payload",
+    });
+    expect(response.body).toBe("PUT yes payload");
+  });
+
+  it("gives up on an endpoint that keeps redirecting", async () => {
+    await expect(
+      safeFetch(`${base}/loop`, { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1"] }),
+    ).rejects.toMatchObject({ code: "TOO_MANY_REDIRECTS" });
+  });
+
   it("caps the response size", async () => {
     await expect(
       safeFetch(`${base}/big`, {
@@ -120,5 +145,25 @@ describe("safeFetch", () => {
       status: 200,
       body: "ok",
     });
+  });
+});
+
+describe("guardedLookup", () => {
+  const resolve = (all: boolean, allowlist: string[] = []) =>
+    new Promise<unknown[]>((done) => {
+      guardedLookup(allowlist)("localhost", { all }, (...args: unknown[]) => done(args));
+    });
+
+  it("answers in the shape it was asked for, with only the permitted address", async () => {
+    expect(await resolve(true, ["127.0.0.1"])).toEqual([
+      null,
+      [{ address: "127.0.0.1", family: 4 }],
+    ]);
+    expect(await resolve(false, ["127.0.0.1"])).toEqual([null, "127.0.0.1", 4]);
+  });
+
+  it("refuses a name with no permitted address", async () => {
+    const [error] = await resolve(false);
+    expect(error).toMatchObject({ code: "DESTINATION_NOT_ALLOWED" });
   });
 });

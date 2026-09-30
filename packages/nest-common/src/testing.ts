@@ -8,7 +8,8 @@
  * docs/testing.md lists who has which; scripts/redis-databases.test.ts keeps them apart.
  */
 export function redisDatabase(index: number): string {
-  const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
+  // Always set in tests: every vitest config applies .env.example's values.
+  const url = new URL(process.env.REDIS_URL as string);
   url.pathname = `/${index}`;
   return url.toString();
 }
