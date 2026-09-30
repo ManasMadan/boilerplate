@@ -36,6 +36,7 @@ passwords equal the role names.
 |---|---|---|
 | `migrator` | `prisma migrate`, test setup | Owns every schema and table. `NOBYPASSRLS`. |
 | `app_api`, `app_worker`, `app_notifications`, `app_webhooks`, `app_ai` | one service each | `NOBYPASSRLS NOINHERIT`, only the grants in migrations. |
+| `app_readonly` | Claude Code's Postgres MCP server, **local database only** (`02-readonly-role.sql`, reapplied by `bun run db:up`) | `BYPASSRLS`, read-only transactions, `SELECT` on everything the migrator owns. Never in CI or a cluster. |
 
 Extensions need a superuser, so the bootstrap script creates them, not migrations.
 Because the services run with production's privileges locally and in tests, a missing

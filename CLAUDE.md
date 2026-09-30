@@ -91,10 +91,10 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
 - `.claude/agents/`: `reviewer`, `security-reviewer`, `migration-reviewer` and
   `verifier`. Use them before calling a change done.
 - `.claude/skills/`: step-by-step procedures (setup, dev, verify, ...).
-- `.mcp.json`: Playwright for driving the local web app, and read-only Postgres on the
-  local `app` database. The Postgres server connects as `app_api` (a local-only
-  password equal to the role name, from `infra/postgres/init`) in restricted mode, so
-  it runs read-only transactions and sees only what RLS allows: tenant and per-user
-  tables show no rows unless `app.org_id` / `app.user_id` is set in the same
-  transaction. Use it for schemas, indexes and query plans. It needs `bun run db:up` and
-  `uv`.
+- `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
+  database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
+  only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and
+  past row-level security, so it sees every workspace's rows for debugging; nothing it
+  runs can write. Use it for data, schemas, indexes and query plans. It needs `uv` and
+  the local services: if Postgres isn't up it says so at once; start it with
+  `bun run db:up`, then reconnect with `/mcp`.

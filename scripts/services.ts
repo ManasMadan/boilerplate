@@ -136,6 +136,24 @@ if (command === "up" || command === "check") {
     const status = compose(["run", "--rm", name]);
     if (status !== 0) process.exit(status);
   }
+  // Postgres runs its init files only on a new volume; the local read-only role (for the
+  // Postgres MCP server) is safe to reapply, so a database made before it gets it too.
+  const readonlyRole = compose([
+    "exec",
+    "-T",
+    "postgres",
+    "psql",
+    "-q",
+    "-U",
+    "postgres",
+    "-d",
+    "app",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-f",
+    "/docker-entrypoint-initdb.d/02-readonly-role.sql",
+  ]);
+  if (readonlyRole !== 0) process.exit(readonlyRole);
   process.exit(0);
 } else if (command === "down") {
   const down = spawnSync("docker", ["compose", "--profile", "full", "down"], {
