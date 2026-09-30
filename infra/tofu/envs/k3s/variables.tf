@@ -34,6 +34,16 @@ variable "observability" {
   default     = false
 }
 
+variable "alert_email" {
+  description = "Where Alertmanager emails alerts (with observability = true). Required in production."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.environment != "production" || var.alert_email != null
+    error_message = "Production needs alert_email: an address alerts reach someone at."
+  }
+}
+
 variable "managed_waf" {
   description = "Cloudflare's managed WAF rules on the zone (needs a Pro plan or higher)."
   type        = bool

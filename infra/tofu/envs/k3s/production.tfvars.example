@@ -6,6 +6,8 @@ site_host             = "app.example.com"
 cloudflare_account_id = "0123456789abcdef0123456789abcdef"
 tls_email             = "ops@example.com"
 observability         = true
+# Where alerts are emailed (through the mail server); required in production.
+alert_email = "ops@example.com"
 
 # Three servers (etcd survives losing one) on a private network, and agents for the
 # workloads. Name servers in the order they're added: the first one bootstraps.

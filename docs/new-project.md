@@ -247,7 +247,10 @@ stringData:
 ```
 
 The other platform Secrets (the Cloudflare token for cert-manager and external-dns, the
-GitHub token for previews, Grafana's admin) are in the table in deploy/README.md.
+GitHub token for previews, Grafana's admin, the password Alertmanager emails alerts
+with) are in the table in deploy/README.md. Production needs somewhere to send alerts:
+`alert_email` in its tfvars, with `observability = true` (deploy/README.md,
+"Observability").
 
 ## 5. Machines, DNS and the cluster
 

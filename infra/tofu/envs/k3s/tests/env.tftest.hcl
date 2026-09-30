@@ -78,6 +78,7 @@ run "one_node_staging" {
 run "production_with_ha_and_mail" {
   command = apply
   variables {
+    alert_email   = "ops@example.com"
     environment   = "production"
     site_host     = "app.example.com"
     previews      = false
@@ -102,6 +103,10 @@ run "production_with_ha_and_mail" {
   assert {
     condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "true" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-host"] == "mail.example.com" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-domain"] == "example.com"
     error_message = "production only runs signed images; the mail server learns its host name and email domain"
+  }
+  assert {
+    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/alert-email"] == "ops@example.com"
+    error_message = "the alerts add-on emails the address OpenTofu is given"
   }
   assert {
     condition     = length([for record in output.dns_records : record if record.name == "app.example.com" && record.proxied]) == 4
@@ -160,4 +165,13 @@ run "plans_without_the_apply_only_keys" {
     sops_age_key         = null
     sops_preview_age_key = null
   }
+}
+
+run "production_needs_somewhere_to_send_alerts" {
+  command = plan
+  variables {
+    environment = "production"
+    previews    = false
+  }
+  expect_failures = [var.alert_email]
 }

@@ -29,6 +29,7 @@ const ENVIRONMENTS = join(ROOT, "deploy/environments");
 const PLATFORM = join(ROOT, "deploy/platform");
 const KUBERNETES_VERSION = "1.34.0";
 const KUBECONFORM_IMAGE = "ghcr.io/yannh/kubeconform:v0.7.0";
+const PROMETHEUS_IMAGE = "docker.io/prom/prometheus:v3.15.0";
 const CRD_SCHEMAS =
   "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json";
 
@@ -71,6 +72,7 @@ const OWN_CHARTS: Record<string, string[]> = {
   ],
   "deploy/platform/mail": ["--set", "domain=example.com"],
   "deploy/platform/jaeger": [],
+  "deploy/platform/alerts": ["--set", "domain=example.com", "--set", "email=ops@example.com"],
 };
 
 function run(command: string, args: string[], input?: string) {
@@ -94,6 +96,17 @@ function kubeconform(manifests: string) {
   return hasKubeconform
     ? run("kubeconform", args, manifests)
     : run("docker", ["run", "--rm", "-i", "--memory=256m", KUBECONFORM_IMAGE, ...args], manifests);
+}
+
+/** `promtool check rules` on a rendered PrometheusRule. */
+function promtool(manifest: string) {
+  const { spec } = Bun.YAML.parse(manifest) as { spec: { groups: unknown } };
+  const script = "cat > /tmp/rules.yaml && promtool check rules /tmp/rules.yaml";
+  return run(
+    "docker",
+    ["run", "--rm", "-i", "--memory=256m", "--entrypoint", "sh", PROMETHEUS_IMAGE, "-c", script],
+    JSON.stringify({ groups: spec.groups }),
+  );
 }
 
 let failed = false;
@@ -156,7 +169,7 @@ for (const env of readdirSync(ENVIRONMENTS).sort()) {
 
 // ---------------------------------------------------------------------------- platform
 
-for (const chart of ["config", "mail", "jaeger"]) {
+for (const chart of ["config", "mail", "jaeger", "alerts"]) {
   const result = run("helm", [
     "template",
     chart,
@@ -166,6 +179,17 @@ for (const chart of ["config", "mail", "jaeger"]) {
   check(`platform ${chart} renders`, result);
   if (result.ok) check(`platform ${chart} is valid Kubernetes`, kubeconform(result.output));
 }
+
+// The alert rules, as Prometheus itself reads them (promtool, in Docker).
+const rules = run("helm", [
+  "template",
+  "alerts",
+  join(PLATFORM, "alerts"),
+  "-s",
+  "templates/rules.yaml",
+  ...(OWN_CHARTS["deploy/platform/alerts"] ?? []),
+]);
+check("alert rules pass promtool", rules.ok ? promtool(rules.output) : rules);
 
 const addonDirs = [join(PLATFORM, "addons"), join(PLATFORM, "addons/observability")];
 for (const dir of addonDirs) {

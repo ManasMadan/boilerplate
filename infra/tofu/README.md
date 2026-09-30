@@ -86,7 +86,7 @@ Then put what OpenTofu made into the environment's SOPS secrets (see
 `deploy/environments/<env>/stack.yaml` at `site_host`, and Argo CD takes it from there.
 Set `previews = true` on the environment whose cluster also runs pull-request previews
 (normally staging), and `observability = true` where Jaeger, Prometheus and Grafana
-should run.
+should run, with `alert_email` for where their alerts go (required in production).
 
 ### Machines made with cloud-init
 

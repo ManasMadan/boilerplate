@@ -87,6 +87,7 @@ There are two kinds of secret, and each has one home:
 | `github-token` in `argocd`, on the cluster hosting previews | `token` (reads pull requests) | `platform/secrets/<env>/` |
 | `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
 | `grafana-admin` in `observability`, only on clusters with observability (its namespace exists nowhere else) | `admin-user`, `admin-password` | `platform/secrets/<env>/` |
+| `alertmanager-smtp` in `observability`, likewise | `password` (the mail server's `SMTP_PASSWORD`, which Alertmanager sends alerts with) | `platform/secrets/<env>/` |
 
 What each service's Secret holds, at least:
 
@@ -305,6 +306,17 @@ them: traces to Jaeger, metrics to Prometheus's OTLP receiver. Neither is public
 kubectl -n observability port-forward svc/jaeger 16686                        # traces
 kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80   # dashboards
 ```
+
+The alerts add-on (`platform/alerts`) adds what Prometheus scrapes besides the services
+(Postgres, cert-manager, the gateway's proxies, KEDA) and rules on it: WAL archiving
+failing or stalled, no recent base backup, certificates close to expiring or not ready,
+the gateway answering more than 5% errors, and a queue backing up. kube-prometheus-stack
+brings its own for pods crash-looping or not ready, nodes and disks. Alertmanager
+emails every warning and critical alert to OpenTofu's `alert_email` (the cluster's
+`boilerplate.dev/alert-email` annotation), through the cluster's mail server as its
+submission account, with that account's password in the `alertmanager-smtp` Secret.
+Production refuses to render without an address, and OpenTofu without `alert_email`.
+Mail bounces aren't alerted on yet: Stalwart's metrics aren't scraped.
 
 ## DNS
 
