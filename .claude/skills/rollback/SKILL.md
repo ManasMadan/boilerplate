@@ -21,9 +21,13 @@ cluster (Argo CD's own rollback is refused while automated sync is on).
    `git revert <commit>`, then a PR titled `revert(infra): deploy v<version> to production`.
    Revert the commit rather than editing the file: releases and image tags in
    `deploy/environments/` are written only by CI and the promotion script
-   (`.claude/rules/infra.md`), and the revert restores exactly what ran before. To go back further than one release, promote the
-   older version instead: `bun run promote v<older version>`.
-3. Merging it deploys the previous release, charts and images. Check with the deploy skill's commands.
+   (`.claude/rules/infra.md`), and the revert restores exactly what ran before. To go
+   back further than one release, promote the older version instead:
+   `bun run promote v<older version>`.
+3. The pull request changes only `release.yaml`, so CI runs only lint, the charts and the
+   scripts' tests (a few minutes), and the images are already built and signed. Merging
+   it deploys the previous release, charts and images. Check with the deploy skill's
+   commands.
 
 ## Staging
 

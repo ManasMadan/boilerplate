@@ -111,9 +111,12 @@ CI has passed on master, store builds once a release has.
 Argo CD syncs automatically and self-heals, so a change made in the cluster is undone;
 roll back in git:
 
-- **Production**: revert the promotion commit on `master` (through a pull request), or
-  promote the previous release again (`bun run promote v<previous>`), which puts back
-  its charts and values as well as its images.
+- **Production**: promote the previous release again (`bun run promote v<previous>`),
+  which puts back its charts and values as well as its images, or revert the promotion
+  commit on `master` (through a pull request). Either pull request changes only
+  `deploy/environments/production/release.yaml`, so CI runs only lint, the charts and
+  the scripts' tests on it, a few minutes rather than the whole pipeline, and the
+  previous release's images are already built and signed. Merging it is the rollback.
 - **Staging**: revert the bump commit, or let the next merge replace it.
 
 The database isn't rolled back: the previous release already works with the current
