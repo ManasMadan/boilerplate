@@ -6,7 +6,11 @@ import { charts } from "./charts";
 import type { Ran } from "./lib";
 import { captureOutput, fakeRun } from "./stand-ins";
 
-afterEach(() => mock.restore());
+const roots: string[] = [];
+afterEach(() => {
+  mock.restore();
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
 
 const REPO = join(import.meta.dir, "..");
 const VARIABLES = "infra/tofu/modules/bootstrap/variables.tf";
@@ -14,6 +18,7 @@ const VARIABLES = "infra/tofu/modules/bootstrap/variables.tf";
 /** A copy of what the check reads: the deploy tree, .sops.yaml and the bootstrap's variables. */
 function checkout() {
   const root = mkdtempSync(join(tmpdir(), "charts-"));
+  roots.push(root);
   for (const path of ["deploy", ".sops.yaml", VARIABLES]) {
     cpSync(join(REPO, path), join(root, path), { recursive: true });
   }
