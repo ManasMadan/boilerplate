@@ -1,6 +1,7 @@
 ---
 name: swap-realtime
-description: Move live UI updates off the shared Redis (a dedicated Redis, NATS, a hosted pub/sub). Use when realtime fan-out loads the main Redis, or the user asks how live updates scale.
+description: Move live UI updates off the shared Redis (a dedicated Redis, NATS, a hosted pub/sub). Use when the user decides realtime fan-out should leave the main Redis, or asks how live updates scale. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the realtime transport
@@ -31,3 +32,11 @@ description: Move live UI updates off the shared Redis (a dedicated Redis, NATS,
 `packages/nest-common/test/realtime.integration.test.ts`,
 `apps/worker/src/realtime/realtime.processor.test.ts`, the realtime case in
 `apps/api/test/api.integration.test.ts`, and `apps/web/e2e/realtime.spec.ts`.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

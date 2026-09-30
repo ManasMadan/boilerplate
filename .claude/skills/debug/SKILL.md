@@ -1,6 +1,7 @@
 ---
 name: debug
 description: Find out why something fails locally, in CI or in a deployed environment. Use when the user reports an error, a failing request, a job that never ran, an email that never arrived, or a service that won't start.
+argument-hint: <symptom, error or request id>
 ---
 
 # Debug
@@ -30,7 +31,10 @@ search covers api → queue → worker → notifications.
    validation. Set it with `bun run env:set KEY=value`; never read `.env`.
 3. Local services: `docker compose logs <postgres|valkey|mailpit|rustfs|clamav> --tail 100`.
    `bun run db:up` refuses to start containers that don't fit in Docker's memory and
-   says so.
+   says so. Who holds a port: `lsof -nP -iTCP:<port> -sTCP:LISTEN` (without
+   `-sTCP:LISTEN`, `lsof` also lists every process merely connected to it, such as a
+   service talking to Postgres). A local ClamAV that stopped answering (uploads stay
+   pending, the worker logs `clamd timed out`): `docker compose restart clamav`.
 4. Types or imports missing after a pull: `bun run gen`. Tables missing:
    `bun run db:deploy`.
 5. Something should have happened but didn't (an email, a webhook, an indexed
@@ -53,6 +57,7 @@ search covers api → queue → worker → notifications.
 
 ## CI
 
-`gh run list --branch <branch>`, then `gh run view <id> --log-failed`. Run the same
-command locally (`bun run lint`, `bun run check-types`, `bun run test`); integration and
-e2e failures usually reproduce with `bun run test:integration` and `bun run test:e2e`.
+The fix-ci skill has the whole procedure. In short: `gh run list --branch <branch>`,
+then `gh run view <id> --log-failed`, and the same command locally.
+
+`docs/troubleshooting.md` is the human version of this page's local half.

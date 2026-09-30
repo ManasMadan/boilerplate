@@ -1,6 +1,8 @@
 ---
 name: preview
 description: Give a pull request its own running environment, or find out why a preview isn't up. Use when the user wants to try, demo or share a branch before merging, or mentions the preview label or a pr-<number> URL.
+argument-hint: <pull request number>
+allowed-tools: Bash(gh pr view *) Bash(gh run list *) Bash(gh run view *) Bash(kubectl -n pr-* get *)
 ---
 
 # Pull-request previews

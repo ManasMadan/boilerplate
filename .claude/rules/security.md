@@ -1,6 +1,9 @@
 ---
 paths:
-  - "apps/*/src/**"
+  - "apps/api/src/**"
+  - "apps/worker/src/**"
+  - "apps/notifications/src/**"
+  - "apps/webhooks/src/**"
   - "apps/ai/app/**"
   - "packages/contracts/src/**"
   - "packages/nest-common/src/**"

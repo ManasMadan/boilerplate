@@ -24,6 +24,11 @@ description: Start, stop or troubleshoot the local development stack. Use when t
 - Every host port comes from `.env.example` (`POSTGRES_PORT`, `S3_CONSOLE_PORT`, …); if
   one is taken, see the setup skill.
 
+`bun dev` and `bun dev:full` are long-running terminal UIs: in an agent session, start
+them with the Bash tool's `run_in_background` and read their output from there, never
+in the foreground (the call would hang until its timeout). The first `dev:full` waits
+several minutes for ClamAV's virus signatures.
+
 ## Troubleshooting
 
 1. `bun run doctor`. It lists the exact fix for tools, `.env` drift and services.
@@ -33,4 +38,7 @@ description: Start, stop or troubleshoot the local development stack. Use when t
 4. After changing the Prisma schema, Pydantic models or the API contract, run `bun run gen`.
 5. Stale state: `bun run db:down` then `bun dev` (keeps data). Wiping data
    (`bun run docker:clean`, which deletes every container, volume and image this repo
-   created) needs the user's confirmation.
+   created) needs the user's confirmation: the Bash guard asks before it runs.
+6. Uploads stay pending after the stack has run for hours: the local ClamAV stopped
+   answering (the worker logs `clamd timed out`). `docker compose restart clamav`.
+7. A port is taken: `lsof -nP -iTCP:<port> -sTCP:LISTEN`, then the setup skill.

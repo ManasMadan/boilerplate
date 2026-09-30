@@ -1,6 +1,8 @@
 ---
 name: rotate-secrets
 description: Rotate or replace a secret or key (ENCRYPTION_KEYS, BETTER_AUTH_SECRET, UNSUBSCRIBE_SECRET, AI_SERVICE_SECRET, customer webhook signing secrets, provider keys). Use when a secret leaked, a key is due for rotation, or the user asks how rotation works here.
+argument-hint: <SECRET name>
+disable-model-invocation: true
 ---
 
 # Rotate secrets

@@ -1,6 +1,8 @@
 ---
 name: release
 description: Cut a release and put it in production. Use when the user asks to release, tag a version, write the changelog, promote to production, or what's in the next version.
+argument-hint: <version>
+disable-model-invocation: true
 ---
 
 # Release to production

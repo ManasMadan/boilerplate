@@ -1,6 +1,7 @@
 ---
 name: swap-push-provider
-description: Add or replace a push notification provider (OneSignal, Expo push, a different FCM or APNs setup). Use when the user wants push delivered through another service or on another platform.
+description: Add or replace a push notification provider (OneSignal, Expo push, a different FCM or APNs setup). Use when the user wants push delivered through another service or on another platform. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap a push provider
@@ -34,3 +35,11 @@ description: Add or replace a push notification provider (OneSignal, Expo push, 
 `apps/notifications/test/fake-push.ts` fakes FCM, APNs and Web Push; extend it or add a fake
 for the new provider, and cover delivery and a dead token in
 `apps/notifications/test/notifications.integration.test.ts`.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

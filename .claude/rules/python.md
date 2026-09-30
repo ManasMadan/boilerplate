@@ -9,7 +9,11 @@ paths:
 - Tooling is uv only: `uv add <pkg>` (never pip, never edit `uv.lock`). Checks run
   through turbo from the root (`bun run lint`, `bun run check-types`, `bun run test`),
   or directly as `uv run --project apps/ai ruff check apps/ai`.
-- basedpyright runs in strict mode. Type everything. `# pyright: ignore[<rule>]` is only
+- basedpyright runs in strict mode, with two rules off in `pyproject.toml`: `reportAny`
+  and `reportExplicitAny`, because the libraries the service builds on return `Any` in
+  many places. So the checker lets `Any` through; you don't. Annotate every signature
+  and field, narrow a library's `Any` to a real type at the boundary, and write `Any`
+  only where a library's own signature forces it. `# pyright: ignore[<rule>]` is only
   for untyped third-party APIs or framework-registered callbacks, always with the rule
   named, never a bare ignore.
 - Request and response models live in `app/schemas.py`. Constrain every field

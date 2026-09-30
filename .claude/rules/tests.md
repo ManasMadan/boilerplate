@@ -16,6 +16,7 @@ Which kind goes where:
 | Kind | Location | Runs with | Needs |
 |---|---|---|---|
 | Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached; the Stop hook runs it for affected packages) | nothing |
+| Scripts and hooks | `scripts/*.test.ts`, `.claude/hooks/*.test.ts` (Bun's runner) | `bun test ./scripts/ ./.claude/hooks/` | nothing |
 | Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` | Docker (the command starts it) |
 | E2E (web) | `apps/web/e2e/*.spec.ts` | `bun run test:e2e --app web` | full stack |
 | E2E (mobile) | `apps/mobile/e2e/*.spec.ts` (react-native-web); native flows in `apps/mobile/maestro/` | `bun run test:e2e --app mobile` | full stack |
@@ -35,7 +36,11 @@ Which kind goes where:
   Mailpit for email, the `local:extractive` model and `hashing` embeddings for AI. New
   providers get a fake like these, not `vi.mock`.
 - Coverage floors are per package in its `vitest.config.ts` (unit and integration
-  counted together). Raise a floor when you add tests; lowering one needs a reason in
-  the PR.
+  counted together), `apps/mobile/jest.config.js` and `fail_under` in
+  `apps/ai/pyproject.toml`. `bun run test:coverage` checks them all (it needs the full
+  Docker profile and takes minutes: run it in the background);
+  `bun run --filter @repo/<name> coverage` checks one package. Raise a floor to what the
+  suite reaches when you add tests; lowering one needs a reason in the PR. The
+  `test-writer` agent writes missing tests and raises floors.
 - A bug fix starts with a test that fails without the fix.
 - Tenancy changes need a test that a second organization cannot see or change the row.

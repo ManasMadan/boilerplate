@@ -1,6 +1,7 @@
 ---
 name: swap-storage
-description: Point file storage somewhere other than the in-cluster RustFS (another S3-compatible server or service) or add one without an S3 API. Use when the user changes where uploads live, or uploads fail because of the storage configuration.
+description: Point file storage somewhere other than the in-cluster RustFS (another S3-compatible server or service) or add one without an S3 API. Use when the user decides to change where uploads live. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap object storage
@@ -39,3 +40,11 @@ purpose: check with the user before moving uploads to a managed service.
 (`bun run test:integration` starts it); the upload flow is covered in
 `apps/api/test/api.integration.test.ts`, the worker's `uploads` tests in
 `apps/worker/test/worker.integration.test.ts`, and `apps/web/e2e/avatar.spec.ts`.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

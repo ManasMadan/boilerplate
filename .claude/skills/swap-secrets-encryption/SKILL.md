@@ -1,6 +1,7 @@
 ---
 name: swap-secrets-encryption
-description: Take the keys that encrypt secrets in the database from a KMS (self-hosted OpenBao Transit, or a cloud KMS) instead of ENCRYPTION_KEYS. Use when compliance requires KMS-held keys, or the user asks about envelope encryption.
+description: Take the keys that encrypt secrets in the database from a KMS (self-hosted OpenBao Transit, or a cloud KMS) instead of ENCRYPTION_KEYS. Use when compliance requires KMS-held keys, or the user asks about envelope encryption. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the encryption key source
@@ -35,3 +36,11 @@ Rotating keys is the rotate-secrets skill.
 `packages/nest-common/src/crypto.test.ts` (round trip, rotation, unknown key) with a
 fake KMS; `apps/webhooks/test/webhooks.integration.test.ts` signs deliveries with
 secrets the API encrypted.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

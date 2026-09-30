@@ -1,6 +1,7 @@
 ---
 name: swap-outbox-source
-description: Replace the outbox relay's polling with change data capture (logical replication, Debezium). Use when outbox polling load or event latency becomes a problem, or the user asks about CDC for domain events.
+description: Replace the outbox relay's polling with change data capture (logical replication, Debezium). Use when the user decides outbox polling load or event latency needs it, or asks about CDC for domain events. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the outbox source
@@ -32,3 +33,11 @@ There is no interface for this yet: the replaceable unit is the relay itself,
 
 The `outbox relay` tests in `apps/worker/test/worker.integration.test.ts` (delivery,
 crash and redelivery, several relays at once) must pass unchanged against the new source.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

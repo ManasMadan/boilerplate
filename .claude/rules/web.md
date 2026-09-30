@@ -6,7 +6,8 @@ paths:
 # apps/web
 
 - Render-only. No route handlers (`app/**/route.ts`, except `app/healthz/route.ts`), no
-  `"use server"`, no `pages/api`. `scripts/check-web-render-only.ts` fails the lint.
+  `"use server"`, no `pages/api`. The root `scripts/check-web-render-only.ts` fails the
+  lint.
   Anything that reads or writes data is an API procedure in `packages/contracts` +
   `apps/api`, called through a `@repo/client` hook.
 - No server-side data fetching and no `fetch(` to the API. The browser calls `/rpc` and
@@ -32,5 +33,6 @@ paths:
   `e2e/*.spec.ts` using the helpers in `e2e/support.ts` (real stack, Mailpit mailbox,
   `expectAccessible` for axe). `bun run --cwd apps/web test:e2e` runs them against a
   running `bun dev`; `bun run test:e2e --app web` builds and starts a fresh stack.
-- First-load JavaScript per route has a budget (`scripts/bundle-budget.ts`, CI).
+- First-load JavaScript per route has a budget (`apps/web/scripts/bundle-budget.ts`,
+  `bun run --cwd apps/web budget` after a build; CI runs it).
   Prefer server components for static content and lazy-load heavy client code.
