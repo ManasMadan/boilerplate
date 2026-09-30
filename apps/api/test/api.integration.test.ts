@@ -546,6 +546,23 @@ describe("organizations and the audit trail", () => {
     expect(over.body.code).toBe("INVITATION_LIMIT_REACHED");
   });
 
+  it("won't let a client mark a workspace as someone's personal one", async () => {
+    const { session } = await signedInUser();
+    const slug = `team-${randomUUID().slice(0, 8)}`;
+    for (const body of [
+      { name: "Fake", slug, metadata: { personal: true } },
+      { name: "Fake", slug: `personal-${randomUUID()}` },
+    ]) {
+      expect((await session.auth("/organization/create", body)).status).toBe(400);
+    }
+    const team = await session.auth<{ id: string }>("/organization/create", { name: "Team", slug });
+    const update = await session.auth("/organization/update", {
+      organizationId: team.body.id,
+      data: { metadata: { personal: true } },
+    });
+    expect(update.status).toBe(400);
+  });
+
   it(`caps the workspaces one account belongs to at ${ORGANIZATION_LIMIT}`, async () => {
     const { session } = await signedInUser();
     const create = () =>

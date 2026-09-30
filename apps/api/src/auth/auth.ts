@@ -77,6 +77,13 @@ import type { Memberships } from "./memberships";
 import { orgAccess, orgRoles } from "./org-access";
 import { securityAlertFor } from "./security-alerts";
 
+/** Refuses a client's attempt to mark a workspace as someone's personal one. */
+function refusePersonal(org: { slug?: string; metadata?: Record<string, unknown> }) {
+  if (org.slug?.startsWith("personal-") || (org.metadata && "personal" in org.metadata)) {
+    throw new APIError("BAD_REQUEST", { code: "VALIDATION_FAILED" });
+  }
+}
+
 /** The paths that create an account from a social provider's profile (Google's). */
 const SOCIAL_SIGN_UP = /^\/(callback\/|sign-in\/social$)/;
 
@@ -575,6 +582,11 @@ export function createAuth({
         // Every membership change is audited (in the organization's own log, so its
         // admins see it) and forgets the cached role, so access follows immediately.
         organizationHooks: {
+          // Only the sign-up hook makes the personal workspace (slug personal-<user id>,
+          // metadata.personal); a client claiming either could pass any workspace off as
+          // someone's own, on the consent page too.
+          beforeCreateOrganization: async ({ organization: org }) => refusePersonal(org),
+          beforeUpdateOrganization: async ({ organization: org }) => refusePersonal(org),
           afterCreateOrganization: async ({ organization: org, user }) => {
             await memberships.forget(org.id, user.id);
             await record(

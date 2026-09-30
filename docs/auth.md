@@ -53,7 +53,9 @@ ships with it.
 Every user gets a personal workspace at sign-up, so organization-scoped features work
 from the first sign-in, and new sessions start in the user's first workspace. Users can
 create more and invite others (invitations last 7 days; the plan's member limit counts
-pending invitations).
+pending invitations). Only sign-up makes the personal workspace (slug
+`personal-<user id>`, `metadata.personal`); a client creating or updating a workspace
+with either is refused, so "Personal" shown in the apps and on the consent page is true.
 
 | Role | Can |
 |---|---|
