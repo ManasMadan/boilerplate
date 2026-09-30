@@ -119,7 +119,7 @@ describe("completing a todo", () => {
   it("shows it done at once, then settles on the server's version", async () => {
     const server = todoApi(1);
     const { result, item } = renderTodos(server);
-    await vi.waitFor(() => expect(item(1)).toBeDefined());
+    await vi.waitFor(() => expect(item(1)).toMatchObject({ completed: false, version: 1 }));
     const release = server.hold();
     const done = result.current.setCompleted.mutateAsync({
       id: id(1),
@@ -136,7 +136,7 @@ describe("completing a todo", () => {
   it("puts it back when the server refuses, and refetches", async () => {
     const server = todoApi(1);
     const { result, item } = renderTodos(server);
-    await vi.waitFor(() => expect(item(1)).toBeDefined());
+    await vi.waitFor(() => expect(item(1)).toMatchObject({ completed: false, version: 1 }));
     server.refuse("TODO_VERSION_CONFLICT");
     await expect(
       result.current.setCompleted.mutateAsync({ id: id(1), completed: true, version: 1 }),
@@ -148,7 +148,7 @@ describe("completing a todo", () => {
   it("refetches once, after the last of several overlapping changes", async () => {
     const server = todoApi(2);
     const { result, item } = renderTodos(server);
-    await vi.waitFor(() => expect(item(2)).toBeDefined());
+    await vi.waitFor(() => expect(item(2)).toMatchObject({ completed: false, version: 1 }));
     const releaseFirst = server.hold();
     const releaseSecond = server.hold();
     const first = result.current.setCompleted.mutateAsync({

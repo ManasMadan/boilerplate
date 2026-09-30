@@ -88,10 +88,13 @@ describe("authorization", () => {
 
   it("sends a signed-out user to sign in first, keeping the signed request", async () => {
     const { challenge } = pkce();
-    const login = await authorize(undefined, await client(), challenge);
+    const clientId = await client();
+    const login = await authorize(undefined, clientId, challenge);
     expect(login.pathname).toBe("/sign-in");
-    expect(login.searchParams.get("client_id")).toBeTruthy();
-    expect(login.searchParams.get("sig")).toBeTruthy();
+    expect(login.searchParams.get("client_id")).toBe(clientId);
+    expect(login.searchParams.get("code_challenge")).toBe(challenge);
+    // An HMAC-SHA-256 of the request, in base64.
+    expect(login.searchParams.get("sig")).toMatch(/^[\w+/]{43}=$/);
   });
 
   it("resumes the authorization when the user signs in from that page", async () => {
@@ -161,10 +164,18 @@ describe("authorization", () => {
     const { session } = await signedIn();
     const clientId = await client();
     await grant(session, clientId);
-    const { challenge } = pkce();
+    const { verifier, challenge } = pkce();
     const callback = await authorize(session, clientId, challenge);
     expect(`${callback.origin}${callback.pathname}`).toBe(REDIRECT_URI);
-    expect(callback.searchParams.get("code")).toBeTruthy();
+    const tokens = await token({
+      grant_type: "authorization_code",
+      code: callback.searchParams.get("code") as string,
+      redirect_uri: REDIRECT_URI,
+      client_id: clientId,
+      code_verifier: verifier,
+      resource: resource(),
+    });
+    expect(tokens.status, JSON.stringify(tokens.body)).toBe(200);
   });
 
   it("returns access_denied to the client when the user declines", async () => {
@@ -308,7 +319,7 @@ describe("authorization", () => {
 
 describe("refresh and revocation", () => {
   it("rotates refresh tokens", async () => {
-    const { session } = await signedIn();
+    const { session, me } = await signedIn();
     const clientId = await client();
     const tokens = await grant(session, clientId);
     const refreshed = await token({
@@ -319,7 +330,9 @@ describe("refresh and revocation", () => {
     });
     expect(refreshed.status, JSON.stringify(refreshed.body)).toBe(200);
     expect(refreshed.body.refresh_token).not.toBe(tokens.refresh_token);
-    expect((await claimsOf(refreshed.body.access_token as string))[ORG_CLAIM]).toBeTruthy();
+    expect((await claimsOf(refreshed.body.access_token as string))[ORG_CLAIM]).toBe(
+      me.activeOrganizationId,
+    );
   });
 
   it("a revoked refresh token gets nothing more", async () => {

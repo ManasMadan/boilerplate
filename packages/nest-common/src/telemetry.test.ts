@@ -78,7 +78,7 @@ describe("startTelemetry", () => {
       "@opentelemetry/instrumentation-ioredis",
       "@opentelemetry/instrumentation-pino",
     ]);
-    expect(options().traceExporter).toBeDefined();
+    expect(options().traceExporter?.constructor.name).toBe("OTLPTraceExporter");
     expect(options().metricReaders).toHaveLength(1);
   });
 

@@ -333,7 +333,12 @@ describe("sign-up and verification", () => {
     await session.auth("/email-otp/verify-email", { email, otp: code.otp });
     const me = await session.rpc.user.me();
     expect(me).toMatchObject({ email, locale: "es" });
-    expect(me.activeOrganizationId).toBeTruthy();
+    // Their personal workspace, made at sign-up.
+    const [personal, ...others] =
+      await session.authGet<{ id: string; slug: string }[]>("/organization/list");
+    expect(others).toEqual([]);
+    expect(personal?.slug).toBe(`personal-${me.id}`);
+    expect(me.activeOrganizationId).toBe(personal?.id);
   });
 });
 
@@ -435,7 +440,7 @@ describe("account security", () => {
       )
       .finally(() => db.end());
     const [code, ...others] = enabled.body.backupCodes;
-    expect(code).toBeDefined();
+    expect(code).toMatch(/^[\w-]{11}$/);
     for (const backup of enabled.body.backupCodes)
       expect(stored.rows[0]?.backup_codes).not.toContain(backup);
 
@@ -593,7 +598,7 @@ describe("time limits", () => {
   });
 
   it("a session older than the fresh window can't list devices or add passkeys", async () => {
-    const { session } = await signedInUser();
+    const { session, email } = await signedInUser();
     expect((await session.authGet<unknown[]>("/list-sessions")).length).toBe(1);
     await editSession(harness, session, (stored) => {
       stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
@@ -604,7 +609,7 @@ describe("time limits", () => {
     const passkey = await session.authGet<{ code: string }>("/passkey/generate-register-options");
     expect(passkey.code).toBe("SESSION_NOT_FRESH");
     // Everyday use is unaffected.
-    expect((await session.rpc.user.me()).email).toBeDefined();
+    expect((await session.rpc.user.me()).email).toBe(email);
   });
 
   it("a session past its expiry is rejected", async () => {
@@ -1337,7 +1342,7 @@ describe("notifications", () => {
     await deliver(me.id, ["first", "second", "third"]);
     const page = await session.rpc.notifications.list({ limit: 2 });
     expect(page.items.map((item) => item.data.title)).toEqual(["third", "second"]);
-    expect(page.nextCursor).not.toBeNull();
+    expect(page.nextCursor).toEqual(expect.any(String));
     expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 3 });
 
     const rest = await session.rpc.notifications.list({
@@ -2322,7 +2327,7 @@ describe("todos", () => {
 
     const first = await session.rpc.todo.list({ limit: 2 });
     expect(first.items.map((todo) => todo.title)).toEqual(["three", "two"]);
-    expect(first.nextCursor).toBeTruthy();
+    expect(first.nextCursor).toEqual(expect.any(String));
     const second = await session.rpc.todo.list({ limit: 2, cursor: first.nextCursor ?? undefined });
     expect(second.items.map((todo) => todo.title)).toEqual(["one"]);
     expect(second.nextCursor).toBeNull();
@@ -2377,7 +2382,10 @@ describe("todos", () => {
     const events = await migrator.appOutboxEvent.findMany({ where: { key: todo.id } });
     await migrator.$disconnect();
     expect(events.map((event) => event.name)).toEqual(["todo.created.v1"]);
-    expect(events[0]?.requestId).toBeTruthy();
+    // The request's own id (a new UUID: the test's client isn't a trusted proxy).
+    expect(events[0]?.requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
   });
 
   it("records completing a todo, not reopening it", async () => {
@@ -2427,7 +2435,9 @@ describe("clients", () => {
       await expectError(session.rpc.system.info(), "CLIENT_OUTDATED");
     }
     for (const appVersion of ["2.0.1", "2.1.0-beta", "10.0.0"]) {
-      await expect(createSession(harness, { appVersion }).rpc.system.info()).resolves.toBeTruthy();
+      await expect(createSession(harness, { appVersion }).rpc.system.info()).resolves.toMatchObject(
+        { minimumClientVersion: "2.0.0" },
+      );
     }
   });
 });

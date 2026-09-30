@@ -142,7 +142,7 @@ describe("least privilege", () => {
     await asRole("app_notifications", async (client) => {
       await expect(
         client.query(`SELECT id, email, locale, timezone FROM auth."user"`),
-      ).resolves.toBeDefined();
+      ).resolves.toMatchObject({ command: "SELECT" });
       await expect(client.query(`SELECT email_verified FROM auth."user"`)).rejects.toThrow(
         /permission denied/,
       );
@@ -155,7 +155,7 @@ describe("least privilege", () => {
     await asRole("app_worker", async (client) => {
       await expect(
         client.query("UPDATE app.outbox_event SET published_at = now() WHERE false"),
-      ).resolves.toBeDefined();
+      ).resolves.toMatchObject({ command: "UPDATE", rowCount: 0 });
       await expect(
         client.query("UPDATE app.outbox_event SET payload = '{}' WHERE false"),
       ).rejects.toThrow(/permission denied/);

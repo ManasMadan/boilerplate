@@ -261,8 +261,9 @@ describe("outbound deliveries", () => {
     const [overlap] = received;
     const headers = overlap?.headers as Record<string, string>;
     // Receivers holding either secret accept it.
-    expect(new Webhook(during.secret).verify(overlap?.body ?? "", headers)).toBeTruthy();
-    expect(new Webhook(previous).verify(overlap?.body ?? "", headers)).toBeTruthy();
+    const sent = JSON.parse(overlap?.body ?? "");
+    expect(new Webhook(during.secret).verify(overlap?.body ?? "", headers)).toEqual(sent);
+    expect(new Webhook(previous).verify(overlap?.body ?? "", headers)).toEqual(sent);
 
     await publish(after.orgId);
     await eventually(
@@ -272,7 +273,9 @@ describe("outbound deliveries", () => {
     const expired = received[1];
     const expiredHeaders = expired?.headers as Record<string, string>;
     expect(expiredHeaders["webhook-signature"]?.split(" ")).toHaveLength(1);
-    expect(new Webhook(after.secret).verify(expired?.body ?? "", expiredHeaders)).toBeTruthy();
+    expect(new Webhook(after.secret).verify(expired?.body ?? "", expiredHeaders)).toEqual(
+      JSON.parse(expired?.body ?? ""),
+    );
     expect(() => new Webhook(previous).verify(expired?.body ?? "", expiredHeaders)).toThrow();
   });
 
@@ -494,7 +497,9 @@ describe("outbound deliveries", () => {
     await deliveries.attempt(orgId, await deliveries.createTest(orgId, endpointId), true);
     const headers = received[0]?.headers as Record<string, string>;
     expect(headers["webhook-signature"]?.split(" ")).toHaveLength(1);
-    expect(new Webhook(secret).verify(received[0]?.body ?? "", headers)).toBeTruthy();
+    expect(new Webhook(secret).verify(received[0]?.body ?? "", headers)).toEqual(
+      JSON.parse(received[0]?.body ?? ""),
+    );
   });
 
   it("doesn't disable an endpoint that has succeeded since its failing delivery was made", async () => {

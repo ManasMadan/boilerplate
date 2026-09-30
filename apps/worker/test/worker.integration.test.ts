@@ -258,8 +258,9 @@ describe("outbox relay, when things go wrong", () => {
     ).rows.map((row) => row.pid);
 
   it("reconnects its listener after losing the connection", async () => {
-    const [before] = await listeners();
-    expect(before).toBeDefined();
+    const pids = await listeners();
+    expect(pids).toHaveLength(1);
+    const [before] = pids;
     await asRole("postgres", (client) => client.query("SELECT pg_terminate_backend($1)", [before]));
     const after = await eventually(listeners, (pids) => pids.length === 1 && pids[0] !== before);
     expect(after).toHaveLength(1);
@@ -692,7 +693,7 @@ describe("uploads", () => {
 
   it("accepts a photo as a 512px WebP with its metadata gone", async () => {
     const photo = await photoWithMetadata();
-    expect((await sharp(photo).metadata()).exif).toBeDefined();
+    expect((await sharp(photo).metadata()).exif?.includes("Secret Name")).toBe(true);
     const { fileId, userId } = await upload(photo, "image/jpeg");
 
     // The uploader's screens are told when it's done.
@@ -814,7 +815,7 @@ describe("uploads", () => {
     );
     const kept = await upload(png);
     await files.check(kept.fileId);
-    expect(await storage.head(`files/${kept.fileId}`)).not.toBeNull();
+    expect(await storage.head(`files/${kept.fileId}`)).toMatchObject({ contentType: "image/webp" });
 
     // The user is deleted: the database queues their files' objects for removal.
     await asRole("postgres", (client) =>
@@ -871,7 +872,10 @@ describe("uploads", () => {
     await expect(clamdDown.check(fileId)).rejects.toThrow("clamd: connection refused");
     await redis.quit();
     expect(await row(fileId)).toMatchObject({ status: "processing", reject_reason: null });
-    expect(await storage.head(`quarantine/${fileId}`)).not.toBeNull();
+    expect(await storage.head(`quarantine/${fileId}`)).toEqual({
+      size: png.length,
+      contentType: "image/png",
+    });
   });
 
   it("rejects an upload whose object never arrived, or is over the limit", async () => {

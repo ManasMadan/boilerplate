@@ -6,6 +6,6 @@ import { describe, expect, it } from "bun:test";
 
 describe("bun run jobs", () => {
   it("loads without connecting anywhere", async () => {
-    expect(await import("./jobs")).toBeDefined();
+    expect(Object.keys(await import("./jobs"))).toEqual([]);
   });
 });

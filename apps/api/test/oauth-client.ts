@@ -65,7 +65,7 @@ export function oauthClient(harness: () => Harness) {
       return new URL(response.headers.get("location") as string, site());
     }
     const body = (await response.json()) as { url?: string };
-    expect(body.url, JSON.stringify(body)).toBeDefined();
+    expect(body.url, JSON.stringify(body)).toEqual(expect.any(String));
     return new URL(body.url as string, site());
   }
 
@@ -106,7 +106,7 @@ export function oauthClient(harness: () => Harness) {
       accept,
       oauth_query: consentUrl.search.slice(1),
     });
-    expect(response.body.url, JSON.stringify(response.body)).toBeDefined();
+    expect(response.body.url, JSON.stringify(response.body)).toEqual(expect.any(String));
     return new URL(response.body.url as string);
   }
 
