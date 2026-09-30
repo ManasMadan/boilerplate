@@ -10,6 +10,7 @@
 
 import { unlimited } from "@repo/contracts/billing";
 import { createDb } from "@repo/db";
+import type { Producer } from "@repo/jobs";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { Redis } from "ioredis";
 import { env } from "../env";
@@ -19,7 +20,8 @@ import { createMemberships } from "./memberships";
 /** What the configuration would send or change through, all refusing. */
 export const inert = {
   notifications: {
-    add: () => Promise.reject(new Error("The auth CLI never sends notifications")),
+    add: (..._job: Parameters<Producer<"notifications-critical">["add"]>) =>
+      Promise.reject(new Error("The auth CLI never sends notifications")),
   },
   billing: {
     entitlements: async () => unlimited,
