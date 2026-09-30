@@ -96,6 +96,29 @@ tests:
     asserts:
       - equal: { path: "spec.rules[0].verifyImages[0].imageReferences", value: ["ghcr.io/manasmadan/boilerplate/*"] }
 
+  - it: checks signatures keylessly, against the CI workflow's identity, by default
+    template: image-policy.yaml
+    set:
+      imagePolicy.enabled: true
+    asserts:
+      - equal:
+          path: "spec.rules[0].verifyImages[0].attestors[0].entries[0].keyless.issuer"
+          value: https://token.actions.githubusercontent.com
+
+  - it: checks signatures against a key alone, without Sigstore's transparency log
+    template: image-policy.yaml
+    set:
+      imagePolicy.enabled: true
+      imagePolicy.publicKey: "-----BEGIN PUBLIC KEY-----\nMFkw\n-----END PUBLIC KEY-----"
+    asserts:
+      - equal:
+          path: "spec.rules[0].verifyImages[0].attestors[0].entries[0]"
+          value:
+            keys:
+              publicKeys: "-----BEGIN PUBLIC KEY-----\nMFkw\n-----END PUBLIC KEY-----"
+              rekor: { ignoreTlog: true }
+              ctlog: { ignoreSCT: true }
+
   - it: has no image policy by default
     template: image-policy.yaml
     asserts:

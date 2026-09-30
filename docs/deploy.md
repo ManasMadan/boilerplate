@@ -57,9 +57,14 @@ rollback.
 
 1. builds every image for amd64 and arm64 and pushes them to
    `ghcr.io/manasmadan/boilerplate/<image>:sha-<commit>`;
-2. merges them into multi-arch tags, signs each with cosign (keyless) and attaches build
+2. merges them into multi-arch tags, signs each with cosign and attaches build
    provenance and an SBOM; production's image policy admits only images this workflow
-   signed on `master`;
+   signed on `master`. Signing is keyless by default: production's admission then checks
+   signatures against Sigstore's public transparency log (`rekor.sigstore.dev`), so an
+   outage there stops new pods from starting. To depend on nothing public, sign with a
+   key pair instead: `cosign generate-key-pair`, the private key and its password as the
+   `COSIGN_PRIVATE_KEY` and `COSIGN_PASSWORD` secrets, the public key as
+   `imagePolicy.publicKey` in `deploy/platform/config/values.yaml`;
 3. commits the new tag to `deploy/environments/staging/stack.yaml` (as the repository's
    GitHub App, `[skip ci]`), and Argo CD rolls it out.
 
@@ -144,3 +149,23 @@ reviewer, since it still decrypts the state (docs/repository-settings.md).
 nightly: every image, the data chart (its credentials generated, RustFS's bucket
 created), the stack, the routes smoke-tested through the gateway (the site's and the
 files host's), and re-encryption run the way operators run it.
+
+## What's GitHub-only
+
+Most of the logic is in `bun` scripts (`scripts/release.ts`, `scripts/charts.ts`,
+`scripts/e2e.ts`, …) that any CI can run, and the workflows' YAML mostly runs on
+Forgejo or Gitea Actions as it is. These parts are GitHub's own, and each has a
+replacement on another host:
+
+| On GitHub | What it does here | Elsewhere |
+|---|---|---|
+| `workflow_run` | deploy.yml after CI passes, mobile.yml after a release | GitLab: one pipeline with stages; Forgejo: call the deploy steps at the end of CI's workflow on `push` to master |
+| `merge_group` | CI on the merge queue | GitLab merge trains; Forgejo has none (merge after CI on the branch) |
+| environments with reviewers | infra.yml's plan and apply, staging's bump | GitLab protected environments; Forgejo: a manual job on a protected branch |
+| OIDC keyless signing (`id-token: write`) | cosign signatures production admits | a key pair (`COSIGN_PRIVATE_KEY`, `imagePolicy.publicKey`), which any CI can use |
+| `attest-build-provenance`, `attest-sbom` | provenance and SBOM attached to the images | `cosign attest` with the same key |
+| CodeQL, code scanning, dependency review | security.yml's checks and the ruleset's gate | Semgrep, Trivy and OSV-Scanner run as failing jobs |
+| GHCR (`ghcr.io`) | the image registry | Harbor, Zot, Forgejo's or GitLab's registry |
+| the GitHub App (`create-github-app-token`) | the staging bump past the ruleset, Renovate | a bot account's token |
+| `gh` in `scripts/release.ts` | a release's CI runs, opening the promotion pull request | `tea` (Forgejo) or `glab` (GitLab) |
+| Argo CD's `pullRequest.github` generator | one preview per labelled pull request | its `gitea` and `gitlab` generators |

@@ -64,3 +64,50 @@ describe("every workflow", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("deploy.yml", () => {
+  const { jobs } = workflow("deploy.yml");
+  const merge = jobs.publish?.steps?.find((step) => step.name === "Merge the architectures");
+
+  it("signs with the key pair when there is one, so admission needn't trust Sigstore", () => {
+    expect(merge?.run).toContain(
+      "cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false",
+    );
+    expect(JSON.stringify(merge)).toContain("secrets.COSIGN_PRIVATE_KEY");
+  });
+
+  it("signs keylessly otherwise", () => {
+    expect(merge?.run).toContain('cosign sign --yes "$REGISTRY/$image@$digest"');
+  });
+});
+
+describe("the GitHub-only parts", () => {
+  const table = readFileSync(join(ROOT, "docs/deploy.md"), "utf8");
+  const workflows = readdirSync(join(ROOT, ".github/workflows"))
+    .map((file) => readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+    .join("\n");
+  const previews = readFileSync(join(ROOT, "deploy/argocd/appsets/previews.yaml"), "utf8");
+
+  // What each is called in the workflows, and in docs/deploy.md's table.
+  const parts: [used: string, documented: string][] = [
+    ["workflow_run:", "`workflow_run`"],
+    ["merge_group:", "`merge_group`"],
+    ["id-token: write", "OIDC keyless signing"],
+    ["actions/attest-build-provenance", "`attest-build-provenance`"],
+    ["github/codeql-action", "CodeQL"],
+    ["actions/dependency-review-action", "dependency review"],
+    ["ghcr.io", "GHCR"],
+    ["actions/create-github-app-token", "the GitHub App"],
+  ];
+
+  it("are each in docs/deploy.md with what replaces them", () => {
+    for (const [used, documented] of parts) {
+      if (workflows.includes(used))
+        expect({ used, documented: table.includes(documented) }).toEqual({
+          used,
+          documented: true,
+        });
+    }
+    if (previews.includes("github:")) expect(table).toContain("`pullRequest.github`");
+  });
+});

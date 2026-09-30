@@ -96,13 +96,21 @@ jobs:
       # One multi-arch tag per image, from the two single-arch builds.
       - name: Merge the architectures
         id: merge
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
           for image in $IMAGES; do
             docker buildx imagetools create -t "$REGISTRY/$image:sha-$SHA" \
               "$REGISTRY/$image:sha-$SHA-amd64" "$REGISTRY/$image:sha-$SHA-arm64"
             digest=$(docker buildx imagetools inspect "$REGISTRY/$image:sha-$SHA" --format '{{json .Manifest}}' | jq -r .digest)
             echo "$image=$digest" >> "$GITHUB_OUTPUT"
-            cosign sign --yes "$REGISTRY/$image@$digest"
+            if [[ -n "$COSIGN_PRIVATE_KEY" ]]; then
+              # With a key pair (imagePolicy.publicKey): nothing public is involved.
+              cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "$REGISTRY/$image@$digest"
+            else
+              cosign sign --yes "$REGISTRY/$image@$digest"
+            fi
           done
       - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:

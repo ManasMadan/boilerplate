@@ -34,3 +34,7 @@ imagePolicy:
   namespaces: [boilerplate]
   # The workflow that signs releases, on the default branch.
   subject: "https://github.com/ManasMadan/boilerplate/.github/workflows/*@refs/heads/master"
+  # A cosign public key (PEM) to check signatures against instead: no dependency on
+  # Sigstore's public services, and any CI can sign. Its private key is deploy.yml's
+  # COSIGN_PRIVATE_KEY secret (deploy/README.md, "Image signatures").
+  publicKey: ""
