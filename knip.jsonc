@@ -9,7 +9,7 @@
   // `.d.json.ts` types its JSON file for TypeScript, which nothing imports by name.
   "ignore": ["**/generated/**", "**/*.d.json.ts"],
   // Tools installed on the machine (doctor checks them), not npm packages.
-  "ignoreBinaries": ["uv", "tofu", "openssl"],
+  "ignoreBinaries": ["uv", "tofu"],
   "workspaces": {
     ".": {
       // Claude Code hooks (.claude/settings.json), the image build's peer check
