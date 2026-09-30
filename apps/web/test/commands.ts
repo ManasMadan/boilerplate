@@ -10,7 +10,7 @@ import { totp as totpCode } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import pg from "pg";
-import type { CDPSession, Page, Route } from "playwright";
+import type { CDPSession, Page, Request, Route } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 // The API's own token format (a relative import: nest-common's entry pulls in Nest).
 import { createSignedTokens } from "../../../packages/nest-common/src/signed-token";
@@ -99,12 +99,20 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
     );
   }
   navigations.set(page, []);
-  if (!finished.has(page))
-    page.on("requestfinished", (request) => finished.get(page)?.push(request.url()));
+  if (!finished.has(page)) {
+    page.on("request", (request) => started.get(page)?.add(request));
+    // Only this test's own: a request the last test left in flight is answered during
+    // this one, and would satisfy a wait before this test's page did anything.
+    page.on("requestfinished", (request) => {
+      if (started.get(page)?.has(request)) finished.get(page)?.push(request.url());
+    });
+  }
+  started.set(page, new WeakSet());
   finished.set(page, []);
 };
 
-/** The page's requests answered since its test started, by URL. */
+/** The page's requests sent since its test started, and those answered, by URL. */
+const started = new WeakMap<Page, WeakSet<Request>>();
 const finished = new WeakMap<Page, string[]>();
 
 /** How many of the page's requests to URLs containing `part` have been answered. */
