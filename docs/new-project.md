@@ -75,6 +75,9 @@ Stalwart and RustFS); these need the real environment, once:
 - [ ] Argo CD shows every application synced and healthy (`kubectl -n argocd get
       applications`), which also proves it decrypted the SOPS secrets.
 - [ ] The site loads through Cloudflare, and `tofu output dns_records` matches the zone.
+- [ ] Going around Cloudflare fails: `curl -v --resolve <site>:443:<node-ip>
+      https://<site>/` ends in a TLS alert (the gateway wants Cloudflare's origin-pull
+      certificate), so nobody can forge the client address rate limits use.
 - [ ] Mail: sign up with a real address; the email arrives, not in spam, with DKIM,
       SPF and DMARC passing (the message's `Authentication-Results` header). Send to a
       non-existent address at a real domain: the bounce reaches the webhooks service and

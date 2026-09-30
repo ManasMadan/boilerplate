@@ -39,7 +39,7 @@ Open these ports in the provider's firewall:
 
 | Port | From | For |
 |---|---|---|
-| 80, 443 | anywhere (Cloudflare, and previews directly) | the gateway |
+| 80, 443 | anywhere (Cloudflare, and previews directly) | the gateway (the site's hosts only answer Cloudflare, see below) |
 | 25, 465, 587, 993 | anywhere, on the mail node | the mail server |
 | 22, 6443 | where OpenTofu runs (your machine, the CI runner) | installing k3s, the Kubernetes API |
 | 6443, 10250, 8472/udp (vxlan) or 51820/udp (wireguard-native) | the other nodes | k3s |
@@ -154,6 +154,16 @@ Two things for mail aren't in Cloudflare:
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out dkim.pem
   openssl pkey -in dkim.pem -pubout -outform DER | base64 | tr -d '\n'   # dkim_public_key
   ```
+
+Cloudflare presents its origin-pull client certificate on every request (the module
+turns on authenticated origin pulls), and the gateway refuses the TLS handshake for the
+site's hosts without it. So someone who finds a node's address can't skip Cloudflare,
+and the client address the services rate-limit on (from `X-Forwarded-For`) is the one
+Cloudflare saw. Previews are reached directly, so the gateway drops any
+`X-Forwarded-For` their visitors send. Apply the module before the platform chart
+first requires the certificate, or the site is refused in between. Restricting 80 and
+443 to Cloudflare's ranges at the provider's firewall is a further option, but only on
+a cluster without previews.
 
 Anything that bypasses Cloudflare (previews, the mail host) shows the nodes' real
 addresses; the proxy hides the site's origin only if the site runs on nodes that serve

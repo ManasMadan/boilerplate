@@ -143,6 +143,30 @@ describe("session revocation", () => {
     expect(statuses.slice(0, 5).every((status) => status !== 429)).toBe(true);
     expect(statuses.at(-1)).toBe(429);
   });
+
+  it("limits password attempts per account, however many addresses they come from", async () => {
+    const { email, password } = await signedInUser();
+    // Each attempt from a new session: a new client address, as a forged or rotated
+    // X-Forwarded-For would give, so the per-address limit never applies.
+    const attempt = (guess: string) =>
+      createSession(harness).auth("/sign-in/email", { email, password: guess });
+    const statuses: number[] = [];
+    for (let i = 0; i < 10; i++) statuses.push((await attempt(`wrong-password-${i}`)).status);
+    expect(statuses.every((status) => status === 401)).toBe(true);
+    const locked = await attempt(password);
+    expect(locked.status).toBe(429);
+    expect(locked.body).toMatchObject({ code: "RATE_LIMITED" });
+    // Other accounts are untouched.
+    const other = await signedInUser();
+    expect(
+      (
+        await createSession(harness).auth("/sign-in/email", {
+          email: other.email,
+          password: other.password,
+        })
+      ).status,
+    ).toBe(200);
+  });
 });
 
 describe("account security", () => {

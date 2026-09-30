@@ -28,11 +28,51 @@ tests:
     asserts:
       - equal: { path: spec.provider.kubernetes.envoyService.externalTrafficPolicy, value: Cluster }
 
-  - it: trusts one proxy hop (Cloudflare) for the client's address
+  - it: trusts one proxy hop (Cloudflare) for the client's address on the site's hosts
     template: gateway.yaml
-    documentSelector: { path: kind, value: ClientTrafficPolicy }
+    documentSelector: { path: metadata.name, value: public, matchMany: true }
     asserts:
       - equal: { path: spec.clientIPDetection.xForwardedFor.numTrustedHops, value: 1 }
+        documentSelector: { path: kind, value: ClientTrafficPolicy }
+
+  - it: lets only Cloudflare connect to the site's hosts, so X-Forwarded-For can't be forged
+    template: gateway.yaml
+    set:
+      previews: true
+    asserts:
+      - equal:
+          path: spec.targetRefs
+          value:
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: public, sectionName: https-0 }
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: public, sectionName: https-1 }
+        documentSelector: { path: "spec.targetRefs[0].sectionName", value: https-0 }
+      - equal:
+          path: spec.tls.clientValidation.caCertificateRefs
+          value: [{ kind: ConfigMap, name: cloudflare-origin-pull-ca }]
+        documentSelector: { path: "spec.targetRefs[0].sectionName", value: https-0 }
+      - matchRegex:
+          path: data["ca.crt"]
+          pattern: "^-----BEGIN CERTIFICATE-----"
+        documentSelector: { path: kind, value: ConfigMap }
+
+  - it: drops the X-Forwarded-For a preview's visitor sends, since previews skip Cloudflare
+    template: gateway.yaml
+    set:
+      previews: true
+    documentSelector: { path: metadata.name, value: previews }
+    asserts:
+      - equal: { path: "spec.targetRefs[0].sectionName", value: https-2 }
+      - equal: { path: spec.headers.earlyRequestHeaders.remove, value: [X-Forwarded-For] }
+      - notExists: { path: spec.tls }
+
+  - it: requires no client certificate when there's no Cloudflare in front
+    template: gateway.yaml
+    set:
+      gateway.originPulls: false
+    asserts:
+      - notExists: { path: spec.tls }
+        documentSelector: { path: kind, value: ClientTrafficPolicy }
+      - hasDocuments: { count: 5 }
 
   - it: issues certificates through Cloudflare DNS with the SOPS-provided token
     template: issuer.yaml

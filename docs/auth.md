@@ -157,6 +157,14 @@ Redis, with tighter rules on the endpoints that guess secrets:
 | `/forget-password/*` | 3 a minute |
 | `/oauth2/register` | 5 a minute |
 
+An address can be rotated, so the endpoints that guess or send secrets are also limited
+per account (`apps/api/src/auth/account-limits.ts`), whatever address the attempts come
+from: 10 password sign-ins, reset-password or verify-email attempts and 10 second-factor
+checks per 15 minutes, and 5 codes sent. They're keyed on the normalised email, or for a
+second factor on the sign-in attempt's two-factor cookie, and refuse the attempt when
+Redis is down. The cost: someone can spend an account's attempts and lock it out of
+these endpoints for the window; a passkey or an existing session still works.
+
 Elsewhere, `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`) limits
 assistant questions (20 a minute), AI documents and file uploads (30 an hour), phone
 codes (5 an hour per user, 3 per number, refused when Redis is down), MCP tool calls and
@@ -164,7 +172,10 @@ API keys, all shared across replicas through Redis.
 
 The client IP comes from `X-Forwarded-For` only when the peer is in `TRUSTED_PROXIES`;
 the API overwrites the header better-auth sees with that resolved address, so a client
-can't forge the IP limits are keyed on.
+can't forge the IP limits are keyed on. That holds because only Cloudflare can reach the
+site's hosts (the gateway requires its origin-pull certificate; see
+`infra/tofu/README.md`), so the rightmost address the gateway trusts is the one
+Cloudflare saw.
 
 ## Captcha
 

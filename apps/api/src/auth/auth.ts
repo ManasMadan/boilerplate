@@ -69,6 +69,7 @@ import type { Redis } from "ioredis";
 import type { Env } from "../env";
 import { features } from "../features";
 import { type EventOrigin, emitAnyEvent, emitEvent } from "../outbox";
+import { createAccountLimits } from "./account-limits";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import type { Memberships } from "./memberships";
 import { orgAccess, orgRoles } from "./org-access";
@@ -122,6 +123,7 @@ export function createAuth({
   database = prismaAdapter(db, { provider: "postgresql" }),
 }: AuthDependencies) {
   const webOrigin = new URL(env.WEB_URL);
+  const accountLimits = createAccountLimits(redis);
 
   /** Records an audit event for auth activity (see auth-events.ts for why it's separate). */
   function record<N extends EventName>(
@@ -282,6 +284,14 @@ export function createAuth({
     // takeover (or a mistake) never goes unnoticed. Runs after the endpoint, only when
     // it succeeded, and never fails the request: the email is queued with retries.
     hooks: {
+      // Per account, on top of the per-address limits above (account-limits.ts).
+      before: createAuthMiddleware(async (ctx) => {
+        await accountLimits({
+          path: ctx.path,
+          body: ctx.body,
+          secondFactor: ctx.getCookie(ctx.context.createAuthCookie("two_factor").name) ?? undefined,
+        });
+      }),
       after: createAuthMiddleware(async (ctx) => {
         if (isAPIError(ctx.context.returned)) return;
         const alert = securityAlertFor(ctx);
