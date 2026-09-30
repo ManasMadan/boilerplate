@@ -25,8 +25,18 @@ export const EMAIL_TRANSPORT = Symbol("EMAIL_TRANSPORT");
 export class SmtpTransport implements EmailTransport {
   private readonly transporter;
 
-  constructor(url: string) {
-    this.transporter = nodemailer.createTransport(url);
+  /**
+   * `timeoutMs` bounds connecting, the server's greeting and any silence on the socket:
+   * nodemailer's defaults (two minutes to connect, ten of silence) would hold a
+   * delivery, and its job, that long on a stuck server.
+   */
+  constructor(url: string, timeoutMs = 30_000) {
+    this.transporter = nodemailer.createTransport({
+      url,
+      connectionTimeout: timeoutMs,
+      greetingTimeout: timeoutMs,
+      socketTimeout: timeoutMs,
+    });
   }
 
   async send(email: OutgoingEmail) {

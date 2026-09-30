@@ -52,7 +52,13 @@ function toServiceError(status: number, body: unknown): AiServiceError {
 
 const TOKEN_LIFETIME_SECONDS = 60;
 
-export function createAiClient(options: { baseUrl: string; secret: string; timeoutMs?: number }) {
+export function createAiClient(options: {
+  baseUrl: string;
+  secret: string;
+  timeoutMs?: number;
+  /** The longest an answer may stream, start to finish (default two minutes). */
+  answerTimeoutMs?: number;
+}) {
   const key = new TextEncoder().encode(options.secret);
   const timeoutMs = options.timeoutMs ?? 30_000;
 
@@ -134,7 +140,11 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
           method: "POST",
           headers: { ...(await headers(caller)), "content-type": "application/json" },
           body: JSON.stringify({ question }),
-          ...(signal && { signal }),
+          // The caller's signal (the client went away) or the answer's own limit.
+          signal: AbortSignal.any([
+            AbortSignal.timeout(options.answerTimeoutMs ?? 120_000),
+            ...(signal ? [signal] : []),
+          ]),
         });
       } catch (cause) {
         throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });

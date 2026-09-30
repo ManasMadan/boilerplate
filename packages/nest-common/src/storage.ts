@@ -65,6 +65,8 @@ export interface S3StorageOptions {
   secretAccessKey?: string;
   /** Needed by RustFS/MinIO-style servers without virtual-hosted buckets. */
   forcePathStyle?: boolean;
+  /** How long one request may take, connecting included (default 30 s). */
+  timeoutMs?: number;
 }
 
 export class S3Storage implements Storage {
@@ -75,6 +77,13 @@ export class S3Storage implements Storage {
       region: options.region,
       ...(options.endpoint && { endpoint: options.endpoint }),
       forcePathStyle: options.forcePathStyle ?? false,
+      // The SDK's own default waits forever on a server that stops answering, and its
+      // requestTimeout only logs a warning unless told to throw.
+      requestHandler: {
+        connectionTimeout: Math.min(5_000, options.timeoutMs ?? 30_000),
+        requestTimeout: options.timeoutMs ?? 30_000,
+        throwOnRequestTimeout: true,
+      },
       ...(options.accessKeyId &&
         options.secretAccessKey && {
           credentials: {
