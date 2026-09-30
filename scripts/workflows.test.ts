@@ -290,3 +290,18 @@ describe("ci.yml's end-to-end job", () => {
     expect(env.TURNSTILE_SECRET_KEY).toBe("1x0000000000000000000000000000000AA");
   });
 });
+
+describe("jobs that run turbo", () => {
+  // Turbo's tasks depend on `^gen`, which reaches the Python service's own `gen` (uv)
+  // through the AI client, whatever --filter says: a job without uv fails there.
+  const turbo = /\bturbo\b|bun run (test|check-types|lint|gen|build)\b|test:e2e|generators\.ts/;
+
+  it("all get uv from the shared setup action", () => {
+    const missing = Object.entries(workflow("ci.yml").jobs).flatMap(([name, job]) => {
+      const runs = (job.steps ?? []).some((step) => turbo.test(step.run ?? ""));
+      const setup = job.steps?.find((step) => step.uses === "./.github/actions/setup");
+      return runs && setup?.with?.python !== "true" ? [name] : [];
+    });
+    expect(missing).toEqual([]);
+  });
+});
