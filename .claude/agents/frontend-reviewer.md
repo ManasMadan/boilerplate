@@ -33,7 +33,7 @@ master...HEAD` and `git status --short`.
 5. **Translations.** No literals (hand detailed checks to the `i18n-checker` agent).
 6. **Weight.** No heavy client dependency on a page that doesn't need it; lazy-load
    what's big; server components for static content. The route stays within its budget
-   (`apps/web/scripts/bundle-budget.ts`).
+   (`scripts/bundle-budget.ts`).
 7. **Security.** New third-party origins added to the CSP in `apps/web/src/proxy.ts`,
    and only what's needed. No `dangerouslySetInnerHTML` with user content. Redirect
    targets are same-origin paths.

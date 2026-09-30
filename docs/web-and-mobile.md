@@ -74,7 +74,7 @@ code to `locales` and `catalogs` in `packages/i18n/src/index.ts`.
 
 `bun run --cwd apps/web budget` (after `next build`) fails when a route's first-load
 JavaScript, gzipped, passes its budget, or the part every route shares grows past its
-own (`apps/web/scripts/bundle-budget.ts`). CI runs it after the end-to-end suite. Raise a
+own (`scripts/bundle-budget.ts`). CI runs it after the end-to-end suite. Raise a
 budget only on purpose, in the change that needs it.
 
 Pages with forms are the heaviest: they validate with the contract's schemas, and zod's

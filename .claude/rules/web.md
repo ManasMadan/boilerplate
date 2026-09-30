@@ -43,6 +43,6 @@ paths:
     `e2e/support.ts` (real stack, Mailpit mailbox, `expectAccessible` for axe).
     `bun run --cwd apps/web test:e2e` runs them against a running `bun dev`;
     `bun run test:e2e --app web` builds and starts a fresh stack.
-- First-load JavaScript per route has a budget (`apps/web/scripts/bundle-budget.ts`,
+- First-load JavaScript per route has a budget (`scripts/bundle-budget.ts`,
   `bun run --cwd apps/web budget` after a build; CI runs it).
   Prefer server components for static content and lazy-load heavy client code.

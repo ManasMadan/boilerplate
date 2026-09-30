@@ -368,7 +368,7 @@ jobs:
           TARGET_RPS: ${{ vars.LOAD_TARGET_RPS || '50' }}
         run: bun run test:e2e --shard=${{ matrix.shard }}/4
       # The web app's first-load JavaScript per route, from the build the suite just ran
-      # (apps/web/scripts/bundle-budget.ts).
+      # (scripts/bundle-budget.ts).
       - name: Bundle budget
         if: matrix.shard == 1
         run: bun run --cwd apps/web budget
