@@ -109,10 +109,13 @@ audited (`org.api_key_created.v1`, `org.api_key_revoked.v1`).
   signed-in people only, so a key never reaches account settings, billing or key
   management.
 - Up to 50 keys per workspace, 600 requests a minute per key, expiring after 30, 90 or 365
-  days, or never.
-- The per-key limit is better-auth's: it counts in the key's own row, so every call
-  with a key writes to `auth.api_key`. That's fine at this limit; at high key traffic it
-  becomes write load on Postgres, and the counter would move to Redis.
+  days.
+- The per-key limit is better-auth's: it counts in the key's own row with a
+  compare-and-swap, so concurrent calls can't get past it, and a refused call writes
+  nothing. So a key causes at most 600 writes to `auth.api_key` a minute. The plugin's
+  Redis mode would take that load off Postgres, but it counts read-modify-write (not
+  atomically, as its source says), so concurrent calls could exceed the limit: raise the
+  limit a lot before trading that away.
 
 ## OAuth for MCP clients
 
