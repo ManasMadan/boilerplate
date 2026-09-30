@@ -5,7 +5,8 @@
   "description": "Queue names and job payload contracts shared by producers and consumers.",
   "exports": {
     ".": "./src/index.ts",
-    "./admin": "./src/admin.ts"
+    "./admin": "./src/admin.ts",
+    "./cli": "./src/cli.ts"
   },
   "scripts": {
     "check-types": "tsc",
