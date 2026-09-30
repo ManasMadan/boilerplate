@@ -126,6 +126,8 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   of you; after a compaction you're told which files the tree changes. The Stop hook
   can't tell two sessions' edits apart, so run one session per checkout and a worktree
   for the next.
+- `.claude-plugin/`: the same skills, agents and hooks as a plugin, for apps made from
+  this template (`docs/new-project.md`); a new agent or hook goes in `plugin.json` too.
 - Worktrees: parallel branches and agents use Worktrunk (`wt`, `.config/wt.toml`), whose
   Claude Code plugin settings.json enables: an agent started with `isolation: worktree`
   gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),

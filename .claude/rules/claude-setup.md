@@ -33,6 +33,11 @@ paths:
   code.claude.com/docs/en/sub-agents.
 - Rules are `.claude/rules/<area>.md` with `paths` frontmatter (the only field Claude
   Code reads); they state this repo's conventions for those files, not general advice.
+- `.claude-plugin/` publishes this setup as a plugin for apps made from the template:
+  `plugin.json` lists every agent and carries the same hooks as `settings.json`, from
+  the plugin's own copy (`${CLAUDE_PLUGIN_ROOT}` for `$CLAUDE_PROJECT_DIR`).
+  `scripts/claude-setup.test.ts` fails when they drift; `claude plugin validate .`
+  checks the manifests.
 - Keep in sync in the same change: a new skill goes in `docs/README.md`'s runbook list;
   a new agent, rule area or MCP server in `CLAUDE.md`'s "Claude Code setup"; a new
   command in `CLAUDE.md`'s table. Every app and `packages/db` has a `CLAUDE.md` with its

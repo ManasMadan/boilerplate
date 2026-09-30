@@ -23,6 +23,7 @@ describe("the file rules", () => {
     ["packages/db/prisma/migrations/migration_lock.toml", "deny"],
     [".claude/settings.json", "ask"],
     [".claude/hooks/guard-files.ts", "ask"],
+    [".claude-plugin/plugin.json", "ask"],
     [".husky/pre-commit", "ask"],
     ["biome.jsonc", "ask"],
     [".gitleaksignore", "ask"],

@@ -29,11 +29,12 @@ const ENVIRONMENT_VALUES = /^deploy\/environments\/[^/]+\/(stack|release)\.yaml$
 // An image tag, or the git revision production deploys from (release.yaml).
 const IMAGE_TAG = /^\s*(tag|imageTag|revision):/m;
 /**
- * The agent's own guard rails: hooks, permissions, the commit hooks and the lint and
- * dependency rules. A change to one needs the user to look at it.
+ * The agent's own guard rails: hooks, permissions, the plugin that ships them to other
+ * apps, the commit hooks and the lint and dependency rules. A change to one needs the
+ * user to look at it.
  */
 const GUARD_RAILS =
-  /^(\.claude\/settings\.json|\.claude\/hooks\/|\.husky\/|biome\.jsonc$|knip\.jsonc$|\.dependency-cruiser\.cjs$|\.gitleaksignore$|\.trivyignore\.yaml$|osv-scanner\.toml$|\.sops\.yaml$)/;
+  /^(\.claude\/settings\.json|\.claude\/hooks\/|\.claude-plugin\/|\.husky\/|biome\.jsonc$|knip\.jsonc$|\.dependency-cruiser\.cjs$|\.gitleaksignore$|\.trivyignore\.yaml$|osv-scanner\.toml$|\.sops\.yaml$)/;
 
 /** The rule for one change, or null when it's allowed. */
 export function verdictFor({ path, shipped = false, before, after }: Change): Verdict {

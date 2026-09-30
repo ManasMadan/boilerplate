@@ -135,3 +135,41 @@ describe("settings.json", () => {
     }
   });
 });
+
+// Apps made from this template can take the setup from here as a plugin, so it has to
+// carry the same skills, agents and hooks as the project's own .claude.
+describe("the plugin", () => {
+  const read = (path: string) => JSON.parse(readFileSync(join(ROOT, path), "utf8"));
+  const plugin = read(".claude-plugin/plugin.json") as {
+    name: string;
+    skills: string[];
+    agents: string[];
+    outputStyles: string;
+    hooks: unknown;
+  };
+
+  it("lists every agent, and takes the skills and output styles by folder", () => {
+    expect(plugin.agents).toEqual(agents.sort().map((agent) => `./.claude/agents/${agent}.md`));
+    expect(plugin.skills).toEqual(["./.claude/skills/"]);
+    expect(plugin.outputStyles).toBe("./.claude/output-styles/");
+  });
+
+  it("runs the same hooks as the project, from the plugin's copy", () => {
+    const settings = readFileSync(join(CLAUDE, "settings.json"), "utf8");
+    const hooks = (JSON.parse(settings) as { hooks: unknown }).hooks;
+    const fromPlugin = JSON.stringify(hooks).replaceAll(
+      "$CLAUDE_PROJECT_DIR/.claude/hooks/",
+      `$\{CLAUDE_PLUGIN_ROOT}/.claude/hooks/`,
+    );
+    expect(plugin.hooks).toEqual(JSON.parse(fromPlugin));
+  });
+
+  it("is the marketplace's one plugin, at the repository's root", () => {
+    const marketplace = read(".claude-plugin/marketplace.json") as {
+      plugins: { name: string; source: string }[];
+    };
+    expect(marketplace.plugins).toEqual([
+      expect.objectContaining({ name: plugin.name, source: "./" }),
+    ]);
+  });
+});

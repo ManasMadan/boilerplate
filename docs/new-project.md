@@ -69,6 +69,15 @@ devcontainer has only OpenTofu, kubectl and Helm of them.
       key in that cluster's `argocd-notifications-secret` (deploy/README.md).
 - [ ] `TOFU_TARGETS`, a repository variable listing the environments that get a plan
       on infrastructure pull requests, e.g. `["staging", "production"]`. Unset, no plans.
+- [ ] Optional: take the Claude Code setup from this template instead of keeping a copy,
+      so its fixes reach this app. The template is a plugin marketplace
+      (`.claude-plugin/`): `/plugin marketplace add ManasMadan/boilerplate`, then
+      `/plugin install boilerplate@boilerplate`, and commit the two to
+      `.claude/settings.json` (`extraKnownMarketplaces`, `enabledPlugins`) for everyone.
+      Then delete this app's `.claude/skills`, `.claude/agents`, `.claude/output-styles`
+      and the `hooks` block of `.claude/settings.json`, or everything runs twice. The
+      plugin has no version, so each commit to the template's default branch is an
+      update. Its skills and agents are then named `boilerplate:<name>`.
 - [ ] Optional: a Claude Code review on every pull request (`claude-review.yml`, the
       repository's own reviewer agents, one comment, never a required check). Set the
       `CLAUDE_REVIEW` repository variable to `true` and the `ANTHROPIC_API_KEY` secret.
