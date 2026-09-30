@@ -37,11 +37,93 @@ export const zDocumentOut = z.object({
 });
 
 /**
+ * ErrorCode
+ */
+export const zErrorCode = z.enum([
+    'BAD_REQUEST',
+    'VALIDATION_FAILED',
+    'UNAUTHENTICATED',
+    'FORBIDDEN',
+    'NOT_FOUND',
+    'CONFLICT',
+    'RATE_LIMITED',
+    'INTERNAL',
+    'SERVICE_UNAVAILABLE',
+    'IDEMPOTENCY_IN_PROGRESS',
+    'FEATURE_DISABLED',
+    'CLIENT_OUTDATED',
+    'FRESH_SESSION_REQUIRED',
+    'DESTINATION_NOT_ALLOWED',
+    'RESPONSE_TOO_LARGE',
+    'TOO_MANY_REDIRECTS',
+    'UPSTREAM_UNAVAILABLE',
+    'NO_ACTIVE_ORGANIZATION',
+    'PHONE_CODE_INVALID',
+    'PHONE_NUMBER_TAKEN',
+    'ENTITLEMENT_REQUIRED',
+    'ALREADY_SUBSCRIBED',
+    'NO_SUBSCRIPTION',
+    'FILE_NOT_FOUND',
+    'FILE_TYPE_NOT_ALLOWED',
+    'FILE_TOO_LARGE',
+    'FILE_INFECTED',
+    'FILE_UNREADABLE',
+    'FILE_NOT_UPLOADED',
+    'FILE_NOT_READY',
+    'UNSUBSCRIBE_LINK_INVALID',
+    'WEBHOOK_ENDPOINT_NOT_FOUND',
+    'WEBHOOK_DELIVERY_NOT_FOUND',
+    'WEBHOOK_URL_NOT_ALLOWED',
+    'WEBHOOK_ENDPOINT_LIMIT',
+    'APP_NOT_FOUND',
+    'API_KEY_NOT_FOUND',
+    'API_KEY_LIMIT_REACHED',
+    'API_KEY_SCOPE_MISSING',
+    'DOCUMENT_NOT_FOUND',
+    'DOCUMENT_INDEXING_FAILED',
+    'AI_BUDGET_EXCEEDED',
+    'AI_RUN_LIMIT',
+    'TODO_NOT_FOUND',
+    'TODO_VERSION_CONFLICT'
+]);
+
+/**
  * ErrorEvent
  */
 export const zErrorEvent = z.object({
     code: z.enum(['AI_RUN_LIMIT', 'UPSTREAM_UNAVAILABLE']),
     type: z.literal('error').optional().default('error')
+});
+
+/**
+ * ErrorIssue
+ */
+export const zErrorIssue = z.object({
+    code: z.string(),
+    path: z.array(z.union([z.string(), z.number()]))
+});
+
+/**
+ * ErrorData
+ */
+export const zErrorData = z.object({
+    issues: z.array(zErrorIssue).nullish(),
+    params: z.record(z.string(), z.union([
+        z.string(),
+        z.number()
+    ])),
+    requestId: z.string().nullish()
+});
+
+/**
+ * ErrorResponse
+ */
+export const zErrorResponse = z.object({
+    code: zErrorCode,
+    data: zErrorData,
+    defined: z.boolean(),
+    message: z.string(),
+    status: z.int()
 });
 
 /**
@@ -123,24 +205,6 @@ export const zAssistantEvent = z.object({
         zDoneEvent,
         zErrorEvent
     ])
-});
-
-/**
- * ValidationError
- */
-export const zValidationError = z.object({
-    ctx: z.record(z.string(), z.unknown()).optional(),
-    input: z.unknown().optional(),
-    loc: z.array(z.union([z.string(), z.int()])),
-    msg: z.string(),
-    type: z.string()
-});
-
-/**
- * HTTPValidationError
- */
-export const zHttpValidationError = z.object({
-    detail: z.array(zValidationError).optional()
 });
 
 /**

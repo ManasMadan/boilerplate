@@ -10,7 +10,7 @@
 import { Injectable } from "@nestjs/common";
 import { type AiCaller, AiServiceError, createAiClient } from "@repo/ai-client";
 import type { AiDocument, AssistantEvent } from "@repo/contracts/api";
-import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import type { ErrorCode } from "@repo/contracts/errors";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
@@ -143,8 +143,8 @@ function toDocument(row: {
 
 function toAppError(error: unknown): AppError {
   if (error instanceof AppError) return error;
-  if (error instanceof AiServiceError && isErrorCode(error.code) && PASSED_ON.has(error.code)) {
-    return new AppError(error.code, { params: error.params as Record<string, string | number> });
+  if (error instanceof AiServiceError && PASSED_ON.has(error.code)) {
+    return new AppError(error.code, { params: error.params });
   }
   return new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "ai" }, cause: error });
 }

@@ -1,3 +1,5 @@
+import * as z from "zod";
+
 /**
  * Every error code the API can return. Clients translate codes with the `errors.<CODE>`
  * keys in packages/i18n, so messages are always in the user's language, and branch on
@@ -9,7 +11,9 @@
  * `message` is for logs only; clients translate `code`.
  *
  * Adding a code: add it here with its HTTP status, then add `errors.<CODE>` to every
- * catalog in packages/i18n (the i18n test fails until you do).
+ * catalog in packages/i18n (the i18n test fails until you do). `bun run gen` exports
+ * the catalog to the Python service (packages/jobs/scripts/export-schemas.ts), which
+ * derives its statuses from it too.
  */
 export const ERROR_CODES = {
   // Generic
@@ -73,6 +77,8 @@ export const ERROR_CODES = {
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
+
+export const errorCode = z.enum(Object.keys(ERROR_CODES) as ErrorCode[]);
 
 export const isErrorCode = (value: unknown): value is ErrorCode =>
   typeof value === "string" && Object.hasOwn(ERROR_CODES, value);

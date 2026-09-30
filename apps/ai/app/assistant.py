@@ -202,7 +202,7 @@ class Assistant:
 
     async def check_budget(self, org_id: UUID) -> None:
         if await used_this_month(org_id) >= self._monthly_tokens:
-            raise AppError("AI_BUDGET_EXCEEDED", 429)
+            raise AppError("AI_BUDGET_EXCEEDED")
 
     async def answer(
         self, org_id: UUID, user_id: UUID, question: str

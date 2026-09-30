@@ -37,10 +37,11 @@ def test_every_route_needs_the_api_s_token(client: TestClient) -> None:
         response = client.request(method, path, headers={"x-request-id": "r1"})
         assert response.status_code == 401
         assert response.json() == {
+            "defined": True,
             "code": "UNAUTHENTICATED",
             "status": 401,
-            "requestId": "r1",
-            "params": {},
+            "message": "UNAUTHENTICATED",
+            "data": {"params": {}, "requestId": "r1"},
         }
 
 
@@ -50,7 +51,9 @@ def test_invalid_input_is_a_validation_error(client: TestClient) -> None:
     assert response.status_code == 422
     body = response.json()
     assert body["code"] == "VALIDATION_FAILED"
-    assert {tuple(issue["path"]) for issue in body["params"]["issues"]} == {
+    # Where the contract's errorData has them, not among the message params.
+    assert body["data"]["params"] == {}
+    assert {tuple(issue["path"]) for issue in body["data"]["issues"]} == {
         ("title",),
         ("content",),
     }
@@ -215,10 +218,23 @@ def test_the_assistant_is_off_without_a_model(
         )
     assert response.status_code == 404
     assert response.json() == {
+        "defined": True,
         "code": "FEATURE_DISABLED",
         "status": 404,
-        "requestId": "req-test",
-        "params": {"feature": "assistant"},
+        "message": "FEATURE_DISABLED",
+        "data": {"params": {"feature": "assistant"}, "requestId": "req-test"},
+    }
+
+
+def test_an_unknown_route_is_a_contract_error(client: TestClient) -> None:
+    response = client.get("/v1/nope")
+    assert response.status_code == 404
+    assert response.json() == {
+        "defined": True,
+        "code": "NOT_FOUND",
+        "status": 404,
+        "message": "NOT_FOUND",
+        "data": {"params": {}},
     }
 
 

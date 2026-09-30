@@ -35,6 +35,8 @@ from app.db.session import engine
 from app.documents import Documents
 
 MCP_PATH = "/ai/mcp"
+# What the server answers: the endpoint, and its OAuth protected-resource metadata.
+MCP_PATHS = frozenset({MCP_PATH, f"/.well-known/oauth-protected-resource{MCP_PATH}"})
 SCOPE = "documents:read"
 ORG_CLAIM = "org"
 # Tool calls per app and user per minute (the api's MCP server allows the same).

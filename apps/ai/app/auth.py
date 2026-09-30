@@ -42,7 +42,7 @@ def verify(token: str, secret: str) -> Caller:
             raise jwt.InvalidTokenError("token lives too long")
         return Caller(user_id=UUID(claims["sub"]), org_id=UUID(claims["org"]))
     except (jwt.InvalidTokenError, ValueError, KeyError) as error:
-        raise AppError("UNAUTHENTICATED", 401) from error
+        raise AppError("UNAUTHENTICATED") from error
 
 
 def caller(
@@ -51,7 +51,7 @@ def caller(
     x_request_id: Annotated[str | None, Header()] = None,
 ) -> Caller:
     if not authorization or not authorization.startswith("Bearer "):
-        raise AppError("UNAUTHENTICATED", 401)
+        raise AppError("UNAUTHENTICATED")
     verified = verify(authorization.removeprefix("Bearer "), settings.service_secret)
     structlog.contextvars.bind_contextvars(
         request_id=x_request_id, org_id=str(verified.org_id), user_id=str(verified.user_id)

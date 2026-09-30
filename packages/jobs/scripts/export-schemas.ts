@@ -1,7 +1,8 @@
 /**
  * Writes the contracts the Python service shares as JSON Schema (generated/schemas,
- * committed), and the shared queues' Redis prefix and job options
- * (generated/queue-settings.json).
+ * committed), the shared queues' Redis prefix and job options
+ * (generated/queue-settings.json), and the error catalog's statuses
+ * (generated/error-codes.json).
  * apps/ai turns them into Pydantic models, so a payload is defined once, in zod, and
  * both languages validate the same shape; CI fails if the committed files drift.
  *
@@ -10,6 +11,8 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { errorData, errorIssue, errorResponse } from "@repo/contracts/api/base";
+import { ERROR_CODES, errorCode } from "@repo/contracts/errors";
 import { realtimeMessage } from "@repo/contracts/realtime";
 import { z } from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
@@ -58,6 +61,8 @@ const pascal = (name: string) =>
  */
 const schemas: Record<string, { title: string; schema: z.ZodType; io: "input" | "output" }> = {
   realtime_message: { title: "RealtimeMessage", schema: realtimeMessage, io: "output" },
+  // Python answers with it, so it's what a response carries (params filled in).
+  error_response: { title: "ErrorResponse", schema: errorResponse, io: "output" },
   queue_setting: { title: "QueueSetting", schema: queueSetting, io: "output" },
   shared_queue_name: { title: "SharedQueueName", schema: z.enum(shared), io: "output" },
 };
@@ -77,12 +82,21 @@ for (const queue of shared) {
   }
 }
 
+// Names for the Pydantic classes of the parts Python code refers to.
+const titles = new Map<z.ZodType, string>([
+  [errorCode, "ErrorCode"],
+  [errorData, "ErrorData"],
+  [errorIssue, "ErrorIssue"],
+]);
+
 for (const [file, { title, schema, io }] of Object.entries(schemas)) {
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
     io,
     // A uuid's format says it all; the regex zod adds too can't apply to Python's UUID type.
-    override: ({ jsonSchema }) => {
+    override: ({ zodSchema, jsonSchema }) => {
+      const name = titles.get(zodSchema);
+      if (name) jsonSchema.title = name;
       if (jsonSchema.format === "uuid") delete jsonSchema.pattern;
       // zod bounds integers to JavaScript's safe range; Python's ints have no such limit.
       if (jsonSchema.minimum === Number.MIN_SAFE_INTEGER) delete jsonSchema.minimum;
@@ -100,3 +114,4 @@ const settings = Object.fromEntries(
   ]),
 );
 writeFileSync(join(out, "..", "queue-settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
+writeFileSync(join(out, "..", "error-codes.json"), `${JSON.stringify(ERROR_CODES, null, 2)}\n`);

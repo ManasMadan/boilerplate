@@ -4,7 +4,7 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnswerData, AnswerErrors, AnswerResponses, CreateDocumentData, CreateDocumentErrors, CreateDocumentResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, LiveData, LiveResponses, ReadyData, ReadyResponses, SentimentData, SentimentErrors, SentimentResponses } from './types.gen';
+import type { AnswerData, AnswerErrors, AnswerResponses, CreateDocumentData, CreateDocumentErrors, CreateDocumentResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, SentimentData, SentimentErrors, SentimentResponses } from './types.gen';
 import { zAnswerBody, zAnswerHeaders, zAnswerResponse, zCreateDocumentBody, zCreateDocumentHeaders, zCreateDocumentResponse, zDeleteDocumentHeaders, zDeleteDocumentPath, zDeleteDocumentResponse, zListDocumentsHeaders, zListDocumentsResponse, zLiveResponse, zReadyResponse, zSentimentBody, zSentimentHeaders, zSentimentResponse2 } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
@@ -24,7 +24,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * Live
  */
-export const live = <ThrowOnError extends boolean = false>(options?: Options<LiveData, ThrowOnError>): RequestResult<LiveResponses, unknown, ThrowOnError> => (options?.client ?? client).get<LiveResponses, unknown, ThrowOnError>({
+export const live = <ThrowOnError extends boolean = false>(options?: Options<LiveData, ThrowOnError>): RequestResult<LiveResponses, LiveErrors, ThrowOnError> => (options?.client ?? client).get<LiveResponses, LiveErrors, ThrowOnError>({
     requestValidator: async (data) => await z.object({
         body: z.never().optional(),
         path: z.never().optional(),
@@ -38,7 +38,7 @@ export const live = <ThrowOnError extends boolean = false>(options?: Options<Liv
 /**
  * Ready
  */
-export const ready = <ThrowOnError extends boolean = false>(options?: Options<ReadyData, ThrowOnError>): RequestResult<ReadyResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyResponses, unknown, ThrowOnError>({
+export const ready = <ThrowOnError extends boolean = false>(options?: Options<ReadyData, ThrowOnError>): RequestResult<ReadyResponses, ReadyErrors, ThrowOnError> => (options?.client ?? client).get<ReadyResponses, ReadyErrors, ThrowOnError>({
     requestValidator: async (data) => await z.object({
         body: z.never().optional(),
         path: z.never().optional(),

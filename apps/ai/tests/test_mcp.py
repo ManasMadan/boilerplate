@@ -238,6 +238,13 @@ def test_without_a_token_the_challenge_points_at_the_metadata(client: TestClient
 
 
 @pytest.mark.integration
+def test_other_routes_stay_the_service_s_own(client: TestClient) -> None:
+    response = client.get("/ai/nope")
+    assert response.status_code == 404
+    assert response.json()["code"] == "NOT_FOUND"
+
+
+@pytest.mark.integration
 def test_the_workspace_s_documents_can_be_listed_and_searched(client: TestClient) -> None:
     org, user = new_org()
     granted(org, user)

@@ -93,7 +93,7 @@ class Documents:
                 .returning(Document.id)
             )
             if deleted is None:
-                raise AppError("DOCUMENT_NOT_FOUND", 404)
+                raise AppError("DOCUMENT_NOT_FOUND")
         await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
 
     async def index(

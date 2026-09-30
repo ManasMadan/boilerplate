@@ -15,7 +15,8 @@ import { SignJWT } from "jose";
 import type { z } from "zod";
 import { createClient } from "./generated/client";
 import { createDocument, deleteDocument, listDocuments, sentiment } from "./generated/sdk.gen";
-import { zAssistantEvent } from "./generated/zod.gen";
+import type { ErrorCode, ErrorIssue } from "./generated/types.gen";
+import { zAssistantEvent, zErrorResponse } from "./generated/zod.gen";
 
 export type { DocumentOut as AiDocument, SentimentResponse } from "./generated/types.gen";
 export type AssistantEvent = z.infer<typeof zAssistantEvent>["event"];
@@ -26,15 +27,27 @@ export interface AiCaller {
   requestId?: string | undefined;
 }
 
-/** A failure the service reported, with its stable error code (or a transport failure). */
+/**
+ * A failure the service reported, with its stable error code, or UPSTREAM_UNAVAILABLE
+ * when it couldn't be reached or answered with something other than an error body.
+ */
 export class AiServiceError extends Error {
   constructor(
     readonly status: number,
-    readonly code: string,
-    readonly params: Record<string, unknown> = {},
+    readonly code: ErrorCode,
+    readonly params: Record<string, string | number> = {},
+    readonly issues: ErrorIssue[] = [],
   ) {
     super(`AI service answered ${status} ${code}`);
   }
+}
+
+/** The error a failed response carries, parsed against the service's error model. */
+function toServiceError(status: number, body: unknown): AiServiceError {
+  const parsed = zErrorResponse.safeParse(body);
+  if (!parsed.success) return new AiServiceError(status, "UPSTREAM_UNAVAILABLE");
+  const { code, data } = parsed.data;
+  return new AiServiceError(status, code, data.params, data.issues ?? []);
 }
 
 const TOKEN_LIFETIME_SECONDS = 60;
@@ -68,23 +81,25 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
     });
   }
 
-  async function unwrap<T>(
-    call: Promise<{ data?: T; error?: unknown; response?: Response }>,
-  ): Promise<T> {
-    let result: { data?: T; error?: unknown; response?: Response };
+  /** The result of a call that succeeded; the service's error (or an outage) otherwise. */
+  async function settle<R extends { error?: unknown; response?: Response }>(
+    call: Promise<R>,
+  ): Promise<R> {
+    let result: R;
     try {
       result = await call;
     } catch (cause) {
       throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });
     }
-    if (result.response?.ok && result.data !== undefined) return result.data;
-    if (result.response?.ok) return undefined as T; // 204
-    const body = (result.error ?? {}) as { code?: string; params?: Record<string, unknown> };
-    throw new AiServiceError(
-      result.response?.status ?? 503,
-      body.code ?? "UPSTREAM_UNAVAILABLE",
-      body.params,
-    );
+    if (!result.response?.ok) throw toServiceError(result.response?.status ?? 503, result.error);
+    return result;
+  }
+
+  async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: Response }>) {
+    const { data } = await settle(call);
+    // The generated client validated the body, so only a response without one lands here.
+    if (data === undefined) throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+    return data;
   }
 
   return {
@@ -98,7 +113,7 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
       return unwrap(createDocument({ client: await forCall(caller), body }));
     },
     async deleteDocument(caller: AiCaller, documentId: string) {
-      await unwrap(
+      await settle(
         deleteDocument({ client: await forCall(caller), path: { document_id: documentId } }),
       );
     },
@@ -125,11 +140,7 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
         throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });
       }
       if (!response.ok || !response.body) {
-        const body = (await response.json().catch(() => ({}))) as {
-          code?: string;
-          params?: Record<string, unknown>;
-        };
-        throw new AiServiceError(response.status, body.code ?? "UPSTREAM_UNAVAILABLE", body.params);
+        throw toServiceError(response.status, await response.json().catch(() => undefined));
       }
       return events(response.body);
     },

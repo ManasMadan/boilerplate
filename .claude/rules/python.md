@@ -25,8 +25,9 @@ paths:
 - `app/contracts/**` is generated from `packages/jobs` (datamodel-codegen). Do not edit
   it; change the zod schema in `packages/jobs` and run `bun run gen`. The edit and Bash
   guards refuse writes to it.
-- Errors: `raise AppError("CODE", status, params)` from `app/errors.py`, with a code that
-  exists in `packages/contracts/src/errors.ts`. Anything else becomes `INTERNAL`.
+- Errors: `raise AppError("CODE", params)` from `app/errors.py`. The code is the
+  generated `ErrorCode` Literal (from `packages/contracts/src/errors.ts`) and the status
+  comes from the catalog, never from the call. Anything else becomes `INTERNAL`.
 - Settings come from `app/settings.py` (`get_settings()`); new variables go there and
   in `.env.example`. Production refuses the local stand-ins (`local:*` models,
   `hashing` embeddings); keep it that way.

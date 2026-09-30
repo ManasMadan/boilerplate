@@ -26,10 +26,18 @@ tokens itself (below).
 | `POST /v1/assistant/answers` | the assistant's answer, as server-sent events |
 | `/ai/mcp` | the MCP server, when `BETTER_AUTH_URL` and `API_URL` are set |
 
-Errors have the same shape as every other service (`app/errors.py`): raise
-`AppError("CODE", status, params)` with a code from `packages/contracts/src/errors.ts`.
-The API passes `DOCUMENT_NOT_FOUND`, `AI_BUDGET_EXCEEDED`, `FEATURE_DISABLED` and
-`VALIDATION_FAILED` on to clients; anything else becomes `UPSTREAM_UNAVAILABLE`.
+Errors have the API's own wire shape (`app/errors.py`), oRPC's error JSON as
+`errorResponse` in `packages/contracts/src/api/base.ts` defines it:
+`{defined, code, status, message, data: {params, requestId, issues}}`. The model, the
+`ErrorCode` Literal and each code's status are generated from `packages/contracts`
+(`app/contracts/error_response.py`, `error_codes.json`), so raise `AppError("CODE",
+params)`: a code outside the catalog doesn't type-check, and the status always comes
+from the catalog. A status the framework answers with that has no code of its own (405,
+say) becomes `BAD_REQUEST` 400, or `INTERNAL` 500 for a 5xx. Every route declares the
+model (`responses` in `app/main.py`), so `packages/ai-client` parses errors against it
+instead of guessing. The API passes `DOCUMENT_NOT_FOUND`, `AI_BUDGET_EXCEEDED`,
+`FEATURE_DISABLED` and `VALIDATION_FAILED` on to clients; anything else becomes
+`UPSTREAM_UNAVAILABLE`.
 
 ## Documents and retrieval
 

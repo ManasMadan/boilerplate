@@ -100,6 +100,31 @@ export type DoneEvent = {
 };
 
 /**
+ * ErrorCode
+ */
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'FRESH_SESSION_REQUIRED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'PHONE_CODE_INVALID' | 'PHONE_NUMBER_TAKEN' | 'ENTITLEMENT_REQUIRED' | 'ALREADY_SUBSCRIBED' | 'NO_SUBSCRIPTION' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'UNSUBSCRIBE_LINK_INVALID' | 'WEBHOOK_ENDPOINT_NOT_FOUND' | 'WEBHOOK_DELIVERY_NOT_FOUND' | 'WEBHOOK_URL_NOT_ALLOWED' | 'WEBHOOK_ENDPOINT_LIMIT' | 'APP_NOT_FOUND' | 'API_KEY_NOT_FOUND' | 'API_KEY_LIMIT_REACHED' | 'API_KEY_SCOPE_MISSING' | 'DOCUMENT_NOT_FOUND' | 'DOCUMENT_INDEXING_FAILED' | 'AI_BUDGET_EXCEEDED' | 'AI_RUN_LIMIT' | 'TODO_NOT_FOUND' | 'TODO_VERSION_CONFLICT';
+
+/**
+ * ErrorData
+ */
+export type ErrorData = {
+    /**
+     * Issues
+     */
+    issues?: Array<ErrorIssue> | null;
+    /**
+     * Params
+     */
+    params: {
+        [key: string]: string | number;
+    };
+    /**
+     * Requestid
+     */
+    requestId?: string | null;
+};
+
+/**
  * ErrorEvent
  */
 export type ErrorEvent = {
@@ -114,13 +139,37 @@ export type ErrorEvent = {
 };
 
 /**
- * HTTPValidationError
+ * ErrorIssue
  */
-export type HttpValidationError = {
+export type ErrorIssue = {
     /**
-     * Detail
+     * Code
      */
-    detail?: Array<ValidationError>;
+    code: string;
+    /**
+     * Path
+     */
+    path: Array<string | number>;
+};
+
+/**
+ * ErrorResponse
+ */
+export type ErrorResponse = {
+    code: ErrorCode;
+    data: ErrorData;
+    /**
+     * Defined
+     */
+    defined: boolean;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Status
+     */
+    status: number;
 };
 
 /**
@@ -223,40 +272,21 @@ export type Usage = {
     outputTokens: number;
 };
 
-/**
- * ValidationError
- */
-export type ValidationError = {
-    /**
-     * Context
-     */
-    ctx?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Input
-     */
-    input?: unknown;
-    /**
-     * Location
-     */
-    loc: Array<string | number>;
-    /**
-     * Message
-     */
-    msg: string;
-    /**
-     * Error Type
-     */
-    type: string;
-};
-
 export type LiveData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/health/live';
 };
+
+export type LiveErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type LiveError = LiveErrors[keyof LiveErrors];
 
 export type LiveResponses = {
     /**
@@ -273,6 +303,15 @@ export type ReadyData = {
     query?: never;
     url: '/health/ready';
 };
+
+export type ReadyErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ReadyError = ReadyErrors[keyof ReadyErrors];
 
 export type ReadyResponses = {
     /**
@@ -302,9 +341,9 @@ export type AnswerData = {
 
 export type AnswerErrors = {
     /**
-     * Validation Error
+     * An error.
      */
-    422: HttpValidationError;
+    default: ErrorResponse;
 };
 
 export type AnswerError = AnswerErrors[keyof AnswerErrors];
@@ -337,9 +376,9 @@ export type ListDocumentsData = {
 
 export type ListDocumentsErrors = {
     /**
-     * Validation Error
+     * An error.
      */
-    422: HttpValidationError;
+    default: ErrorResponse;
 };
 
 export type ListDocumentsError = ListDocumentsErrors[keyof ListDocumentsErrors];
@@ -374,9 +413,9 @@ export type CreateDocumentData = {
 
 export type CreateDocumentErrors = {
     /**
-     * Validation Error
+     * An error.
      */
-    422: HttpValidationError;
+    default: ErrorResponse;
 };
 
 export type CreateDocumentError = CreateDocumentErrors[keyof CreateDocumentErrors];
@@ -414,9 +453,9 @@ export type DeleteDocumentData = {
 
 export type DeleteDocumentErrors = {
     /**
-     * Validation Error
+     * An error.
      */
-    422: HttpValidationError;
+    default: ErrorResponse;
 };
 
 export type DeleteDocumentError = DeleteDocumentErrors[keyof DeleteDocumentErrors];
@@ -449,9 +488,9 @@ export type SentimentData = {
 
 export type SentimentErrors = {
     /**
-     * Validation Error
+     * An error.
      */
-    422: HttpValidationError;
+    default: ErrorResponse;
 };
 
 export type SentimentError = SentimentErrors[keyof SentimentErrors];

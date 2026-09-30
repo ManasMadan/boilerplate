@@ -15,7 +15,7 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy import text
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -23,13 +23,14 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app import model
 from app.assistant import Assistant, AssistantEvent, AssistantRequest, create_agent, create_model
 from app.auth import CallerDep
+from app.contracts.error_response import ErrorResponse
 from app.db.models import Document
 from app.db.session import close_engine, engine, open_engine
 from app.documents import Documents, create_summaries
 from app.embeddings import create_embedder
 from app.errors import AppError, install_error_handlers
 from app.log import configure_logging
-from app.mcp_server import create_mcp_server, mcp_app
+from app.mcp_server import MCP_PATHS, create_mcp_server, mcp_app
 from app.queues import IngestQueue
 from app.schemas import (
     DocumentCreate,
@@ -87,18 +88,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await close_engine()
 
 
-app = FastAPI(title="ai", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="ai",
+    version="0.1.0",
+    lifespan=lifespan,
+    # Every error, from any route, has the contract's shape (app/errors.py); declaring it
+    # also replaces FastAPI's default 422 schema, which this service never sends.
+    responses={"default": {"model": ErrorResponse, "description": "An error."}},
+)
 install_error_handlers(app)
 start_telemetry("ai", app)
 
 
 async def _mcp(scope: Scope, receive: Receive, send: Send) -> None:
-    """Hands requests to the MCP server built at startup (it answers /ai/mcp and its
-    protected-resource metadata); not found when it's off."""
+    """Hands requests for /ai/mcp and its protected-resource metadata to the MCP server
+    built at startup. Anything else, and everything when the server is off, is an
+    unknown route."""
     server: ASGIApp | None = app.state.mcp
-    if server is None:
-        await JSONResponse({"detail": "Not Found"}, status_code=404)(scope, receive, send)
-        return
+    if server is None or scope.get("path") not in MCP_PATHS:
+        raise AppError("NOT_FOUND")
     await server(scope, receive, send)
 
 
@@ -109,7 +117,7 @@ def _documents(request: Request) -> Documents:
 def _assistant(request: Request) -> Assistant:
     assistant: Assistant | None = request.app.state.assistant
     if not assistant:
-        raise AppError("FEATURE_DISABLED", 404, {"feature": "assistant"})
+        raise AppError("FEATURE_DISABLED", {"feature": "assistant"})
     return assistant
 
 

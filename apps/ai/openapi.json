@@ -171,6 +171,106 @@
         "title": "DoneEvent",
         "type": "object"
       },
+      "ErrorCode": {
+        "enum": [
+          "BAD_REQUEST",
+          "VALIDATION_FAILED",
+          "UNAUTHENTICATED",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "CONFLICT",
+          "RATE_LIMITED",
+          "INTERNAL",
+          "SERVICE_UNAVAILABLE",
+          "IDEMPOTENCY_IN_PROGRESS",
+          "FEATURE_DISABLED",
+          "CLIENT_OUTDATED",
+          "FRESH_SESSION_REQUIRED",
+          "DESTINATION_NOT_ALLOWED",
+          "RESPONSE_TOO_LARGE",
+          "TOO_MANY_REDIRECTS",
+          "UPSTREAM_UNAVAILABLE",
+          "NO_ACTIVE_ORGANIZATION",
+          "PHONE_CODE_INVALID",
+          "PHONE_NUMBER_TAKEN",
+          "ENTITLEMENT_REQUIRED",
+          "ALREADY_SUBSCRIBED",
+          "NO_SUBSCRIPTION",
+          "FILE_NOT_FOUND",
+          "FILE_TYPE_NOT_ALLOWED",
+          "FILE_TOO_LARGE",
+          "FILE_INFECTED",
+          "FILE_UNREADABLE",
+          "FILE_NOT_UPLOADED",
+          "FILE_NOT_READY",
+          "UNSUBSCRIBE_LINK_INVALID",
+          "WEBHOOK_ENDPOINT_NOT_FOUND",
+          "WEBHOOK_DELIVERY_NOT_FOUND",
+          "WEBHOOK_URL_NOT_ALLOWED",
+          "WEBHOOK_ENDPOINT_LIMIT",
+          "APP_NOT_FOUND",
+          "API_KEY_NOT_FOUND",
+          "API_KEY_LIMIT_REACHED",
+          "API_KEY_SCOPE_MISSING",
+          "DOCUMENT_NOT_FOUND",
+          "DOCUMENT_INDEXING_FAILED",
+          "AI_BUDGET_EXCEEDED",
+          "AI_RUN_LIMIT",
+          "TODO_NOT_FOUND",
+          "TODO_VERSION_CONFLICT"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
+      "ErrorData": {
+        "additionalProperties": false,
+        "properties": {
+          "issues": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ErrorIssue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issues"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "ErrorData",
+        "type": "object"
+      },
       "ErrorEvent": {
         "properties": {
           "code": {
@@ -194,17 +294,65 @@
         "title": "ErrorEvent",
         "type": "object"
       },
-      "HTTPValidationError": {
+      "ErrorIssue": {
+        "additionalProperties": false,
         "properties": {
-          "detail": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "path": {
             "items": {
-              "$ref": "#/components/schemas/ValidationError"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
             },
-            "title": "Detail",
+            "title": "Path",
             "type": "array"
           }
         },
-        "title": "HTTPValidationError",
+        "required": [
+          "path",
+          "code"
+        ],
+        "title": "ErrorIssue",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ErrorData"
+          },
+          "defined": {
+            "title": "Defined",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "defined",
+          "code",
+          "status",
+          "message",
+          "data"
+        ],
+        "title": "ErrorResponse",
         "type": "object"
       },
       "HealthResponse": {
@@ -346,46 +494,6 @@
         ],
         "title": "Usage",
         "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
       }
     }
   },
@@ -408,6 +516,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
           }
         },
         "summary": "Live"
@@ -426,6 +544,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
           }
         },
         "summary": "Ready"
@@ -490,15 +618,15 @@
             },
             "description": "Server-sent events, each `data:` line one AssistantEvent."
           },
-          "422": {
+          "default": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error."
           }
         },
         "summary": "Answer"
@@ -556,15 +684,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error."
           }
         },
         "summary": "List Documents"
@@ -626,15 +754,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error."
           }
         },
         "summary": "Create Document"
@@ -691,15 +819,15 @@
           "204": {
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error."
           }
         },
         "summary": "Delete Document"
@@ -763,15 +891,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error."
           }
         },
         "summary": "Sentiment"
