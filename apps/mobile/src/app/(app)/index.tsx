@@ -49,7 +49,8 @@ export default function Todos() {
         refreshControl={
           <RefreshControl refreshing={todos.isRefetching} onRefresh={() => todos.refetch()} />
         }
-        onEndReached={() => todos.hasNextPage && !todos.isFetchingNextPage && todos.fetchNextPage()}
+        // A page already loading is reused, not cancelled and asked for again.
+        onEndReached={() => todos.hasNextPage && todos.fetchNextPage({ cancelRefetch: false })}
         ListHeaderComponent={
           <View className="gap-4 pb-2">
             <Text role="heading" variant="h3">

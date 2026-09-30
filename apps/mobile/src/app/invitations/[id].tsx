@@ -17,17 +17,16 @@ export default function Invitation() {
   const t = useTranslations("invitations");
   const errorMessage = useAuthErrorMessage();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: session } = authClient.useSession();
   const [organizationName, setOrganizationName] = useState<string | null>();
   const [failure, setFailure] = useState<string>();
 
+  // Only signed-in users reach this screen (the root layout's protected routes).
   useEffect(() => {
-    if (!session || !id) return;
     void (async () => {
       const { data } = await authClient.organization.getInvitation({ query: { id } });
       setOrganizationName(data?.organizationName ?? null);
     })();
-  }, [session, id]);
+  }, [id]);
 
   async function accept() {
     const { data, error } = await authClient.organization.acceptInvitation({ invitationId: id });

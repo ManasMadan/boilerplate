@@ -15,10 +15,7 @@ export function Screen({
 }) {
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.select({ ios: "padding" })}>
         <ScrollView contentContainerClassName="gap-6 p-6" keyboardShouldPersistTaps="handled">
           {title ? (
             <View className="gap-1">
