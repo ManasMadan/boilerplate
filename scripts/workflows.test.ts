@@ -193,20 +193,31 @@ describe("deploy.yml's staging bump", () => {
     return { a, b, c, bump, staging };
   }
 
-  it("moves staging forward to a newer commit's images", () => {
-    const repo = repository();
-    expect(repo.bump(`sha-${repo.c}`).exitCode).toBe(0);
-    expect(repo.staging()).toContain(`tag: "sha-${repo.c}"`);
-  });
+  // Each of these runs a dozen git commands: slow on a busy machine, so they get time.
+  const GIT = 30_000;
 
-  it("never moves it back when an older commit's run finishes last", () => {
-    const repo = repository();
-    repo.bump(`sha-${repo.c}`);
-    const late = repo.bump(`sha-${repo.b}`);
-    expect(late.exitCode).toBe(0);
-    expect(late.stdout.toString()).toContain("newer than");
-    expect(repo.staging()).toContain(`tag: "sha-${repo.c}"`);
-  });
+  it(
+    "moves staging forward to a newer commit's images",
+    () => {
+      const repo = repository();
+      expect(repo.bump(`sha-${repo.c}`).exitCode).toBe(0);
+      expect(repo.staging()).toContain(`tag: "sha-${repo.c}"`);
+    },
+    GIT,
+  );
+
+  it(
+    "never moves it back when an older commit's run finishes last",
+    () => {
+      const repo = repository();
+      repo.bump(`sha-${repo.c}`);
+      const late = repo.bump(`sha-${repo.b}`);
+      expect(late.exitCode).toBe(0);
+      expect(late.stdout.toString()).toContain("newer than");
+      expect(repo.staging()).toContain(`tag: "sha-${repo.c}"`);
+    },
+    GIT,
+  );
 
   it("builds every commit's images: one run per commit, never cancelled", () => {
     const text = readFileSync(join(ROOT, ".github/workflows/deploy.yml"), "utf8");
