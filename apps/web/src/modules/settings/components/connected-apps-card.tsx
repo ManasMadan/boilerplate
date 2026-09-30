@@ -35,9 +35,11 @@ export function ConnectedAppsCard() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent>
-        {apps.isPending ? (
-          <Skeleton className="h-10" />
-        ) : apps.data?.length ? (
+        {apps.isPending ? <Skeleton className="h-10" /> : null}
+        {!apps.isPending && !apps.data?.length ? (
+          <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        ) : null}
+        {apps.data?.length ? (
           <ul className="flex flex-col divide-y">
             {apps.data.map((app) => {
               const name = app.name ?? t("unnamed");
@@ -76,9 +78,7 @@ export function ConnectedAppsCard() {
               );
             })}
           </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

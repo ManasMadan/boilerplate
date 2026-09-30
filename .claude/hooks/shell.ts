@@ -303,7 +303,8 @@ function commandVerdict({ env, words }: Simple, installed: (bin: string) => bool
   if (program === "tofu" && ["apply", "destroy", "import", "state"].includes(sub)) {
     return ask("This changes real infrastructure or its state.");
   }
-  const script = program === "bun" && sub === "run" ? third : program === "bun" ? sub : "";
+  let script = "";
+  if (program === "bun") script = sub === "run" ? third : sub;
   const destructive: Record<string, string> = {
     promote: "Opens a production promotion: a branch, a commit, a push and a pull request.",
     "scripts/release.ts": "Releases and promotes: pushes to GitHub.",

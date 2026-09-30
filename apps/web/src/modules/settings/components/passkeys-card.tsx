@@ -54,9 +54,11 @@ export function PasskeysCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {staleSession ? <ReauthPrompt /> : null}
-        {passkeys.isPending ? (
-          <Skeleton className="h-10" />
-        ) : passkeys.data?.length ? (
+        {passkeys.isPending ? <Skeleton className="h-10" /> : null}
+        {!passkeys.isPending && !passkeys.data?.length ? (
+          <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        ) : null}
+        {passkeys.data?.length ? (
           <ul className="flex flex-col divide-y">
             {passkeys.data.map((passkey) => (
               <li key={passkey.id} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -74,9 +76,7 @@ export function PasskeysCard() {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        )}
+        ) : null}
         <Button variant="outline" className="self-start" onClick={add}>
           {t("add")}
         </Button>

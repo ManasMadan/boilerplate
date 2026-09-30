@@ -67,11 +67,8 @@ export async function startFakeAi() {
     }
     if (request.method === "POST" && path === "/v1/documents") {
       const title = String(input.title);
-      const status = title.includes("[ready]")
-        ? "ready"
-        : title.includes("[failed]")
-          ? "failed"
-          : "pending";
+      const status =
+        (["ready", "failed"] as const).find((state) => title.includes(`[${state}]`)) ?? "pending";
       const doc: Doc = {
         id: randomUUID(),
         org,

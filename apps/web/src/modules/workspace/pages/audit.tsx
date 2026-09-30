@@ -19,8 +19,8 @@ import { useFormatter, useTranslations } from "next-intl";
 function paramsOf(payload: Record<string, unknown>) {
   const params: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(payload)) {
-    params[key] =
-      typeof value === "number" ? value : Array.isArray(value) ? value.join(", ") : String(value);
+    if (typeof value === "number") params[key] = value;
+    else params[key] = Array.isArray(value) ? value.join(", ") : String(value);
   }
   return params;
 }
@@ -40,15 +40,16 @@ export function WorkspaceAuditPage() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {log.isPending ? (
-          <Skeleton className="h-32" />
-        ) : log.isError ? (
+        {log.isPending ? <Skeleton className="h-32" /> : null}
+        {log.isError ? (
           <p role="alert" className="text-sm text-destructive">
             {errorMessage(log.error)}
           </p>
-        ) : entries.length === 0 ? (
+        ) : null}
+        {log.isSuccess && entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
+        ) : null}
+        {log.isSuccess && entries.length > 0 ? (
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>
@@ -80,7 +81,7 @@ export function WorkspaceAuditPage() {
               ))}
             </tbody>
           </table>
-        )}
+        ) : null}
         {log.hasNextPage ? (
           <Button
             variant="outline"

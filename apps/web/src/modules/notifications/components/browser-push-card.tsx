@@ -85,11 +85,13 @@ export function BrowserPushCard() {
       <CardContent className="flex flex-col gap-4">
         {state === "unsupported" ? (
           <p className="text-sm text-muted-foreground">{t("unsupported")}</p>
-        ) : state === "blocked" ? (
+        ) : null}
+        {state === "blocked" ? (
           <Alert>
             <AlertDescription>{t("blocked")}</AlertDescription>
           </Alert>
-        ) : (
+        ) : null}
+        {state !== "unsupported" && state !== "blocked" ? (
           <Field orientation="horizontal">
             <Checkbox
               id="browser-push"
@@ -101,7 +103,7 @@ export function BrowserPushCard() {
               {t("enable")}
             </FieldLabel>
           </Field>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

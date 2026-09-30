@@ -121,6 +121,23 @@ const page = (title: string, body: string) =>
 const escapeHtml = (text: string) =>
   text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
 
+/**
+ * An API handler's result as a response: nothing is Stripe's 404, a `{ status, body }` is
+ * sent as it is, and anything else is a 200 with it as the body.
+ */
+function answerFor(result: unknown): { status: number; body: unknown } {
+  if (result === undefined) {
+    return {
+      status: 404,
+      body: { error: { type: "invalid_request_error", message: "Unrecognized request URL" } },
+    };
+  }
+  if (typeof result === "object" && result !== null && "status" in result && "body" in result) {
+    return result as { status: number; body: unknown };
+  }
+  return { status: 200, body: result };
+}
+
 export async function startFakeStripe(options: FakeStripeOptions) {
   const customers = new Map<
     string,
@@ -503,20 +520,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         }
         if (cached) return json(cached.status, cached.body);
         const result = await api(request.method as string, url.pathname, form, url.searchParams);
-        const answer =
-          result === undefined
-            ? {
-                status: 404,
-                body: {
-                  error: { type: "invalid_request_error", message: "Unrecognized request URL" },
-                },
-              }
-            : typeof result === "object" &&
-                result !== null &&
-                "status" in result &&
-                "body" in result
-              ? (result as { status: number; body: unknown })
-              : { status: 200, body: result };
+        const answer = answerFor(result);
         if (cacheKey && request.method === "POST")
           idempotent.set(cacheKey, { request: raw, ...answer });
         return json(answer.status, answer.body);

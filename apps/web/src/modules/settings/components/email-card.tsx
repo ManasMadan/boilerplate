@@ -67,12 +67,14 @@ export function EmailCard() {
               {t("change")}
             </Button>
           </div>
-        ) : step.name === "current" ? (
+        ) : null}
+        {step.name === "current" ? (
           <RequestChange
             currentEmail={email}
             onSent={(newEmail) => setStep({ name: "new", newEmail })}
           />
-        ) : (
+        ) : null}
+        {step.name === "new" ? (
           <ConfirmChange
             newEmail={step.newEmail}
             onDone={async () => {
@@ -82,7 +84,7 @@ export function EmailCard() {
               setStep({ name: "start" });
             }}
           />
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

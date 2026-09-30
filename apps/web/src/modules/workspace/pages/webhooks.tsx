@@ -50,13 +50,16 @@ export function WorkspaceWebhooksPage() {
           <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {endpoints.isPending ? (
-            <Skeleton className="h-16" />
-          ) : endpoints.isError ? (
+          {endpoints.isPending ? <Skeleton className="h-16" /> : null}
+          {endpoints.isError ? (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(endpoints.error)}
             </p>
-          ) : endpoints.data?.length ? (
+          ) : null}
+          {endpoints.isSuccess && endpoints.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("empty")}</p>
+          ) : null}
+          {endpoints.isSuccess && endpoints.data.length > 0 ? (
             <ul className="flex flex-col divide-y">
               {endpoints.data.map((endpoint) => (
                 <li key={endpoint.id} className="flex items-center justify-between gap-3 py-2">
@@ -70,9 +73,7 @@ export function WorkspaceWebhooksPage() {
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("empty")}</p>
-          )}
+          ) : null}
         </CardContent>
       </Card>
       {hasWebhooks ? (

@@ -8,7 +8,7 @@ import { useRedeliverWebhookMutation } from "@repo/client/api/webhooks/redeliver
 import { useRotateWebhookSecretMutation } from "@repo/client/api/webhooks/rotate-secret";
 import { useSendWebhookTestMutation } from "@repo/client/api/webhooks/send-test";
 import { useUpdateWebhookEndpointMutation } from "@repo/client/api/webhooks/update-endpoint";
-import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
+import { WEBHOOK_SECRET_OVERLAP_HOURS, type WebhookDelivery } from "@repo/contracts/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -149,10 +149,7 @@ export function WebhookEndpointPage({ id }: { id: string }) {
 
 function DeliveriesCard({ endpointId }: { endpointId: string }) {
   const t = useTranslations("workspace.webhooks.deliveries");
-  const format = useFormatter();
-  const errorMessage = useApiErrorMessage();
   const deliveries = useWebhookDeliveriesInfiniteQuery(endpointId);
-  const redeliver = useRedeliverWebhookMutation();
   const items = deliveries.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
@@ -161,65 +158,17 @@ function DeliveriesCard({ endpointId }: { endpointId: string }) {
         <CardTitle>{t("title")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {deliveries.isPending ? (
-          <Skeleton className="h-20" />
-        ) : items.length === 0 ? (
+        {deliveries.isPending ? <Skeleton className="h-20" /> : null}
+        {!deliveries.isPending && items.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
+        ) : null}
+        {items.length > 0 ? (
           <ul className="flex flex-col divide-y" aria-label={t("title")}>
             {items.map((delivery) => (
-              <li
-                key={delivery.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm"
-              >
-                <div className="flex flex-col">
-                  <code className="text-xs">{delivery.eventName}</code>
-                  <span className="text-xs text-muted-foreground">
-                    {format.dateTime(delivery.createdAt, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}{" "}
-                    · {t("attempts", { count: delivery.attempts })}
-                    {delivery.lastStatus ? ` · HTTP ${delivery.lastStatus}` : ""}
-                    {delivery.lastError && !delivery.lastStatus
-                      ? ` · ${t(`error.${delivery.lastError}`)}`
-                      : ""}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={
-                      delivery.status === "failed"
-                        ? "destructive"
-                        : delivery.status === "succeeded"
-                          ? "secondary"
-                          : "outline"
-                    }
-                  >
-                    {t(delivery.status)}
-                  </Badge>
-                  {delivery.status === "pending" ? null : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        redeliver.mutate(
-                          { id: delivery.id },
-                          {
-                            onError: (error) => toast.error(errorMessage(error)),
-                            onSuccess: () => toast.success(t("redelivered")),
-                          },
-                        )
-                      }
-                    >
-                      {t("redeliver")}
-                    </Button>
-                  )}
-                </div>
-              </li>
+              <DeliveryRow key={delivery.id} delivery={delivery} />
             ))}
           </ul>
-        )}
+        ) : null}
         {deliveries.hasNextPage ? (
           <Button
             variant="outline"
@@ -231,5 +180,53 @@ function DeliveriesCard({ endpointId }: { endpointId: string }) {
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+const STATUS_BADGE = {
+  failed: "destructive",
+  succeeded: "secondary",
+  pending: "outline",
+} as const satisfies Record<WebhookDelivery["status"], string>;
+
+function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
+  const t = useTranslations("workspace.webhooks.deliveries");
+  const format = useFormatter();
+  const errorMessage = useApiErrorMessage();
+  const redeliver = useRedeliverWebhookMutation();
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
+      <div className="flex flex-col">
+        <code className="text-xs">{delivery.eventName}</code>
+        <span className="text-xs text-muted-foreground">
+          {format.dateTime(delivery.createdAt, { dateStyle: "medium", timeStyle: "short" })} ·{" "}
+          {t("attempts", { count: delivery.attempts })}
+          {delivery.lastStatus ? ` · HTTP ${delivery.lastStatus}` : ""}
+          {delivery.lastError && !delivery.lastStatus
+            ? ` · ${t(`error.${delivery.lastError}`)}`
+            : ""}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant={STATUS_BADGE[delivery.status]}>{t(delivery.status)}</Badge>
+        {delivery.status === "pending" ? null : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              redeliver.mutate(
+                { id: delivery.id },
+                {
+                  onError: (error) => toast.error(errorMessage(error)),
+                  onSuccess: () => toast.success(t("redelivered")),
+                },
+              )
+            }
+          >
+            {t("redeliver")}
+          </Button>
+        )}
+      </div>
+    </li>
   );
 }

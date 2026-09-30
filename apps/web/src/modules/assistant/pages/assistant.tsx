@@ -7,6 +7,7 @@ import { useAssistant } from "@repo/client/api/ai/assistant";
 import { useAiDocumentsQuery } from "@repo/client/api/ai/documents";
 import { useRemoveDocumentMutation } from "@repo/client/api/ai/remove-document";
 import {
+  type AiDocument,
   DOCUMENT_CONTENT_MAX_LENGTH,
   DOCUMENT_TITLE_MAX_LENGTH,
   QUESTION_MAX_LENGTH,
@@ -129,11 +130,6 @@ function AskCard() {
 
 function DocumentsCard() {
   const t = useTranslations("assistant.documents");
-  const errorMessage = useApiErrorMessage();
-  const documents = useAiDocumentsQuery();
-  const remove = useRemoveDocumentMutation();
-  const workspace = useActiveWorkspace();
-  const { data: session } = authClient.useSession();
 
   return (
     <Card>
@@ -142,67 +138,86 @@ function DocumentsCard() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        {documents.isPending ? (
-          <Skeleton className="h-16" />
-        ) : documents.isError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {errorMessage(documents.error)}
-          </p>
-        ) : documents.data.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("none")}</p>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {documents.data.map((document) => {
-              const mayRemove = workspace.isAdmin || document.createdBy === session?.user.id;
-              return (
-                <li key={document.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium">{document.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {document.status === "ready"
-                        ? t("passages", { count: document.chunkCount })
-                        : document.status === "failed" && document.error
-                          ? errorMessage({ code: document.error })
-                          : null}
-                    </span>
-                    {document.summary ? (
-                      <p className="line-clamp-2 text-xs text-muted-foreground">
-                        {document.summary}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={document.status === "failed" ? "destructive" : "secondary"}>
-                      {t(`status.${document.status}`)}
-                    </Badge>
-                    {mayRemove ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={remove.isPending}
-                        aria-label={`${t("remove")}: ${document.title}`}
-                        onClick={() =>
-                          remove.mutate(
-                            { documentId: document.id },
-                            {
-                              onSuccess: () => toast.success(t("removed")),
-                              onError: (error) => toast.error(errorMessage(error)),
-                            },
-                          )
-                        }
-                      >
-                        {t("remove")}
-                      </Button>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <DocumentList />
         <AddDocumentForm />
       </CardContent>
     </Card>
+  );
+}
+
+function DocumentList() {
+  const t = useTranslations("assistant.documents");
+  const errorMessage = useApiErrorMessage();
+  const documents = useAiDocumentsQuery();
+
+  if (documents.isPending) return <Skeleton className="h-16" />;
+  if (documents.isError) {
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        {errorMessage(documents.error)}
+      </p>
+    );
+  }
+  if (documents.data.length === 0) {
+    return <p className="text-sm text-muted-foreground">{t("none")}</p>;
+  }
+  return (
+    <ul className="flex flex-col divide-y">
+      {documents.data.map((document) => (
+        <DocumentItem key={document.id} document={document} />
+      ))}
+    </ul>
+  );
+}
+
+function DocumentItem({ document }: { document: AiDocument }) {
+  const t = useTranslations("assistant.documents");
+  const errorMessage = useApiErrorMessage();
+  const remove = useRemoveDocumentMutation();
+  const workspace = useActiveWorkspace();
+  const { data: session } = authClient.useSession();
+  const mayRemove = workspace.isAdmin || document.createdBy === session?.user.id;
+
+  let detail: string | null = null;
+  if (document.status === "ready") detail = t("passages", { count: document.chunkCount });
+  else if (document.status === "failed" && document.error) {
+    detail = errorMessage({ code: document.error });
+  }
+
+  return (
+    <li className="flex items-center justify-between gap-3 py-2">
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate text-sm font-medium">{document.title}</span>
+        <span className="text-xs text-muted-foreground">{detail}</span>
+        {document.summary ? (
+          <p className="line-clamp-2 text-xs text-muted-foreground">{document.summary}</p>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant={document.status === "failed" ? "destructive" : "secondary"}>
+          {t(`status.${document.status}`)}
+        </Badge>
+        {mayRemove ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={remove.isPending}
+            aria-label={`${t("remove")}: ${document.title}`}
+            onClick={() =>
+              remove.mutate(
+                { documentId: document.id },
+                {
+                  onSuccess: () => toast.success(t("removed")),
+                  onError: (error) => toast.error(errorMessage(error)),
+                },
+              )
+            }
+          >
+            {t("remove")}
+          </Button>
+        ) : null}
+      </div>
+    </li>
   );
 }
 

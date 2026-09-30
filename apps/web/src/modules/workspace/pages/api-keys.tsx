@@ -80,21 +80,22 @@ export function WorkspaceApiKeysPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {keys.isPending ? (
-            <Skeleton className="h-16" />
-          ) : keys.isError ? (
+          {keys.isPending ? <Skeleton className="h-16" /> : null}
+          {keys.isError ? (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(keys.error)}
             </p>
-          ) : keys.data?.length ? (
+          ) : null}
+          {keys.isSuccess && keys.data.length > 0 ? (
             <ul className="flex flex-col divide-y" aria-label={t("title")}>
               {keys.data.map((key) => (
                 <KeyRow key={key.id} apiKey={key} />
               ))}
             </ul>
-          ) : (
+          ) : null}
+          {keys.isSuccess && keys.data.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("empty")}</p>
-          )}
+          ) : null}
         </CardContent>
       </Card>
       <CreateKeyCard onCreated={setSecret} />

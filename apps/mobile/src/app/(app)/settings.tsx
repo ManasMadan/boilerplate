@@ -125,17 +125,12 @@ export default function Settings() {
           <CardTitle>{t("settings.notifications")}</CardTitle>
         </CardHeader>
         <CardContent className="gap-3">
-          {push === "unavailable" ? (
-            <Text className="text-muted-foreground">{t("settings.pushUnavailable")}</Text>
-          ) : push === "denied" ? (
-            <Text className="text-muted-foreground">{t("settings.pushDenied")}</Text>
-          ) : push === "granted" && register.isSuccess ? (
-            <Text>{t("settings.pushEnabled")}</Text>
-          ) : (
-            <Button onPress={enablePush} disabled={register.isPending || push === undefined}>
-              <Text>{t("settings.enablePush")}</Text>
-            </Button>
-          )}
+          <PushStatus
+            push={push}
+            enabled={push === "granted" && register.isSuccess}
+            busy={register.isPending}
+            onEnable={enablePush}
+          />
         </CardContent>
       </Card>
       <View className="items-center">
@@ -144,5 +139,32 @@ export default function Settings() {
         </Text>
       </View>
     </Screen>
+  );
+}
+
+/** Where push notifications stand on this device, or the button that turns them on. */
+function PushStatus({
+  push,
+  enabled,
+  busy,
+  onEnable,
+}: {
+  push: PushState | undefined;
+  enabled: boolean;
+  busy: boolean;
+  onEnable: () => void;
+}) {
+  const t = useTranslations("mobile");
+  if (push === "unavailable") {
+    return <Text className="text-muted-foreground">{t("settings.pushUnavailable")}</Text>;
+  }
+  if (push === "denied") {
+    return <Text className="text-muted-foreground">{t("settings.pushDenied")}</Text>;
+  }
+  if (enabled) return <Text>{t("settings.pushEnabled")}</Text>;
+  return (
+    <Button onPress={onEnable} disabled={busy || push === undefined}>
+      <Text>{t("settings.enablePush")}</Text>
+    </Button>
   );
 }

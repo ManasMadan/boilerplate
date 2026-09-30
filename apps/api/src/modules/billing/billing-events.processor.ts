@@ -49,6 +49,15 @@ const stripeObject = z.object({
     .nullish(),
 });
 
+/** The subscription a Stripe event is about, or undefined when it isn't about one. */
+function subscriptionOf(type: string, found: z.infer<typeof stripeObject>) {
+  if (SUBSCRIPTION_EVENTS.has(type)) return found.id;
+  if (type === "checkout.session.completed") return found.subscription;
+  // An invoice outside a subscription (a one-off charge) has no subscription details.
+  if (type.startsWith("invoice.")) return found.parent?.subscription_details?.subscription;
+  return undefined;
+}
+
 @Processor("events-billing", { concurrency: 5, prefix: queuePrefix("events-billing") })
 export class BillingEventsProcessor extends JobProcessor {
   constructor(
@@ -74,13 +83,7 @@ export class BillingEventsProcessor extends JobProcessor {
     }
     const { type, object } = events[name].parse(raw);
     const found = stripeObject.parse(object);
-    const subscriptionId = SUBSCRIPTION_EVENTS.has(type)
-      ? found.id
-      : type === "checkout.session.completed"
-        ? found.subscription
-        : type.startsWith("invoice.")
-          ? found.parent?.subscription_details?.subscription
-          : undefined;
+    const subscriptionId = subscriptionOf(type, found);
     if (!subscriptionId) return;
     await this.billing.sync(subscriptionId);
 

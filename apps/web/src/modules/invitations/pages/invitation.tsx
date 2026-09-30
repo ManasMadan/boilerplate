@@ -46,13 +46,9 @@ export function InvitationPage({ id }: { id: string }) {
         <CardHeader>
           <CardTitle>{t("title")}</CardTitle>
           <CardDescription>
-            {invitation.isPending ? (
-              <Skeleton className="h-4 w-48" />
-            ) : data ? (
-              t("description", { organizationName: data.organizationName })
-            ) : (
-              t("invalid")
-            )}
+            {invitation.isPending ? <Skeleton className="h-4 w-48" /> : null}
+            {data ? t("description", { organizationName: data.organizationName }) : null}
+            {!invitation.isPending && !data ? t("invalid") : null}
           </CardDescription>
         </CardHeader>
         {data ? (

@@ -59,6 +59,9 @@
         "useImportType": "error",
         // Reassigning a parameter hides what the caller passed; name the new value.
         "noParameterAssign": "error",
+        // A ternary inside a ternary reads as a puzzle: early returns, a lookup table, or
+        // one condition per JSX branch instead.
+        "noNestedTernary": "error",
         // One way to import zod everywhere, `import * as z from "zod"`: in code that reaches
         // the browser the bundler keeps only the members used, while `import { z }` binds
         // zod's prebuilt namespace object and ships all of zod, every language's messages

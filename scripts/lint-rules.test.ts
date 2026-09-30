@@ -24,6 +24,8 @@ const SAMPLES: Record<string, string> = {
   }
 }
 `,
+  "lint/style/noNestedTernary": `export const size = (n: number) => (n > 10 ? "big" : n > 5 ? "medium" : "small");
+`,
   "lint/style/noRestrictedImports": `import { z } from "zod";
 
 export const name = z.string();

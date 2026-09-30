@@ -120,7 +120,9 @@ export class DeliveryService {
       );
     }
     const succeeded = status !== undefined && status >= 200 && status < 300;
-    const outcome: AttemptResult = succeeded ? "succeeded" : isLastAttempt ? "failed" : "retry";
+    let outcome: AttemptResult = "retry";
+    if (succeeded) outcome = "succeeded";
+    else if (isLastAttempt) outcome = "failed";
 
     await tenant.webhookDelivery.update({
       where: { id: deliveryId },

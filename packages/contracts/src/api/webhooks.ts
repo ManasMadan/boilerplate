@@ -62,6 +62,7 @@ export const webhookDeliverySchema = z.object({
   lastAttemptAt: z.date().nullable(),
   createdAt: z.date(),
 });
+export type WebhookDelivery = z.infer<typeof webhookDeliverySchema>;
 
 const endpointUrl = z.url({ protocol: /^https?$/ }).max(2048);
 const endpointFields = {

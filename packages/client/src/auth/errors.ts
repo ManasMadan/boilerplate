@@ -23,13 +23,7 @@ export function authErrorKey(error: unknown): AuthErrorCode | undefined {
   };
   // The rate limiter answers 429 without a code.
   const raw =
-    status === 429
-      ? "RATE_LIMITED"
-      : typeof code === "string"
-        ? code
-        : typeof oauthError === "string"
-          ? oauthError
-          : undefined;
+    status === 429 ? "RATE_LIMITED" : [code, oauthError].find((value) => typeof value === "string");
   const key =
     raw !== undefined && Object.hasOwn(AUTH_ERROR_ALIASES, raw) ? AUTH_ERROR_ALIASES[raw] : raw;
   return isAuthErrorCode(key) ? key : undefined;

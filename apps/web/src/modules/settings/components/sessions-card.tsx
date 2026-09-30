@@ -19,29 +19,29 @@ import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "@/modules/auth";
 import { needsRecentSignIn, ReauthPrompt } from "./reauth-prompt";
 
+// In the order to test them: Edge's user agent also says Chrome, Chrome's says Safari,
+// and Android's says Linux.
+const BROWSERS: [RegExp, string][] = [
+  [/Edg\//, "Edge"],
+  [/Chrome\//, "Chrome"],
+  [/Firefox\//, "Firefox"],
+  [/Safari\//, "Safari"],
+];
+const SYSTEMS: [RegExp, string][] = [
+  [/iPhone|iPad/, "iOS"],
+  [/Android/, "Android"],
+  [/Mac OS X/, "macOS"],
+  [/Windows/, "Windows"],
+  [/Linux/, "Linux"],
+];
+
 /** A readable device name from a user agent, without a parsing library. */
 function deviceName(userAgent: string | null | undefined) {
   if (!userAgent) return null;
-  const browser = /Edg\//.test(userAgent)
-    ? "Edge"
-    : /Chrome\//.test(userAgent)
-      ? "Chrome"
-      : /Firefox\//.test(userAgent)
-        ? "Firefox"
-        : /Safari\//.test(userAgent)
-          ? "Safari"
-          : "Browser";
-  const os = /iPhone|iPad/.test(userAgent)
-    ? "iOS"
-    : /Android/.test(userAgent)
-      ? "Android"
-      : /Mac OS X/.test(userAgent)
-        ? "macOS"
-        : /Windows/.test(userAgent)
-          ? "Windows"
-          : /Linux/.test(userAgent)
-            ? "Linux"
-            : "";
+  const first = (names: [RegExp, string][]) =>
+    names.find(([pattern]) => pattern.test(userAgent))?.[1];
+  const browser = first(BROWSERS) ?? "Browser";
+  const os = first(SYSTEMS);
   return os ? `${browser} · ${os}` : browser;
 }
 
@@ -69,15 +69,12 @@ export function SessionsCard() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {sessions.isPending ? (
-          <Skeleton className="h-16" />
-        ) : sessions.isError ? (
-          needsRecentSignIn(sessions.error) ? (
-            <ReauthPrompt />
-          ) : (
-            <p className="text-sm text-destructive">{errorMessage(sessions.error)}</p>
-          )
-        ) : (
+        {sessions.isPending ? <Skeleton className="h-16" /> : null}
+        {sessions.isError && needsRecentSignIn(sessions.error) ? <ReauthPrompt /> : null}
+        {sessions.isError && !needsRecentSignIn(sessions.error) ? (
+          <p className="text-sm text-destructive">{errorMessage(sessions.error)}</p>
+        ) : null}
+        {sessions.isSuccess ? (
           <ul className="flex flex-col divide-y">
             {sessions.data?.map((session) => {
               const isCurrent = session.id === current?.session.id;
@@ -108,7 +105,7 @@ export function SessionsCard() {
               );
             })}
           </ul>
-        )}
+        ) : null}
         {(sessions.data?.length ?? 0) > 1 ? (
           <Button
             variant="outline"

@@ -79,9 +79,11 @@ export function TodoList() {
             <Skeleton className="h-9" />
             <Skeleton className="h-9" />
           </div>
-        ) : items.length === 0 ? (
+        ) : null}
+        {!todos.isPending && items.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
+        ) : null}
+        {items.length > 0 ? (
           <ul className="flex flex-col divide-y">
             {items.map((todo) => (
               <li key={todo.id} className="flex items-center gap-3 py-2">
@@ -114,7 +116,7 @@ export function TodoList() {
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
         {todos.hasNextPage ? (
           <Button
             variant="outline"

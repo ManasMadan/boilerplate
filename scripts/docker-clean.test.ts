@@ -39,13 +39,10 @@ describe("docker:clean", () => {
 
   it("skips what isn't there: no services, no cluster, no builder, no images", () => {
     const printed = captureOutput();
-    const { run, calls } = fakeRun((line) =>
-      line.startsWith("docker images") || line.endsWith("config --images")
-        ? {}
-        : line === "kind get clusters"
-          ? { stdout: "other\n" }
-          : { status: 1 },
-    );
+    const { run, calls } = fakeRun((line) => {
+      if (line.startsWith("docker images") || line.endsWith("config --images")) return {};
+      return line === "kind get clusters" ? { stdout: "other\n" } : { status: 1 };
+    });
     cleanDocker(run);
     expect(calls.filter((line) => / (delete|rm) /.test(line))).toEqual([]);
     expect(printed()).toBe("");

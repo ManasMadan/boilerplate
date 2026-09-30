@@ -36,9 +36,8 @@ export function UnsubscribePage() {
           ) : null}
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-3">
-          {!token ? (
-            <p className="text-sm text-muted-foreground">{t("missing")}</p>
-          ) : unsubscribe.data ? null : (
+          {token ? null : <p className="text-sm text-muted-foreground">{t("missing")}</p>}
+          {token && !unsubscribe.data ? (
             <>
               <Button
                 onClick={() => unsubscribe.mutate({ token })}
@@ -52,7 +51,7 @@ export function UnsubscribePage() {
                 </p>
               ) : null}
             </>
-          )}
+          ) : null}
           <Link href="/settings/notifications" className={buttonVariants({ variant: "link" })}>
             {t("manage")}
           </Link>
