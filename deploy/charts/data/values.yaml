@@ -119,6 +119,30 @@ gateway:
   namespaceSelector:
     kubernetes.io/metadata.name: envoy-gateway-system
 
+# A copy of the backups and the uploads outside the cluster, so losing the cluster (or
+# the one disk of a one-node cluster) doesn't take the database, its backups and every
+# upload together. Any S3-compatible storage you run somewhere else will do: a RustFS
+# or MinIO on another machine, in another place. On once `endpoint` is set: a CronJob
+# per bucket copies new objects there on `schedule` (rclone copy: nothing is deleted
+# offsite, so a wiped bucket here can't wipe the copy; expire old objects with the
+# bucket's lifecycle rules there). The keys are in the `secretName` Secret
+# (accessKeyId, secretAccessKey), from environments/<env>/secrets/. `required` refuses
+# to render without it (production).
+offsite:
+  required: false
+  # e.g. https://s3.backups.example.net
+  endpoint: ""
+  region: us-east-1
+  bucket: ""
+  # A folder of the bucket for this environment: <bucket>/<prefix>/{backups,uploads}.
+  prefix: ""
+  secretName: offsite-storage
+  schedule: "17 * * * *"
+  image: docker.io/rclone/rclone:1.75.1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+
 # A pull-request preview: this release owns its namespace (so deleting the preview
 # deletes everything in it) with quotas that keep one preview from starving others.
 preview:

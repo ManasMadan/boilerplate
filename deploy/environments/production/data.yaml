@@ -16,3 +16,10 @@ storage:
     storage: { size: 100Gi }
   backups:
     storage: { size: 200Gi }
+# The copy outside the cluster: required in production. Your S3-compatible storage on
+# another machine; its keys go in secrets/offsite-storage.sops.yaml.
+offsite:
+  required: true
+  endpoint: https://s3.backups.example.net
+  bucket: boilerplate-offsite
+  prefix: production

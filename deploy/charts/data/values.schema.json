@@ -140,6 +140,22 @@
         "namespace": { "type": "string" },
         "quota": { "type": "object", "additionalProperties": { "type": "string" } }
       }
+    },
+    "offsite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "schedule", "secretName"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "endpoint": { "type": "string", "pattern": "^(https?://.+)?$" },
+        "region": { "type": "string" },
+        "bucket": { "anyOf": [{ "const": "" }, { "$ref": "#/$defs/bucket" }] },
+        "prefix": { "type": "string", "pattern": "^([a-z0-9][a-z0-9._-]*)?$" },
+        "secretName": { "type": "string", "minLength": 1 },
+        "schedule": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "resources": { "$ref": "#/$defs/resources" }
+      }
     }
   },
   "$defs": {

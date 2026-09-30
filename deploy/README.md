@@ -56,6 +56,7 @@ There are two kinds of secret, and each has one home:
 | `storage` | `bucket`, `region`, `endpoint`, `publicEndpoint`, `accessKeyId`, `secretAccessKey` | generated (data chart) |
 | `<release>-backups-storage` | `accessKeyId`, `secretAccessKey` (the backups server's) | generated (data chart) |
 | `<release>-<service>` for `api`, `notifications`, `webhooks`, `ai` (the AI worker shares `ai`'s; `web` and `worker` have none) | any of the service's variables (each app's `src/env.ts`, `app/settings.py` for ai) | `environments/<env>/secrets/<service>.sops.yaml` |
+| `offsite-storage`, where there's an offsite copy (production) | `accessKeyId`, `secretAccessKey` of the storage outside the cluster | `environments/<env>/secrets/offsite-storage.sops.yaml` |
 | `cloudflare-api-token` in `cert-manager` and in `external-dns` | `token` (Zone:DNS:Edit on the zone) | `platform/secrets/<env>/` |
 | `github-token` in `argocd`, on the cluster hosting previews | `token` (reads pull requests) | `platform/secrets/<env>/` |
 | `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
@@ -179,8 +180,18 @@ archives every WAL segment as it's written and takes a base backup daily, to the
 backups server's `backups` bucket, kept for `postgres.backups.retention`. Any moment
 since the oldest base backup kept can be restored. Put the backups server on another
 node than Postgres's primary (`storage.backups.nodeSelector`) so one lost disk can't
-take both; for a copy outside the cluster, mirror the bucket (`aws s3 sync`, RustFS
-replication) to storage somewhere else.
+take both.
+
+The backups server and the uploads server are in the cluster, so on its own a lost
+cluster (or the one disk of a one-node cluster) would take the database, its backups
+and every upload with it. `offsite` in the data values copies both buckets to
+S3-compatible storage you run somewhere else, every hour: a CronJob per bucket runs
+`rclone copy`, which never deletes there, so a wiped bucket in the cluster can't wipe
+the copy (expire old objects with that bucket's lifecycle rules instead). Production
+refuses to render without it (`offsite.required`). Its keys are the
+`offsite-storage` Secret, in `environments/<env>/secrets/`. After losing the cluster,
+copy the backups back into the new cluster's backups bucket before restoring (the
+same `rclone copy`, the other way), and the uploads into its uploads bucket.
 
 Restoring (a mistake in the data, or a new cluster): CloudNativePG only bootstraps a
 cluster when it creates it, so restoring means a new cluster from the backups.

@@ -229,6 +229,23 @@ stringData:
   .dockerconfigjson: '{"auths":{"ghcr.io":{"auth":"<base64 of user:token>"}}}'
 ```
 
+Production's copy of its backups and uploads outside the cluster: S3-compatible storage
+you run on another machine, somewhere else (a RustFS or MinIO), with a bucket for it.
+Put its address, bucket and a folder in `offsite` in
+`deploy/environments/production/data.yaml` (the render fails in production until
+they're set: deploy/README.md, "Backups and restore"), and its keys in
+`deploy/environments/production/secrets/offsite-storage.sops.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: offsite-storage
+stringData:
+  accessKeyId: ""
+  secretAccessKey: ""
+```
+
 The other platform Secrets (the Cloudflare token for cert-manager and external-dns, the
 GitHub token for previews, Grafana's admin) are in the table in deploy/README.md.
 
