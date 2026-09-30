@@ -67,7 +67,7 @@ secrets are encrypted to its public key, see `deploy/README.md`). Then:
 
 ```sh
 cd infra/tofu/envs/k3s
-cp backend-staging.hcl.example backend-staging.hcl
+cp backend-staging.hcl.example backend-staging.hcl   # backend-production.hcl.example for production
 cp staging.tfvars.example staging.tfvars          # your machines, domain, …
 export CLOUDFLARE_API_TOKEN=…                     # see modules/cloudflare for its permissions
 export TF_VAR_ssh_private_key="$(cat ~/.ssh/boilerplate)"
