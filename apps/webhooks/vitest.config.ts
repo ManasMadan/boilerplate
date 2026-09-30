@@ -16,7 +16,16 @@ export default defineConfig({
   test: {
     coverage: coverage(),
     projects: [
-      { test: { name: "unit", include: ["src/**/*.test.ts"], env } },
+      {
+        test: {
+          name: "unit",
+          include: ["src/**/*.test.ts"],
+          // Some load the service's env or modules afresh; the first import of a file
+          // transforms all of nest-common, which takes seconds on a busy machine.
+          testTimeout: 15_000,
+          env,
+        },
+      },
       {
         test: {
           name: "integration",
