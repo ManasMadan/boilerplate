@@ -21,11 +21,10 @@ export function coverage(): CoverageOptions {
       "**/*.d.ts",
       "**/test/**",
       "**/e2e/**",
-      // Generated code, configs, and entry points that only start a process.
+      // Generated code and configs.
       "**/generated/**",
       "**/*.gen.ts",
       "**/*.config.{ts,mts}",
-      "**/src/main.ts",
     ],
     reporter: ["text-summary", "lcov"],
     // Written even when a test fails, so the merge still shows what the rest covered.
