@@ -408,6 +408,82 @@ describe("notifications service", () => {
     );
   });
 
+  it("tells a workspace's owners and admins when an API key or webhook endpoint is created", async () => {
+    const [owner, admin, member] = [
+      await newUser("Owner"),
+      await newUser("Admin"),
+      await newUser("Member"),
+    ];
+    const orgId = randomUUID();
+    await sql("INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)", [
+      orgId,
+    ]);
+    for (const [user, role] of [
+      [owner, "owner"],
+      [admin, "admin"],
+      [member, "member"],
+    ] as const) {
+      await sql("INSERT INTO auth.member (organization_id, user_id, role) VALUES ($1, $2, $3)", [
+        orgId,
+        user.id,
+        role,
+      ]);
+    }
+    const events = createProducer(
+      "events-notifications",
+      createRedis(process.env.REDIS_URL as string),
+    );
+    const created = [
+      {
+        name: "org.api_key_created.v1",
+        payload: { apiKeyId: randomUUID(), name: "CI", scopes: [] },
+      },
+      {
+        name: "webhook.endpoint_created.v1",
+        payload: { endpointId: randomUUID(), url: "https://example.com/in" },
+      },
+    ];
+    const ids: string[] = [];
+    for (const { name, payload } of created) {
+      const id = randomUUID();
+      ids.push(id);
+      await events.add(
+        "event",
+        {
+          id,
+          name,
+          key: randomUUID(),
+          payload,
+          orgId,
+          actorId: admin.id,
+          requestId: null,
+          occurredAt: new Date().toISOString(),
+          source: "api",
+        },
+        { jobId: id },
+      );
+    }
+    await events.close();
+    for (const id of ids) await settle(id, 2);
+
+    const subjects = async (email: string) => {
+      const res = await fetch(
+        `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      );
+      return ((await res.json()) as { messages: MailpitMessage[] }).messages
+        .map((m) => m.Subject)
+        .sort();
+    };
+    const expected = [
+      "A webhook endpoint was added to your workspace",
+      "An API key was created in your workspace",
+    ];
+    await waitForEmail(owner.email);
+    expect(await subjects(owner.email)).toEqual(expected);
+    expect(await subjects(admin.email)).toEqual(expected);
+    expect(await subjects(member.email)).toEqual([]);
+  });
+
   it("keeps each user's inbox private at the database level", async () => {
     const user = await newUser();
     await settle(await reminder(user.id), 2);

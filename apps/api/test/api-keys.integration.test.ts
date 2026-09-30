@@ -5,11 +5,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
-import { API_KEY_LIMIT, type ApiKeyScope } from "@repo/contracts/api";
+import { API_KEY_LIMIT, type ApiKeyScope, MAX_API_KEY_DAYS } from "@repo/contracts/api";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createSession,
+  editSession,
   type Harness,
   newEmail,
   newPassword,
@@ -166,6 +167,24 @@ describe("managing keys", () => {
     ]) {
       await expectError(create(input), "VALIDATION_FAILED");
     }
+  });
+
+  it("needs a recent sign-in to create one, so a stolen session can't leave a key behind", async () => {
+    const { session } = await signedInUser();
+    await editSession(harness, session, (stored) => {
+      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    });
+    await expectError(newKey({ session } as User), "FRESH_SESSION_REQUIRED");
+    // Managing existing ones doesn't.
+    await expect(session.rpc.apiKeys.list()).resolves.toEqual([]);
+  });
+
+  it("expires every key: the old null means the longest lifetime", async () => {
+    const { session } = await signedInUser();
+    const { apiKey } = await newKey({ session } as User);
+    const days = ((apiKey.expiresAt?.getTime() ?? 0) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(MAX_API_KEY_DAYS - 1);
+    expect(days).toBeLessThanOrEqual(MAX_API_KEY_DAYS);
   });
 
   it("is for owners and admins only", async () => {

@@ -353,6 +353,14 @@
       "app-connected": {
         "subject": "Se conectó una aplicación a tu cuenta",
         "body": "Una aplicación puede usar ahora los datos de tu cuenta en uno de tus espacios de trabajo, hasta que la desconectes en tus ajustes de seguridad."
+      },
+      "api-key-created": {
+        "subject": "Se creó una clave de API en tu espacio de trabajo",
+        "body": "Un administrador creó la clave de API «{label}». Puede actuar en el espacio de trabajo sin iniciar sesión hasta que caduque o se revoque."
+      },
+      "webhook-endpoint-created": {
+        "subject": "Se añadió un endpoint de webhook a tu espacio de trabajo",
+        "body": "Un administrador añadió un endpoint de webhook en {label}. Los eventos del espacio de trabajo se envían ahora allí."
       }
     },
     "webhookDisabled": {
@@ -708,7 +716,6 @@
       },
       "expiry": "Caduca",
       "expiryDays": "En {days} días",
-      "never": "Nunca",
       "create": "Crear clave",
       "created": "Clave de API creada",
       "key": {

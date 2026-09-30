@@ -15,8 +15,10 @@ export const API_KEY_NAME_MAX_LENGTH = 64;
 export const API_KEY_LIMIT = 50;
 /** Requests each key may make per minute (RATE_LIMITED beyond that). */
 export const API_KEY_REQUESTS_PER_MINUTE = 600;
-/** Choices offered when creating a key; null never expires. */
+/** Choices offered when creating a key. Every key expires, so a stolen session can't leave one for good. */
 export const API_KEY_EXPIRY_DAYS = [30, 90, 365] as const;
+/** The longest a key lives; `expiresInDays: null` (formerly "never") gets this. */
+export const MAX_API_KEY_DAYS = 365;
 
 export const apiKeySchema = z.object({
   id: z.uuid(),
@@ -39,7 +41,12 @@ export const createApiKeyInput = z.object({
     .min(1)
     .max(API_KEY_SCOPES.length)
     .refine((scopes) => new Set(scopes).size === scopes.length, { message: "duplicate" }),
-  expiresInDays: z.union([...API_KEY_EXPIRY_DAYS.map((days) => z.literal(days))]).nullable(),
+  expiresInDays: z
+    .union([...API_KEY_EXPIRY_DAYS.map((days) => z.literal(days))])
+    .nullable()
+    .describe(
+      `Days until the key expires. null is kept for old clients and means ${MAX_API_KEY_DAYS}.`,
+    ),
 });
 
 export const apiKeysContract = {

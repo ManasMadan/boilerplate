@@ -353,6 +353,14 @@
       "app-connected": {
         "subject": "An app was connected to your account",
         "body": "An app can now use your account's data in one of your workspaces, until you disconnect it in your security settings."
+      },
+      "api-key-created": {
+        "subject": "An API key was created in your workspace",
+        "body": "An admin created the API key “{label}”. It can act in the workspace without signing in until it expires or is revoked."
+      },
+      "webhook-endpoint-created": {
+        "subject": "A webhook endpoint was added to your workspace",
+        "body": "An admin added a webhook endpoint at {label}. The workspace's events are now sent there."
       }
     },
     "webhookDisabled": {
@@ -708,7 +716,6 @@
       },
       "expiry": "Expires",
       "expiryDays": "In {days} days",
-      "never": "Never",
       "create": "Create key",
       "created": "API key created",
       "key": {

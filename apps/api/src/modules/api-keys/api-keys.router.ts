@@ -2,9 +2,9 @@
 import type { Procedures } from "../../rpc/procedures";
 import type { ApiKeysService } from "./api-keys.service";
 
-export const apiKeysRouter = ({ orgAdmin }: Procedures, keys: ApiKeysService) => ({
+export const apiKeysRouter = ({ orgAdmin, freshAdmin }: Procedures, keys: ApiKeysService) => ({
   list: orgAdmin.apiKeys.list.handler(({ context }) => keys.list(context.orgId)),
-  create: orgAdmin.apiKeys.create.handler(({ context, input }) =>
+  create: freshAdmin.apiKeys.create.handler(({ context, input }) =>
     keys.create(context.orgId, context.userId, input),
   ),
   revoke: orgAdmin.apiKeys.revoke.handler(({ context, input }) =>

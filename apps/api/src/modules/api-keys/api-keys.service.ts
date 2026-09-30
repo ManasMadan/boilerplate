@@ -15,6 +15,7 @@ import {
   type ApiKey,
   type ApiKeyScope,
   type createApiKeyInput,
+  MAX_API_KEY_DAYS,
 } from "@repo/contracts/api";
 import type { OrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
@@ -32,6 +33,8 @@ export interface ApiKeyCaller {
   orgId: string;
   userId: string;
   role: OrgRole;
+  /** A key never counts as a fresh sign-in. */
+  signedInAt: null;
 }
 
 const metadataSchema = z.object({ createdBy: z.uuid() });
@@ -103,7 +106,8 @@ export class ApiKeysService {
         organizationId: orgId,
         userId,
         name: input.name,
-        expiresIn: input.expiresInDays === null ? null : input.expiresInDays * DAY_SECONDS,
+        // Every key expires: null (the contract's old "never") means the longest.
+        expiresIn: (input.expiresInDays ?? MAX_API_KEY_DAYS) * DAY_SECONDS,
         permissions: toPermissions(input.scopes),
         metadata: { createdBy: userId },
       },
@@ -164,7 +168,7 @@ export class ApiKeysService {
     if (!toScopes(result.key.permissions).includes(scope)) {
       throw new AppError("API_KEY_SCOPE_MISSING", { params: { scope } });
     }
-    return { apiKeyId: result.key.id, orgId, userId, role };
+    return { apiKeyId: result.key.id, orgId, userId, role, signedInAt: null };
   }
 
   private async present(rows: ApiKeyRow[]): Promise<ApiKey[]> {

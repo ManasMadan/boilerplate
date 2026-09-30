@@ -5,6 +5,7 @@
  *   base    error mapping (AppError → typed contract error) + client version gate
  *   authed  + a valid session (UNAUTHENTICATED otherwise); `context.user`, `context.session`
  *   fresh   + signed in within FRESH_SESSION_AGE ("sudo mode"; FRESH_SESSION_REQUIRED)
+ *   freshAdmin  orgAdmin, signed in within FRESH_SESSION_AGE
  *   inOrg   a signed-in member of the active organization, or an API key with the
  *           procedure's scope; `context.orgId` (tenant for row-level security),
  *           `context.userId`, `context.role`, `context.apiKeyId`
@@ -39,6 +40,17 @@ export interface OrgCaller {
   userId: string;
   role: OrgRole;
   apiKeyId: string | null;
+  /** When the session signed in; null for an API key, which never counts as fresh. */
+  signedInAt: Date | null;
+}
+
+/**
+ * Throws unless the caller signed in within FRESH_SESSION_AGE ("sudo mode"): for what
+ * outlives a stolen session (API keys, webhook endpoints), as for account changes.
+ */
+export function requireFresh(caller: Pick<OrgCaller, "signedInAt">) {
+  if (!caller.signedInAt || Date.now() - caller.signedInAt.getTime() >= FRESH_SESSION_AGE * 1000)
+    throw new AppError("FRESH_SESSION_REQUIRED");
 }
 
 type ErrorParams = ErrorData["params"];
@@ -146,7 +158,13 @@ export function createProcedures(
     if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
     const role = await memberships.role(orgId, result.user.id);
     if (!role) throw new AppError("NO_ACTIVE_ORGANIZATION");
-    return { orgId, role, userId: result.user.id, apiKeyId: null };
+    return {
+      orgId,
+      role,
+      userId: result.user.id,
+      apiKeyId: null,
+      signedInAt: new Date(result.session.createdAt),
+    };
   }
 
   const inOrg = base.use(async ({ context, next, procedure }) => {
@@ -161,7 +179,13 @@ export function createProcedures(
     return next();
   });
 
-  return { os, base, authed, fresh, inOrg, orgAdmin };
+  /** Owners and admins who signed in recently (see requireFresh). */
+  const freshAdmin = orgAdmin.use(async ({ context, next }) => {
+    requireFresh(context);
+    return next();
+  });
+
+  return { os, base, authed, fresh, inOrg, orgAdmin, freshAdmin };
 }
 
 export type Procedures = ReturnType<typeof createProcedures>;

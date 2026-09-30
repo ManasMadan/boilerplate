@@ -105,6 +105,19 @@ const templates = {
         ...payload.data,
       }),
   },
+  "workspace.access-created": {
+    category: "security",
+    email: (payload, { recipient, t }) =>
+      renderEmail(SecurityAlertEmail, securityAlertSubject, {
+        locale: recipient.locale,
+        t,
+        event: payload.data.kind === "api-key" ? "api-key-created" : "webhook-endpoint-created",
+        label: payload.data.label,
+        securityUrl: url(
+          payload.data.kind === "api-key" ? "/settings/api-keys" : "/settings/webhooks",
+        ),
+      }),
+  },
   "webhooks.endpoint-disabled": {
     category: "workspace",
     inApp: (payload) => ({

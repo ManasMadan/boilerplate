@@ -182,8 +182,6 @@ function KeyRow({ apiKey }: { apiKey: ApiKey }) {
   );
 }
 
-const NEVER = "never";
-
 function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
   const t = useTranslations("workspace.apiKeys");
   const errorMessage = useApiErrorMessage();
@@ -192,13 +190,11 @@ function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
     resolver: zodResolver(createApiKeyInput),
     defaultValues: { name: "", scopes: [], expiresInDays: 90 },
   });
-  const expiryItems = [
-    ...API_KEY_EXPIRY_DAYS.map((days) => ({
-      value: String(days),
-      label: t("expiryDays", { days }),
-    })),
-    { value: NEVER, label: t("never") },
-  ];
+  // Every key expires (a stolen session can't leave one behind for good).
+  const expiryItems = API_KEY_EXPIRY_DAYS.map((days) => ({
+    value: String(days),
+    label: t("expiryDays", { days }),
+  }));
 
   return (
     <Card>
@@ -260,10 +256,8 @@ function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
                 <Field>
                   <FieldLabel htmlFor="api-key-expiry">{t("expiry")}</FieldLabel>
                   <Select
-                    value={field.value === null ? NEVER : String(field.value)}
-                    onValueChange={(value) =>
-                      value && field.onChange(value === NEVER ? null : Number(value))
-                    }
+                    value={String(field.value)}
+                    onValueChange={(value) => value && field.onChange(Number(value))}
                     items={expiryItems}
                   >
                     <SelectTrigger id="api-key-expiry" className="w-full sm:w-48">

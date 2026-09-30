@@ -62,6 +62,7 @@ turned off.
 | `auth.security-alert` | security | email, sms | a sensitive account change ([auth.md](auth.md)) |
 | `org.invitation` | invitations | email | someone is invited to a workspace |
 | `billing.payment-failed` | billing | in_app, email | a renewal fails (owners and admins) |
+| `workspace.access-created` | security | email | an API key or webhook endpoint was created (owners and admins, from `org.api_key_created.v1` and `webhook.endpoint_created.v1`) |
 | `webhooks.endpoint-disabled` | workspace | in_app, email, push | an endpoint was disabled for failing (owners and admins, from the `webhook.endpoint_disabled.v1` event) |
 | `todo.reminder` | activity | in_app, email, push | the example bulk template; nothing produces it yet |
 

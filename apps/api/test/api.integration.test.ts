@@ -592,6 +592,29 @@ describe("organizations and the audit trail", () => {
 describe("webhook endpoints", () => {
   const url = "http://127.0.0.1:9/hook";
 
+  it("needs a recent sign-in to add one or point it elsewhere", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({
+      url,
+      events: ["todo.created.v1"],
+    });
+    await editSession(harness, session, (stored) => {
+      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    });
+    await expectError(
+      session.rpc.webhooks.createEndpoint({ url, events: ["todo.created.v1"] }),
+      "FRESH_SESSION_REQUIRED",
+    );
+    await expectError(
+      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url: "http://127.0.0.1:9/other" }),
+      "FRESH_SESSION_REQUIRED",
+    );
+    // Anything else about it doesn't.
+    await expect(
+      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, enabled: false }),
+    ).resolves.toMatchObject({ url });
+  });
+
   it("returns the signing secret once and keeps it encrypted at rest", async () => {
     const { session } = await signedInUser();
     const created = await session.rpc.webhooks.createEndpoint({ url, events: ["todo.created.v1"] });

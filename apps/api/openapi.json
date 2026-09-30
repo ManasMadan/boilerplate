@@ -36550,7 +36550,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Days until the key expires. null is kept for old clients and means 365."
                   }
                 },
                 "required": [

@@ -85,6 +85,13 @@ audited (`org.api_key_created.v1`, `org.api_key_revoked.v1`).
 - The key travels in `x-api-key` and acts as the admin who created it, with their current
   role, only in its workspace. It stops working when revoked, expired or when its creator
   leaves.
+- A key outlives the session that made it, so creating one needs a recent sign-in (like
+  account changes: `FRESH_SESSION_REQUIRED` two hours after signing in), every key expires (at most
+  365 days; `expiresInDays: null` from older clients means the longest), and the
+  workspace's owners and admins get an email when one is created. Adding a webhook
+  endpoint or changing its URL follows the same rules. A password reset leaves keys
+  alone: legitimate integrations would break on every reset, and the creation email is
+  what tells owners to revoke one they don't recognise.
 - It may only call procedures whose contract names a scope it has:
 
   ```ts

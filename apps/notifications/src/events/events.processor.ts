@@ -27,6 +27,19 @@ function notificationFor(event: EventEnvelope): NotificationPayload | undefined 
         data: { endpointId: payload.endpointId, url: payload.url },
       };
     }
+    case "org.api_key_created.v1":
+    case "webhook.endpoint_created.v1": {
+      if (!event.orgId) return undefined;
+      const apiKey = event.name === "org.api_key_created.v1";
+      const label = apiKey
+        ? events["org.api_key_created.v1"].parse(event.payload).name
+        : events["webhook.endpoint_created.v1"].parse(event.payload).url;
+      return {
+        template: "workspace.access-created",
+        to: { orgId: event.orgId, roles: ["owner", "admin"] },
+        data: { kind: apiKey ? "api-key" : "webhook-endpoint", label },
+      };
+    }
     default:
       return undefined;
   }

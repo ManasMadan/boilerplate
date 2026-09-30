@@ -108,6 +108,17 @@ export const notificationPayload = z.discriminatedUnion("template", [
     }),
   }),
   z.object({
+    // Someone created a way into the workspace that outlives their session: its owners
+    // and admins hear about it, so a stolen session can't leave one behind unseen.
+    template: z.literal("workspace.access-created"),
+    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
+    data: z.object({
+      kind: z.enum(["api-key", "webhook-endpoint"]),
+      /** The key's name or the endpoint's URL. */
+      label: z.string(),
+    }),
+  }),
+  z.object({
     template: z.literal("webhooks.endpoint-disabled"),
     // Everyone in the organization with one of these roles.
     to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
@@ -290,6 +301,7 @@ export const notificationQueue = {
   "org.invitation": "notifications-critical",
   "auth.security-alert": "notifications-critical",
   "webhooks.endpoint-disabled": "notifications-critical",
+  "workspace.access-created": "notifications-critical",
   "billing.payment-failed": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
@@ -317,7 +329,10 @@ export const eventSubscribers = {
     name === "org.member_removed.v1",
   // Events that notify someone, and email feedback (bounces, complaints) to suppress.
   "events-notifications": (name: string) =>
-    name === "webhook.endpoint_disabled.v1" || name === "email.feedback_received.v1",
+    name === "webhook.endpoint_disabled.v1" ||
+    name === "org.api_key_created.v1" ||
+    name === "webhook.endpoint_created.v1" ||
+    name === "email.feedback_received.v1",
   "events-realtime": (name: string) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: string) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;
