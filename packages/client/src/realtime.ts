@@ -6,6 +6,11 @@
  * Messages only say what changed, so each maps to a refetch of the affected queries.
  * After any reconnect everything live is refetched too, since messages may have been
  * missed while disconnected.
+ *
+ * The reconnect loop is written out rather than oRPC's ClientRetryPlugin, which does
+ * retry streams: the plugin would sit on every call's link for this one stream, and
+ * its wait between attempts ignores the abort signal, so an unmounted tab would keep a
+ * timer (up to 30s) and then try once more.
  */
 import type { RealtimeMessage } from "@repo/contracts/realtime";
 import { useQueryClient } from "@tanstack/react-query";
