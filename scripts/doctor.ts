@@ -26,15 +26,35 @@ console.log("\nTools");
 const wantedNode = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim();
 const node = await version(["node", "--version"]);
 if (!node) problem("Node is not installed. Install it with nvm: `nvm install` (reads .nvmrc).");
-else if (!node.startsWith(`v${wantedNode}`))
+else if (node.match(/^v(\d+)\./)?.[1] !== wantedNode)
   problem(`Node ${node} found, ${wantedNode} expected. Run \`nvm use\`.`);
 else ok(`Node ${node}`);
 
-ok(`Bun ${Bun.version}`);
+// package.json pins the Bun that CI, the images and bun.lock use (packageManager), and
+// the oldest one the scripts work with (engines).
+const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+  packageManager: string;
+  engines: { bun: string };
+};
+const pinnedBun = manifest.packageManager.replace(/^bun@/, "");
+if (!Bun.semver.satisfies(Bun.version, manifest.engines.bun))
+  problem(
+    `Bun ${Bun.version} found, ${manifest.engines.bun} needed. Run \`bun upgrade\` (CI uses ${pinnedBun}).`,
+  );
+else if (Bun.version !== pinnedBun)
+  warn(
+    `Bun ${Bun.version}; CI and the images use ${pinnedBun} (\`bun upgrade --version ${pinnedBun}\`).`,
+  );
+else ok(`Bun ${Bun.version}`);
 
+// Not only for the Python service: codegen runs it (turbo's gen → @repo/ai-client →
+// @repo/ai#gen), and setup, dev, check-types and test all depend on codegen.
 const uv = await version(["uv", "--version"]);
 if (uv) ok(uv);
-else warn("uv is not installed (only needed for the Python service: `brew install uv`).");
+else
+  problem(
+    "uv is not installed. Setup, `bun dev`, types and tests need it (the AI service's code generation): `brew install uv`, or see https://docs.astral.sh/uv/.",
+  );
 
 const docker = await version(["docker", "info", "--format", "{{.ServerVersion}}"]);
 if (docker) ok(`Docker ${docker}`);
@@ -48,7 +68,10 @@ else {
   const missing = [...example.keys()].filter((key) => !env.has(key));
   const unknown = [...env.keys()].filter((key) => !example.has(key));
   const placeholders = [...env].filter(([, value]) => PLACEHOLDER.test(value)).map(([key]) => key);
-  if (missing.length) problem(`Missing in .env (copy from .env.example): ${missing.join(", ")}`);
+  if (missing.length)
+    problem(
+      `Missing in .env: ${missing.join(", ")}. Run \`bun run setup\`: it adds them, generating the secrets.`,
+    );
   if (unknown.length)
     warn(`In .env but not in .env.example (renamed or removed?): ${unknown.join(", ")}`);
   if (placeholders.length)
