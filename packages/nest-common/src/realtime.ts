@@ -17,12 +17,16 @@
  * don't change.
  */
 import { EventEmitter } from "node:events";
-import { REALTIME_REDIS_PREFIX } from "@repo/contracts/realtime";
 import type { Redis } from "ioredis";
 import type { z } from "zod";
 
-// The Python service publishes on the same channels, named from this constant.
-const PREFIX = REALTIME_REDIS_PREFIX;
+/**
+ * Redis channel prefix. The Python service publishes on the same channels, named from
+ * @repo/contracts' REALTIME_REDIS_PREFIX (which plumbing can't import); apps/api's
+ * realtime-prefix.test.ts keeps the two equal.
+ */
+export const REALTIME_CHANNEL_PREFIX = "realtime:";
+const PREFIX = REALTIME_CHANNEL_PREFIX;
 /** Messages a slow stream may fall behind by before the oldest are dropped. */
 const MAX_BUFFERED = 100;
 
