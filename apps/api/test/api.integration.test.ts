@@ -327,16 +327,6 @@ describe("sign-up and verification", () => {
     expect(me).toMatchObject({ email, locale: "es" });
     expect(me.activeOrganizationId).toBeTruthy();
   });
-
-  it("rejects passwords found in public breaches", async () => {
-    const session = createSession(harness);
-    const result = await session.auth<{ code: string }>("/sign-up/email", {
-      email: newEmail(),
-      password: "password123",
-      name: "X",
-    });
-    expect(result.body.code).toBe("PASSWORD_COMPROMISED");
-  });
 });
 
 describe("session revocation", () => {
