@@ -10,6 +10,7 @@
  *
  *   bun run test:coverage          run every suite with coverage (writes the reports)
  *   bun scripts/coverage.ts        merge them, check every file, write coverage/merged.lcov
+ *   bun scripts/coverage.ts apps/web packages/ui   check only the files under these paths
  *
  * CI then runs diff-cover on coverage/merged.lcov, so a pull request can't add a line
  * without a test either.
@@ -141,10 +142,14 @@ if (import.meta.main) {
   mkdirSync(join(ROOT, "coverage"), { recursive: true });
   const measured = new Map([...coverage].filter(([path]) => isSource(path)));
   writeFileSync(join(ROOT, "coverage/merged.lcov"), `${toLcov(measured)}\n`);
+  const scopes = process.argv.slice(2);
+  const inScope = (path: string) =>
+    scopes.length === 0 || scopes.some((scope) => path.startsWith(scope.replace(/\/?$/, "/")));
+  for (const path of measured.keys()) if (!inScope(path)) measured.delete(path);
 
   // A source file no test ever loads is in no report at all: it counts as uncovered.
   const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: ROOT }).stdout.toString().split("\n");
-  const unloaded = tracked.filter((path) => isSource(path) && !measured.has(path));
+  const unloaded = tracked.filter((path) => isSource(path) && inScope(path) && !measured.has(path));
 
   const exceptions = listedFiles(ROOT);
   for (const path of unloaded.filter((path) => !exceptions.has(path))) {
