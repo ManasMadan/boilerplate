@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { TodoService } from "../modules/todo";
 import { createMcpServer } from "./mcp.server";
 
-async function callListTodos(list: () => Promise<unknown>) {
+async function connect(scopes: string[], list: () => Promise<unknown> = async () => []) {
   const logError = vi.fn();
   const server = createMcpServer(
-    { userId: "u", orgId: "o", clientId: "c", scopes: new Set(["todos:read"]), token: "t" },
+    { userId: "u", orgId: "o", clientId: "c", scopes: new Set(scopes), token: "t" },
     {
       todos: { list } as unknown as TodoService,
       describeError: async (error) => `described ${error.code}`,
@@ -20,9 +20,13 @@ async function callListTodos(list: () => Promise<unknown>) {
   await server.connect(serverSide);
   const client = new Client({ name: "test", version: "1" });
   await client.connect(clientSide);
-  const result = await runWithContext({ requestId: "req-1" }, () =>
-    client.callTool({ name: "list_todos", arguments: { limit: 5 } }),
-  );
+  return { client, logError };
+}
+
+async function callListTodos(list: () => Promise<unknown>, requestId: string | null = "req-1") {
+  const { client, logError } = await connect(["todos:read"], list);
+  const call = () => client.callTool({ name: "list_todos", arguments: { limit: 5 } });
+  const result = await (requestId ? runWithContext({ requestId }, call) : call());
   await client.close();
   return { result, logError };
 }
@@ -49,5 +53,22 @@ describe("MCP tool failures", () => {
     const text = JSON.stringify(result);
     expect(text).toContain("INTERNAL: the tool failed");
     expect(text).not.toContain("secret");
+  });
+
+  it("have no request id to give outside a request", async () => {
+    const { result } = await callListTodos(async () => {
+      throw new Error("boom");
+    }, null);
+    expect(result).toMatchObject({ content: [{ text: "INTERNAL: the tool failed." }] });
+  });
+});
+
+describe("MCP tools", () => {
+  it("are only those the token's scopes allow", async () => {
+    const { client } = await connect(["todos:write"]);
+    const { tools } = await client.listTools();
+    await client.close();
+    expect(tools.map((tool) => tool.name)).not.toContain("list_todos");
+    expect(tools.map((tool) => tool.name)).toContain("add_todo");
   });
 });

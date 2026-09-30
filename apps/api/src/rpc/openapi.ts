@@ -78,7 +78,7 @@ type Spec = Awaited<ReturnType<OpenAPIGenerator["generate"]>>;
  * Every operation takes a signed-in session; those whose contract names an API key scope
  * take a key with that scope too, and say so.
  */
-function markApiKeyOperations(spec: Spec, router: unknown) {
+export function markApiKeyOperations(spec: Spec, router: unknown) {
   if (isContractProcedure(router)) {
     const { route, meta } = router["~orpc"];
     const operation =

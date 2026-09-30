@@ -18,8 +18,9 @@ const toMe = (user: UserRow, activeOrganizationId: string | null | undefined) =>
   name: user.name,
   email: user.email,
   image: user.image ?? null,
-  locale: user.locale ?? "en",
-  timezone: user.timezone ?? "UTC",
+  // NOT NULL columns; better-auth types its optional fields as nullable.
+  locale: user.locale as string,
+  timezone: user.timezone as string,
   activeOrganizationId: activeOrganizationId ?? null,
   phoneNumber: user.phoneNumber ?? null,
 });

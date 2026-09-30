@@ -77,6 +77,13 @@ describe("MCP access tokens", () => {
     expect(await verify(await sign(key, { azp: undefined }))).toMatchObject({ ok: false });
   });
 
+  it("grant no scopes to a token that names none", async () => {
+    const key = await keyPair("k1");
+    const { verify } = verifierFor(() => ({ keys: [key.jwk] }));
+    const result = await verify(await sign(key, { scope: undefined }));
+    expect(result.ok && [...result.caller.scopes]).toEqual([]);
+  });
+
   it("refuse a token whose grant no longer stands", async () => {
     const key = await keyPair("k1");
     const { verify } = verifierFor(() => ({ keys: [key.jwk] }), false);

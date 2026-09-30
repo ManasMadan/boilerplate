@@ -109,9 +109,9 @@ const VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/;
  * gate that let unreadable versions through would let any client skip it.
  */
 function isOlderVersion(version: string, minimum: string) {
-  const [a, b] = [VERSION.exec(version), VERSION.exec(minimum)];
+  // The environment only accepts major.minor.patch for the minimum (src/env.ts).
+  const [a, b] = [VERSION.exec(version), VERSION.exec(minimum) as RegExpExecArray];
   if (!a) return true;
-  if (!b) throw new Error(`MINIMUM_CLIENT_VERSION isn't major.minor.patch: ${minimum}`);
   for (let i = 1; i <= 3; i++) {
     const diff = Number(a[i]) - Number(b[i]);
     if (diff !== 0) return diff < 0;
@@ -142,7 +142,8 @@ export function createProcedures(
   const authed = base.use(async ({ context, next }) => {
     const result = await auth.api.getSession({ headers: context.headers });
     if (!result) throw new AppError("UNAUTHENTICATED");
-    updateContext({ userId: result.user.id, locale: result.user.locale ?? undefined });
+    // The column is NOT NULL; better-auth types optional fields as nullable.
+    updateContext({ userId: result.user.id, locale: result.user.locale as string });
     return next({ context: { user: result.user, session: result.session } });
   });
 
@@ -168,7 +169,7 @@ export function createProcedures(
     }
     const result = await auth.api.getSession({ headers });
     if (!result) throw new AppError("UNAUTHENTICATED");
-    updateContext({ userId: result.user.id, locale: result.user.locale ?? undefined });
+    updateContext({ userId: result.user.id, locale: result.user.locale as string });
     const orgId = result.session.activeOrganizationId;
     if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
     const role = await memberships.role(orgId, result.user.id);

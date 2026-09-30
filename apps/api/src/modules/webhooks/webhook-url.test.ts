@@ -9,6 +9,7 @@ const dns = vi.hoisted(() => ({
 vi.mock("node:dns/promises", () => ({ lookup: () => dns.answer() }));
 vi.mock("../../env", () => ({ env: { NODE_ENV: "test", WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: [] } }));
 const { assertDeliverableUrl } = await import("./webhook-url");
+const { env } = await import("../../env");
 
 const dnsError = (code: string) => Object.assign(new Error(code), { code });
 const resolvesTo = (address: string) => {
@@ -44,5 +45,18 @@ describe("a webhook endpoint's URL", () => {
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("UPSTREAM_UNAVAILABLE");
     expect((error as AppError).cause).toBe(failure);
+  });
+
+  it("must be https in production", async () => {
+    resolvesTo("93.184.216.34");
+    Object.assign(env, { NODE_ENV: "production" });
+    try {
+      await expect(assertDeliverableUrl("http://example.com/hook")).rejects.toMatchObject({
+        code: "WEBHOOK_URL_NOT_ALLOWED",
+      });
+      await expect(assertDeliverableUrl("https://example.com/hook")).resolves.toBeUndefined();
+    } finally {
+      Object.assign(env, { NODE_ENV: "test" });
+    }
   });
 });

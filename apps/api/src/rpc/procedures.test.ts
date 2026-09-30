@@ -1,3 +1,4 @@
+import { ORPCError, ValidationError } from "@orpc/server";
 import { Prisma } from "@repo/db";
 import { AppError } from "@repo/nest-common";
 import { describe, expect, it, vi } from "vitest";
@@ -35,5 +36,42 @@ describe("errors from procedures", () => {
     });
     expect(toContractError(unique, log).code).toBe("CONFLICT");
     expect(log).not.toHaveBeenCalledWith(expect.anything(), "error");
+  });
+
+  it("sends validation problems as codes and paths, never English messages", () => {
+    const issues = [
+      { message: "Too short", path: ["items", { key: "title" }, 0], code: "too_small" },
+      { message: "Something's off" },
+    ];
+    const invalid = new ORPCError("BAD_REQUEST", {
+      cause: new ValidationError({ message: "Input validation failed", issues }),
+    });
+    const mapped = toContractError(invalid, vi.fn());
+    expect(mapped.code).toBe("VALIDATION_FAILED");
+    expect(mapped.data).toMatchObject({
+      params: {},
+      issues: [
+        { path: ["items", "title", 0], code: "too_small" },
+        { path: [], code: "invalid" },
+      ],
+    });
+  });
+
+  it("keeps an oRPC error with a catalog code, and its params", () => {
+    const log = vi.fn();
+    const bare = toContractError(new ORPCError("TODO_NOT_FOUND", { status: 404 }), log);
+    expect(bare).toMatchObject({ code: "TODO_NOT_FOUND", status: 404, data: { params: {} } });
+    const withParams = toContractError(
+      new ORPCError("RATE_LIMITED", { data: { params: { retryAfterSeconds: 3 } } }),
+      log,
+    );
+    expect(withParams.data).toMatchObject({ params: { retryAfterSeconds: 3 } });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("hides an oRPC error with a code the catalog doesn't have", () => {
+    const log = vi.fn();
+    expect(toContractError(new ORPCError("TEAPOT"), log).code).toBe("INTERNAL");
+    expect(log).toHaveBeenCalledWith(expect.any(ORPCError), "error");
   });
 });

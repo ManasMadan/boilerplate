@@ -1,8 +1,34 @@
+import { oc } from "@orpc/contract";
 import { webhookEvents } from "@repo/contracts/events";
 import { describe, expect, it } from "vitest";
-import { openApiDocument } from "./openapi";
+import { markApiKeyOperations, openApiDocument } from "./openapi";
 
-describe("the OpenAPI document", () => {
+describe("the REST document", () => {
+  it("says which operations take an API key, and with which scope", async () => {
+    const spec = await openApiDocument({ version: "1", serverUrl: "/api/v1" });
+    expect(spec.paths?.["/todos"]?.get).toMatchObject({
+      security: [{ session: [] }, { apiKey: [] }],
+      description: "API keys need the `todos:read` scope.",
+    });
+    expect(spec.paths?.["/me"]?.get?.security).toEqual([{ session: [] }]);
+  });
+
+  it("adds the scope to an operation's own description, and skips what it doesn't document", () => {
+    const router = {
+      described: oc.route({ method: "GET", path: "/a" }).meta({ apiKeyScope: "todos:read" }),
+      undocumented: oc.route({ method: "GET", path: "/missing" }),
+      unrouted: oc.meta({}),
+      version: "not a procedure",
+    };
+    const spec = { openapi: "3.1.1", info: { title: "t", version: "1" } };
+    const paths = { "/a": { get: { description: "Lists things." } } };
+    markApiKeyOperations({ ...spec, paths } as never, router);
+    expect(paths["/a"].get).toEqual({
+      description: "Lists things.\n\nAPI keys need the `todos:read` scope.",
+      security: [{ session: [] }, { apiKey: [] }],
+    });
+  });
+
   it("describes the body of every event customers can subscribe to", async () => {
     const spec = await openApiDocument({ version: "1.0.0", serverUrl: "http://localhost" });
     expect(Object.keys(spec.webhooks ?? {}).sort()).toEqual([...webhookEvents].sort());
