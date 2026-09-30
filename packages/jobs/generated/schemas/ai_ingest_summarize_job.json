@@ -1,5 +1,5 @@
 {
-  "title": "AiIngestJob",
+  "title": "AiIngestSummarizeJob",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
@@ -15,8 +15,7 @@
         "orgId": {
           "type": "string"
         }
-      },
-      "additionalProperties": false
+      }
     },
     "payload": {
       "type": "object",
@@ -33,13 +32,11 @@
       "required": [
         "documentId",
         "orgId"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [
     "meta",
     "payload"
-  ],
-  "additionalProperties": false
+  ]
 }

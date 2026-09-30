@@ -59,6 +59,9 @@ typeCheckingMode = "strict"
 pythonVersion = "3.14"
 include = ["app", "tests", "evals"]
 reportUnusedCallResult = false
+# A job or code added on the TypeScript side regenerates a Literal; every `match` over it
+# must then handle the new value.
+reportMatchNotExhaustive = true
 reportAny = false
 reportExplicitAny = false
 # Tests drive untyped third-party clients (redis-py, TestClient internals) directly;

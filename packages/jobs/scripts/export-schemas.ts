@@ -5,40 +5,98 @@
  * apps/ai turns them into Pydantic models, so a payload is defined once, in zod, and
  * both languages validate the same shape; CI fails if the committed files drift.
  *
- * Add an entry here when a Python service produces or consumes a queue or message.
+ * Add a queue to `shared` when a Python service produces or consumes it: every job on
+ * it gets its own schema, and its job names and settings come along.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { realtimeMessage } from "@repo/contracts/realtime";
 import { z } from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
 const out = join(import.meta.dirname, "..", "generated", "schemas");
+// Start empty, so a schema that's no longer exported doesn't linger as a stale file.
+rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-// File name (the Python module) → title (the Pydantic class) and schema.
-const schemas: Record<string, [string, z.ZodType]> = {
-  ai_ingest_job: [
-    "AiIngestJob",
-    z.object({ meta: jobMeta, payload: queues["ai-ingest"].jobs.ingest }),
-  ],
-  realtime_message: ["RealtimeMessage", realtimeMessage],
-};
+/** The queues Python uses. */
+const shared = ["ai-ingest"] as const;
 
-for (const [file, [title, schema]] of Object.entries(schemas)) {
+/**
+ * What Python needs of a queue's options. Strict, so an option added to one of these
+ * queues in queues.ts fails here until it's added (and so reaches Python) too.
+ */
+const keep = z.union([
+  z.boolean(),
+  z.number().int(),
+  z
+    .strictObject({ age: z.number().int().optional(), count: z.number().int().optional() })
+    .meta({ title: "KeepJobs" }),
+]);
+const queueSetting = z.strictObject({
+  prefix: z.string(),
+  options: z
+    .strictObject({
+      attempts: z.number().int(),
+      backoff: z
+        .strictObject({ type: z.string(), delay: z.number().int().optional() })
+        .meta({ title: "Backoff" }),
+      removeOnComplete: keep,
+      removeOnFail: keep,
+    })
+    .meta({ title: "JobOptions" }),
+});
+
+const snake = (name: string) => name.replaceAll("-", "_");
+const pascal = (name: string) =>
+  name.replace(/(^|-)(\w)/g, (_match, _dash: string, letter: string) => letter.toUpperCase());
+
+/**
+ * File name (the Python module) → title (the Pydantic class), schema, and which side of
+ * zod it describes. Python reads jobs, so those are "input": optional fields a newer
+ * producer adds, or keys zod would strip, don't make an older worker reject the job.
+ */
+const schemas: Record<string, { title: string; schema: z.ZodType; io: "input" | "output" }> = {
+  realtime_message: { title: "RealtimeMessage", schema: realtimeMessage, io: "output" },
+  queue_setting: { title: "QueueSetting", schema: queueSetting, io: "output" },
+  shared_queue_name: { title: "SharedQueueName", schema: z.enum(shared), io: "output" },
+};
+for (const queue of shared) {
+  const jobs = queues[queue].jobs;
+  schemas[`${snake(queue)}_job_name`] = {
+    title: `${pascal(queue)}JobName`,
+    schema: z.enum(Object.keys(jobs)),
+    io: "output",
+  };
+  for (const [job, payload] of Object.entries(jobs)) {
+    schemas[`${snake(queue)}_${snake(job)}_job`] = {
+      title: `${pascal(queue)}${pascal(job)}Job`,
+      schema: z.object({ meta: jobMeta, payload }),
+      io: "input",
+    };
+  }
+}
+
+for (const [file, { title, schema, io }] of Object.entries(schemas)) {
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
+    io,
     // A uuid's format says it all; the regex zod adds too can't apply to Python's UUID type.
     override: ({ jsonSchema }) => {
       if (jsonSchema.format === "uuid") delete jsonSchema.pattern;
+      // zod bounds integers to JavaScript's safe range; Python's ints have no such limit.
+      if (jsonSchema.minimum === Number.MIN_SAFE_INTEGER) delete jsonSchema.minimum;
+      if (jsonSchema.maximum === Number.MAX_SAFE_INTEGER) delete jsonSchema.maximum;
     },
   });
   writeFileSync(join(out, `${file}.json`), `${JSON.stringify({ title, ...json }, null, 2)}\n`);
 }
 
 // The queues Python uses, with the same Redis prefix and job options as TypeScript's.
-const shared = ["ai-ingest"] as const;
 const settings = Object.fromEntries(
-  shared.map((name) => [name, { prefix: queuePrefix(name), options: queues[name].options }]),
+  shared.map((name) => [
+    name,
+    queueSetting.parse({ prefix: queuePrefix(name), options: queues[name].options }),
+  ]),
 );
 writeFileSync(join(out, "..", "queue-settings.json"), `${JSON.stringify(settings, null, 2)}\n`);

@@ -84,8 +84,11 @@ real model, set `AI_MODEL`, `AI_EMBEDDINGS` and the provider's key (`ANTHROPIC_A
 ## The worker
 
 `app/worker.py` consumes `ai-ingest` (`ingest` and `summarize` jobs), validating each
-against the generated `AiIngestJob` model and binding the request id it was queued with
-to its logs. A failure throws, and BullMQ retries with the same backoff the TypeScript
+against its own generated model (`app/contracts/ai_ingest_<job>_job.py`) and binding the
+request id it was queued with to its logs. The models ignore fields they don't know, so
+a newer producer can add an optional field without an older worker rejecting the job,
+and the job names are a generated `Literal`: a job added in `packages/jobs` is a type
+error in the worker until it's handled. A failure throws, and BullMQ retries with the same backoff the TypeScript
 side uses (the queue settings are generated from `packages/jobs`). It publishes a live
 nudge to the organization when a document changes, so the web app refreshes.
 

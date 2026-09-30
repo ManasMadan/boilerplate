@@ -13,7 +13,6 @@ from redis.asyncio import Redis
 from sqlalchemy import delete, func, select, update
 
 from app.chunking import chunk
-from app.contracts.ai_ingest_job import Meta
 from app.db.models import Document, DocumentChunk
 from app.db.session import tenant
 from app.embeddings import Embedder
@@ -73,9 +72,7 @@ class Documents:
             session.add(document)
             await session.flush()
             await session.refresh(document)
-        await self._queue.add(
-            document.id, org_id, Meta(requestId=request_id, userId=str(user_id), orgId=str(org_id))
-        )
+        await self._queue.add("ingest", document.id, org_id, request_id=request_id, user_id=user_id)
         await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
         return document
 
@@ -99,7 +96,14 @@ class Documents:
                 raise AppError("DOCUMENT_NOT_FOUND", 404)
         await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
 
-    async def index(self, org_id: UUID, document_id: UUID, meta: Meta | None = None) -> None:
+    async def index(
+        self,
+        org_id: UUID,
+        document_id: UUID,
+        *,
+        request_id: str | None = None,
+        user_id: UUID | None = None,
+    ) -> None:
         """Splits and embeds a document (the ingest job). Safe to run again: it replaces
         the passages it wrote before."""
         async with tenant(org_id) as session:
@@ -148,7 +152,9 @@ class Documents:
             )
         await publish_to_org(self._redis, org_id, {"type": "documents.changed"})
         if self._summaries:
-            await self._queue.add(document_id, org_id, meta or Meta(), name="summarize")
+            await self._queue.add(
+                "summarize", document_id, org_id, request_id=request_id, user_id=user_id
+            )
 
     async def summarize(self, org_id: UUID, document_id: UUID, user_id: UUID | None) -> None:
         """Writes the document's summary (the summarize job). A workspace past its monthly

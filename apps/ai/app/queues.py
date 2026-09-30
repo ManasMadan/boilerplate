@@ -1,46 +1,75 @@
-"""The queues this service uses, configured from packages/jobs (prefix and job options
-come from app/contracts/queue_settings.json, generated from the TypeScript definitions,
-so both languages agree on where jobs live and how they retry)."""
+"""The queues this service uses, configured from packages/jobs: the queue and job names,
+each job's payload model, the Redis prefix and the job options are all generated from
+the TypeScript definitions (app/contracts), so both languages agree on where jobs live,
+what they carry and how they retry.
+"""
 
-import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Protocol
 from uuid import UUID
 
-# bullmq ships no type stubs: its calls are confined to this module, behind typed wrappers.
+# bullmq's source is typed but ships without a py.typed marker, so pyright treats it as
+# stub-less; its calls are confined to this module, behind typed wrappers.
 from bullmq import Queue, Worker  # pyright: ignore[reportMissingTypeStubs]
-
-from app.contracts.ai_ingest_job import AiIngestJob, Meta, Payload
-
-SETTINGS: dict[str, dict[str, Any]] = json.loads(
-    (Path(__file__).parent / "contracts" / "queue_settings.json").read_text()
+from bullmq.types import (  # pyright: ignore[reportMissingTypeStubs]
+    JobOptions,
+    QueueBaseOptions,
+    WorkerOptions,
 )
-INGEST = "ai-ingest"
+from pydantic import TypeAdapter
+
+from app.contracts.ai_ingest_ingest_job import AiIngestIngestJob
+from app.contracts.ai_ingest_job_name import AiIngestJobName
+from app.contracts.ai_ingest_summarize_job import AiIngestSummarizeJob
+from app.contracts.queue_setting import QueueSetting
+from app.contracts.shared_queue_name import SharedQueueName
+
+SETTINGS = TypeAdapter(dict[SharedQueueName, QueueSetting]).validate_json(
+    (Path(__file__).parent / "contracts" / "queue_settings.json").read_bytes()
+)
+INGEST: SharedQueueName = "ai-ingest"
+_JOB_OPTIONS = TypeAdapter(JobOptions)
 
 
-def queue_options(name: str, redis_url: str) -> dict[str, Any]:
-    return {"connection": redis_url, "prefix": SETTINGS[name]["prefix"]}
+def job_options(queue: SharedQueueName, job_id: str) -> JobOptions:
+    """The queue's shared job options, as bullmq's own options type."""
+    options = SETTINGS[queue].options.model_dump(mode="json", exclude_none=True)
+    return _JOB_OPTIONS.validate_python({**options, "jobId": job_id})
 
 
 class IngestQueue:
     def __init__(self, redis_url: str) -> None:
-        self._queue = Queue(INGEST, queue_options(INGEST, redis_url))  # pyright: ignore[reportArgumentType]
+        options: QueueBaseOptions = {"connection": redis_url, "prefix": SETTINGS[INGEST].prefix}
+        self._queue = Queue(INGEST, options)
 
     async def add(
         self,
+        name: AiIngestJobName,
         document_id: UUID,
         org_id: UUID,
-        meta: Meta,
-        name: Literal["ingest", "summarize"] = "ingest",
+        *,
+        request_id: str | None,
+        user_id: UUID | None,
     ) -> None:
-        job = AiIngestJob(meta=meta, payload=Payload(documentId=document_id, orgId=org_id))
+        job = {
+            "meta": {
+                "requestId": request_id,
+                "userId": str(user_id) if user_id else None,
+                "orgId": str(org_id),
+            },
+            "payload": {"documentId": document_id, "orgId": org_id},
+        }
         # One job per document and step: queuing the same step twice runs it once.
-        job_id = str(document_id) if name == "ingest" else f"{document_id}-summary"
-        await self._queue.add(  # pyright: ignore[reportUnknownMemberType]
-            name,
-            job.model_dump(mode="json", exclude_none=True),
-            {**SETTINGS[INGEST]["options"], "jobId": job_id},  # pyright: ignore[reportArgumentType]
+        match name:
+            case "ingest":
+                data = AiIngestIngestJob.model_validate(job)
+                job_id = str(document_id)
+            case "summarize":
+                data = AiIngestSummarizeJob.model_validate(job)
+                job_id = f"{document_id}-summary"
+        await self._queue.add(  # pyright: ignore[reportUnknownMemberType]  # bullmq leaves the job's data untyped
+            name, data.model_dump(mode="json", exclude_none=True), job_options(INGEST, job_id)
         )
 
     async def close(self) -> None:
@@ -50,7 +79,7 @@ class IngestQueue:
 class JobLike(Protocol):
     id: str | None
     name: str
-    data: Any
+    data: object
 
 
 class RunningWorker(Protocol):
@@ -58,7 +87,7 @@ class RunningWorker(Protocol):
 
 
 def start_worker(
-    name: str,
+    queue: SharedQueueName,
     handle: Callable[[JobLike], Awaitable[None]],
     redis_url: str,
     concurrency: int,
@@ -66,5 +95,10 @@ def start_worker(
     async def process(job: JobLike, _token: str) -> None:
         await handle(job)
 
-    opts: Any = {**queue_options(name, redis_url), "concurrency": concurrency}
-    return Worker(name, process, opts)  # pyright: ignore[reportArgumentType, reportUnknownVariableType]
+    options: WorkerOptions = {
+        "connection": redis_url,
+        "prefix": SETTINGS[queue].prefix,
+        "concurrency": concurrency,
+    }
+    # bullmq types the processor as returning a Future; any coroutine function works.
+    return Worker(queue, process, options)  # pyright: ignore[reportArgumentType]
