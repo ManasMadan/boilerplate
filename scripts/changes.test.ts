@@ -1,5 +1,8 @@
-import { describe, expect, it } from "bun:test";
-import { areas, areasOf } from "./changes";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { areas, areasOf, main } from "./changes";
+import { captureOutput, fakeRun } from "./stand-ins";
+
+afterEach(() => mock.restore());
 
 const none = { app: false, charts: false, infra: false, images: false, scripts: false };
 
@@ -52,5 +55,23 @@ describe("which CI jobs a pull request needs", () => {
         scripts: true,
       });
     }
+  });
+});
+
+describe("the command", () => {
+  it("prints each area for the files changed since the base, or all of them without one", () => {
+    const printed = captureOutput();
+    const { run, calls } = fakeRun(() => ({ stdout: "docs/testing.md\n" }));
+    expect(main("origin/master", run)).toBe(0);
+    expect(calls).toEqual(["git diff --name-only origin/master HEAD"]);
+    expect(printed()).toContain("app=false");
+    expect(main(undefined, run)).toBe(0);
+    expect(printed()).toContain("app=true");
+  });
+
+  it("fails when git can't diff against the base", () => {
+    const printed = captureOutput();
+    expect(main("nowhere", fakeRun(() => ({ status: 128, stderr: "bad revision" })).run)).toBe(1);
+    expect(printed()).toContain("git diff against nowhere failed: bad revision");
   });
 });

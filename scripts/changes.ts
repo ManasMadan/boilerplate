@@ -16,8 +16,7 @@
  * requests (master, the merge queue, nightly) CI runs everything without asking.
  * Prints `name=true|false` lines for $GITHUB_OUTPUT.
  */
-import { spawnSync } from "node:child_process";
-import { ROOT } from "./lib";
+import { ROOT, type Run, runSync } from "./lib";
 
 export type Area = "app" | "charts" | "infra" | "images" | "scripts";
 const AREAS: Area[] = ["app", "charts", "infra", "images", "scripts"];
@@ -64,21 +63,24 @@ export function areas(files: string[]): Record<Area, boolean> {
   >;
 }
 
-if (import.meta.main) {
-  const base = process.argv[2];
-  let files: string[] | undefined;
+/**
+ * The command: the areas changed since `base` (a pull request's base), or all of them
+ * without one (a push, the merge queue, the nightly run), as `area=true` lines for
+ * GITHUB_OUTPUT; the exit code.
+ */
+export function main(base = process.argv[2], run: Run = runSync): number {
+  let files = [".github/"];
   if (base) {
-    const diff = spawnSync("git", ["diff", "--name-only", base, "HEAD"], {
-      cwd: ROOT,
-      encoding: "utf8",
-    });
+    const diff = run("git", ["diff", "--name-only", base, "HEAD"], { cwd: ROOT });
     if (diff.status !== 0) {
       console.error(`git diff against ${base} failed: ${diff.stderr}`);
-      process.exit(1);
+      return 1;
     }
     files = diff.stdout.split("\n").filter(Boolean);
   }
-  // Without a base (not a pull request): everything.
-  const result = files ? areas(files) : areas([".github/"]);
+  const result = areas(files);
   for (const area of AREAS) console.log(`${area}=${result[area]}`);
+  return 0;
 }
+
+if (import.meta.main) process.exit(main());
