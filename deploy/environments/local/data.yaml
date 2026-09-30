@@ -15,9 +15,9 @@ valkey:
   maxmemory: 200mb
 storage:
   uploads:
-    host: files.boilerplate.localhost
+    host: files.localhost
     scheme: http
-    corsOrigins: [http://boilerplate.localhost]
+    corsOrigins: [http://localhost]
     storage: { size: 1Gi, storageClass: "" }
     resources:
       requests: { cpu: 50m, memory: 128Mi }

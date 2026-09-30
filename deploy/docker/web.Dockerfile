@@ -10,6 +10,9 @@
 # starts, so the same image runs in every environment.
 
 ARG BUN_IMAGE=oven/bun:1.3.6-slim
+# Next builds under Node: under Bun's runtime it can't load its own compiled server
+# modules ("Expected CommonJS module to have a function wrapper"). Matches .nvmrc.
+ARG NODE_IMAGE=node:24-trixie-slim
 # renovate: datasource=npm depName=turbo
 ARG TURBO_VERSION=2.11.5
 
@@ -19,8 +22,12 @@ WORKDIR /repo
 COPY . .
 RUN bunx turbo@${TURBO_VERSION} prune @repo/web --docker --out-dir /pruned
 
-FROM ${BUN_IMAGE} AS build
+FROM ${BUN_IMAGE} AS bun
+
+FROM ${NODE_IMAGE} AS build
 ARG TURBO_VERSION
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -s bun /usr/local/bin/bunx
 ENV TURBO_TELEMETRY_DISABLED=1 \
     NEXT_TELEMETRY_DISABLED=1
 WORKDIR /repo

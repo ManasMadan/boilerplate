@@ -78,17 +78,40 @@ gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
 JSON
 ```
 
-The GitHub App is made in the web UI (below). Then, with its numeric App ID (on the
-App's page) and its client ID:
+From here on every change reaches `master` through a pull request, and these can't be
+undone by a command; to keep pushing straight to `master` for a while, leave the
+`master` ruleset out until you're ready.
+
+GitHub has no command that creates a GitHub App, but this opens its form filled in with
+the permissions below (no webhook, only this account):
 
 ```sh
-gh variable set BOT_APP_CLIENT_ID --repo "$REPO" --body "<client id>"
-gh secret set BOT_APP_PRIVATE_KEY --repo "$REPO" < path/to/the-app.private-key.pem
+open "https://github.com/settings/apps/new?name=${REPO#*/}-bot-${REPO%/*}&url=https://github.com/$REPO&public=false&webhook_active=false&contents=write&pull_requests=write&issues=write&workflows=write&checks=read&statuses=read"
+```
+
+In the browser: **Create GitHub App** (the name must be unique on GitHub); note the
+**App ID** (a number) and the **Client ID** (`Iv…`); **Generate a private key** (a
+`.pem` downloads); **Install App** → **Only select repositories** → this one. Then:
+
+```sh
+APP_ID=123456                       # the App ID
+CLIENT_ID=Iv23xxxxxxxxxxxx          # the Client ID
+PEM=~/Downloads/<app name>.<date>.private-key.pem
+
+gh variable set BOT_APP_CLIENT_ID --repo "$REPO" --body "$CLIENT_ID"
+gh secret set BOT_APP_PRIVATE_KEY --repo "$REPO" < "$PEM"
+
+# The App may push the staging bump past the master ruleset.
 RULESET=$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.name == "master") | .id')
 gh api -X PUT "repos/$REPO/rulesets/$RULESET" --input - <<JSON
-{"bypass_actors": [{"actor_id": <app id>, "actor_type": "Integration", "bypass_mode": "always"}]}
+{"bypass_actors": [{"actor_id": $APP_ID, "actor_type": "Integration", "bypass_mode": "always"}]}
 JSON
+
+rm "$PEM"   # GitHub keeps the secret; don't leave the key lying around
 ```
+
+To check: `gh api "repos/$REPO/rulesets" --jq '.[].name'` prints `master` and
+`release tags`, and `gh variable list --repo "$REPO"` shows `BOT_APP_CLIENT_ID`.
 
 ## Merging
 
