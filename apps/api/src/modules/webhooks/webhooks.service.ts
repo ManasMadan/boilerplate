@@ -2,7 +2,7 @@
  * Customer webhook endpoints: configuration rules, the signing secret, and hand-offs to
  * apps/webhooks (test events, replays). Every change is audited in the same transaction.
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import {
   WEBHOOK_ENDPOINT_LIMIT,
@@ -22,6 +22,7 @@ import {
   InjectDatabase,
   InjectRedis,
   keysFromEnv,
+  newWebhookSecret,
   type RateLimiter,
   type Redis,
   SecretBox,
@@ -37,9 +38,6 @@ export const WEBHOOK_DELIVERIES = Symbol("WEBHOOK_DELIVERIES");
 type EndpointRow = Awaited<ReturnType<WebhooksRepository["listEndpoints"]>>[number];
 
 const toEndpoint = (row: EndpointRow): WebhookEndpoint => webhookEndpointSchema.parse(row);
-
-/** Standard Webhooks secret format: whsec_ + base64 of 24 random bytes. */
-const newSecret = () => `whsec_${randomBytes(24).toString("base64")}`;
 
 type Changed = EventPayload<"webhook.endpoint_updated.v1">["changed"];
 
@@ -83,7 +81,7 @@ export class WebhooksService implements OnApplicationShutdown {
     // Existing endpoints keep working after a downgrade; new ones need the plan.
     await this.billing.require(orgId, "webhooks");
     await assertDeliverableUrl(input.url);
-    const secret = newSecret();
+    const secret = newWebhookSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {
       if ((await this.repository.countEndpoints(tx)) >= WEBHOOK_ENDPOINT_LIMIT) {
         throw new AppError("WEBHOOK_ENDPOINT_LIMIT", { params: { max: WEBHOOK_ENDPOINT_LIMIT } });
@@ -167,7 +165,7 @@ export class WebhooksService implements OnApplicationShutdown {
    * one, since its replacement was never put to use.
    */
   rotateSecret(orgId: string, id: string) {
-    const secret = newSecret();
+    const secret = newWebhookSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await tx.webhookEndpoint.findUnique({
         where: { id },

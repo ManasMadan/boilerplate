@@ -81,3 +81,9 @@ export class SecretBox {
     return stored.split(".")[1] !== this.keys.active().id;
   }
 }
+
+/**
+ * A new webhook signing secret in the Standard Webhooks format (standardwebhooks.com):
+ * `whsec_` and the base64 of 24 random bytes, which its libraries read as the key.
+ */
+export const newWebhookSecret = () => `whsec_${randomBytes(24).toString("base64")}`;
