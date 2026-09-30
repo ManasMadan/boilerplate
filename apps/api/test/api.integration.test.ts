@@ -1842,6 +1842,27 @@ describe("account deletion", () => {
   });
 });
 
+describe("events outside a request", () => {
+  it("name the workspace the change happened in, from a job, script or seed as from a request", async () => {
+    const { session } = await signedInUser();
+    const { id: userId } = await session.rpc.user.me();
+    const [personal] = await session.authGet<{ id: string }[]>("/organization/list");
+    const orgId = personal?.id as string;
+    const { TodoService } = await import("../src/modules/todo");
+    // Called directly: no request, so no organization in the request context.
+    const todo = await harness.app.get(TodoService).create(orgId, userId, "From a job");
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    const { rows } = await client
+      .query<{ org_id: string | null }>(
+        "SELECT org_id FROM app.outbox_event WHERE name = 'todo.created.v1' AND key = $1",
+        [todo.id],
+      )
+      .finally(() => client.end());
+    expect(rows).toEqual([{ org_id: orgId }]);
+  });
+});
+
 describe("todos", () => {
   it("creates, pages, completes and deletes, with typed errors", async () => {
     const { session } = await signedInUser();

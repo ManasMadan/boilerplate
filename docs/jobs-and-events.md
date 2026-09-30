@@ -108,8 +108,10 @@ await tenantTx(database.write, orgId, async (tx) => {
 
 `emitEvent` (from `createOutbox` in `packages/nest-common/src/outbox.ts`, bound per
 service in its `src/outbox.ts`) validates the payload against the catalog, inserts a row
-into the service's `<schema>.outbox_event` with the actor, organization and request id
-from the request context, and sends `pg_notify('outbox', …)`, delivered on commit. It
+into the service's `<schema>.outbox_event` with the actor and request id from the
+request context and the organization the transaction runs as (`tenantTx`, else the
+request's, unless an origin says otherwise; so a job, script or seed gets it right too),
+and sends `pg_notify('outbox', …)`, delivered on commit. It
 only accepts a `Tx`, so an event outside a transaction doesn't compile: the change and
 its event commit together or not at all.
 
