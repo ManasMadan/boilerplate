@@ -85,6 +85,11 @@
       "linter": { "rules": { "suspicious": { "noDuplicateCustomProperties": "off" } } }
     },
     {
+      // Nest code. Nest's dependency injection reads each constructor parameter's type from
+      // the decorator metadata TypeScript emits, which needs the imported class at runtime;
+      // `import type` erases it, and injection then fails at boot. Modules are classes with
+      // only a decorator and static members (`forRoot()`), which is Nest's shape, not a
+      // mistake.
       "includes": [
         "apps/api/**",
         "apps/webhooks/**",

@@ -97,6 +97,9 @@ audited (`org.api_key_created.v1`, `org.api_key_revoked.v1`).
   management.
 - Up to 50 keys per workspace, 600 requests a minute per key, expiring after 30, 90 or 365
   days, or never.
+- The per-key limit is better-auth's: it counts in the key's own row, so every call
+  with a key writes to `auth.api_key`. That's fine at this limit; at high key traffic it
+  becomes write load on Postgres, and the counter would move to Redis.
 
 ## OAuth for MCP clients
 
@@ -172,6 +175,11 @@ Elsewhere, `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`) limits
 assistant questions (20 a minute), AI documents and file uploads (30 an hour), phone
 codes (5 an hour per user, 3 per number, refused when Redis is down), MCP tool calls and
 API keys, all shared across replicas through Redis.
+
+Phone codes can go to any country: there's no list of allowed country codes. Texts to
+some destinations cost far more than others, and SMS pumping targets exactly those, so a
+product that sends texts should add an allowlist (in `PhoneService`, before the code is
+sent) for the countries it serves.
 
 The client IP comes from `X-Forwarded-For` only when the peer is in `TRUSTED_PROXIES`;
 the API overwrites the header better-auth sees with that resolved address, so a client

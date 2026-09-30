@@ -6,6 +6,9 @@
  *
  * A few things Prisma can't express live only in migrations (it would "fix" them by
  * dropping them). Those are listed in IGNORED with the reason; any other difference fails.
+ *
+ * It needs MIGRATOR_DATABASE_URL: without a datasource, `prisma migrate diff
+ * --from-config-datasource` prints nothing and exits 0, which would read as "no drift".
  */
 import { spawnSync } from "node:child_process";
 

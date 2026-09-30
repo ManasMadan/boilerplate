@@ -9,6 +9,12 @@
  *
  * Every request runs inside a request context (request id, locale, client version) so
  * logs, queued jobs and outbox events all carry the same request id.
+ *
+ * Why oRPC's own Fastify handlers and not the `@orpc/nest` adapter: the adapter only
+ * speaks the OpenAPI codec, so the web and mobile clients' RPCLink got 404s; it crashed
+ * reading request headers unless every call passed a context; and Nest interceptors on
+ * its handlers were silently skipped. Mounting both handlers here keeps one pipeline
+ * (procedures.ts) for both protocols, with services still resolved from Nest's container.
  */
 
 import { OpenAPIHandler } from "@orpc/openapi/fastify";

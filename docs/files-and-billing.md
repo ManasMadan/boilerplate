@@ -77,6 +77,10 @@ its first start to download signatures. `FILE_SCANNER=none` skips scanning while
 on something else (refused in production). The RustFS console is at
 http://localhost:59001.
 
+The local ClamAV can stop answering after running for some hours: uploads then stay
+`pending` and the worker's logs show `clamd timed out`. `docker compose restart clamav`
+brings it back (it keeps its signatures, so it's quick).
+
 ## Billing
 
 Billing is per organization, on Stripe (`apps/api/src/modules/billing`). Stripe is the

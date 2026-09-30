@@ -23,13 +23,20 @@ packages (the `unit` project in services), Jest with React Native Testing Librar
 ## Integration
 
 `bun run test:integration` starts the full Docker profile (`bun scripts/services.ts up
---full`) and runs every package's `test:integration`, never cached.
+--full`) and runs every package's `test:integration`, never cached. The full profile's
+memory limits add up to about 3.4 GB, and the start refuses unless Docker has that free
+plus half a gigabyte of headroom (about 3.9 GB): on Docker Desktop's default 2 GB, raise
+it in Settings, Resources. It takes longer than two minutes, so run it in the
+background when a tool times out commands (an agent's shell, for one).
 
 - Each test file gets its own Postgres database cloned from a migrated template, and
   connects as the service's own role, so a missing grant or row-level security policy
   fails here (see [database.md](database.md#test-databases)).
-- Each suite uses its own Redis database number (the TypeScript suites 4 and 7 to 15,
-  Python 6; 0 is the dev stack).
+- Each suite uses its own Redis database number, and 0 is the dev stack's. Every other
+  one is taken: the api's files 1 to 5, 7 to 10 and 13 (one per file, `startApi(<n>)`),
+  webhooks 11, nest-common and jobs 12, notifications 14, worker 15, Python 6, and
+  webhooks' Stalwart suite 4, which it shares with the api's OAuth suite. A new suite has
+  no free number, so give it a key prefix of its own instead.
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker
   compose publishes), its placeholder secrets replaced by fresh ones and its empty
   values left unset, so they behave the same on every machine and in CI. Anything
@@ -52,6 +59,24 @@ registers a webhook pointing at itself, sends one message that is delivered (to
 Mailpit, DKIM-signed) and one to `bounce.test` that is refused, and checks the signed
 `delivery.dsn-perm-fail` Stalwart posts becomes the feedback event that suppresses the
 address.
+
+## Not tested automatically
+
+What CI can't check, and how each is covered instead. A test that needs credentials is
+still written, and skips with the reason when they're missing.
+
+| What | Why not in CI | Test, and how to run it |
+|---|---|---|
+| Google sign-in | needs a real Google account | `apps/web/e2e/google.spec.ts`, with `E2E_GOOGLE_EMAIL` and `E2E_GOOGLE_PASSWORD` |
+| Client ID Metadata Documents from a public URL | needs an HTTPS document on the internet | `apps/api/test/oauth.integration.test.ts` (the CIMD case), with `E2E_CIMD_CLIENT_ID` |
+| Turnstile's real widget | CI runs without the Turnstile keys | `apps/web/e2e/captcha.spec.ts` and `apps/api/test/captcha.integration.test.ts`, with Cloudflare's always-pass test keys (`.env.example`) |
+| Mail through Stalwart | needs the `mail` profile | `apps/notifications/test/stalwart.integration.test.ts` and `apps/webhooks/test/stalwart.integration.test.ts`, with `STALWART_SMTP_URL` and `STALWART_URL` (above) |
+| Native mobile: a session surviving a restart, the push permission prompt, links opened by the OS | needs a device or simulator with a development build | `apps/mobile/maestro/*.yaml`, by hand (`apps/mobile/maestro/README.md`) |
+| Real Stripe test mode | the suites use `packages/fake-stripe` | by hand: [files-and-billing.md](files-and-billing.md), "Real Stripe test mode" |
+| A web push notification being clicked | the service worker's `notificationclick` needs a real browser notification | by hand: allow notifications on the web app, trigger one, click it |
+| Email in real mail clients | rendering differs per client | by hand: the previews (`bun run --cwd packages/email dev`), then a real send |
+| Real MCP clients | needs Claude or an IDE on the other end | by hand: connect one to `<site>/api/mcp` and `<site>/ai/mcp` |
+| The first real deploy: DNS, TLS, mail deliverability, backups to a new cluster, the SOPS plugin in Argo CD, the first EAS build and store submission, Renovate's and the preview's first runs | needs the real environment | once, per [new-project.md](new-project.md), "The first deploy" |
 
 ## Coverage floors
 

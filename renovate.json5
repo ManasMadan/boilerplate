@@ -138,9 +138,19 @@
       groupName: "helm",
     },
     {
-      description: "The mobile app's React Native and React versions come from the Expo SDK: upgrade them together with `bunx expo install --fix`",
+      description: "The mobile app's React Native and React versions come from the Expo SDK: upgrade them together with `bunx expo install --fix`. React is pinned exactly (19.2.3, repo-wide in the catalog, so web matches) because Expo SDK 57 requires that version; it moves with the next SDK, not on its own",
       matchPackageNames: ["expo", "expo-*", "@expo/*", "react-native", "react-native-*", "react", "react-dom", "@types/react", "@types/react-dom"],
       groupName: "Expo SDK",
+    },
+    {
+      description: "TypeScript 7 (the native compiler) has no JavaScript compiler API yet, which openapi-typescript, Next's type check and Storybook's docgen need (see packages/typescript-config/base.json)",
+      matchPackageNames: ["typescript"],
+      allowedVersions: "<7",
+    },
+    {
+      description: "BullMQ for Node and for Python run the same Lua scripts against the same queues, so they move together: a Node upgrade without the matching Python release can change a script the other side still calls",
+      matchPackageNames: ["bullmq"],
+      groupName: "bullmq",
     },
     {
       description: "OpenTelemetry's SDK, exporters and instrumentations are released in step",

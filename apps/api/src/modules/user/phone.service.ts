@@ -2,6 +2,10 @@
  * Adding a phone number: the user asks for a code, we text it, they type it back. Only
  * then is the number saved, so a stored number is always one the user receives texts at.
  *
+ * This is our own flow rather than better-auth's phoneNumber plugin because the plugin's
+ * `send-otp` endpoint needs no session (anyone can make us text any number) and it adds
+ * password reset by SMS, which makes a phone number enough to take over an account.
+ *
  *   - Codes are random, stored hashed in Redis with the number they were sent to, expire
  *     after PHONE_CODE_EXPIRES_IN and allow MAX_ATTEMPTS guesses.
  *   - Texts cost money and can be abused to spam a number (or to pump premium numbers),
