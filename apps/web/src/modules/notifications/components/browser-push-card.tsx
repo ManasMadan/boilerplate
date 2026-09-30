@@ -53,7 +53,13 @@ export function BrowserPushCard() {
           setState(await browserPushState());
           return;
         }
-        await register.mutateAsync({ device: toDevice(subscription) });
+        try {
+          await register.mutateAsync({ device: toDevice(subscription) });
+        } catch (error) {
+          // A subscription the API doesn't know would show push as on, with nothing sent.
+          await subscription.unsubscribe();
+          throw error;
+        }
         toast.success(t("enabled"));
       } else {
         const subscription = await currentSubscription();
