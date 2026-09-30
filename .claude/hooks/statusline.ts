@@ -4,19 +4,22 @@
  * git call and a TCP connect per service (localhost refuses instantly when nothing
  * listens). It never calls Docker, which can take seconds to answer.
  */
-import { listening } from "../../scripts/lib";
+import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv } from "../../scripts/lib";
 
-// The default host ports from docker-compose.yml. Overrides in .env are not read here.
-const SERVICES = [
-  { name: "pg", port: 55432 },
-  { name: "valkey", port: 56379 },
-  { name: "mail", port: 51025 },
-];
+/** The core services' host ports: .env's, else .env.example's (docker-compose.yml's). */
+export function servicePorts(env = readEnv(ENV_PATH), example = readEnv(ENV_EXAMPLE_PATH)) {
+  const port = (key: string) => Number(env.get(key) ?? example.get(key));
+  return [
+    { name: "pg", port: port("POSTGRES_PORT") },
+    { name: "valkey", port: port("VALKEY_PORT") },
+    { name: "mail", port: port("MAILPIT_SMTP_PORT") },
+  ];
+}
 
 /** The status line for the session `stdin` describes (JSON; anything else is ignored). */
 export async function statusline(
   stdin: { json(): Promise<unknown> } = Bun.stdin,
-  services = SERVICES,
+  services = servicePorts(),
 ): Promise<string> {
   const input = (await stdin.json().catch(() => ({}))) as {
     workspace?: { project_dir?: string };

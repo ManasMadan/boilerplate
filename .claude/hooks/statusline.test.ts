@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
-import { statusline } from "./statusline";
+import { servicePorts, statusline } from "./statusline";
 
 let repo: string;
 let server: Server;
@@ -47,5 +47,21 @@ describe("the status line", () => {
     expect(await statusline(stdin(new Error("not JSON")), [{ name: "pg", port }])).toMatch(
       / \| pg up$/,
     );
+  });
+
+  it("checks the ports .env sets, else the example's", () => {
+    const env = new Map([["POSTGRES_PORT", "5432"]]);
+    const example = new Map([
+      ["POSTGRES_PORT", "55432"],
+      ["VALKEY_PORT", "56379"],
+      ["MAILPIT_SMTP_PORT", "51025"],
+    ]);
+    expect(servicePorts(env, example)).toEqual([
+      { name: "pg", port: 5432 },
+      { name: "valkey", port: 56379 },
+      { name: "mail", port: 51025 },
+    ]);
+    // By default, this checkout's files.
+    expect(servicePorts().map((service) => service.name)).toEqual(["pg", "valkey", "mail"]);
   });
 });
