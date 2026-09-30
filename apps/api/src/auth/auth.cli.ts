@@ -10,7 +10,6 @@
 
 import { unlimited } from "@repo/contracts/billing";
 import { createDb } from "@repo/db";
-import type { Producer } from "@repo/jobs";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { Redis } from "ioredis";
 import { env } from "../env";
@@ -19,7 +18,7 @@ import { createMemberships } from "./memberships";
 
 const notifications = {
   add: () => Promise.reject(new Error("The auth CLI never sends notifications")),
-} as unknown as Producer<"notifications-critical">;
+};
 
 const db = createDb({ url: env.API_DATABASE_URL, poolMax: 1, service: "auth-cli" });
 const redis = new Redis(env.REDIS_URL, { lazyConnect: true });

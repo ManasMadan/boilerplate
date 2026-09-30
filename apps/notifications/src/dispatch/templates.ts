@@ -189,31 +189,18 @@ export interface BoundTemplate {
   sms?: (context: RenderContext) => string;
 }
 
-/**
- * Pairs a definition with its payload. TypeScript can't relate `payload.template` to the
- * registry entry through the union, so that pairing is asserted here, once: the
- * registry is keyed by template and each payload was validated against its template.
- */
+/** Pairs a definition with its payload, so the dispatcher renders without knowing which. */
 function bind<T extends NotificationTemplate>(
   definition: TemplateDefinition<T>,
   payload: PayloadOf<T>,
 ): BoundTemplate {
+  const { email, inApp, push, sms } = definition;
   return {
     category: definition.category,
-    ...(definition.email && {
-      email: (context: RenderContext) =>
-        definition.email?.(payload, context) as Promise<RenderedEmail>,
-    }),
-    ...(definition.inApp && {
-      inApp: (context: RenderContext) => definition.inApp?.(payload, context) as InAppMessage,
-    }),
-    ...(definition.push && {
-      push: (context: RenderContext) =>
-        definition.push?.(payload, context) as ReturnType<NonNullable<BoundTemplate["push"]>>,
-    }),
-    ...(definition.sms && {
-      sms: (context: RenderContext) => definition.sms?.(payload, context) as string,
-    }),
+    ...(email && { email: (context: RenderContext) => email(payload, context) }),
+    ...(inApp && { inApp: (context: RenderContext) => inApp(payload, context) }),
+    ...(push && { push: (context: RenderContext) => push(payload, context) }),
+    ...(sms && { sms: (context: RenderContext) => sms(payload, context) }),
   };
 }
 

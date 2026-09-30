@@ -115,7 +115,16 @@ export class Dispatcher implements OnApplicationShutdown {
         // Caught like every other channel: a push that throws must not skip the rest.
         try {
           failures.push(
-            ...(await this.deliverPush(recipient, name, template, context, policy, key, false)),
+            ...(await this.deliverPush(
+              recipient.userId,
+              recipient,
+              name,
+              template,
+              context,
+              policy,
+              key,
+              false,
+            )),
           );
         } catch (error) {
           failures.push(error);
@@ -214,6 +223,7 @@ export class Dispatcher implements OnApplicationShutdown {
    * runs this again when they end.
    */
   private async deliverPush(
+    userId: string,
     recipient: Recipient,
     name: string,
     template: BoundTemplate,
@@ -222,7 +232,6 @@ export class Dispatcher implements OnApplicationShutdown {
     key: string,
     deferred: boolean,
   ) {
-    const userId = recipient.userId as string;
     if (policy && !policy.allows(template.category, "push")) return [];
     const devices = await this.push.devices(userId);
     if (devices.length === 0 || !template.push) return [];
@@ -299,7 +308,16 @@ export class Dispatcher implements OnApplicationShutdown {
     const context: RenderContext = { recipient, t, payload };
     const failures =
       channel === "push"
-        ? await this.deliverPush(recipient, payload.template, template, context, policy, key, true)
+        ? await this.deliverPush(
+            userId,
+            recipient,
+            payload.template,
+            template,
+            context,
+            policy,
+            key,
+            true,
+          )
         : [];
     if (failures.length > 0)
       throw new AggregateError(failures, "deferred delivery failed; retrying");

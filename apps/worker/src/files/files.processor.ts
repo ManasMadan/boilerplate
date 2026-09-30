@@ -82,6 +82,7 @@ export class FilesProcessor extends JobProcessor {
 
     try {
       const stored = await this.inspect(
+        this.storage,
         file.purpose as UploadPurpose,
         quarantine,
         file.declaredSize,
@@ -113,9 +114,13 @@ export class FilesProcessor extends JobProcessor {
     await publishRealtime(this.redis, realtimeChannel.user(file.userId), { type: "files.changed" });
   }
 
-  private async inspect(purpose: UploadPurpose, key: string, declaredSize: number) {
+  private async inspect(
+    storage: Storage,
+    purpose: UploadPurpose,
+    key: string,
+    declaredSize: number,
+  ) {
     const rules = uploadPurposes[purpose];
-    const storage = this.storage as Storage;
     const head = await storage.head(key);
     if (!head) throw new Rejected("FILE_UNREADABLE");
     if (head.size > rules.maxBytes) throw new Rejected("FILE_TOO_LARGE");

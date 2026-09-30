@@ -172,10 +172,8 @@ export class ApiKeysService {
   }
 
   private async present(rows: ApiKeyRow[]): Promise<ApiKey[]> {
-    const creators = [...new Set(rows.map((row) => createdBy(row.metadata)).filter((id) => id))];
-    const users = new Map(
-      (await this.keys.users(creators as string[])).map((user) => [user.id, user]),
-    );
+    const creators = [...new Set(rows.flatMap((row) => createdBy(row.metadata) ?? []))];
+    const users = new Map((await this.keys.users(creators)).map((user) => [user.id, user]));
     return rows.map((row) => {
       const creator = createdBy(row.metadata);
       return {

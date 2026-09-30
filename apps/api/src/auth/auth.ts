@@ -95,7 +95,7 @@ export interface AuthDependencies {
   env: Env;
   db: Db;
   redis: Redis;
-  notifications: Producer<"notifications-critical">;
+  notifications: Pick<Producer<"notifications-critical">, "add">;
   memberships: Memberships;
   /** Plan limits and cancelling a deleted organization's subscription (modules/billing). */
   billing: {
