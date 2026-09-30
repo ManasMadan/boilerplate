@@ -27,111 +27,157 @@ interface Simple {
 
 const OPERATORS = new Set([";", "&&", "||", "|", "&", "\n", "(", ")"]);
 
-/** Words and operators, with quotes and backslashes resolved. */
-function tokenize(line: string): string[] {
-  const tokens: string[] = [];
-  let word = "";
-  let inWord = false;
-  const flush = () => {
-    if (inWord) tokens.push(word);
-    word = "";
-    inWord = false;
-  };
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i] as string;
-    const next = line[i + 1];
-    if (char === "'" || char === '"') {
-      const end = line.indexOf(char, i + 1);
-      const stop = end === -1 ? line.length : end;
-      word += line.slice(i + 1, stop);
-      inWord = true;
-      i = stop;
-    } else if (char === "\\" && next !== undefined) {
-      word += next;
-      inWord = true;
-      i++;
-    } else if (char === " " || char === "\t") {
-      flush();
-    } else if ((char === "&" || char === "|") && next === char) {
-      flush();
-      tokens.push(char + next);
-      i++;
-    } else if (char === ">" || (char === "&" && next === ">")) {
-      // `2>` and `&>` redirect too: the descriptor digit belongs to the operator.
-      const descriptor = /^\d$/.test(word) ? word : "";
-      if (descriptor) word = "";
-      flush();
-      const append = line[i + (char === "&" ? 2 : 1)] === ">";
-      tokens.push(`${descriptor}${char === "&" ? "&>" : ">"}${append ? ">" : ""}`);
-      i += (char === "&" ? 1 : 0) + (append ? 1 : 0);
-      // `>&2` duplicates a descriptor; it writes no file.
-      if (line[i + 1] === "&") {
-        tokens.pop();
-        i++;
-        while (/\d/.test(line[i + 1] ?? "")) i++;
-      }
-    } else if (char === "<" && next === "<") {
-      // A heredoc: the body is data, not commands. Skip to its closing marker.
-      flush();
-      const rest = line.slice(i + 2).replace(/^[-~]?\s*/, "");
-      const marker = /^['"]?(\w+)['"]?/.exec(rest)?.[1];
-      const bodyStart = line.indexOf("\n", i);
-      if (!marker || bodyStart === -1) break;
-      const end = line.indexOf(`\n${marker}`, bodyStart);
-      tokens.push("\n");
-      i = end === -1 ? line.length : end + marker.length + 1;
-    } else if (char === "<") {
-      // Input: its file is read, not written.
-      flush();
-      tokens.push("<");
-    } else if (OPERATORS.has(char)) {
-      flush();
-      tokens.push(char);
-    } else {
-      word += char;
-      inWord = true;
+/** Reads a command line into words and operators, one character (or a run) at a time. */
+class Lexer {
+  readonly tokens: string[] = [];
+  private word = "";
+  private inWord = false;
+  /** Where it's read to: each step reads from here and moves it past what it read. */
+  private i = 0;
+
+  constructor(private readonly line: string) {}
+
+  /** Words and operators, with quotes and backslashes resolved. */
+  read(): string[] {
+    for (; this.i < this.line.length; this.i++) {
+      if (!this.step(this.line[this.i] as string, this.line[this.i + 1])) break;
+    }
+    this.flush();
+    return this.tokens;
+  }
+
+  /** Reads one character (and what it starts); false to stop reading the line. */
+  private step(char: string, next: string | undefined): boolean {
+    if (char === "'" || char === '"') this.quote(char);
+    else if (char === "\\" && next !== undefined) this.append(next, 1);
+    else if (char === " " || char === "\t") this.flush();
+    else return this.operatorStep(char, next);
+    return true;
+  }
+
+  /** Reads an operator or redirect, or else one more character of the word. */
+  private operatorStep(char: string, next: string | undefined): boolean {
+    if ((char === "&" || char === "|") && next === char) this.operator(char + next, 1);
+    else if (char === ">" || (char === "&" && next === ">")) this.redirect(char);
+    else if (char === "<" && next === "<") return this.heredoc();
+    // Input: its file is read, not written.
+    else if (char === "<" || OPERATORS.has(char)) this.operator(char, 0);
+    else this.append(char, 0);
+    return true;
+  }
+
+  private flush() {
+    if (this.inWord) this.tokens.push(this.word);
+    this.word = "";
+    this.inWord = false;
+  }
+
+  private append(text: string, skip: number) {
+    this.word += text;
+    this.inWord = true;
+    this.i += skip;
+  }
+
+  private operator(token: string, skip: number) {
+    this.flush();
+    this.tokens.push(token);
+    this.i += skip;
+  }
+
+  private quote(char: string) {
+    const end = this.line.indexOf(char, this.i + 1);
+    const stop = end === -1 ? this.line.length : end;
+    this.append(this.line.slice(this.i + 1, stop), 0);
+    this.i = stop;
+  }
+
+  private redirect(char: string) {
+    const { line } = this;
+    // `2>` and `&>` redirect too: the descriptor digit belongs to the operator.
+    const descriptor = /^\d$/.test(this.word) ? this.word : "";
+    if (descriptor) this.word = "";
+    this.flush();
+    const append = line[this.i + (char === "&" ? 2 : 1)] === ">";
+    this.tokens.push(`${descriptor}${char === "&" ? "&>" : ">"}${append ? ">" : ""}`);
+    this.i += (char === "&" ? 1 : 0) + (append ? 1 : 0);
+    // `>&2` duplicates a descriptor; it writes no file.
+    if (line[this.i + 1] === "&") {
+      this.tokens.pop();
+      this.i++;
+      while (/\d/.test(line[this.i + 1] ?? "")) this.i++;
     }
   }
-  flush();
-  return tokens;
+
+  /** A heredoc: the body is data, not commands. Skips to its closing marker. */
+  private heredoc(): boolean {
+    const { line } = this;
+    this.flush();
+    const rest = line.slice(this.i + 2).replace(/^[-~]?\s*/, "");
+    const marker = /^['"]?(\w+)['"]?/.exec(rest)?.[1];
+    const bodyStart = line.indexOf("\n", this.i);
+    if (!marker || bodyStart === -1) return false;
+    const end = line.indexOf(`\n${marker}`, bodyStart);
+    this.tokens.push("\n");
+    this.i = end === -1 ? line.length : end + marker.length + 1;
+    return true;
+  }
+}
+
+const emptyCommand = (): Simple => ({ env: {}, words: [], redirects: [] });
+
+/** The line's tokens grouped into simple commands. */
+function splitCommands(tokens: string[]): Simple[] {
+  const commands: Simple[] = [];
+  let current = emptyCommand();
+  const end = () => {
+    if (current.words.length || current.redirects.length) commands.push(current);
+    current = emptyCommand();
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i] as string;
+    if (OPERATORS.has(token) || token === "&&" || token === "||") end();
+    else i += addToken(current, token, tokens[i + 1]);
+  }
+  end();
+  return commands;
+}
+
+/**
+ * Adds a word, a `VAR=value` or a redirect (with `next`, its file) to a command; how many
+ * tokens after this one it used.
+ */
+function addToken(command: Simple, token: string, next: string | undefined): number {
+  // Input: its file is read, not written.
+  if (token === "<") return 1;
+  if (/^\d?&?>>?$/.test(token)) {
+    if (next && next !== "/dev/null") command.redirects.push(next);
+    return 1;
+  }
+  if (!command.words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+    const [key = "", ...value] = token.split("=");
+    command.env[key] = value.join("=");
+  } else {
+    command.words.push(token);
+  }
+  return 0;
+}
+
+/** The command a wrapper runs (`sudo`, `env A=b`, ...), with the wrapper's variables. */
+function unwrapped(command: Simple): Simple {
+  const words = [...command.words];
+  while (["sudo", "command", "time", "nohup", "exec"].includes(words[0] ?? "")) words.shift();
+  if (words[0] === "env") {
+    words.shift();
+    while (words[0]?.includes("=")) {
+      const [key = "", ...value] = (words.shift() as string).split("=");
+      command.env[key] = value.join("=");
+    }
+  }
+  return { ...command, words };
 }
 
 function simpleCommands(line: string): Simple[] {
-  const commands: Simple[] = [];
-  let current: Simple = { env: {}, words: [], redirects: [] };
-  const tokens = tokenize(line);
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i] as string;
-    if (OPERATORS.has(token) || token === "&&" || token === "||") {
-      if (current.words.length || current.redirects.length) commands.push(current);
-      current = { env: {}, words: [], redirects: [] };
-    } else if (token === "<") {
-      i++;
-    } else if (/^\d?&?>>?$/.test(token)) {
-      const target = tokens[i + 1];
-      if (target && target !== "/dev/null") current.redirects.push(target);
-      i++;
-    } else if (!current.words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
-      const [key = "", ...value] = token.split("=");
-      current.env[key] = value.join("=");
-    } else {
-      current.words.push(token);
-    }
-  }
-  if (current.words.length || current.redirects.length) commands.push(current);
-  // Wrappers that run the rest of the line as the command.
-  return commands.map((command) => {
-    const words = [...command.words];
-    while (["sudo", "command", "time", "nohup", "exec"].includes(words[0] ?? "")) words.shift();
-    if (words[0] === "env") {
-      words.shift();
-      while (words[0]?.includes("=")) {
-        const [key = "", ...value] = (words.shift() as string).split("=");
-        command.env[key] = value.join("=");
-      }
-    }
-    return { ...command, words };
-  });
+  return splitCommands(new Lexer(line).read()).map(unwrapped);
 }
 
 const operands = (words: string[]) => words.slice(1).filter((word) => !word.startsWith("-"));
@@ -216,120 +262,158 @@ function dockerRemoves([, sub = "", third = "", ...rest]: string[]) {
   return objects.includes(sub) && ["rm", "prune"].includes(third);
 }
 
+/** A command's words, and whether it has any of some flags. */
+type Command = { words: string[]; has: (...flags: string[]) => boolean };
+
+/** git commit and push: skipping the hooks or force-pushing is refused; either needs a yes. */
+function gitPublishVerdict({ words, has }: Command): Verdict {
+  const [, sub = ""] = words;
+  // `-n` is commit's short --no-verify, alone or among other short flags.
+  const shortNoVerify = words.some((word) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(word));
+  if (has("--no-verify") || (sub === "commit" && shortNoVerify)) {
+    return deny("--no-verify skips the commit and push hooks' checks. Fix what they report.");
+  }
+  if (sub === "commit") return ask("Commits need the user's approval (CLAUDE.md).");
+  if (has("--force", "-f") || words.some((word) => /^\+/.test(word))) {
+    return deny("Force-pushing rewrites shared history; the user does that by hand if ever.");
+  }
+  if (words.some((word) => word.startsWith("--force-with-lease"))) {
+    return ask("A force push (--force-with-lease) rewrites the branch's history.");
+  }
+  return ask("Pushing publishes the branch; it needs the user's approval.");
+}
+
+/** git: history and shared state need a yes. */
+function gitVerdict(command: Command): Verdict {
+  const { words, has } = command;
+  const [, sub = "", third = ""] = words;
+  if (sub === "commit" || sub === "push") return gitPublishVerdict(command);
+  if (sub === "branch" && has("-D", "--delete")) return ask("Deleting a branch loses its commits.");
+  if (sub === "reset" && has("--hard")) return ask("git reset --hard discards uncommitted work.");
+  if (sub === "clean") return ask("git clean deletes untracked files.");
+  // Read-only forms are fine; anything else swaps work in and out of a stack every
+  // worktree shares, so one session's stash can land in another's tree.
+  if (sub === "stash" && !["list", "show"].includes(third)) {
+    return ask(
+      "git stash is shared by every worktree of this repository; commit the work, or use another worktree (`wt switch --create`).",
+    );
+  }
+  if (sub === "worktree" && third === "add") {
+    return ask(
+      "Make worktrees with `wt switch --create <branch>` (.config/wt.toml copies .env and installs).",
+    );
+  }
+  return null;
+}
+
+const GITHUB_ACCOUNT_COMMANDS = new Set([
+  "api",
+  "release",
+  "secret",
+  "variable",
+  "repo",
+  "workflow",
+]);
+
+/** gh: anything that changes GitHub needs a yes. */
+function ghVerdict({ words }: Command): Verdict {
+  const [, sub = "", third = ""] = words;
+  if (sub === "pr" && ["create", "merge", "close", "comment", "review", "edit"].includes(third)) {
+    return ask("This changes a pull request on GitHub; it needs the user's approval.");
+  }
+  if (GITHUB_ACCOUNT_COMMANDS.has(sub)) {
+    return ask("This reaches GitHub on the user's account; it needs their approval.");
+  }
+  return null;
+}
+
+/** The repo's scripts that push, promote or delete (by `bun run` name or file). */
+const DESTRUCTIVE_SCRIPTS: Record<string, string> = {
+  promote: "Opens a production promotion: a branch, a commit, a push and a pull request.",
+  "scripts/release.ts": "Releases and promotes: pushes to GitHub.",
+  "docker:clean": "Deletes every local volume (databases included).",
+  "scripts/docker-clean.ts": "Deletes every local volume (databases included).",
+  "k8s:down": "Deletes the local cluster.",
+  "db:reset": "Resets the local database.",
+};
+
+/** bun: new dependencies and the scripts that push, promote or delete need a yes. */
+function bunVerdict({ words }: Command): Verdict {
+  const [, sub = "", third = ""] = words;
+  // A new dependency is code from outside: the user picks it (and Renovate waits 3 days
+  // for any release; bunfig.toml makes `bun add` wait too).
+  if (sub === "add") return ask("Adding a dependency brings in outside code; the user decides.");
+  const script = sub === "run" ? third : sub;
+  const destructive = DESTRUCTIVE_SCRIPTS[script];
+  if (destructive) return ask(destructive);
+  if (words.includes("reset") && words.some((word) => word.includes("@repo/db"))) {
+    return ask("Resets the local database (prisma migrate reset).");
+  }
+  return null;
+}
+
+/** bunx: only the workspace's own tools, and no database changes outside a migration. */
+function bunxVerdict({ words, has }: Command, installed: (bin: string) => boolean): Verdict {
+  const [, sub = "", third = ""] = words;
+  // Without the workspace's copy, bunx downloads whatever npm package has that name, and
+  // runs it: `bunx biome` before `bun install` is someone else's "biome".
+  if (sub && !sub.startsWith("-") && !installed(sub)) {
+    return ask(
+      `${sub} isn't installed here, so bunx would download and run npm's "${sub}". Run \`bun install\` first.`,
+    );
+  }
+  if (sub === "prisma" && ["db", "migrate"].includes(third) && has("push", "execute", "reset")) {
+    return ask("This changes or wipes the database outside a migration.");
+  }
+  return null;
+}
+
 /** What the policy says about one simple command, or null. */
 function commandVerdict({ env, words }: Simple, installed: (bin: string) => boolean): Verdict {
   const [program = "", sub = "", third = ""] = words;
-  const has = (...flags: string[]) => words.some((word) => flags.includes(word));
+  const command: Command = { words, has: (...flags) => words.some((word) => flags.includes(word)) };
   if (env.HUSKY === "0" || env.HUSKY_SKIP_HOOKS) {
     return deny(
       "Skipping the commit hooks (HUSKY=0) skips the checks they run. Fix what they report.",
     );
   }
-  if (program === "git") {
-    if (
-      (sub === "commit" &&
-        (has("--no-verify") || words.some((word) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(word)))) ||
-      (sub === "push" && has("--no-verify"))
-    ) {
-      return deny("--no-verify skips the commit and push hooks' checks. Fix what they report.");
-    }
-    if (sub === "push" && (has("--force", "-f") || words.some((word) => /^\+/.test(word)))) {
-      return deny("Force-pushing rewrites shared history; the user does that by hand if ever.");
-    }
-    if (sub === "push" && words.some((word) => word.startsWith("--force-with-lease"))) {
-      return ask("A force push (--force-with-lease) rewrites the branch's history.");
-    }
-    if (sub === "branch" && has("-D", "--delete"))
-      return ask("Deleting a branch loses its commits.");
-    if (sub === "reset" && has("--hard")) return ask("git reset --hard discards uncommitted work.");
-    if (sub === "clean") return ask("git clean deletes untracked files.");
-    // Read-only forms are fine; anything else swaps work in and out of a stack every
-    // worktree shares, so one session's stash can land in another's tree.
-    if (sub === "stash" && !["list", "show"].includes(third)) {
-      return ask(
-        "git stash is shared by every worktree of this repository; commit the work, or use another worktree (`wt switch --create`).",
-      );
-    }
-    if (sub === "worktree" && third === "add") {
-      return ask(
-        "Make worktrees with `wt switch --create <branch>` (.config/wt.toml copies .env and installs).",
-      );
-    }
-    if (sub === "commit") return ask("Commits need the user's approval (CLAUDE.md).");
-    if (sub === "push") return ask("Pushing publishes the branch; it needs the user's approval.");
+  switch (program) {
+    case "git":
+      return gitVerdict(command);
+    case "gh":
+      return ghVerdict(command);
+    case "bun":
+      return bunVerdict(command);
+    case "bunx":
+      return bunxVerdict(command, installed);
+    case "wt":
+      return worktrunkVerdict(sub, third, command.has);
+    // Docker is shared by every checkout and every other project on the machine.
+    case "docker":
+      return dockerRemoves(words)
+        ? ask(
+            "This stops or deletes Docker containers, volumes or images that other checkouts and projects may use.",
+          )
+        : null;
+    case "uv":
+      return sub === "add"
+        ? ask("Adding a dependency brings in outside code; the user decides.")
+        : null;
+    case "sops":
+      if (command.has("-d", "--decrypt") || sub === "decrypt") {
+        return deny(
+          "Decrypting a secrets file puts its values in the conversation. The user edits it with `sops <file>`.",
+        );
+      }
+      return null;
+    case "tofu":
+      if (["apply", "destroy", "import", "state"].includes(sub)) {
+        return ask("This changes real infrastructure or its state.");
+      }
+      return null;
+    default:
+      return null;
   }
-  if (program === "gh") {
-    if (sub === "pr" && ["create", "merge", "close", "comment", "review", "edit"].includes(third)) {
-      return ask("This changes a pull request on GitHub; it needs the user's approval.");
-    }
-    if (
-      sub === "api" ||
-      sub === "release" ||
-      sub === "secret" ||
-      sub === "variable" ||
-      sub === "repo" ||
-      sub === "workflow"
-    ) {
-      return ask("This reaches GitHub on the user's account; it needs their approval.");
-    }
-  }
-  if (program === "sops" && (has("-d", "--decrypt") || sub === "decrypt")) {
-    return deny(
-      "Decrypting a secrets file puts its values in the conversation. The user edits it with `sops <file>`.",
-    );
-  }
-  // A new dependency is code from outside: the user picks it (and Renovate waits 3 days
-  // for any release; bunfig.toml makes `bun add` wait too).
-  if ((program === "bun" && sub === "add") || (program === "uv" && sub === "add")) {
-    return ask("Adding a dependency brings in outside code; the user decides.");
-  }
-  // Without the workspace's copy, bunx downloads whatever npm package has that name, and
-  // runs it: `bunx biome` before `bun install` is someone else's "biome".
-  if (program === "bunx" && sub && !sub.startsWith("-") && !installed(sub)) {
-    return ask(
-      `${sub} isn't installed here, so bunx would download and run npm's "${sub}". Run \`bun install\` first.`,
-    );
-  }
-  if (program === "wt") {
-    const wt = worktrunkVerdict(sub, third, has);
-    if (wt) return wt;
-  }
-  // Docker is shared by every checkout and every other project on the machine.
-  if (program === "docker" && dockerRemoves(words)) {
-    return ask(
-      "This stops or deletes Docker containers, volumes or images that other checkouts and projects may use.",
-    );
-  }
-  if (program === "tofu" && ["apply", "destroy", "import", "state"].includes(sub)) {
-    return ask("This changes real infrastructure or its state.");
-  }
-  let script = "";
-  if (program === "bun") script = sub === "run" ? third : sub;
-  const destructive: Record<string, string> = {
-    promote: "Opens a production promotion: a branch, a commit, a push and a pull request.",
-    "scripts/release.ts": "Releases and promotes: pushes to GitHub.",
-    "docker:clean": "Deletes every local volume (databases included).",
-    "scripts/docker-clean.ts": "Deletes every local volume (databases included).",
-    "k8s:down": "Deletes the local cluster.",
-    "db:reset": "Resets the local database.",
-  };
-  if (destructive[script]) return ask(destructive[script] as string);
-  if (
-    program === "bun" &&
-    words.includes("reset") &&
-    words.some((word) => word.includes("@repo/db"))
-  ) {
-    return ask("Resets the local database (prisma migrate reset).");
-  }
-  if (
-    program === "bunx" &&
-    sub === "prisma" &&
-    ["db", "migrate"].includes(third) &&
-    has("push", "execute", "reset")
-  ) {
-    return ask("This changes or wipes the database outside a migration.");
-  }
-  return null;
 }
 
 /** The strictest verdict any command on the line gets (deny beats ask). */
