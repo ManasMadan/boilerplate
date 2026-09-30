@@ -6,7 +6,7 @@
  *   const app = await openApp("/");
  *   expect(app.pathname()).toBe("/sign-in");
  */
-import { act } from "@testing-library/react-native";
+import { act, configure } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 import { authClient } from "../src/lib/auth-client";
 
@@ -21,6 +21,9 @@ export const loadSession = () => act(() => authClient.$store.atoms.session?.valu
 
 // The first render of a file loads the whole app, which takes a few seconds on a busy machine.
 jest.setTimeout(30_000);
+// findBy* and waitFor wait for what a screen does after a fake request answers: a second
+// (the default) isn't enough when turbo runs every package's tests at once.
+configure({ asyncUtilTimeout: 10_000 });
 
 /** Opens the app at `url`, as a link or a cold start would. */
 export async function openApp(url = "/") {
