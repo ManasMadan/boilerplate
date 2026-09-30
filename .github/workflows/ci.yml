@@ -39,14 +39,12 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      # With uv: the Python service's own lint (ruff) is one of the steps.
       - uses: ./.github/actions/setup
-      - run: bunx biome ci .
-      - run: bun run lint:boundaries
-      # Unused files, exports and dependencies, and dependencies used but not declared
-      # (knip.jsonc).
-      - run: bun run lint:unused
-      # Shortcut markers left as comments (scripts/check-markers.ts).
-      - run: bun run lint:markers
+        with: { python: "true" }
+      # Biome, boundaries, unused code (knip.jsonc), shortcut markers and each package's
+      # lint, all of them even when one fails (scripts/lint.ts).
+      - run: bun run lint
 
   types:
     name: Type-check

@@ -87,7 +87,7 @@
     "dev:full": "bun run doctor && bun scripts/services.ts up --full && turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types && tsc -p scripts && tsc -p .claude/hooks",
-    "lint": "biome check . && bun run lint:boundaries && bun run lint:unused && bun run lint:markers && bun run lint:suppressions && turbo run lint",
+    "lint": "bun scripts/lint.ts",
     "lint:unused": "knip",
     "lint:markers": "bun scripts/check-markers.ts",
     "format": "biome check --write .",
