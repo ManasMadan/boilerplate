@@ -11,7 +11,7 @@ import { Processor } from "@nestjs/bullmq";
 import type { EventEnvelope } from "@repo/contracts/events";
 import { type RealtimeMessage, realtimeChannel } from "@repo/contracts/realtime";
 import { parseJob, queuePrefix } from "@repo/jobs";
-import { InjectRedis, JobProcessor, type Redis } from "@repo/nest-common";
+import { InjectRedis, JobProcessor, type Redis, runJob } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { publishRealtime } from "./publish";
 
@@ -32,8 +32,11 @@ export class RealtimeProcessor extends JobProcessor {
   }
 
   async process(job: Job<unknown>) {
-    const { payload: event } = parseJob("events-realtime", "event", job.data);
+    const { meta, payload: event } = parseJob("events-realtime", "event", job.data);
     const target = realtimeFor(event);
-    if (target) await publishRealtime(this.redis, target.channel, target.message);
+    if (!target) return;
+    await runJob(meta, `event:${event.id}`, () =>
+      publishRealtime(this.redis, target.channel, target.message),
+    );
   }
 }

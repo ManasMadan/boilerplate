@@ -11,7 +11,7 @@ import {
   queuePrefix,
   WEBHOOK_RETRY_DELAYS_MS,
 } from "@repo/jobs";
-import { InjectRedis, JobProcessor, type Redis, runWithContext } from "@repo/nest-common";
+import { InjectRedis, JobProcessor, type Redis, runJob } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { env } from "../env";
 import { DeliveryService } from "./delivery.service";
@@ -40,11 +40,12 @@ export class DeliveryProcessor extends JobProcessor {
   }
 
   async process(job: Job<unknown>) {
-    const meta = {
-      requestId: `job:${job.id}`,
-      ...parseJob("webhook-deliveries", job.name as JobName<"webhook-deliveries">, job.data).meta,
-    };
-    await runWithContext(meta, () => this.handle(job));
+    const { meta } = parseJob(
+      "webhook-deliveries",
+      job.name as JobName<"webhook-deliveries">,
+      job.data,
+    );
+    await runJob(meta, `job:${job.id}`, () => this.handle(job));
   }
 
   private async handle(job: Job<unknown>) {

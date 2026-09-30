@@ -18,7 +18,7 @@ import {
   queuePrefix,
   type RoutedEvent,
 } from "@repo/jobs";
-import { JobProcessor, runWithContext } from "@repo/nest-common";
+import { JobProcessor, runJob } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { Dispatcher } from "../dispatch/dispatcher";
 import { DeliveryPolicy } from "../dispatch/policy";
@@ -78,8 +78,6 @@ export class EventsProcessor extends JobProcessor {
     }
     const notification = notificationFor({ ...event, name });
     if (!notification) return;
-    await runWithContext({ ...meta, requestId: meta.requestId ?? `event:${event.id}` }, () =>
-      this.dispatcher.dispatch(notification, event.id),
-    );
+    await runJob(meta, `event:${event.id}`, () => this.dispatcher.dispatch(notification, event.id));
   }
 }

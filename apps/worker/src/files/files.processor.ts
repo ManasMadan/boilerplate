@@ -33,6 +33,7 @@ import {
   JobProcessor,
   PinoLogger,
   type Redis,
+  runJob,
   STORAGE,
   type Storage,
 } from "@repo/nest-common";
@@ -69,8 +70,8 @@ export class FilesProcessor extends JobProcessor {
   }
 
   async process(job: Job<unknown>) {
-    const { payload } = parseJob("files", "process", job.data);
-    await this.check(payload.fileId);
+    const { meta, payload } = parseJob("files", "process", job.data);
+    await runJob(meta, `job:${job.id}`, () => this.check(payload.fileId));
   }
 
   async check(fileId: string) {

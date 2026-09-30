@@ -13,7 +13,7 @@
 import { Processor } from "@nestjs/bullmq";
 import { events } from "@repo/contracts/events";
 import { eventSubscribers, parseJob, queuePrefix, type RoutedEvent } from "@repo/jobs";
-import { JobProcessor, runWithContext } from "@repo/nest-common";
+import { JobProcessor, runJob } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import * as z from "zod";
 import { env } from "../../env";
@@ -63,9 +63,7 @@ export class BillingEventsProcessor extends JobProcessor {
     const { name } = event;
     // An event routed here by a newer relay this build doesn't know yet.
     if (!this.billing.enabled || !eventSubscribers["events-billing"](name)) return;
-    await runWithContext({ ...meta, requestId: meta.requestId ?? `event:${event.id}` }, () =>
-      this.handle(event.id, name, event.payload),
-    );
+    await runJob(meta, `event:${event.id}`, () => this.handle(event.id, name, event.payload));
   }
 
   private async handle(eventId: string, name: RoutedEvent<"events-billing">, raw: unknown) {

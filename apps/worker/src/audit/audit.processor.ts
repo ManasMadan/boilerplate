@@ -4,7 +4,7 @@
  */
 import { Processor } from "@nestjs/bullmq";
 import { parseJob, queuePrefix } from "@repo/jobs";
-import { type Database, InjectDatabase, JobProcessor, runWithContext } from "@repo/nest-common";
+import { type Database, InjectDatabase, JobProcessor, runJob } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { env } from "../env";
 
@@ -19,7 +19,7 @@ export class AuditProcessor extends JobProcessor {
 
   async process(job: Job<unknown>) {
     const { meta, payload: event } = parseJob("events-audit", "event", job.data);
-    await runWithContext({ ...meta, requestId: meta.requestId ?? `event:${event.id}` }, () =>
+    await runJob(meta, `event:${event.id}`, () =>
       this.database.write.auditLog.createMany({
         data: [
           {

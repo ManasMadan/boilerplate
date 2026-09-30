@@ -3,6 +3,7 @@ import {
   contextLogFields,
   currentContext,
   jobMetaFromContext,
+  runJob,
   runWithContext,
   updateContext,
 } from "./context";
@@ -31,6 +32,14 @@ describe("request context", () => {
       updateContext({ userId: "u-4" });
       expect(jobMetaFromContext()).toEqual({ requestId: "r-4", userId: "u-4" });
     });
+  });
+
+  it("runs a job in the context it was queued from, named by the fallback when none", () => {
+    expect(runJob({ requestId: "r-5", orgId: "o-5" }, "job:1", () => currentContext())).toEqual({
+      requestId: "r-5",
+      orgId: "o-5",
+    });
+    expect(runJob({}, "event:e-1", () => currentContext())).toEqual({ requestId: "event:e-1" });
   });
 
   it("puts only the ids it has on log lines, never personal data", () => {

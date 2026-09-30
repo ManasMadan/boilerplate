@@ -29,6 +29,19 @@ export function runWithContext<T>(context: RequestContext, fn: () => T): T {
   return storage.run({ ...context }, fn);
 }
 
+/**
+ * Runs a job's work in the request context it was queued from (its `meta`), so its logs
+ * carry that request's id. `fallback` names the work when no request queued it: the
+ * event's id, or `job:<id>`.
+ */
+export function runJob<T>(
+  meta: Omit<RequestContext, "requestId"> & { requestId?: string },
+  fallback: string,
+  fn: () => T,
+): T {
+  return runWithContext({ ...meta, requestId: meta.requestId ?? fallback }, fn);
+}
+
 export function currentContext(): RequestContext | undefined {
   return storage.getStore();
 }

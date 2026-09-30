@@ -1,6 +1,6 @@
 import { Processor } from "@nestjs/bullmq";
 import { type NotificationQueue, parseJob, queuePrefix } from "@repo/jobs";
-import { JobProcessor, runWithContext } from "@repo/nest-common";
+import { JobProcessor, runJob } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { DigestService } from "../digest/digest.service";
 import { env } from "../env";
@@ -17,7 +17,7 @@ async function handle(queue: NotificationQueue, job: Job<unknown>, dispatcher: D
   const jobId = job.id as string;
   if (job.name === "deferred") {
     const { meta, payload } = parseJob(queue, "deferred", job.data);
-    await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${jobId}` }, () =>
+    await runJob(meta, `job:${jobId}`, () =>
       dispatcher.deliverDeferred(payload.payload, payload.channel, payload.userId, payload.key),
     );
     return;
@@ -25,7 +25,7 @@ async function handle(queue: NotificationQueue, job: Job<unknown>, dispatcher: D
   if (job.name !== "send") throw new Error(`Unknown job "${job.name}" on ${queue}`);
   const { meta, payload } = parseJob(queue, "send", job.data);
   // Restore the producer's request context so these logs carry its request id.
-  await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${jobId}` }, () =>
+  await runJob(meta, `job:${jobId}`, () =>
     // The producer-chosen job id is stable across retries and Redis restarts.
     dispatcher.dispatch(payload, jobId),
   );
@@ -63,9 +63,7 @@ export class BulkNotificationsProcessor extends JobProcessor {
     }
     if (job.name === "digest") {
       const { meta, payload } = parseJob("notifications-bulk", "digest", job.data);
-      await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${job.id}` }, () =>
-        this.digests.send(payload.userId, payload.date),
-      );
+      await runJob(meta, `job:${job.id}`, () => this.digests.send(payload.userId, payload.date));
       return;
     }
     return handle("notifications-bulk", job, this.dispatcher);

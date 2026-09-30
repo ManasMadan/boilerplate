@@ -17,6 +17,7 @@ import {
   JobProcessor,
   PinoLogger,
   row,
+  runJob,
 } from "@repo/nest-common";
 import type { Job, Queue } from "bullmq";
 import * as z from "zod";
@@ -66,8 +67,8 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
   }
 
   async process(job: Job<unknown>) {
-    parseJob("maintenance", job.name as Task, job.data);
-    await this.run(job.name as Task);
+    const { meta } = parseJob("maintenance", job.name as Task, job.data);
+    await runJob(meta, `job:${job.id}`, () => this.run(job.name as Task));
   }
 
   /** Runs one task now; also used by tests and the ops scripts. */

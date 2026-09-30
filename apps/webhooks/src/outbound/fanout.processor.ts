@@ -14,7 +14,7 @@ import {
   InjectRedis,
   JobProcessor,
   type Redis,
-  runWithContext,
+  runJob,
 } from "@repo/nest-common";
 import type { Job } from "bullmq";
 
@@ -36,48 +36,45 @@ export class FanoutProcessor extends JobProcessor {
     // Customer webhooks are per organization; events without one have no audience.
     const orgId = event.orgId;
     if (!orgId) return;
-    await runWithContext(
-      { ...meta, requestId: meta.requestId ?? `event:${event.id}` },
-      async () => {
-        const tenant = withTenant(this.database.write, orgId);
-        const endpoints = await tenant.webhookEndpoint.findMany({
-          where: {
-            disabledAt: null,
-            OR: [{ events: { isEmpty: true } }, { events: { has: event.name } }],
-          },
-          select: { id: true },
-        });
-        if (endpoints.length === 0) return;
+    await runJob(meta, `event:${event.id}`, async () => {
+      const tenant = withTenant(this.database.write, orgId);
+      const endpoints = await tenant.webhookEndpoint.findMany({
+        where: {
+          disabledAt: null,
+          OR: [{ events: { isEmpty: true } }, { events: { has: event.name } }],
+        },
+        select: { id: true },
+      });
+      if (endpoints.length === 0) return;
 
-        // Standard Webhooks payload shape: { type, timestamp, data }.
-        const body = JSON.stringify({
-          type: event.name,
-          timestamp: event.occurredAt,
-          data: event.payload,
-        });
-        await tenant.webhookDelivery.createMany({
-          data: endpoints.map((endpoint) => ({
-            endpointId: endpoint.id,
-            orgId,
-            eventId: event.id,
-            eventName: event.name,
-            body,
-          })),
-          skipDuplicates: true,
-        });
-        const deliveries = await tenant.webhookDelivery.findMany({
-          where: { eventId: event.id, status: "pending" },
-          select: { id: true },
-        });
-        await this.deliveries.addBulk(
-          deliveries.map((delivery) => ({
-            name: "deliver" as const,
-            payload: { deliveryId: delivery.id, orgId },
-            options: { jobId: delivery.id, meta: { ...meta, orgId } },
-          })),
-        );
-      },
-    );
+      // Standard Webhooks payload shape: { type, timestamp, data }.
+      const body = JSON.stringify({
+        type: event.name,
+        timestamp: event.occurredAt,
+        data: event.payload,
+      });
+      await tenant.webhookDelivery.createMany({
+        data: endpoints.map((endpoint) => ({
+          endpointId: endpoint.id,
+          orgId,
+          eventId: event.id,
+          eventName: event.name,
+          body,
+        })),
+        skipDuplicates: true,
+      });
+      const deliveries = await tenant.webhookDelivery.findMany({
+        where: { eventId: event.id, status: "pending" },
+        select: { id: true },
+      });
+      await this.deliveries.addBulk(
+        deliveries.map((delivery) => ({
+          name: "deliver" as const,
+          payload: { deliveryId: delivery.id, orgId },
+          options: { jobId: delivery.id, meta: { ...meta, orgId } },
+        })),
+      );
+    });
   }
 
   async onModuleDestroy() {
