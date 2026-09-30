@@ -116,7 +116,7 @@
     "db:deploy": "bun run --filter @repo/db deploy",
     "db:studio": "bun run --filter @repo/db studio",
     "db:reset": "bun run --filter @repo/db reset",
-    "lint:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs && bun scripts/check-web-render-only.ts",
+    "lint:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs && bun scripts/check-web-render-only.ts && bun scripts/check-layers.ts",
     "prepare": "husky",
     "stripe:fake": "bun run --filter @repo/fake-stripe start",
     "db:seed": "turbo run seed --filter=@repo/api",

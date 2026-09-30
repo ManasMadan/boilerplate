@@ -73,6 +73,8 @@ setups. Inbound Stripe webhooks go straight to `localhost:3004/webhooks/stripe`.
 4. The feature module (`apps/api/src/modules/<feature>`: router, service, repository)
    queries through `withTenant` / `tenantTx`, so Postgres row-level security scopes it to
    the organization, and writes its domain events to the outbox in the same transaction.
+   Only the repository touches Prisma; the service owns the transaction and hands its
+   `Tx` to the repository (`lint:boundaries` checks this).
 5. Errors leave as stable codes (`packages/contracts/src/errors.ts`) with parameters;
    clients translate `errors.<code>` themselves. Every HTTP surface answers an error in
    the same JSON body, oRPC's: `{ code, status, message, data: { params, requestId,

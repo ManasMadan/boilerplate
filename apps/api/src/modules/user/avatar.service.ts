@@ -9,9 +9,9 @@
  */
 import { Injectable } from "@nestjs/common";
 import { fileContentPath } from "@repo/contracts/files";
-import { type Database, InjectDatabase } from "@repo/nest-common";
 import { type Auth, InjectAuth } from "../../auth/auth.module";
 import { FilesService } from "../files";
+import { UserRepository } from "./user.repository";
 
 const AVATAR_PATH = /^\/api\/v1\/files\/([0-9a-f-]{36})\/content$/;
 
@@ -19,16 +19,13 @@ const AVATAR_PATH = /^\/api\/v1\/files\/([0-9a-f-]{36})\/content$/;
 export class AvatarService {
   constructor(
     @InjectAuth() private readonly auth: Auth,
-    @InjectDatabase() private readonly database: Database,
+    private readonly users: UserRepository,
     private readonly files: FilesService,
   ) {}
 
   async set(userId: string, fileId: string | null) {
     if (fileId) await this.files.ready(userId, fileId, "avatar");
-    const current = await this.database.read.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { image: true },
-    });
+    const current = await this.users.image(userId);
     const previous = AVATAR_PATH.exec(current.image ?? "")?.[1];
     const context = await this.auth.$context;
     await context.internalAdapter.updateUser(userId, {

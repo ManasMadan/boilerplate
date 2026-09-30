@@ -31,7 +31,7 @@ import { env } from "../../env";
 import { emitEvent } from "../../outbox";
 import { BillingService } from "../billing";
 import { assertDeliverableUrl } from "./webhook-url";
-import { endpointColumns, WebhooksRepository } from "./webhooks.repository";
+import { WebhooksRepository } from "./webhooks.repository";
 
 export const WEBHOOK_DELIVERIES = Symbol("WEBHOOK_DELIVERIES");
 
@@ -86,16 +86,13 @@ export class WebhooksService implements OnApplicationShutdown {
       if ((await this.repository.countEndpoints(tx)) >= WEBHOOK_ENDPOINT_LIMIT) {
         throw new AppError("WEBHOOK_ENDPOINT_LIMIT", { params: { max: WEBHOOK_ENDPOINT_LIMIT } });
       }
-      const endpoint = await tx.webhookEndpoint.create({
-        data: {
-          orgId,
-          url: input.url,
-          description: input.description ?? "",
-          events: input.events ?? [],
-          secret: this.box.encrypt(secret),
-          createdById: userId,
-        },
-        select: endpointColumns,
+      const endpoint = await this.repository.createEndpoint(tx, {
+        orgId,
+        url: input.url,
+        description: input.description ?? "",
+        events: input.events ?? [],
+        secret: this.box.encrypt(secret),
+        createdById: userId,
       });
       await emitEvent(tx, "webhook.endpoint_created.v1", endpoint.id, {
         endpointId: endpoint.id,
@@ -127,18 +124,14 @@ export class WebhooksService implements OnApplicationShutdown {
       if (input.enabled !== undefined && input.enabled !== (current.disabledAt === null))
         changed.push("enabled");
 
-      const endpoint = await tx.webhookEndpoint.update({
-        where: { id: input.id },
-        data: {
-          ...(input.url !== undefined && { url: input.url }),
-          ...(input.description !== undefined && { description: input.description }),
-          ...(input.events !== undefined && { events: input.events }),
-          ...(changed.includes("enabled") &&
-            (input.enabled
-              ? { disabledAt: null, disabledReason: null }
-              : { disabledAt: new Date(), disabledReason: "manual" })),
-        },
-        select: endpointColumns,
+      const endpoint = await this.repository.updateEndpoint(tx, input.id, {
+        ...(input.url !== undefined && { url: input.url }),
+        ...(input.description !== undefined && { description: input.description }),
+        ...(input.events !== undefined && { events: input.events }),
+        ...(changed.includes("enabled") &&
+          (input.enabled
+            ? { disabledAt: null, disabledReason: null }
+            : { disabledAt: new Date(), disabledReason: "manual" })),
       });
       if (changed.length > 0) {
         await emitEvent(tx, "webhook.endpoint_updated.v1", endpoint.id, {
@@ -154,7 +147,7 @@ export class WebhooksService implements OnApplicationShutdown {
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findEndpoint(tx, id);
       if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
-      await tx.webhookEndpoint.delete({ where: { id } });
+      await this.repository.deleteEndpoint(tx, id);
       await emitEvent(tx, "webhook.endpoint_deleted.v1", id, { endpointId: id, url: current.url });
     });
   }
@@ -167,18 +160,12 @@ export class WebhooksService implements OnApplicationShutdown {
   rotateSecret(orgId: string, id: string) {
     const secret = newWebhookSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {
-      const current = await tx.webhookEndpoint.findUnique({
-        where: { id },
-        select: { secret: true },
-      });
+      const current = await this.repository.findSecret(tx, id);
       if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
-      await tx.webhookEndpoint.update({
-        where: { id },
-        data: {
-          secret: this.box.encrypt(secret),
-          previousSecret: current.secret,
-          previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000),
-        },
+      await this.repository.setSecret(tx, id, {
+        secret: this.box.encrypt(secret),
+        previousSecret: current.secret,
+        previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000),
       });
       await emitEvent(tx, "webhook.secret_rotated.v1", id, { endpointId: id });
       return { secret };

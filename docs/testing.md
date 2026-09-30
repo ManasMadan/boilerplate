@@ -307,7 +307,7 @@ The evals run on every change with the local stand-ins; see
 
 | Command | What it checks |
 |---|---|
-| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser and the web render-only check), `lint:unused`, `lint:markers`, and each package's `lint` (ruff for Python), all of them even when one fails, with a summary at the end (`scripts/lint.ts`); CI runs the same command |
+| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser, the web render-only check and `scripts/check-layers.ts`), `lint:unused`, `lint:markers`, and each package's `lint` (ruff for Python), all of them even when one fails, with a summary at the end (`scripts/lint.ts`); CI runs the same command |
 | `bun run lint:unused` | knip (`knip.jsonc`): unused files, exports and dependencies, and dependencies used but not declared |
 | `bun run lint:markers` | no `ponytail:` markers in tracked source (`scripts/check-markers.ts`): a comment says why in plain words |
 | `bun run check-types` | tsc everywhere, basedpyright (strict) for Python |

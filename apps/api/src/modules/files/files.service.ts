@@ -7,18 +7,16 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { type FileInfo, fileSchema } from "@repo/contracts/api";
 import { type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
-import { withUser } from "@repo/db";
 import type { Producer } from "@repo/jobs";
 import {
   AppError,
   createRateLimiter,
-  type Database,
-  InjectDatabase,
   InjectRedis,
   type Redis,
   STORAGE,
   type Storage,
 } from "@repo/nest-common";
+import { FilesRepository } from "./files.repository";
 
 export const FILES_QUEUE = Symbol("FILES_QUEUE");
 
@@ -40,17 +38,6 @@ interface FileRow {
   createdAt: Date;
 }
 
-const select = {
-  id: true,
-  purpose: true,
-  status: true,
-  filename: true,
-  contentType: true,
-  size: true,
-  rejectReason: true,
-  createdAt: true,
-} as const;
-
 // Parsed, not cast: a value the column holds but the contract doesn't know fails here.
 const toInfo = (row: FileRow): FileInfo => fileSchema.parse(row);
 
@@ -59,7 +46,7 @@ export class FilesService {
   private readonly uploads;
 
   constructor(
-    @InjectDatabase() private readonly database: Database,
+    private readonly files: FilesRepository,
     @Inject(STORAGE) private readonly optionalStorage: Storage | null,
     @Inject(FILES_QUEUE) private readonly queue: Producer<"files">,
     @InjectRedis() redis: Redis,
@@ -96,16 +83,12 @@ export class FilesService {
       });
     }
     const id = randomUUID();
-    const row = await withUser(this.database.write, userId).file.create({
-      data: {
-        id,
-        userId,
-        purpose: input.purpose,
-        filename: input.filename,
-        declaredType: input.contentType,
-        declaredSize: input.size,
-      },
-      select,
+    const row = await this.files.create(userId, {
+      id,
+      purpose: input.purpose,
+      filename: input.filename,
+      declaredType: input.contentType,
+      declaredSize: input.size,
     });
     const upload = await storage.presignUpload({
       key: quarantineKey(id),
@@ -140,7 +123,7 @@ export class FilesService {
 
   /** Deletes the row; the database queues its stored objects for removal. */
   async remove(userId: string, fileId: string) {
-    await withUser(this.database.write, userId).file.deleteMany({ where: { id: fileId, userId } });
+    await this.files.remove(userId, fileId);
   }
 
   /**
@@ -148,10 +131,7 @@ export class FilesService {
    * avatar: row-level security decides). Null when there's no such file.
    */
   async downloadUrl(viewerId: string, fileId: string) {
-    const row = await withUser(this.database.read, viewerId).file.findFirst({
-      where: { id: fileId, status: "ready" },
-      select: { purpose: true, filename: true },
-    });
+    const row = await this.files.findReadable(viewerId, fileId);
     if (!row) return null;
     return this.storage.presignDownload(storedKey(fileId), {
       expiresInSeconds: DOWNLOAD_EXPIRES_IN,
@@ -161,10 +141,7 @@ export class FilesService {
   }
 
   private async find(userId: string, fileId: string) {
-    const row = await withUser(this.database.read, userId).file.findFirst({
-      where: { id: fileId, userId },
-      select,
-    });
+    const row = await this.files.find(userId, fileId);
     if (!row) throw new AppError("FILE_NOT_FOUND");
     return row;
   }

@@ -23,7 +23,7 @@ import {
   subscriptionStatuses,
   unlimited,
 } from "@repo/contracts/billing";
-import { tenantTx, withTenant } from "@repo/db";
+import { tenantTx } from "@repo/db";
 import {
   AppError,
   type Database,
@@ -36,6 +36,7 @@ import {
 import type Stripe from "stripe";
 import * as z from "zod";
 import { env } from "../../env";
+import { BillingRepository, type SubscriptionData } from "./billing.repository";
 import { STRIPE } from "./stripe";
 
 // The subscription row's text columns, parsed rather than cast.
@@ -70,6 +71,7 @@ export class BillingService {
   constructor(
     @Inject(STRIPE) private readonly stripe: Stripe | null,
     @InjectDatabase() private readonly database: Database,
+    private readonly repository: BillingRepository,
     @InjectPinoLogger(BillingService.name) private readonly log: PinoLogger,
     @InjectRedis() private readonly redis: Redis,
   ) {}
@@ -90,17 +92,9 @@ export class BillingService {
     };
   }
 
-  /** The subscription that decides the plan: the newest one that isn't over. */
-  private async current(orgId: string) {
-    return withTenant(this.database.read, orgId).subscription.findFirst({
-      where: { orgId, status: { notIn: ["canceled", "incomplete_expired"] } },
-      orderBy: { createdAt: "desc" },
-    });
-  }
-
   async plan(orgId: string): Promise<PlanName> {
     if (!this.enabled) return "pro";
-    const subscription = await this.current(orgId);
+    const subscription = await this.repository.current(orgId);
     return subscription && paid.has(subscription.status)
       ? planName.parse(subscription.plan)
       : "free";
@@ -118,16 +112,12 @@ export class BillingService {
     }
   }
 
-  private memberCount(orgId: string) {
-    return this.database.read.member.count({ where: { organizationId: orgId } });
-  }
-
   async overview(orgId: string): Promise<BillingOverview> {
     const [plan, entitlements, members, subscription] = await Promise.all([
       this.plan(orgId),
       this.entitlements(orgId),
-      this.memberCount(orgId),
-      this.enabled ? this.current(orgId) : null,
+      this.repository.memberCount(orgId),
+      this.enabled ? this.repository.current(orgId) : null,
     ]);
     return {
       enabled: this.enabled,
@@ -147,21 +137,19 @@ export class BillingService {
 
   async checkout(orgId: string, interval: BillingInterval) {
     const stripe = this.client;
-    const current = await this.current(orgId);
+    const current = await this.repository.current(orgId);
     if (current && paid.has(current.status)) {
       throw new AppError("ALREADY_SUBSCRIBED");
     }
     const customer = await this.customer(orgId);
-    const hadOne = await withTenant(this.database.read, orgId).subscription.count({
-      where: { orgId },
-    });
+    const hadOne = await this.repository.hadSubscription(orgId);
     const price = interval === "month" ? env.STRIPE_PRICE_PRO_MONTHLY : env.STRIPE_PRICE_PRO_YEARLY;
     const settings = new URL("/settings/billing", env.WEB_URL);
     // A double click or a second tab gets the same session (Stripe replays the answer for
     // the same key), and a new one, say for the other interval, expires the one before:
     // a workspace has one open checkout at a time, so it can't end up paying twice.
     const hour = Math.floor(Date.now() / 3_600_000);
-    const seats = Math.max(1, await this.memberCount(orgId));
+    const seats = Math.max(1, await this.repository.memberCount(orgId));
     const session = await fromStripe(() =>
       stripe.checkout.sessions.create(
         {
@@ -173,7 +161,7 @@ export class BillingService {
             metadata: { orgId },
             // One free trial per organization.
             ...(env.STRIPE_TRIAL_DAYS > 0 &&
-              hadOne === 0 && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
+              !hadOne && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
           },
           allow_promotion_codes: true,
           success_url: `${settings.toString()}?checkout=done`,
@@ -202,9 +190,7 @@ export class BillingService {
 
   async portal(orgId: string) {
     const stripe = this.client;
-    const row = await withTenant(this.database.read, orgId).billingCustomer.findUnique({
-      where: { orgId },
-    });
+    const row = await this.repository.customer(orgId);
     if (!row) throw new AppError("NO_SUBSCRIPTION");
     const session = await fromStripe(() =>
       stripe.billingPortal.sessions.create({
@@ -217,9 +203,7 @@ export class BillingService {
 
   async invoices(orgId: string) {
     const stripe = this.client;
-    const row = await withTenant(this.database.read, orgId).billingCustomer.findUnique({
-      where: { orgId },
-    });
+    const row = await this.repository.customer(orgId);
     if (!row) return [];
     const list = await fromStripe(() =>
       stripe.invoices.list({ customer: row.stripeCustomerId, limit: 24 }),
@@ -239,14 +223,9 @@ export class BillingService {
   /** The organization's Stripe customer, created once (concurrent first calls agree). */
   private async customer(orgId: string) {
     const stripe = this.client;
-    const existing = await withTenant(this.database.read, orgId).billingCustomer.findUnique({
-      where: { orgId },
-    });
+    const existing = await this.repository.customer(orgId);
     if (existing) return existing.stripeCustomerId;
-    const org = await this.database.read.organization.findUniqueOrThrow({
-      where: { id: orgId },
-      select: { name: true },
-    });
+    const org = await this.repository.organizationName(orgId);
     const created = await fromStripe(() =>
       stripe.customers.create(
         { name: org.name, metadata: { orgId } },
@@ -255,10 +234,7 @@ export class BillingService {
         { idempotencyKey: `customer-${orgId}` },
       ),
     );
-    await withTenant(this.database.write, orgId).billingCustomer.createMany({
-      data: [{ orgId, stripeCustomerId: created.id }],
-      skipDuplicates: true,
-    });
+    await this.repository.saveCustomer(orgId, created.id);
     return created.id;
   }
 
@@ -273,12 +249,8 @@ export class BillingService {
       this.log.warn({ subscriptionId }, "ignoring a subscription that isn't ours");
       return;
     }
-    const org = await this.database.read.organization.findUnique({
-      where: { id: orgId },
-      select: { id: true },
-    });
-    if (!org) return; // deleted meanwhile
-    const data = {
+    if (!(await this.repository.organization(orgId))) return; // deleted meanwhile
+    const data: SubscriptionData = {
       plan: price.plan,
       status: subscription.status,
       priceId: item.price.id,
@@ -290,15 +262,8 @@ export class BillingService {
       trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
     };
     const others = await tenantTx(this.database.write, orgId, async (tx) => {
-      await tx.subscription.upsert({
-        where: { id: subscription.id },
-        create: { id: subscription.id, orgId, ...data },
-        update: data,
-      });
-      return tx.subscription.findMany({
-        where: { orgId, id: { not: subscription.id }, status: { in: [...PAID_STATUSES] } },
-        select: { id: true },
-      });
+      await this.repository.saveSubscription(tx, subscription.id, orgId, data);
+      return this.repository.otherPaid(tx, orgId, subscription.id);
     });
     // Checkout keeps one session open per workspace, so this shouldn't happen; if it does
     // (a session paid in the moment before it was expired), someone must refund one.
@@ -313,9 +278,9 @@ export class BillingService {
   /** Paid plans are per seat: keeps the subscription's quantity at the member count. */
   async syncSeats(orgId: string) {
     const stripe = this.client;
-    const current = await this.current(orgId);
+    const current = await this.repository.current(orgId);
     if (!current || !paid.has(current.status)) return;
-    const seats = Math.max(1, await this.memberCount(orgId));
+    const seats = Math.max(1, await this.repository.memberCount(orgId));
     if (seats === current.quantity) return;
     const subscription = await stripe.subscriptions.retrieve(current.id);
     const item = subscription.items.data[0];
@@ -330,10 +295,7 @@ export class BillingService {
   /** Before an organization is deleted: nothing may keep charging for it. */
   async cancelFor(orgId: string) {
     if (!this.stripe) return;
-    const live = await withTenant(this.database.read, orgId).subscription.findMany({
-      where: { orgId, status: { notIn: ["canceled", "incomplete_expired"] } },
-      select: { id: true },
-    });
+    const live = await this.repository.live(orgId);
     for (const { id } of live) {
       await this.stripe.subscriptions.cancel(id, {}, { idempotencyKey: `cancel-${id}` });
     }
@@ -344,9 +306,6 @@ export class BillingService {
     const subscription = await this.client.subscriptions.retrieve(subscriptionId);
     const orgId = subscription.metadata.orgId;
     if (!orgId || !UUID.test(orgId)) return null;
-    return this.database.read.organization.findUnique({
-      where: { id: orgId },
-      select: { id: true, name: true },
-    });
+    return this.repository.organization(orgId);
   }
 }

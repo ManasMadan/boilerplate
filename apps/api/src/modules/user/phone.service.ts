@@ -38,6 +38,7 @@ import {
   requestNotification,
 } from "../../notifications";
 import { emitEvent } from "../../outbox";
+import { UserRepository } from "./user.repository";
 
 const MAX_ATTEMPTS = 5;
 const MINUTE = 60;
@@ -54,6 +55,7 @@ export class PhoneService {
 
   constructor(
     @InjectDatabase() private readonly database: Database,
+    private readonly users: UserRepository,
     @InjectRedis() private readonly redis: Redis,
     @InjectCriticalNotifications() private readonly notifications: CriticalNotifications,
   ) {
@@ -79,10 +81,7 @@ export class PhoneService {
   }
 
   async current(userId: string) {
-    const user = await this.database.read.user.findUnique({
-      where: { id: userId },
-      select: { phoneNumber: true },
-    });
+    const user = await this.users.phoneNumber(userId);
     return user?.phoneNumber ?? null;
   }
 
@@ -150,12 +149,9 @@ export class PhoneService {
 
   private async change(userId: string, phoneNumber: string | null) {
     return transaction(this.database.write, async (tx) => {
-      const before = await tx.user.findUniqueOrThrow({
-        where: { id: userId },
-        select: { phoneNumber: true },
-      });
-      const updated = await tx.user
-        .update({ where: { id: userId }, data: { phoneNumber } })
+      const before = await this.users.phoneNumberIn(tx, userId);
+      const updated = await this.users
+        .setPhoneNumber(tx, userId, phoneNumber)
         .catch((error: { code?: string }) => {
           // Someone else verified this number in the meantime.
           if (error.code === "P2002") throw new AppError("PHONE_NUMBER_TAKEN");
