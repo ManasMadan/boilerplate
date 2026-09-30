@@ -55,7 +55,11 @@ export function createApiServer() {
           return row.active;
         },
         redis: app.get<Redis>(REDIS),
-        server: { todos: app.get(TodoService), release: env.RELEASE },
+        server: {
+          todos: app.get(TodoService),
+          release: env.RELEASE,
+          logError: (error) => logger.error({ err: describeError(error) }, "MCP tool failed"),
+        },
         describeError: async (error, locale) => {
           const t = await i18n.getTranslator(isLocale(locale) ? locale : "en");
           return t(`errors.${error.code}`, error.params);

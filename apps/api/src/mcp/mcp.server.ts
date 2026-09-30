@@ -14,7 +14,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createTodoInput, deleteTodoInput, setTodoCompletedInput } from "@repo/contracts/api";
 import { pageInput } from "@repo/contracts/pagination";
-import { AppError } from "@repo/nest-common";
+import { AppError, currentContext } from "@repo/nest-common";
 import type { TodoService } from "../modules/todo";
 import type { McpCaller } from "./mcp.tokens";
 
@@ -22,6 +22,8 @@ export interface McpServerDependencies {
   todos: TodoService;
   /** The sentence for an error code, in the caller's language. */
   describeError: (error: AppError) => Promise<string>;
+  /** Where an unexpected failure is logged (the client only hears that one happened). */
+  logError: (error: unknown) => void;
   release: string;
 }
 
@@ -29,7 +31,11 @@ export function createMcpServer(caller: McpCaller, deps: McpServerDependencies) 
   const server = new McpServer({ name: "boilerplate", version: deps.release });
   const { orgId, userId } = caller;
 
-  /** Runs a tool; a known failure becomes a tool error the model can read and act on. */
+  /**
+   * Runs a tool; a known failure becomes a tool error the model can read and act on. An
+   * unexpected one is logged and answered as INTERNAL with the request id: rethrown, the
+   * SDK would hand its message (a stack's worth of internals) to the client.
+   */
   async function run(work: () => Promise<unknown>): Promise<CallToolResult> {
     try {
       const result = await work();
@@ -37,10 +43,22 @@ export function createMcpServer(caller: McpCaller, deps: McpServerDependencies) 
         content: [{ type: "text", text: JSON.stringify(result ?? { ok: true }) }],
       };
     } catch (error) {
-      if (!(error instanceof AppError)) throw error;
+      if (error instanceof AppError) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `${error.code}: ${await deps.describeError(error)}` }],
+        };
+      }
+      deps.logError(error);
+      const requestId = currentContext()?.requestId;
       return {
         isError: true,
-        content: [{ type: "text", text: `${error.code}: ${await deps.describeError(error)}` }],
+        content: [
+          {
+            type: "text",
+            text: `INTERNAL: the tool failed${requestId ? ` (request id ${requestId})` : ""}.`,
+          },
+        ],
       };
     }
   }
