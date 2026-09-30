@@ -1,5 +1,5 @@
 /**
- * `bun run jobs` (scripts/jobs.ts, src/cli.ts) against a real Valkey: jobs' database 12, on one of
+ * `bun run jobs` (scripts/jobs.ts, src/cli.ts) against a real Valkey: jobs' database 19, on one of
  * the real queues (the command opens them by name), with job ids of this run's own.
  */
 import { randomUUID } from "node:crypto";
@@ -10,7 +10,7 @@ import { jobs } from "../src/cli";
 import { queuePrefix, queues } from "../src/queues";
 
 const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
-url.pathname = "/12";
+url.pathname = "/19";
 const REDIS = url.toString();
 const NAME = Object.keys(queues)[0] as keyof typeof queues;
 const connection = new Redis(REDIS, { maxRetriesPerRequest: null });

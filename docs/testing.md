@@ -38,8 +38,8 @@ background when a tool times out commands (an agent's shell, for one).
   32 (the `--databases` flag in `docker-compose.yml`, which CI's integration job runs too).
   Taken: the api's files 1 to 5, 7 to 10 and 13 (one per file, `startApi(<n>)`),
   webhooks 11, nest-common 12, notifications 14, worker 15, webhooks' Stalwart suite 16,
-  the api's breached-password suite 17, the web's browser tests 18 and Python 6. A new
-  suite takes the next free number, 19 onwards;
+  the api's breached-password suite 17, the web's browser tests 18, jobs 19 and Python 6.
+  A new suite takes the next free number, 20 onwards;
   `scripts/redis-databases.test.ts` fails when two suites that flush share one. A change
   to the flag needs the local container recreated (`docker compose up -d valkey`).
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker

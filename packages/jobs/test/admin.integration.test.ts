@@ -5,10 +5,10 @@ import { Redis } from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { discardFailed, failedJobs, retryFailed } from "../src/admin";
 
-// Database 12 (shared with nest-common's suite, which never flushes it) under a prefix
-// of this run's own, so nothing else's keys are touched.
+// The jobs package's own Valkey database (docs/testing.md), under a prefix of this
+// run's own, so nothing else's keys are touched.
 const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
-url.pathname = "/12";
+url.pathname = "/19";
 const connection = new Redis(url.toString(), { maxRetriesPerRequest: null });
 const prefix = `test-admin-${randomUUID()}`;
 const queue = new Queue("jobs-admin", { connection, prefix });

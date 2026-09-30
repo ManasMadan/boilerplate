@@ -5,13 +5,15 @@ import { afterAll, describe, expect, it } from "vitest";
 // Through the package's entry point, as the services import it.
 import { createProducer, parseJob } from "../src";
 
-// Database 12 (shared with nest-common's suite, which never uses these queues).
+// The jobs package's own Valkey database (docs/testing.md).
 const url = new URL(process.env.REDIS_URL as string);
-url.pathname = "/12";
+url.pathname = "/19";
 const connection = new Redis(url.toString(), { maxRetriesPerRequest: null });
 const producer = createProducer("notifications-critical", connection);
+// Only the jobs this file added: the CLI's suite uses the same real queue at the same time.
+const added: string[] = [];
 afterAll(async () => {
-  await producer.queue.obliterate({ force: true });
+  await Promise.all(added.map(async (id) => (await producer.queue.getJob(id))?.remove()));
   await producer.close();
   await connection.quit();
 });
@@ -26,6 +28,7 @@ const payload = (otp: string) =>
 describe("producer", () => {
   it("stores a job under the id it's given, with its metadata, once", async () => {
     const jobId = randomUUID();
+    added.push(jobId);
     await producer.add("send", payload("111111"), { jobId, meta: { requestId: "r-1" } });
     await producer.add("send", payload("222222"), { jobId });
     const job = await producer.queue.getJob(jobId);
@@ -37,6 +40,7 @@ describe("producer", () => {
 
   it("stores many jobs in one go, each checked like a single one", async () => {
     const ids = [randomUUID(), randomUUID()];
+    added.push(...ids);
     await producer.addBulk(
       ids.map((jobId, n) => ({ name: "send", payload: payload(`33333${n}`), options: { jobId } })),
     );

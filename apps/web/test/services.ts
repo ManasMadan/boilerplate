@@ -49,13 +49,12 @@ export const SITE = {
 };
 
 /**
- * The Redis database both APIs use. Every number is taken (docs/testing.md); 12 is
- * shared with nest-common's and jobs' suites, which never flush it and use queues of
- * their own. Nothing here consumes the queues the APIs fill, so OTPs are read from them.
+ * The Valkey database both APIs use, the web's own (docs/testing.md lists who has which).
+ * Nothing here consumes the queues the APIs fill, so OTPs are read from them.
  */
 export const REDIS_URL = (() => {
   const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
-  url.pathname = "/12";
+  url.pathname = "/18";
   return url.toString();
 })();
 

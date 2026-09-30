@@ -16,17 +16,22 @@ const files = Bun.spawnSync(["git", "ls-files", "apps/*/test/*", "packages/*/tes
   .split("\n")
   .filter((path) => /\.(ts|py)$/.test(path));
 
-/** Each file's database numbers: `startApi(n)`, `redisDatabase(n)`, Python's `path="/n"`. */
+/**
+ * Each file's database numbers: `startApi(n)`, `redisDatabase(n)`, Python's `path="/n"`,
+ * and a URL's `pathname = "/n"`.
+ */
 const claims = files.flatMap((path) => {
   const text = readFileSync(join(ROOT, path), "utf8");
-  return [...text.matchAll(/(?:startApi|redisDatabase)\((\d+)|_replace\(path="\/(\d+)"\)/g)].map(
-    (match) => ({
-      path,
-      pkg: path.split("/").slice(0, 2).join("/"),
-      db: Number(match[1] ?? match[2]),
-      flushes: /flushdb\(\)|flushTestDatabase\(|startApi\(/.test(text),
-    }),
-  );
+  return [
+    ...text.matchAll(
+      /(?:startApi|redisDatabase)\((\d+)|_replace\(path="\/(\d+)"\)|pathname = "\/(\d+)"/g,
+    ),
+  ].map((match) => ({
+    path,
+    pkg: path.split("/").slice(0, 2).join("/"),
+    db: Number(match[1] ?? match[2] ?? match[3]),
+    flushes: /flushdb\(\)|flushTestDatabase\(|startApi\(/.test(text),
+  }));
 });
 
 const compose = readFileSync(join(ROOT, "docker-compose.yml"), "utf8");
