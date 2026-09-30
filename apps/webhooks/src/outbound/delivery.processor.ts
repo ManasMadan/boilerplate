@@ -19,13 +19,14 @@ import { DeliveryService } from "./delivery.service";
 /** Thrown to make BullMQ schedule the next attempt; the outcome is already recorded. */
 class DeliveryFailed extends Error {}
 
+/** How long to wait after a failed attempt: the schedule's step, never past its last. */
+export const retryDelayMs = (attemptsMade: number) =>
+  WEBHOOK_RETRY_DELAYS_MS[attemptsMade - 1] ?? (WEBHOOK_RETRY_DELAYS_MS.at(-1) as number);
+
 @Processor("webhook-deliveries", {
   concurrency: env.WEBHOOK_DELIVERY_CONCURRENCY,
   prefix: queuePrefix("webhook-deliveries"),
-  settings: {
-    backoffStrategy: (attemptsMade: number) =>
-      WEBHOOK_RETRY_DELAYS_MS[attemptsMade - 1] ?? (WEBHOOK_RETRY_DELAYS_MS.at(-1) as number),
-  },
+  settings: { backoffStrategy: retryDelayMs },
 })
 export class DeliveryProcessor extends JobProcessor {
   private readonly queue;
@@ -50,7 +51,8 @@ export class DeliveryProcessor extends JobProcessor {
     switch (job.name as JobName<"webhook-deliveries">) {
       case "deliver": {
         const { deliveryId, orgId } = parseJob("webhook-deliveries", "deliver", job.data).payload;
-        const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+        // BullMQ sets attempts on every job (0 when none were asked for).
+        const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts as number);
         const outcome = await this.deliveries.attempt(orgId, deliveryId, isLastAttempt);
         if (outcome === "retry")
           throw new DeliveryFailed(`delivery ${deliveryId} failed; retrying`);

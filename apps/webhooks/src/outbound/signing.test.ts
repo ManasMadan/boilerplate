@@ -39,4 +39,8 @@ describe("Standard Webhooks signing", () => {
     expect(verify(secret, "msg", 1_700_000_000, "{}", headers["webhook-signature"])).toBe(true);
     expect(verify(secret, "msg", 1_700_000_001, "{}", headers["webhook-signature"])).toBe(false);
   });
+
+  it("refuses a secret that isn't a Standard Webhooks one", () => {
+    expect(() => signatureHeaders(["not-whsec"], "msg", "{}")).toThrow(/start with whsec_/);
+  });
 });
