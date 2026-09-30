@@ -27,6 +27,18 @@ values, and refuses any file in a `secrets/` directory that isn't SOPS-encrypted
 schemas kubeconform validates against are downloaded once into
 `node_modules/.cache/kubeconform` (CI caches that directory too).
 
+## One app per cluster
+
+The names are fixed, not derived from the project: the namespaces `boilerplate`,
+`pr-<number>` and `mail`, the ApplicationSets `envs`, `previews`, `platform` and
+`observability`, the gateway `public`, the `boilerplate.dev/*` labels and annotations on
+clusters, OpenTofu's `boilerplate-<env>` names, and kind's cluster and image builder
+(`boilerplate`, `scripts/k8s.ts`). So each cluster runs one app built from this template,
+per environment: a second app on the same cluster would share the namespaces and
+ApplicationSets with the first. Give each app its own clusters. Locally, docker compose's
+project is `boilerplate` too (`docker-compose.yml`), so one checkout's services run on a
+machine at a time.
+
 ## Two releases per environment
 
 `data` and `stack` are separate releases in the same namespace, `data` first. The
