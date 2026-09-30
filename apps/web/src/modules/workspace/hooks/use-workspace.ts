@@ -19,8 +19,8 @@ const keys = {
 async function unwrap<T>(call: Promise<{ data: T | null; error: unknown }>): Promise<T> {
   const { data, error } = await call;
   if (error) throw error;
-  if (data === null) throw new Error("Empty response");
-  return data;
+  // better-auth answers either data or an error.
+  return data as T;
 }
 
 /** Personal workspaces (one per user, created at sign-up) can't be shared or deleted. */

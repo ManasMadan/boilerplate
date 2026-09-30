@@ -24,7 +24,7 @@ export function UpgradeHint({ entitlement }: { entitlement: "webhooks" | "member
       <AlertDescription className="flex flex-col items-start gap-2">
         {entitlement === "webhooks"
           ? t("upgradeForWebhooks")
-          : t("limitReached", { limit: limit ?? 0 })}
+          : t("limitReached", { limit: Number(limit) })}
         <Link href="/settings/billing" className="font-medium underline underline-offset-4">
           {t("upgrade.title")}
         </Link>

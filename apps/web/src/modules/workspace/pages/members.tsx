@@ -55,10 +55,8 @@ function RoleSelect({
   return (
     <Select
       value={value}
-      onValueChange={(next) => {
-        const role = orgRoleSchema.safeParse(next);
-        if (role.success) onChange(role.data);
-      }}
+      // Only the ROLES items can be picked.
+      onValueChange={(next) => onChange(orgRoleSchema.parse(next))}
       items={ROLES.map((role) => ({ value: role, label: t(role) }))}
     >
       <SelectTrigger id={id} aria-label={label} className="w-36">

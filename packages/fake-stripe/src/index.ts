@@ -66,8 +66,11 @@ interface Invoice
     type: Stripe.Invoice.Parent["type"];
     subscription_details: { subscription: string };
   };
-  /** A draft has no number or hosted page until it's finalized. */
-  status: "paid" | "open" | "draft";
+  /**
+   * A draft has no number or hosted page until it's finalized. Any status: tests set ones
+   * Stripe doesn't document, as a newer API version could.
+   */
+  status: string;
   currency: "usd";
 }
 
@@ -137,7 +140,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     if (!response.ok) throw new Error(`webhook ${type} was refused: ${response.status}`);
   }
 
-  function invoiceFor(subscription: Subscription, status: Invoice["status"]) {
+  function invoiceFor(subscription: Subscription, status: string) {
     const item = subscription.items.data[0] as SubscriptionItem;
     const draft = status === "draft";
     const invoice: Invoice = {
@@ -380,14 +383,20 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     return html(404, page("Not found", ""));
   }
 
-  /** Test hooks: things only time or a bank would do. */
-  async function hooks(path: string) {
+  /**
+   * Test hooks: things only time or a bank would do, and invoices in any status
+   * (`/invoice?status=draft`), as Stripe's dashboard can leave them.
+   */
+  async function hooks(path: string, query: URLSearchParams) {
     const failed = /^\/__fake\/subscriptions\/(sub_\w+)\/payment-failed$/.exec(path);
     const lapsed = /^\/__fake\/subscriptions\/(sub_\w+)\/lapse$/.exec(path);
     // The next renewal's invoice, as Stripe drafts it an hour before it's due.
     const upcoming = /^\/__fake\/subscriptions\/(sub_\w+)\/draft-invoice$/.exec(path);
-    const subscription = subscriptions.get((failed ?? lapsed ?? upcoming)?.[1] ?? "");
+    // An invoice in any status (`?status=`), as Stripe's dashboard can leave one.
+    const invoice = /^\/__fake\/subscriptions\/(sub_\w+)\/invoice$/.exec(path);
+    const subscription = subscriptions.get((failed ?? lapsed ?? upcoming ?? invoice)?.[1] ?? "");
     if (!subscription) return undefined;
+    if (invoice) return invoiceFor(subscription, query.get("status") ?? "draft");
     if (upcoming) {
       invoiceFor(subscription, "draft");
     } else if (failed) {
@@ -447,7 +456,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         const result =
           url.pathname === "/__fake/state"
             ? { subscriptions: [...subscriptions.values()], events }
-            : await hooks(url.pathname);
+            : await hooks(url.pathname, url.searchParams);
         return result ? json(200, result) : json(404, { error: "not found" });
       }
       return await hosted(request, response, url.pathname, form);
