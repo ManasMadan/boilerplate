@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const sdk = vi.hoisted(() => ({
   options: undefined as undefined | Record<string, unknown>,
   start: vi.fn(),
-  shutdown: vi.fn(async () => {}),
+  shutdown: vi.fn(async () => undefined),
 }));
 const register = vi.hoisted(() => vi.fn());
 

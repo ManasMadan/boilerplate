@@ -10,9 +10,15 @@
  * CLOSED for sensitive limiters (auth, AI) and OPEN for general traffic, per `onRedisError`:
  * an outage should not lock everyone out, nor open the door to credential stuffing.
  */
+import { Logger } from "@nestjs/common";
 import type { Redis } from "ioredis";
 import { RateLimiterRedis, RateLimiterRes } from "rate-limiter-flexible";
 import { AppError } from "./errors";
+import { describeError } from "./job-processor";
+
+const log = new Logger("RateLimiter");
+/** At most one log line per limiter this often, however many requests hit the outage. */
+const OUTAGE_LOG_MS = 30_000;
 
 export interface RateLimiterOptions {
   name: string;
@@ -36,6 +42,7 @@ export function createRateLimiter(redis: Redis, options: RateLimiterOptions) {
     duration: options.windowSeconds,
   });
   const failOpen = options.onRedisError === "allow";
+  let loggedAt = Number.NEGATIVE_INFINITY;
 
   async function consume(key: string, cost = 1): Promise<RateLimitResult> {
     try {
@@ -48,6 +55,18 @@ export function createRateLimiter(redis: Redis, options: RateLimiterOptions) {
           remaining: 0,
           retryAfterSeconds: Math.ceil(error.msBeforeNext / 1000),
         };
+      }
+      // Redis is failing: the limiter answers as configured, and says so.
+      if (Date.now() - loggedAt >= OUTAGE_LOG_MS) {
+        loggedAt = Date.now();
+        log.error(
+          {
+            limiter: options.name,
+            failing: failOpen ? "open" : "closed",
+            err: describeError(error),
+          },
+          "rate limiter can't reach Redis",
+        );
       }
       if (failOpen) return { allowed: true, remaining: 0, retryAfterSeconds: 0 };
       return { allowed: false, remaining: 0, retryAfterSeconds: options.windowSeconds };

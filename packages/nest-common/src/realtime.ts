@@ -46,7 +46,7 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
      * `onDropped` hears about messages outside the contract (or not JSON at all), which
      * are dropped: they come from Redis, where anything can publish.
      */
-    constructor(redis: Redis, onDropped: (channel: string, raw: string) => void = () => {}) {
+    constructor(redis: Redis, onDropped: (channel: string, raw: string) => void = () => undefined) {
       // A connection in subscriber mode can't run other commands, so it gets its own.
       this.subscriber = redis.duplicate();
       this.subscriber.on("message", (channel: string, raw: string) => {

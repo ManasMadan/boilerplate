@@ -42,7 +42,9 @@
         "noConsole": "error",
         // An error, not the preset's warning: its safe fix quietly turns @ts-ignore into
         // @ts-expect-error, which then passes.
-        "noTsIgnore": "error"
+        "noTsIgnore": "error",
+        // An empty block is a failure swallowed or code left unfinished; say why instead.
+        "noEmptyBlockStatements": "error"
       },
       "style": {
         "noNonNullAssertion": "error",

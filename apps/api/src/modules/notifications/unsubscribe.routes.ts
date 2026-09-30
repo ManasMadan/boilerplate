@@ -26,12 +26,10 @@ export function mountOneClickUnsubscribe(
       async (request, reply) => {
         const token = request.query.token;
         if (!token) return sendError(reply, "UNSUBSCRIBE_LINK_INVALID");
-        try {
-          await notifications.unsubscribe(token);
-          return reply.status(200).send({ unsubscribed: true });
-        } catch {
-          return sendError(reply, "UNSUBSCRIBE_LINK_INVALID");
-        }
+        // A bad link throws UNSUBSCRIBE_LINK_INVALID, which the error filter answers;
+        // anything else (the database down) is a logged 500, not "invalid link".
+        await notifications.unsubscribe(token);
+        return reply.status(200).send({ unsubscribed: true });
       },
     );
     done();

@@ -16,7 +16,10 @@ import {
   AppError,
   createRateLimiter,
   currentContext,
+  describeError,
+  InjectPinoLogger,
   InjectRedis,
+  PinoLogger,
   type Redis,
 } from "@repo/nest-common";
 import { env } from "../../env";
@@ -39,7 +42,10 @@ export class AiService {
   private readonly uploads;
   private readonly sentiments;
 
-  constructor(@InjectRedis() redis: Redis) {
+  constructor(
+    @InjectRedis() redis: Redis,
+    @InjectPinoLogger(AiService.name) private readonly log: PinoLogger,
+  ) {
     this.questions = createRateLimiter(redis, {
       name: "ai-questions",
       points: 20,
@@ -116,11 +122,14 @@ export class AiService {
     const stream = await this.call(() =>
       this.ai.answer(this.caller(userId, orgId), question, signal),
     );
+    const log = this.log;
     return (async function* () {
       try {
         yield* stream;
-      } catch {
+      } catch (error) {
         if (signal?.aborted) return; // the client went away
+        // The client hears the service failed either way; the log says which it was.
+        log[streamFailureLevel(error)]({ err: describeError(error) }, "assistant stream failed");
         yield { type: "error", code: "UPSTREAM_UNAVAILABLE" } as const;
       }
     })();
@@ -138,6 +147,17 @@ function toDocument(row: {
   createdAt: string;
 }): AiDocument {
   return { ...row, createdAt: new Date(row.createdAt) };
+}
+
+/**
+ * How loudly to log an answer that broke off: the service or the connection failing is a
+ * warning (it happens); anything else, like the stream breaking its contract, is a bug.
+ */
+export function streamFailureLevel(error: unknown): "warn" | "error" {
+  const dropped =
+    error instanceof AiServiceError ||
+    (error instanceof TypeError && error.message === "terminated");
+  return dropped ? "warn" : "error";
 }
 
 function toAppError(error: unknown): AppError {

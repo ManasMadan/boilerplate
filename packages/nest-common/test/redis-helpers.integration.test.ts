@@ -1,7 +1,8 @@
 /** Integration tests for the Redis-backed helpers. Requires `bun run db:up`. */
 import { randomUUID } from "node:crypto";
+import { Logger } from "@nestjs/common";
 import { Redis } from "ioredis";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { CacheService } from "../src/cache";
 import { AppError } from "../src/errors";
 import { IdempotencyStore } from "../src/idempotency";
@@ -78,8 +79,17 @@ describe("rate limiter", () => {
       windowSeconds: 60,
       onRedisError: "allow",
     });
+    const logged = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
     expect((await closed.consume("x")).allowed).toBe(false);
     expect((await open.consume("x")).allowed).toBe(true);
+    // Said, not silent, and once per limiter however many requests hit the outage.
+    for (let i = 0; i < 5; i++) await closed.consume("x");
+    expect(logged).toHaveBeenCalledTimes(2);
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({ limiter: "c", failing: "closed" }),
+      "rate limiter can't reach Redis",
+    );
+    logged.mockRestore();
     dead.disconnect();
   });
 });
