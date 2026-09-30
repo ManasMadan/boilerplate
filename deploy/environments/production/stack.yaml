@@ -1,6 +1,5 @@
-# Production. image.tag changes only through a promotion pull request (merge = deploy).
-image:
-  tag: ""
+# Production. Its image tag and the revision these values are read at are in
+# release.yaml, which only a promotion pull request changes (merge = deploy).
 site:
   # Your production host.
   host: app.example.com

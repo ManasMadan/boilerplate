@@ -25,9 +25,10 @@ request (docs/deploy.md, "Releases → production"; the code is `scripts/release
    commit with no images) and publishes the GitHub release; mobile.yml starts the store
    builds once that passed. Tags can't be moved, so check before pushing.
 4. **Promote.** Once staging is healthy on those images: `bun run promote v<version>`
-   opens `chore(infra): deploy v<version> to production`, which sets `image.tag` in
-   `deploy/environments/production/stack.yaml` to the release's images. It runs as the
-   user, so CI runs on the pull request.
+   opens `chore(infra): deploy v<version> to production`, which points
+   `deploy/environments/production/release.yaml` at the tag (production's charts, values
+   and Secrets are read there) and the release's images. It runs as the user, so CI runs
+   on the pull request.
 5. **Deploy** by merging it. Argo CD syncs `production-data` and `production-stack`;
    production admits only images deploy.yml signed on `master`. Watch it as in the
    deploy skill, with the production cluster's context.

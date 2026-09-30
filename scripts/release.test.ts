@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import {
   mobileVersion,
   type ReleaseFacts,
+  releaseFile,
   releaseImageTag,
   releaseNotes,
-  withImageTag,
 } from "./release";
 
 const commit = (subject: string, body = "") => ({ hash: "abc1234", subject, body });
@@ -52,23 +52,16 @@ describe("the mobile version", () => {
 });
 
 describe("promoting", () => {
-  const values = '# Production.\nimage:\n  tag: ""\nsite:\n  host: app.example.com\n  tag: other\n';
-
-  it("sets image.tag and nothing else", () => {
-    expect(withImageTag(values, "sha-123")).toBe(
-      '# Production.\nimage:\n  tag: "sha-123"\nsite:\n  host: app.example.com\n  tag: other\n',
+  it("pins production to the release's revision and images, keeping the comments", () => {
+    const current = "# The release production runs.\n# Written by promote.\nrevision: HEAD\n";
+    expect(releaseFile(current, "v1.4.0", "sha-123")).toBe(
+      "# The release production runs.\n# Written by promote.\nrevision: v1.4.0\nimageTag: sha-123\n",
     );
   });
 
-  it("finds the tag among image's other keys", () => {
-    const more = 'image:\n  pullPolicy: IfNotPresent\n  tag: "sha-old"\nsite: {}\n';
-    expect(withImageTag(more, "sha-new")).toBe(
-      'image:\n  pullPolicy: IfNotPresent\n  tag: "sha-new"\nsite: {}\n',
-    );
-  });
-
-  it("refuses values without an image.tag", () => {
-    expect(() => withImageTag("site:\n  host: a\n", "sha-1")).toThrow("No image.tag");
+  it("writes what the envs ApplicationSet reads", () => {
+    const release = Bun.YAML.parse(releaseFile("revision: v1.0.0\n", "v1.4.0", "sha-1")) as object;
+    expect(release).toEqual({ revision: "v1.4.0", imageTag: "sha-1" });
   });
 });
 

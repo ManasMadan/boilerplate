@@ -13,13 +13,23 @@ spec:
   generators:
     - matrix:
         generators:
-          - clusters:
-              selector:
-                matchLabels:
-                  boilerplate.dev/observability: "true"
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        boilerplate.dev/observability: "true"
+                # The revision the environment deploys from, and production's images:
+                # deploy/environments/<env>/release.yaml, read at HEAD.
+                - git:
+                    repoURL: https://github.com/ManasMadan/boilerplate.git
+                    revision: HEAD
+                    pathParamPrefix: release
+                    files:
+                      - path: 'deploy/environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/release.yaml'
           - git:
               repoURL: https://github.com/ManasMadan/boilerplate.git
-              revision: HEAD
+              revision: "{{ .revision }}"
               # The generator's own `path` parameter (the file's location) would replace
               # an add-on's `path` key; this moves it to `.file.path`.
               pathParamPrefix: file
@@ -60,7 +70,7 @@ spec:
       sources:
         {{- if hasKey . "path" }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: HEAD
+          targetRevision: "{{ .revision }}"
           path: {{ .path }}
           helm:
             releaseName: {{ .addon }}
@@ -73,6 +83,6 @@ spec:
             valueFiles:
               - $repo/deploy/platform/values/{{ .addon }}.yaml
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: HEAD
+          targetRevision: "{{ .revision }}"
           ref: repo
         {{- end }}

@@ -85,10 +85,12 @@ store builds once it has passed. Choose the number from the notes
 a new major version, a `feat` a minor one.
 
 `bun run promote` opens the promotion pull request (`release/production-v<version>`),
-from your own GitHub login so CI runs on it: it sets `image.tag` in
-`deploy/environments/production/stack.yaml` to the release's images (the same rule as the
-check), the ones already running on staging, and refuses when there are none. Merging the
-promotion is the deploy.
+from your own GitHub login so CI runs on it: it writes
+`deploy/environments/production/release.yaml`, the revision production is deployed from
+(the tag, so its charts, values, Secrets and add-ons are the release's) and the release's
+images (the same rule as the check), the ones already running on staging. It refuses
+when there are none. Merging the promotion is the deploy; a chart change merged to
+master reaches production only this way (deploy/README.md, "GitOps").
 
 The mobile app follows the same events on EAS (`mobile.yml`, see
 [web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)): updates once
@@ -100,7 +102,8 @@ Argo CD syncs automatically and self-heals, so a change made in the cluster is u
 roll back in git:
 
 - **Production**: revert the promotion commit on `master` (through a pull request), or
-  open one setting `image.tag` back to the previous `sha-<commit>`.
+  promote the previous release again (`bun run promote v<previous>`), which puts back
+  its charts and values as well as its images.
 - **Staging**: revert the bump commit, or let the next merge replace it.
 
 The database isn't rolled back: the previous release already works with the current

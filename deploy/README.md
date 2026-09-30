@@ -267,6 +267,14 @@ OpenTofu installs Argo CD on each cluster with `argocd/argo-cd-values.yaml` and 
   first, and each environment's Secrets with the stack. A merge to master deploys
   staging (CI commits the new image tag); production changes only through a promotion
   pull request.
+
+Each environment deploys from the git revision in `environments/<env>/release.yaml`
+(the ApplicationSets read that file at master's head): the charts, values, Secrets and
+platform add-ons. Staging's is `HEAD`, so it follows master. Production's is the tag of
+the release it runs, with that release's images, and only `bun run promote` changes
+it. So a merged change to a chart, values file or add-on reaches staging at once and
+production with the next promotion. Changes to `argocd/` itself (the ApplicationSets,
+projects, root) still reach every cluster on merge: review them as production changes.
 - **previews**: a preview per pull request labelled `preview`, in its own namespace,
   at `https://pr-<number>.preview.<domain>`, deleted with the label or the PR, on the
   cluster that hosts previews (staging's). Each brings its own database and Valkey.

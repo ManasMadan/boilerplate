@@ -4,8 +4,11 @@
 # database up. The stack also gets the environment's Secrets, decrypted from
 # deploy/environments/<env>/secrets/ by Argo CD's sops plugin, and exports telemetry to
 # the cluster's Jaeger and Prometheus when it has the boilerplate.dev/observability
-# label. Staging's image tag is committed by CI on every merge to master; production's
-# only changes through a promotion pull request.
+# label. Staging follows master, and CI commits its image tag on every merge.
+# Production runs a release: its charts, values and Secrets are read at the tag in
+# deploy/environments/production/release.yaml, with that release's images, and only a
+# promotion pull request changes that file. So merging a chart change deploys it to
+# staging, not to production.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -17,12 +20,22 @@ spec:
   generators:
     - matrix:
         generators:
-          - clusters:
-              selector:
-                matchExpressions:
-                  - key: boilerplate.dev/environment
-                    operator: In
-                    values: [staging, production]
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchExpressions:
+                        - key: boilerplate.dev/environment
+                          operator: In
+                          values: [staging, production]
+                # The revision the environment deploys from, and production's images:
+                # deploy/environments/<env>/release.yaml, read at HEAD.
+                - git:
+                    repoURL: https://github.com/ManasMadan/boilerplate.git
+                    revision: HEAD
+                    pathParamPrefix: release
+                    files:
+                      - path: 'deploy/environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/release.yaml'
           - list:
               elements:
                 - chart: data
@@ -67,7 +80,7 @@ spec:
     spec:
       sources:
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: HEAD
+          targetRevision: "{{ .revision }}"
           path: deploy/charts/{{ .chart }}
           helm:
             releaseName: boilerplate
@@ -77,10 +90,14 @@ spec:
             parameters:
               - name: observability.enabled
                 value: {{ eq (index .metadata.labels "boilerplate.dev/observability" | default "") "true" | quote }}
+              {{- if hasKey . "imageTag" }}
+              - name: image.tag
+                value: {{ .imageTag | quote }}
+              {{- end }}
             {{- end }}
         {{- if eq .chart "stack" }}
         - repoURL: https://github.com/ManasMadan/boilerplate.git
-          targetRevision: HEAD
+          targetRevision: "{{ .revision }}"
           path: deploy/environments/{{ $env }}/secrets
           plugin:
             name: sops

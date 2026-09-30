@@ -16,7 +16,7 @@ import { fail, ok, ROOT } from "./lib";
 
 const TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const MOBILE_CONFIG = "apps/mobile/app.config.ts";
-const PRODUCTION = "deploy/environments/production/stack.yaml";
+const PRODUCTION = "deploy/environments/production/release.yaml";
 const STAGING = "deploy/environments/staging/stack.yaml";
 /** How long release.yml waits for CI and deploy.yml to finish on the tagged commit. */
 const DEPLOY_WAIT_MS = 60 * 60_000;
@@ -64,16 +64,13 @@ export function mobileVersion(config: string): string | undefined {
   return /^\s*version:\s*"([^"]+)"/m.exec(config)?.[1];
 }
 
-/** Production's values with `image.tag` pointed at a build. */
-export function withImageTag(values: string, imageTag: string): string {
-  const next = values.replace(
-    /^(image:\n(?:[ \t]+.*\n)*?[ \t]+tag:)[ \t]*.*$/m,
-    `$1 "${imageTag}"`,
-  );
-  if (next === values && !values.includes(`tag: "${imageTag}"`)) {
-    throw new Error(`No image.tag in ${PRODUCTION}`);
-  }
-  return next;
+/**
+ * Production's release.yaml pointed at a release: Argo CD reads its charts, values and
+ * Secrets at the tag, and runs its images. The file's comments are kept.
+ */
+export function releaseFile(current: string, tag: string, imageTag: string): string {
+  const comments = current.split("\n").filter((line) => line.startsWith("#"));
+  return [...comments, `revision: ${tag}`, `imageTag: ${imageTag}`, ""].join("\n");
 }
 
 /** What finding a release's images needs from git and CI (injected, so it's testable). */
@@ -217,7 +214,7 @@ function promote(tag: string) {
   const file = join(ROOT, PRODUCTION);
   const from = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   git(["switch", "--quiet", "-c", branch, "origin/master"]);
-  writeFileSync(file, withImageTag(readFileSync(file, "utf8"), imageTag));
+  writeFileSync(file, releaseFile(readFileSync(file, "utf8"), tag, imageTag));
   git(["commit", "--quiet", "-m", title, "--", PRODUCTION]);
   git(["push", "--quiet", "-u", "origin", branch]);
   git(["switch", "--quiet", from]);
@@ -231,7 +228,7 @@ function promote(tag: string) {
     "--title",
     title,
     "--body",
-    `Points production at the images of ${tag} (\`${imageTag}\`), already running on staging. Merging deploys it.`,
+    `Points production at ${tag}: its charts, values and Secrets, and its images (\`${imageTag}\`), already running on staging. Merging deploys it.`,
   ]);
   ok(`Promotion pull request: ${url}`);
 }
