@@ -347,7 +347,7 @@ describe("test hooks", () => {
     expect(types().slice(-2)).toEqual(["invoice.payment_failed", "customer.subscription.updated"]);
 
     const events = fake.events.length;
-    await post(`/__fake/subscriptions/${subscription?.id}/draft-invoice`);
+    await post(`/__fake/subscriptions/${subscription?.id}/invoice?status=draft`);
     expect(fake.events.length).toBe(events);
     const [draft] = (await stripe.invoices.list({ customer: customer.id, limit: 1 })).data;
     expect(draft).toMatchObject({ status: "draft", number: null, hosted_invoice_url: null });

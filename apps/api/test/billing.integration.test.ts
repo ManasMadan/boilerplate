@@ -625,7 +625,7 @@ describe("keeping in sync, edge cases", () => {
     const { owner, orgId } = await workspace();
     await subscribe(owner.session);
     await fetch(
-      `${stripe.url}/__fake/subscriptions/${stripe.subscriptionFor(orgId)?.id}/draft-invoice`,
+      `${stripe.url}/__fake/subscriptions/${stripe.subscriptionFor(orgId)?.id}/invoice?status=draft`,
       {
         method: "POST",
       },

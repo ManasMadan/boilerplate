@@ -7,7 +7,7 @@
  *
  * Hosted pages: `/checkout/<session>` (pay, pay with a declined card, or go back) and
  * `/portal/<session>` (cancel or resume the plan, then return). Test hooks under
- * `/__fake/` make a renewal fail, a subscription lapse, or draft the next invoice.
+ * `/__fake/` make a renewal fail, a subscription lapse, or add an invoice in any status.
  *
  * Only what the app calls is implemented; anything else answers 404 like an unknown
  * Stripe route, so a new Stripe call fails loudly in tests until it's added here.
@@ -390,16 +390,13 @@ export async function startFakeStripe(options: FakeStripeOptions) {
   async function hooks(path: string, query: URLSearchParams) {
     const failed = /^\/__fake\/subscriptions\/(sub_\w+)\/payment-failed$/.exec(path);
     const lapsed = /^\/__fake\/subscriptions\/(sub_\w+)\/lapse$/.exec(path);
-    // The next renewal's invoice, as Stripe drafts it an hour before it's due.
-    const upcoming = /^\/__fake\/subscriptions\/(sub_\w+)\/draft-invoice$/.exec(path);
-    // An invoice in any status (`?status=`), as Stripe's dashboard can leave one.
+    // An invoice in any status (`?status=draft`: the next renewal's, as Stripe drafts it
+    // an hour before it's due), without an event, as Stripe's dashboard can leave one.
     const invoice = /^\/__fake\/subscriptions\/(sub_\w+)\/invoice$/.exec(path);
-    const subscription = subscriptions.get((failed ?? lapsed ?? upcoming ?? invoice)?.[1] ?? "");
+    const subscription = subscriptions.get((failed ?? lapsed ?? invoice)?.[1] ?? "");
     if (!subscription) return undefined;
-    if (invoice) return invoiceFor(subscription, query.get("status") ?? "draft");
-    if (upcoming) {
-      invoiceFor(subscription, "draft");
-    } else if (failed) {
+    if (invoice) return invoiceFor(subscription, String(query.get("status")));
+    if (failed) {
       subscription.status = "past_due";
       const invoice = invoiceFor(subscription, "open");
       await emit("invoice.payment_failed", { ...invoice, attempt_count: 1 });
