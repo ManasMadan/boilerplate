@@ -79,7 +79,6 @@ module "bootstrap" {
     {
       domain         = var.domain
       "tls-email"    = var.tls_email
-      dns01          = "cloudflare"
       "image-policy" = tostring(var.environment == "production")
     },
     local.mail_host == null ? {} : { "mail-host" = local.mail_host },

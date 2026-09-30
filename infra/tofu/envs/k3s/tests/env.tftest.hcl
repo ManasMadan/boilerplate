@@ -55,8 +55,8 @@ run "one_node_staging" {
     error_message = "staging hosts previews, without the observability add-ons"
   }
   assert {
-    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "false" && module.bootstrap.cluster_annotations["boilerplate.dev/domain"] == "example.com" && module.bootstrap.cluster_annotations["boilerplate.dev/dns01"] == "cloudflare"
-    error_message = "staging admits unsigned images; the platform config gets the domain and DNS-01 provider"
+    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "false" && module.bootstrap.cluster_annotations["boilerplate.dev/domain"] == "example.com"
+    error_message = "staging admits unsigned images; the platform config gets the domain"
   }
   assert {
     condition     = !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-host") && !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-domain")
