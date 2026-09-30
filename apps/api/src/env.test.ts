@@ -76,4 +76,16 @@ describe("optional features", () => {
   ])("refuse to start %s half configured", async (_, variables, message) => {
     await expect(load(variables)).rejects.toThrow(message);
   });
+
+  it("checks passwords against public breaches in production unless told not to", async () => {
+    // Production as it would be: without the local stand-ins the example sets.
+    const production = { NODE_ENV: "production", WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "" };
+    expect((await load(production)).env.PASSWORD_BREACH_CHECK).toBe("on");
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    expect((await load({})).env.PASSWORD_BREACH_CHECK).toBe("off");
+    vi.resetModules();
+    const off = await load({ ...production, PASSWORD_BREACH_CHECK: "off" });
+    expect(off.env.PASSWORD_BREACH_CHECK).toBe("off");
+  });
 });

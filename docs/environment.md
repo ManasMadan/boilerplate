@@ -133,6 +133,7 @@ that uses it.
 | `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | major.minor.patch. The mobile app sends its version as `x-app-version`; one below this (a pre-release comes before its release) or one that isn't a version at all gets `CLIENT_OUTDATED`, and the app shows its update screen. The web app sends none. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | api | empty | Both set: "Sign in with Google" (`google` feature). Redirect URI: `${BETTER_AUTH_URL}/api/auth/callback/google`. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | api | empty | Both set: Cloudflare Turnstile on sign-up, emailed codes and password reset (`captcha` feature). The site key reaches browsers through `system.info`. Cloudflare's always-pass test keys are in `.env.example`. |
+| `PASSWORD_BREACH_CHECK` | api | `on` in production, `off` otherwise | `on`: sign-ups and password changes refuse a password found in public breaches (Have I Been Pwned; only the first five characters of its SHA-1 hash are sent). Fails closed: while HIBP is unreachable they fail with a server error rather than let a password through unchecked. |
 | `ENCRYPTION_KEYS` | api (req.), webhooks (req.) | generated | `id:base64key[,id:base64key…]`, 32-byte keys. The first encrypts, any listed key decrypts; prepend a new one to rotate. Encrypts webhook signing secrets at rest. |
 | `UNSUBSCRIBE_SECRET` | api (req.), notifications (req.) | generated | At least 32 characters. Notifications signs one-click unsubscribe links, the API checks them. |
 

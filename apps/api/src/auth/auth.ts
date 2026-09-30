@@ -592,7 +592,7 @@ export function createAuth({
       }),
       passkey({ rpID: webOrigin.hostname, rpName: "Boilerplate", origin: env.WEB_URL }),
       // Rejects passwords found in public breaches (k-anonymity: only a hash prefix is sent).
-      haveIBeenPwned(),
+      haveIBeenPwned({ enabled: env.PASSWORD_BREACH_CHECK === "on" }),
       organization({
         creatorRole: "owner",
         ac: orgAccess,

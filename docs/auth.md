@@ -13,7 +13,7 @@ Auth never sends email itself: codes, invitations and alerts are queued on
 
 | Method | Web | Mobile | Notes |
 |---|---|---|---|
-| Email and password | yes | yes | 8 to 128 characters. Passwords found in public breaches are refused (Have I Been Pwned, k-anonymity). No session until the email is verified. |
+| Email and password | yes | yes | 8 to 128 characters. Passwords found in public breaches are refused (Have I Been Pwned, k-anonymity; `PASSWORD_BREACH_CHECK`, on in production). No session until the email is verified. |
 | Emailed codes | yes | yes | 6 digits, 5 minutes, stored hashed. They verify the address after sign-up (and sign the user in), reset a forgotten password, and change the email (a code from the current and one from the new address). Signing in unverified sends a fresh code. |
 | Passkeys | yes | no | WebAuthn, relying party = the `WEB_URL` host. |
 | Google | yes | yes | On when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. Google accounts link to an existing account with the same verified email; OAuth tokens are encrypted at rest. |

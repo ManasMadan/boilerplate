@@ -68,6 +68,13 @@ export const envSchema = {
   // site key is public (browsers render the widget with it); the secret stays here.
   TURNSTILE_SITE_KEY: z.string().min(1).optional(),
   TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
+  // Refuse passwords found in public breaches (Have I Been Pwned, k-anonymity: only a
+  // hash prefix leaves). On by default in production only, so local runs and the tests
+  // never depend on the internet. While it's on and HIBP is unreachable, sign-ups and
+  // password changes fail (a breached password is never let through unchecked).
+  PASSWORD_BREACH_CHECK: z
+    .enum(["on", "off"])
+    .default(process.env.NODE_ENV === "production" ? "on" : "off"),
   // Browser push: the public half of apps/notifications' VAPID key pair.
   VAPID_PUBLIC_KEY: z.string().min(1).optional(),
   // Optional: billing (Stripe). On when STRIPE_SECRET_KEY is set, with both prices.
