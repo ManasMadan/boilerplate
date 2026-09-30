@@ -36,8 +36,9 @@ function pg(command: string[]) {
 }
 
 // One line per fact about the database; a faithful restore yields exactly the same lines.
-// ponytail: row hashes are order-independent sums of 64-bit row hashes, streamed, so
-// memory stays flat on big tables; the ceiling is one full read of every table.
+// Each table's hash is the sum of its rows' 64-bit hashes, so row order doesn't matter
+// and Postgres streams it without holding the table in memory. It still reads every
+// table in full, which bounds how large a database the drill suits.
 const FINGERPRINT = `
 select format('table %s rows=%s hash=%s rls=%s forced=%s', c.oid::regclass,
     (xpath('/row/n/text()', t))[1], (xpath('/row/h/text()', t))[1],

@@ -135,8 +135,9 @@ The evals run on every change with the local stand-ins; see
 
 | Command | What it checks |
 |---|---|
-| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser and the web render-only check), `lint:unused`, and each package's `lint` (ruff for Python) |
+| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser and the web render-only check), `lint:unused`, `lint:markers`, and each package's `lint` (ruff for Python) |
 | `bun run lint:unused` | knip (`knip.jsonc`): unused files, exports and dependencies, and dependencies used but not declared |
+| `bun run lint:markers` | no `ponytail:` markers in tracked source (`scripts/check-markers.ts`): a comment says why in plain words |
 | `bun run check-types` | tsc everywhere, basedpyright (strict) for Python |
 | `bun run db:lint` | Squawk on new migrations |
 | `bun run --cwd apps/web budget` | first-load JavaScript per route, after `next build` |

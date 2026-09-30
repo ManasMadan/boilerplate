@@ -91,7 +91,9 @@ export class ApiKeysService {
   }
 
   async create(orgId: string, userId: string, input: z.infer<typeof createApiKeyInput>) {
-    // ponytail: a count check, not a lock; concurrent creates can pass the limit by a few.
+    // A count, not a lock: two admins creating keys at the same moment can both pass it
+    // and end a key or two over the limit, which is harmless for a cap this size. A hard
+    // cap would need a lock on the organization's row for the duration of the create.
     if ((await this.keys.count(orgId)) >= API_KEY_LIMIT) {
       throw new AppError("API_KEY_LIMIT_REACHED", { params: { limit: API_KEY_LIMIT } });
     }
