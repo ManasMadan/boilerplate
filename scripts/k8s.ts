@@ -349,9 +349,10 @@ async function reencrypt() {
  * Every image, as boilerplate/<image>:dev, in a builder of our own: its memory is capped
  * (a build can't starve other containers) and its cache goes away with
  * `bun run docker:clean`. In CI all at once, reading the layers deploy.yml caches on
- * master when GitHub's cache is reachable; locally one image at a time.
+ * master when GitHub's cache is reachable, each loaded into the cluster as soon as it's
+ * built and the cluster exists; locally one image at a time, loaded together after.
  */
-async function buildImages() {
+async function buildImages(cluster: Promise<void>) {
   if (!run("docker", ["buildx", "inspect", BUILDER], { quiet: true }).ok) {
     step("image builder", "docker", [
       "buildx",
@@ -379,22 +380,39 @@ async function buildImages() {
       ? ["--set", "*.cache-from=type=gha,scope=amd64"]
       : []),
   ];
+  const load = (images: string[]) =>
+    stepAsync(`${images.join(", ")} loaded into the cluster`, "kind", [
+      "load",
+      "docker-image",
+      "--name",
+      CLUSTER,
+      ...images.map((image) => `boilerplate/${image}:dev`),
+    ]);
   if (IN_CI) {
-    await stepAsync(`images (${IMAGES.join(", ")})`, "docker", bake(IMAGES));
+    // Concurrent builds share the builder's cache, so common layers still build once.
+    await Promise.all(
+      IMAGES.map(async (image) => {
+        await stepAsync(`image ${image}`, "docker", bake([image]));
+        await cluster;
+        await load([image]);
+      }),
+    );
     return;
   }
   for (const image of IMAGES) await stepAsync(`image ${image}`, "docker", bake([image]));
+  await cluster;
+  await load(IMAGES);
 }
 
 async function up() {
   preflight();
+  const exists = run("kind", ["get", "clusters"], { quiet: true }).stdout.split("\n");
+  const cluster = exists.includes(CLUSTER)
+    ? Promise.resolve(ok("cluster (exists)"))
+    : stepAsync("cluster", "kind", ["create", "cluster", "--config", "deploy/local/kind.yaml"]);
   // Only our charts need our images: in CI they build while the cluster gets ready.
-  const images = IN_CI ? buildImages() : undefined;
-  if (!run("kind", ["get", "clusters"], { quiet: true }).stdout.split("\n").includes(CLUSTER)) {
-    step("cluster", "kind", ["create", "cluster", "--config", "deploy/local/kind.yaml"]);
-  } else {
-    ok("cluster (exists)");
-  }
+  const images = IN_CI ? buildImages(cluster) : undefined;
+  await cluster;
   const envoy = stepAsync("Envoy Gateway", "helm", [
     "upgrade",
     "--install",
@@ -452,19 +470,11 @@ async function up() {
       "10m",
     ]);
   if (images === undefined) {
-    await buildImages();
+    await buildImages(cluster);
     await data();
   } else {
     await Promise.all([images, data()]);
   }
-  step("images loaded into the cluster", "kind", [
-    "load",
-    "docker-image",
-    "--name",
-    CLUSTER,
-    ...IMAGES.map((image) => `boilerplate/${image}:dev`),
-  ]);
-
   step("Postgres ready", "kubectl", [
     "--context",
     `kind-${CLUSTER}`,
