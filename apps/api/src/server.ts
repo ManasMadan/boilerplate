@@ -73,7 +73,12 @@ export function createApiServer() {
       await mountRpc(
         fastify,
         createRouter(
-          createProcedures(auth, memberships, (key, scope) => apiKeys.authenticate(key, scope)),
+          createProcedures(
+            auth,
+            memberships,
+            (key, scope) => apiKeys.authenticate(key, scope),
+            app.get<Redis>(REDIS),
+          ),
           app,
         ),
         {

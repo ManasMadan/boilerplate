@@ -3,7 +3,7 @@
  * IDE), and disconnecting them. One entry per app and workspace the user approved.
  */
 import * as z from "zod";
-import { base, errorsOf } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf("APP_NOT_FOUND");
@@ -35,6 +35,7 @@ export const appsContract = {
    * (APP_NOT_FOUND for an id that isn't the user's).
    */
   disconnect: route("POST", "/me/apps/{id}/disconnect", "Disconnect an app")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ id: z.uuid() }))
     .output(z.void()),
 };

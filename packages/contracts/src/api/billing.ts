@@ -50,6 +50,14 @@ export const invoiceSchema = z.object({
   url: z.url().nullable(),
 });
 
+/** Each one asks Stripe for a page; shared by the workspace's admins. */
+const stripeSessions = {
+  name: "billing-sessions",
+  points: 10,
+  windowSeconds: 60,
+  per: "org",
+} as const;
+
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
   base.errors(errors).route({ method, path, tags: ["Billing"], summary });
 
@@ -59,12 +67,13 @@ export const billingContract = {
   ),
   /** A Stripe Checkout page to subscribe to the paid plan (ALREADY_SUBSCRIBED if it is). */
   checkout: route("POST", "/billing/checkout", "Start a subscription")
+    .meta({ rateLimit: stripeSessions })
     .input(z.object({ interval: z.enum(billingIntervals) }))
     .output(z.object({ url: z.url() })),
   /** Stripe's billing portal: payment method, plan changes, cancelling, invoices. */
-  portal: route("POST", "/billing/portal", "Manage the subscription").output(
-    z.object({ url: z.url() }),
-  ),
+  portal: route("POST", "/billing/portal", "Manage the subscription")
+    .meta({ rateLimit: stripeSessions })
+    .output(z.object({ url: z.url() })),
   invoices: route("GET", "/billing/invoices", "Past invoices, newest first").output(
     z.array(invoiceSchema),
   ),

@@ -31,6 +31,14 @@ export const setTodoCompletedInput = z.object({
 });
 export const deleteTodoInput = z.object({ id: z.uuid() });
 
+/**
+ * Todo changes are limited in TodoService, not here: the MCP server's tools change todos
+ * through it too, and every way in spends the workspace's one allowance.
+ */
+const todoWrites = {
+  exempt: "TodoService limits a workspace's changes itself, so MCP's share the same allowance.",
+} as const;
+
 export const todoContract = {
   list: base
     .errors(errors)
@@ -45,7 +53,7 @@ export const todoContract = {
     .output(todoPageSchema),
   create: base
     .errors(errors)
-    .meta({ apiKeyScope: "todos:write" })
+    .meta({ apiKeyScope: "todos:write", rateLimit: todoWrites })
     .route({
       method: "POST",
       path: "/todos",
@@ -57,7 +65,7 @@ export const todoContract = {
     .output(todoSchema),
   setCompleted: base
     .errors(errors)
-    .meta({ apiKeyScope: "todos:write" })
+    .meta({ apiKeyScope: "todos:write", rateLimit: todoWrites })
     .route({
       method: "PATCH",
       path: "/todos/{id}",
@@ -68,7 +76,7 @@ export const todoContract = {
     .output(todoSchema),
   delete: base
     .errors(errors)
-    .meta({ apiKeyScope: "todos:write" })
+    .meta({ apiKeyScope: "todos:write", rateLimit: todoWrites })
     .route({
       method: "DELETE",
       path: "/todos/{id}",

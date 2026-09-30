@@ -5,7 +5,7 @@
 import * as z from "zod";
 import { webhookEvents } from "../events";
 import { page, pageInput } from "../pagination";
-import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf(
@@ -80,9 +80,11 @@ export const webhooksContract = {
     z.array(webhookEndpointSchema),
   ),
   createEndpoint: route("POST", "/webhooks/endpoints", "Add a webhook endpoint")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ url: endpointUrl, ...endpointFields }))
     .output(z.object({ endpoint: webhookEndpointSchema }).extend(withSecret.shape)),
   updateEndpoint: route("PATCH", "/webhooks/endpoints/{id}", "Change or turn an endpoint on/off")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(
       endpointId.extend({
         url: endpointUrl.optional(),
@@ -92,6 +94,7 @@ export const webhooksContract = {
     )
     .output(webhookEndpointSchema),
   deleteEndpoint: route("DELETE", "/webhooks/endpoints/{id}", "Delete an endpoint")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(endpointId)
     .output(z.void()),
   rotateSecret: route(
@@ -99,9 +102,13 @@ export const webhooksContract = {
     "/webhooks/endpoints/{id}/rotate-secret",
     "Replace the signing secret",
   )
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(endpointId)
     .output(withSecret),
+  // Each of these two sends a request to the customer's URL: without a limit, our servers
+  // could be pointed at someone's endpoint as a flood.
   sendTest: route("POST", "/webhooks/endpoints/{id}/test", "Send a test event")
+    .meta({ rateLimit: { name: "webhook-tests", points: 10, windowSeconds: 60, per: "org" } })
     .input(endpointId)
     .output(z.void()),
   listDeliveries: route(
@@ -112,6 +119,9 @@ export const webhooksContract = {
     .input(endpointId.extend(pageInput.shape))
     .output(page(webhookDeliverySchema)),
   redeliver: route("POST", "/webhooks/deliveries/{id}/redeliver", "Send a delivery again")
+    .meta({
+      rateLimit: { name: "webhook-redeliveries", points: 60, windowSeconds: 60, per: "org" },
+    })
     .input(endpointId)
     .output(z.void()),
 };

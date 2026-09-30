@@ -5,7 +5,7 @@
  */
 import { eventIterator } from "@orpc/contract";
 import * as z from "zod";
-import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf(
@@ -56,7 +56,9 @@ const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
   base.errors(errors).route({ method, path, tags: ["AI"], summary });
 
 export const aiContract = {
+  /** Each one is a model call. */
   sentiment: route("POST", "/ai/sentiment", "Classify the sentiment of a text")
+    .meta({ rateLimit: { name: "ai-sentiment", points: 60, windowSeconds: 60, per: "user" } })
     .input(z.object({ text: z.string().trim().min(1).max(SENTIMENT_TEXT_MAX_LENGTH) }))
     .output(
       z.object({
@@ -70,7 +72,10 @@ export const aiContract = {
     .meta({ apiKeyScope: "documents:read" })
     .output(z.array(aiDocumentSchema)),
   addDocument: route("POST", "/ai/documents", "Add a document for the assistant")
-    .meta({ apiKeyScope: "documents:write" })
+    .meta({
+      apiKeyScope: "documents:write",
+      rateLimit: { name: "ai-documents", points: 30, windowSeconds: 60 * 60, per: "user" },
+    })
     .input(
       z.object({
         title: z.string().trim().min(1).max(DOCUMENT_TITLE_MAX_LENGTH),
@@ -80,11 +85,12 @@ export const aiContract = {
     .output(aiDocumentSchema),
   /** Its creator or a workspace admin (FORBIDDEN otherwise). */
   removeDocument: route("POST", "/ai/documents/{documentId}/remove", "Remove a document")
-    .meta({ apiKeyScope: "documents:write" })
+    .meta({ apiKeyScope: "documents:write", rateLimit: EVERYDAY_WRITES })
     .input(z.object({ documentId: z.uuid() }))
     .output(z.void()),
   /** Streams an answer from the workspace's documents (AI_BUDGET_EXCEEDED when used up). */
   ask: route("POST", "/ai/answers", "Ask the assistant")
+    .meta({ rateLimit: { name: "ai-questions", points: 20, windowSeconds: 60, per: "user" } })
     .input(z.object({ question: z.string().trim().min(1).max(QUESTION_MAX_LENGTH) }))
     .output(eventIterator(assistantEventSchema)),
 };

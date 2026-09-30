@@ -14,13 +14,10 @@ import type { ErrorCode } from "@repo/contracts/errors";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
-  createRateLimiter,
   currentContext,
   describeError,
   InjectPinoLogger,
-  InjectRedis,
   PinoLogger,
-  type Redis,
 } from "@repo/nest-common";
 import { env } from "../../env";
 
@@ -38,31 +35,8 @@ export class AiService {
     env.AI_URL && env.AI_SERVICE_SECRET
       ? createAiClient({ baseUrl: env.AI_URL, secret: env.AI_SERVICE_SECRET })
       : null;
-  private readonly questions;
-  private readonly uploads;
-  private readonly sentiments;
 
-  constructor(
-    @InjectRedis() redis: Redis,
-    @InjectPinoLogger(AiService.name) private readonly log: PinoLogger,
-  ) {
-    this.questions = createRateLimiter(redis, {
-      name: "ai-questions",
-      points: 20,
-      windowSeconds: 60,
-    });
-    this.uploads = createRateLimiter(redis, {
-      name: "ai-documents",
-      points: 30,
-      windowSeconds: 60 * 60,
-    });
-    // Each one is a model call too.
-    this.sentiments = createRateLimiter(redis, {
-      name: "ai-sentiment",
-      points: 60,
-      windowSeconds: 60,
-    });
-  }
+  constructor(@InjectPinoLogger(AiService.name) private readonly log: PinoLogger) {}
 
   private get ai() {
     if (!this.client) throw new AppError("FEATURE_DISABLED", { params: { feature: "ai" } });
@@ -82,7 +56,6 @@ export class AiService {
   }
 
   async sentiment(userId: string, orgId: string, text: string) {
-    await this.sentiments.take(userId);
     return this.call(() => this.ai.sentiment(this.caller(userId, orgId), text));
   }
 
@@ -92,7 +65,6 @@ export class AiService {
   }
 
   async addDocument(userId: string, orgId: string, input: { title: string; content: string }) {
-    await this.uploads.take(userId);
     const row = await this.call(() => this.ai.createDocument(this.caller(userId, orgId), input));
     return toDocument(row);
   }
@@ -108,7 +80,7 @@ export class AiService {
   }
 
   /**
-   * Starts an answer: limits, budget and an unavailable service are refused here, as
+   * Starts an answer: the budget and an unavailable service are refused here, as
    * typed errors, before the stream begins. A failure midway (the connection drops)
    * ends the stream with an `error` event, which the contract has for exactly that.
    */
@@ -118,7 +90,6 @@ export class AiService {
     question: string,
     signal?: AbortSignal,
   ): Promise<AsyncGenerator<AssistantEvent>> {
-    await this.questions.take(userId);
     const stream = await this.call(() =>
       this.ai.answer(this.caller(userId, orgId), question, signal),
     );

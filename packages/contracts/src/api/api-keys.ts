@@ -8,7 +8,7 @@
  * hash is stored.
  */
 import * as z from "zod";
-import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 import { API_KEY_PREFIX, API_KEY_SCOPES } from "./scopes";
 
 /** The codes this module's procedures throw, on top of the common ones. */
@@ -65,6 +65,7 @@ export const apiKeysContract = {
   /** API_KEY_LIMIT keys per workspace (API_KEY_LIMIT_REACHED beyond that). */
   create: base
     .errors(errors)
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .route({
       method: "POST",
       path: "/api-keys",
@@ -83,6 +84,7 @@ export const apiKeysContract = {
   /** The key stops working immediately (API_KEY_NOT_FOUND for another workspace's key). */
   revoke: base
     .errors(errors)
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .route({
       method: "DELETE",
       path: "/api-keys/{id}",

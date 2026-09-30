@@ -196,14 +196,27 @@ second factor on the sign-in attempt's two-factor cookie, and refuse the attempt
 Redis is down. The cost: someone can spend an account's attempts and lock it out of
 these endpoints for the window; a passkey or an existing session still works.
 
-Elsewhere, `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`) limits
-assistant questions (20 a minute), sentiment checks (60 a minute), AI documents and file uploads (30 an hour), phone
-codes (5 an hour per user, 3 per number, refused when Redis is down), MCP tool calls and
-API keys, all shared across replicas through Redis. Anything that makes our servers call
-a customer's URL is limited per workspace too: webhook test sends (10 a minute),
-redeliveries (60 a minute) and todo changes (600 a minute, one API key's allowance,
-however many keys the workspace spreads them over). `limiter.take(key)` consumes and
-throws `RATE_LIMITED` with `retryAfterSeconds`.
+Every API procedure that changes something declares its limit in its contract
+(`meta({ rateLimit })`, `ProcedureMeta` in `packages/contracts/src/api/base.ts`), or says
+why it has none, and a contract test fails on one that does neither. The procedure
+builders (`apps/api/src/rpc/procedures.ts`) apply it once they know who's calling, per
+user or per workspace, with `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`),
+shared across replicas through Redis; past it the call gets `RATE_LIMITED` with
+`retryAfterSeconds`. Declared limits: assistant questions (20 a minute), sentiment checks
+(60 a minute), AI documents and file uploads (30 an hour), phone codes (5 an hour per
+user, refused when Redis is down) and their checks (20 an hour), Stripe checkout and
+portal pages (10 a minute per workspace), and, per workspace because they make our
+servers call a customer's URL, webhook test sends (10 a minute) and redeliveries (60 a
+minute). Everyday changes (preferences, keys, endpoints, marking things read) share one
+allowance of 120 a minute per user, which lets Redis outages through.
+
+A few limits live outside the contract. Phone codes are limited to 3 an hour per number
+in `PhoneService`, since the number is input. Todo changes are limited in `TodoService`
+(600 a minute per workspace, one API key's allowance, however many keys the workspace
+spreads them over), because the MCP server's tools make them too and share it. MCP tool
+calls and API keys have their own per-token and per-key limits. The email unsubscribe
+link has none: it needs no session, and its signed token turns off one category for one
+user, so repeating it gains nothing.
 
 Phone codes can go to any country: there's no list of allowed country codes. Texts to
 some destinations cost far more than others, and SMS pumping targets exactly those, so a

@@ -14,22 +14,36 @@
  *     list: inOrg.todo.list.handler(({ context, input }) => todos.list(context.orgId, input)),
  *   });
  *
+ * Every builder but `base` also applies the rate limit the procedure's contract declares
+ * (`meta.rateLimit`, per user or per workspace), once it knows who's calling. Limits
+ * outside the contract sit with what they protect: better-auth's for sign-in, MCP's per
+ * token, and the few a service keeps because other ways in share them (todo changes).
+ *
  * This is the only request pipeline for the API: Nest provides modules and dependency
  * injection, while auth, tenancy and error mapping live here, where they are typed and
- * apply identically to RPC and REST. Rate limits sit with what they protect: better-auth's
- * for sign-in, and the services' own limiters (AI, MCP).
+ * apply identically to RPC and REST.
  */
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";
-import { API_KEY_HEADER, type ApiKeyScope, contract, type ErrorData } from "@repo/contracts/api";
+import {
+  API_KEY_HEADER,
+  type ApiKeyScope,
+  contract,
+  type ErrorData,
+  type ProcedureMeta,
+  type RateLimit,
+} from "@repo/contracts/api";
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
+  createRateLimiter,
   currentContext,
   fromPrismaError,
   isAppError,
+  type RateLimiter,
+  type Redis,
   updateContext,
 } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
@@ -129,6 +143,20 @@ function isOlderVersion(version: string, minimum: string) {
   return a[4] !== undefined && b[4] === undefined;
 }
 
+/** Who a rate limit can be counted against: the caller, and their workspace if the call has one. */
+export interface LimitKeys {
+  user: string;
+  org?: string;
+}
+
+/** The key a call spends its limit under. A per-workspace limit needs a workspace. */
+export function rateLimitKey(limit: RateLimit, keys: LimitKeys) {
+  const key = keys[limit.per];
+  if (key === undefined)
+    throw new Error(`limit "${limit.name}" is per ${limit.per}, and the call has none`);
+  return key;
+}
+
 /** Checks an API key for a procedure that needs `scope` (modules/api-keys). */
 export type AuthenticateApiKey = (key: string, scope: ApiKeyScope) => Promise<OrgCaller>;
 
@@ -136,8 +164,22 @@ export function createProcedures(
   auth: Auth,
   memberships: Memberships,
   authenticateApiKey: AuthenticateApiKey,
+  redis: Redis,
 ) {
   const os = implement(contract).$context<RpcContext>();
+
+  // One limiter per name: procedures that share a name share its allowance.
+  const limiters = new Map<string, RateLimiter>();
+  async function spendLimit(meta: ProcedureMeta, keys: LimitKeys) {
+    const limit = meta.rateLimit;
+    if (!limit || "exempt" in limit) return;
+    let limiter = limiters.get(limit.name);
+    if (!limiter) {
+      limiter = createRateLimiter(redis, limit);
+      limiters.set(limit.name, limiter);
+    }
+    await limiter.take(rateLimitKey(limit, keys));
+  }
 
   const base = os.use(async ({ next }) => {
     const version = currentContext()?.clientVersion;
@@ -149,11 +191,12 @@ export function createProcedures(
     return next();
   });
 
-  const authed = base.use(async ({ context, next }) => {
+  const authed = base.use(async ({ context, next, procedure }) => {
     const result = await auth.api.getSession({ headers: context.headers });
     if (!result) throw new AppError("UNAUTHENTICATED");
     // The column is NOT NULL; better-auth types optional fields as nullable.
     updateContext({ userId: result.user.id, locale: result.user.locale as string });
+    await spendLimit(procedure["~orpc"].meta, { user: result.user.id });
     return next({ context: { user: result.user, session: result.session } });
   });
 
@@ -196,6 +239,7 @@ export function createProcedures(
   const inOrg = base.use(async ({ context, next, procedure }) => {
     const caller = await orgCaller(context.headers, procedure["~orpc"].meta.apiKeyScope);
     updateContext({ userId: caller.userId, orgId: caller.orgId });
+    await spendLimit(procedure["~orpc"].meta, { user: caller.userId, org: caller.orgId });
     return next({ context: caller });
   });
 

@@ -32,9 +32,11 @@ paths:
 - Errors: `throw new AppError("CODE", { params })` from `@repo/nest-common`. Codes live
   in `packages/contracts/src/errors.ts`; never throw bare `Error` for an expected case
   and never put user-facing text in errors.
-- Rate limits are per operation: `createRateLimiter` from `@repo/nest-common`, throwing
-  `RATE_LIMITED` with `retryAfterSeconds`. Anything that costs money or sends messages
-  needs one.
+- Rate limits are declared in the procedure's contract (`meta({ rateLimit })`, see
+  `.claude/rules/contracts.md`) and applied by the builders, per user or per workspace.
+  Anything that costs money or sends messages needs one. `createRateLimiter` from
+  `@repo/nest-common` in a service is only for what the contract can't key on (the phone
+  number a code is sent to) or what other ways in share (todo changes over MCP).
 - Paid features check `BillingService.require(orgId, entitlement)`. Optional features
   are on only when their env is set (`src/features.ts`) and otherwise answer
   `FEATURE_DISABLED`.

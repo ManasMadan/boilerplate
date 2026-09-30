@@ -8,14 +8,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { type FileInfo, fileSchema } from "@repo/contracts/api";
 import { type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
 import type { Producer } from "@repo/jobs";
-import {
-  AppError,
-  createRateLimiter,
-  InjectRedis,
-  type Redis,
-  STORAGE,
-  type Storage,
-} from "@repo/nest-common";
+import { AppError, STORAGE, type Storage } from "@repo/nest-common";
 import { FilesRepository } from "./files.repository";
 
 export const FILES_QUEUE = Symbol("FILES_QUEUE");
@@ -43,20 +36,11 @@ const toInfo = (row: FileRow): FileInfo => fileSchema.parse(row);
 
 @Injectable()
 export class FilesService {
-  private readonly uploads;
-
   constructor(
     private readonly files: FilesRepository,
     @Inject(STORAGE) private readonly optionalStorage: Storage | null,
     @Inject(FILES_QUEUE) private readonly queue: Producer<"files">,
-    @InjectRedis() redis: Redis,
-  ) {
-    this.uploads = createRateLimiter(redis, {
-      name: "file-uploads",
-      points: 30,
-      windowSeconds: 60 * 60,
-    });
-  }
+  ) {}
 
   private get storage() {
     if (!this.optionalStorage)
@@ -75,12 +59,6 @@ export class FilesService {
     }
     if (input.size > rules.maxBytes) {
       throw new AppError("FILE_TOO_LARGE", { params: { maxBytes: rules.maxBytes } });
-    }
-    const limit = await this.uploads.consume(userId);
-    if (!limit.allowed) {
-      throw new AppError("RATE_LIMITED", {
-        params: { retryAfterSeconds: limit.retryAfterSeconds },
-      });
     }
     const id = randomUUID();
     const row = await this.files.create(userId, {

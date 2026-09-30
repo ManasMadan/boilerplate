@@ -18,6 +18,13 @@ builds in the field all depend on it.
 - API keys: a procedure callable with a key sets `base.meta({ apiKeyScope: "..." })`
   with a scope from `API_KEY_SCOPES` in `src/api/scopes.ts`. No scope means keys get
   `FORBIDDEN`. Add a scope only for data a third party should reach.
+- Rate limits: every procedure that changes something (any method but GET) sets
+  `meta({ rateLimit })`: a `RateLimit` (`name`, `points`, `windowSeconds`, `per: "user"`
+  or `"org"`) or `{ exempt: "why" }`. Everyday changes use `EVERYDAY_WRITES` from
+  `src/api/base.ts`; anything that costs money, sends messages or calls out gets its own,
+  failing closed. The API applies the declared limit (`apps/api/src/rpc/procedures.ts`),
+  so a service never creates its own for a procedure; `src/api/rate-limits.test.ts`
+  fails on a mutation with neither.
 - Error codes: add to `ERROR_CODES` in `src/errors.ts` with the HTTP status, and add
   `errors.<CODE>` to every catalog in `packages/i18n` in the same change. `params` are
   ICU arguments: strings and numbers only.

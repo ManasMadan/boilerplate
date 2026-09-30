@@ -36,9 +36,9 @@ paths:
 - Secrets live in `.env` (set with `bun run env:set`), never in code, fixtures, logs or
   error params. Secrets stored in the database are encrypted with `SecretBox`
   (`ENCRYPTION_KEYS`). Signed links use `createSignedTokens`.
-- Rate-limit anything that sends messages, costs money or checks a secret:
-  `createRateLimiter` (fails closed by default), better-auth's `rateLimit` for auth
-  routes.
+- Rate-limit anything that sends messages, costs money or checks a secret: the
+  procedure's `meta({ rateLimit })` in packages/contracts (fails closed by default),
+  `createRateLimiter` elsewhere, better-auth's `rateLimit` for auth routes.
 - SQL: Prisma queries or tagged `$queryRaw`/`$executeRaw` templates. `$queryRawUnsafe`
   only when an identifier must vary, taken from a constant list, with values still as
   `$1` parameters (`apps/worker/src/maintenance/maintenance.processor.ts`). Never

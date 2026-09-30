@@ -2,7 +2,7 @@ import { ORPCError, ValidationError } from "@orpc/server";
 import { Prisma } from "@repo/db";
 import { AppError } from "@repo/nest-common";
 import { describe, expect, it, vi } from "vitest";
-import { toContractError } from "./procedures";
+import { rateLimitKey, toContractError } from "./procedures";
 
 describe("errors from procedures", () => {
   it("logs an AppError of 500 or more, with its cause: it's our fault", () => {
@@ -73,5 +73,17 @@ describe("errors from procedures", () => {
     const log = vi.fn();
     expect(toContractError(new ORPCError("TEAPOT"), log).code).toBe("INTERNAL");
     expect(log).toHaveBeenCalledWith(expect.any(ORPCError), "error");
+  });
+});
+
+describe("rate limit keys", () => {
+  const limit = { name: "test", points: 1, windowSeconds: 1 } as const;
+
+  it("count per user or per workspace, and never a workspace limit outside one", () => {
+    expect(rateLimitKey({ ...limit, per: "user" }, { user: "u-1", org: "o-1" })).toBe("u-1");
+    expect(rateLimitKey({ ...limit, per: "org" }, { user: "u-1", org: "o-1" })).toBe("o-1");
+    expect(() => rateLimitKey({ ...limit, per: "org" }, { user: "u-1" })).toThrow(
+      'limit "test" is per org',
+    );
   });
 });

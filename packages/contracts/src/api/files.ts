@@ -6,7 +6,7 @@
  */
 import * as z from "zod";
 import { fileRejections, fileStatuses, uploadPurposeNames } from "../files";
-import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf(
@@ -37,6 +37,7 @@ const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
 
 export const filesContract = {
   createUpload: route("POST", "/files/uploads", "Start an upload")
+    .meta({ rateLimit: { name: "file-uploads", points: 30, windowSeconds: 60 * 60, per: "user" } })
     .input(
       z.object({
         purpose: z.enum(uploadPurposeNames),
@@ -58,6 +59,7 @@ export const filesContract = {
     ),
   /** After the PUT succeeded: the file is checked and becomes ready (or rejected). */
   completeUpload: route("POST", "/files/{fileId}/complete", "Finish an upload")
+    .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ fileId: z.uuid() }))
     .output(fileSchema),
   get: route("GET", "/files/{fileId}", "A file's status")

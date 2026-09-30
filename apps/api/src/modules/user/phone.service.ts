@@ -49,9 +49,9 @@ const hashCode = (userId: string, code: string) =>
 
 @Injectable()
 export class PhoneService {
-  private readonly perUser;
+  // Per user (sending and verifying) is declared in the contract; per number is here,
+  // since the number is input.
   private readonly perNumber;
-  private readonly verifies;
 
   constructor(
     @InjectDatabase() private readonly database: Database,
@@ -60,21 +60,9 @@ export class PhoneService {
     @InjectCriticalNotifications() private readonly notifications: CriticalNotifications,
   ) {
     // Fail closed: without Redis, no texts go out.
-    this.perUser = createRateLimiter(redis, {
-      name: "phone-code-user",
-      points: 5,
-      windowSeconds: 60 * MINUTE,
-      onRedisError: "deny",
-    });
     this.perNumber = createRateLimiter(redis, {
       name: "phone-code-number",
       points: 3,
-      windowSeconds: 60 * MINUTE,
-      onRedisError: "deny",
-    });
-    this.verifies = createRateLimiter(redis, {
-      name: "phone-code-verify",
-      points: 20,
       windowSeconds: 60 * MINUTE,
       onRedisError: "deny",
     });
@@ -86,7 +74,6 @@ export class PhoneService {
   }
 
   async sendCode(userId: string, locale: string | null | undefined, phoneNumber: string) {
-    await this.perUser.take(userId);
     await this.perNumber.take(phoneNumber);
     // Its own number again: nothing to verify (and nothing learned about anyone else's).
     if ((await this.current(userId)) === phoneNumber) throw new AppError("PHONE_NUMBER_TAKEN");
@@ -113,7 +100,6 @@ export class PhoneService {
   }
 
   async verify(userId: string, phoneNumber: string, code: string) {
-    await this.verifies.take(userId);
     const key = codeKey(userId);
     // Count the attempt before looking, atomically: of any number of parallel guesses,
     // only MAX_ATTEMPTS get compared. (On a missing key this creates a lone counter; it
