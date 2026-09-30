@@ -86,7 +86,7 @@
     "dev": "bun run doctor && bun scripts/services.ts up && turbo run dev --filter=@repo/web --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks",
     "dev:full": "bun run doctor && bun scripts/services.ts up --full && turbo run dev",
     "build": "turbo run build",
-    "check-types": "turbo run check-types && tsc -p scripts && tsc -p .claude/hooks",
+    "check-types": "turbo run check-types && tsc -p scripts && tsc -p .claude/hooks && tsc -p turbo/generators",
     "lint": "bun scripts/lint.ts",
     "lint:unused": "knip",
     "lint:markers": "bun scripts/check-markers.ts",
