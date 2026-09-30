@@ -15,7 +15,7 @@ Which kind goes where:
 
 | Kind | Location | Runs with | Needs |
 |---|---|---|---|
-| Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached, Stop hook) | nothing |
+| Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached; the Stop hook runs it for affected packages) | nothing |
 | Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` | Docker (the command starts it) |
 | E2E (web) | `apps/web/e2e/*.spec.ts` | `bun run test:e2e --app web` | full stack |
 | E2E (mobile) | `apps/mobile/e2e/*.spec.ts` (react-native-web); native flows in `apps/mobile/maestro/` | `bun run test:e2e --app mobile` | full stack |

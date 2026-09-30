@@ -68,10 +68,14 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
 - Generated files (`**/generated/**`, `*.gen.ts`, `openapi.json`, `apps/ai/app/contracts/`),
   applied migrations, lockfiles and `.env` are never edited by hand; hooks block most of
   them. Change the source and regenerate.
-- When you finish a change, the Stop hook runs types and unit tests for affected
-  packages (plus ruff for `apps/ai`). It does not run Biome or the boundary checks: run
-  `bun run lint` yourself. For anything touching the database, queues or HTTP, also run
-  the `verify` skill.
+- When you finish a change, the Stop hook checks what changed: Biome on the changed files,
+  lint, types and unit tests of the affected packages (ruff and basedpyright for
+  `apps/ai`), types and tests of `scripts/` and the hooks when they changed, and knip. It
+  re-checks after each fix (up to 3 times a turn), and when a change is too wide for its
+  60 s (a root `package.json`, the lockfile, a timeout) it asks you to run the full
+  checks in the background before finishing. It doesn't run the boundary checks,
+  integration or e2e tests: for anything touching the database, queues or HTTP, run the
+  `verify` skill.
 - Commits: Conventional Commits with a workspace scope, e.g. `feat(api): add todo sharing`.
 - New environment variables go in the service's `src/env.ts`, `.env.example`, and
   docs/environment.md, in the same change.

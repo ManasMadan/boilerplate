@@ -5,8 +5,9 @@ description: Prove a change works before calling it done. Use after implementing
 
 # Verify a change
 
-The Stop hook already runs lint, types and unit tests for affected packages. This skill
-covers what it cannot:
+The Stop hook already runs Biome on the changed files, lint, types and unit tests of the
+affected packages, the checks of `scripts/` and the hooks, and knip. This skill covers
+what it cannot:
 
 1. `bun run lint` (includes architecture boundaries and the web render-only check).
 2. `bun run check-types`.

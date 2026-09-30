@@ -85,7 +85,7 @@
     "dev": "bun run doctor && bun scripts/services.ts up && turbo run dev --filter=@repo/web --filter=@repo/api --filter=@repo/notifications --filter=@repo/worker --filter=@repo/webhooks",
     "dev:full": "bun run doctor && bun scripts/services.ts up --full && turbo run dev",
     "build": "turbo run build",
-    "check-types": "turbo run check-types && tsc -p scripts",
+    "check-types": "turbo run check-types && tsc -p scripts && tsc -p .claude/hooks",
     "lint": "biome check . && bun run lint:boundaries && bun run lint:unused && turbo run lint",
     "lint:unused": "knip",
     "format": "biome check --write .",

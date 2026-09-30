@@ -70,8 +70,8 @@ jobs:
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - run: bun run test
-      # The repo's own scripts (scripts/*.test.ts), outside the workspaces turbo runs.
-      - run: bun test scripts
+      # The repo's own scripts and the Claude Code hooks, outside the workspaces turbo runs.
+      - run: bun test ./scripts/ ./.claude/hooks/
 
   components:
     name: Components (stories, a11y, screenshots)
