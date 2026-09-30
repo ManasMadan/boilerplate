@@ -102,6 +102,15 @@ describe("error responses", () => {
     });
   });
 
+  it("tells a REST caller how to authenticate, and an outdated app to update, with fitting statuses", async () => {
+    const unauthenticated = await send("/api/v1/todos");
+    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.headers.get("www-authenticate")).toBe('ApiKey header="x-api-key"');
+    const outdated = await send("/api/v1/todos", { headers: { "x-app-version": "1.0.0" } });
+    expect(outdated.status).toBe(400);
+    expect((await outdated.json()).code).toBe("CLIENT_OUTDATED");
+  });
+
   it("gives better-auth's errors the same envelope, keeping their codes", async () => {
     const response = await send("/api/auth/sign-in/email", json(JSON.stringify({ email: "x" })));
     expect(response.status).toBe(400);

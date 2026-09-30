@@ -37,7 +37,7 @@ afterEach(() => jest.restoreAllMocks());
 
 describe("the app's API client", () => {
   it("sends the session cookie from secure storage and the app version", async () => {
-    const calls = apiFails("CLIENT_OUTDATED", 426);
+    const calls = apiFails("CLIENT_OUTDATED", 400);
     await render(
       <ApiProvider locale="es">
         <Me />
@@ -51,7 +51,7 @@ describe("the app's API client", () => {
   });
 
   it("shows the update screen when the API no longer supports this build", async () => {
-    apiFails("CLIENT_OUTDATED", 426);
+    apiFails("CLIENT_OUTDATED", 400);
     await render(
       <ApiProvider locale="en">
         <Me />

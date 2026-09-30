@@ -34,9 +34,11 @@ export const ERROR_CODES = {
   // Platform
   IDEMPOTENCY_IN_PROGRESS: 409,
   FEATURE_DISABLED: 404,
-  CLIENT_OUTDATED: 426,
+  /** 400, not 426: that one requires an Upgrade header naming a protocol to switch to. */
+  CLIENT_OUTDATED: 400,
   FRESH_SESSION_REQUIRED: 403,
-  DESTINATION_NOT_ALLOWED: 400,
+  /** The same refusal as WEBHOOK_URL_NOT_ALLOWED, found later (at delivery), so the same status. */
+  DESTINATION_NOT_ALLOWED: 422,
   RESPONSE_TOO_LARGE: 502,
   TOO_MANY_REDIRECTS: 502,
   UPSTREAM_UNAVAILABLE: 502,
@@ -77,6 +79,8 @@ export const ERROR_CODES = {
   API_KEY_SCOPE_MISSING: 403,
   // AI
   DOCUMENT_NOT_FOUND: 404,
+  // DOCUMENT_INDEXING_FAILED (a document's error) and AI_RUN_LIMIT (an answer's) are never
+  // HTTP answers, only codes inside a response; their statuses are there for the catalog.
   DOCUMENT_INDEXING_FAILED: 422,
   AI_BUDGET_EXCEEDED: 429,
   AI_RUN_LIMIT: 422,

@@ -23,7 +23,7 @@
 import { implement, ORPCError, ValidationError } from "@orpc/server";
 import { API_KEY_HEADER, type ApiKeyScope, contract, type ErrorData } from "@repo/contracts/api";
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
-import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import { AppError, currentContext, fromPrismaError, updateContext } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
@@ -85,7 +85,7 @@ export function toContractError(thrown: unknown, log: LogError): ORPCError<Error
         code: "code" in issue && typeof issue.code === "string" ? issue.code : "invalid",
       }));
       return new ORPCError("VALIDATION_FAILED", {
-        status: 422,
+        status: ERROR_CODES.VALIDATION_FAILED,
         data: { params: {} as ErrorParams, requestId, issues },
       });
     }
