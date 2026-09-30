@@ -23,5 +23,9 @@ call `fetch` against the API.
   `CLIENT_OUTDATED`, `NO_ACTIVE_ORGANIZATION`) are handled once in `src/provider.tsx`.
 - Shared form rules and auth error keys live in `src/auth/forms.ts`; web and mobile both
   use them, so do not copy validation into an app.
+- Hooks are tested next to their file against the contract implemented in memory:
+  `standIn((os) => ({ ... }))` with only the procedures the test calls, and `renderHook`,
+  both from `test/stand-in.tsx`. Polling and reconnects run on fake timers, waited on
+  with `until`.
 - Must run in the browser and React Native: import contract types only, no Node APIs,
   nothing from `packages/db`, `nest-common` or `jobs`.
