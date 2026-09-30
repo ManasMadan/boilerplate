@@ -3,9 +3,14 @@
  * example of its own, with a state key of its own, so nobody copies staging's and points
  * production at staging's state.
  */
-import { describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { infraCheck } from "./infra";
+import { captureOutput, fakeRun } from "./stand-ins";
+
+afterEach(() => mock.restore());
 
 const ROOT_DIR = join(import.meta.dir, "../infra/tofu/envs/k3s");
 const environments = readdirSync(ROOT_DIR)
@@ -50,5 +55,78 @@ describe("the facts OpenTofu writes on the cluster", () => {
       readers.includes(`boilerplate.dev/${key}`) ||
       new RegExp(`:\\s*${key}\\s*$`, "m").test(readers);
     expect(read).toBe(true);
+  });
+});
+
+describe("the OpenTofu check", () => {
+  const TOFU = join(import.meta.dir, "../infra/tofu");
+  const pluginCache = () => join(mkdtempSync(join(tmpdir(), "tofu-plugins-")), "cache");
+
+  it("checks the format, then inits, validates and tests every root with the plugin cache", () => {
+    const printed = captureOutput();
+    const { run, calls, options } = fakeRun();
+    const cache = pluginCache();
+    expect(infraCheck({ run, tofuDir: TOFU, pluginCache: cache, env: { PATH: "/bin" } })).toBe(0);
+    const roots = ["envs/k3s", "modules/bootstrap", "modules/cloudflare", "modules/k3s"];
+    expect(calls).toEqual([
+      "tofu fmt -check -recursive -diff .",
+      ...roots.flatMap(() => [
+        "tofu init -backend=false -input=false -no-color",
+        "tofu validate -no-color",
+        "tofu test -no-color",
+      ]),
+    ]);
+    expect(options.map((o) => o.cwd)).toEqual([
+      TOFU,
+      ...roots.flatMap((root) => Array(3).fill(join(TOFU, root))),
+    ]);
+    expect(options[0]?.env).toEqual({
+      PATH: "/bin",
+      TF_PLUGIN_CACHE_DIR: cache,
+      TF_IN_AUTOMATION: "1",
+    });
+    expect(readdirSync(cache)).toEqual([]);
+    expect(printed()).toContain("modules/k3s: tests");
+  });
+
+  it("fails with tofu's output, and skips what an init that failed can't check", () => {
+    const printed = captureOutput();
+    const tofuDir = mkdtempSync(join(tmpdir(), "tofu-"));
+    for (const root of ["modules/broken", "modules/plain", "envs/one/tests"]) {
+      mkdirSync(join(tofuDir, root), { recursive: true });
+    }
+    const { run, calls, options } = fakeRun((line) =>
+      line.startsWith("tofu fmt")
+        ? { status: 3, stdout: "main.tf\n", stderr: "badly formatted\n" }
+        : {},
+    );
+    const broken = join(tofuDir, "modules/broken");
+    const code = infraCheck({
+      run: (command, args, given) => {
+        const ran = run(command, args, given);
+        const fails = given?.cwd === broken && args[0] === "init";
+        return fails ? { status: 1, stdout: "", stderr: "no provider" } : ran;
+      },
+      tofuDir,
+      pluginCache: pluginCache(),
+    });
+    expect(code).toBe(1);
+    expect(printed()).toContain("main.tf\nbadly formatted");
+    expect(printed()).toContain("no provider");
+    expect(calls).toEqual([
+      "tofu fmt -check -recursive -diff .",
+      "tofu init -backend=false -input=false -no-color",
+      "tofu validate -no-color",
+      "tofu test -no-color",
+      "tofu init -backend=false -input=false -no-color",
+      "tofu init -backend=false -input=false -no-color",
+      "tofu validate -no-color",
+    ]);
+    expect(options.map((o) => o.cwd)).toEqual([
+      tofuDir,
+      ...Array(3).fill(join(tofuDir, "envs/one")),
+      broken,
+      ...Array(2).fill(join(tofuDir, "modules/plain")),
+    ]);
   });
 });
