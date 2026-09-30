@@ -305,3 +305,58 @@ describe("jobs that run turbo", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("preview.yml's cleanup", () => {
+  const { jobs } = workflow("preview.yml");
+  const script = jobs.cleanup?.steps?.[1]?.with?.script as string;
+
+  /** Runs the step's script against a fake GitHub with these package versions. */
+  async function cleanup(versions: { id: number; tags: string[] }[]) {
+    const deleted: number[] = [];
+    const endpoint = (name: string) => Object.assign(async () => ({}), { endpoint: name });
+    const github = {
+      paginate: async (fn: { endpoint: string }) =>
+        fn.endpoint === "commits"
+          ? [{ sha: "aaa" }, { sha: "bbb" }]
+          : versions.map((v) => ({ id: v.id, metadata: { container: { tags: v.tags } } })),
+      rest: {
+        pulls: { listCommits: endpoint("commits") },
+        packages: {
+          getAllPackageVersionsForPackageOwnedByUser: endpoint("versions"),
+          getAllPackageVersionsForPackageOwnedByOrg: endpoint("versions"),
+          deletePackageVersionForUser: async (r: { package_version_id: number }) => {
+            deleted.push(r.package_version_id);
+          },
+          deletePackageVersionForOrg: async () => {},
+        },
+      },
+    };
+    const context = {
+      repo: { owner: "me", repo: "boilerplate" },
+      payload: {
+        pull_request: { number: 7 },
+        repository: { owner: { login: "me", type: "User" } },
+      },
+    };
+    const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+    process.env.IMAGES = "api";
+    await new AsyncFunction("github", "context", "core", script)(github, context, { info() {} });
+    return deleted;
+  }
+
+  it("runs when a pull request with a preview closes, and only then builds nothing", () => {
+    expect(jobs.cleanup?.if).toContain("github.event.action == 'closed'");
+    expect(jobs.images?.if).toContain("github.event.action != 'closed'");
+  });
+
+  it("deletes the images of the pull request's commits, and nothing else", async () => {
+    const deleted = await cleanup([
+      { id: 1, tags: ["sha-aaa"] },
+      { id: 2, tags: ["sha-bbb"] },
+      { id: 3, tags: ["sha-ccc"] },
+      { id: 4, tags: ["sha-aaa", "v1.0.0"] },
+      { id: 5, tags: [] },
+    ]);
+    expect(deleted).toEqual([1, 2]);
+  });
+});

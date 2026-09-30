@@ -135,7 +135,8 @@ pull request's code can't mail real people or spend the domain's reputation. Arg
 notices a new head commit before its
 images are pushed, so the first sync fails and retries with backoff for about half an
 hour until they are. New pushes rebuild; removing the label or closing the pull request
-deletes it.
+deletes it, and closing it deletes its images from GHCR too (every `sha-<commit>` of the
+pull request's commits).
 
 A preview runs the pull request's images with the charts, values and Secrets of the
 branch it targets, never the pull request's own: a fork's charts could otherwise run any

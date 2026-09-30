@@ -2,7 +2,8 @@
 # pull request's images as sha-<head commit> and pushes them; Argo CD's previews
 # ApplicationSet then deploys that commit to its own namespace, at
 # https://pr-<number>.preview.<domain>, and this workflow posts the link. New pushes
-# rebuild; removing the label or closing the pull request deletes the preview.
+# rebuild; removing the label or closing the pull request deletes the preview, and
+# closing it also deletes its images from GHCR.
 #
 # Only branches of this repository get previews: a fork's code never runs with the
 # token that pushes images. Argo CD deploys the images with the target branch's charts
@@ -12,7 +13,7 @@ name: Preview
 
 on:
   pull_request:
-    types: [labeled, synchronize, reopened]
+    types: [labeled, synchronize, reopened, closed]
 
 concurrency:
   group: preview-${{ github.event.pull_request.number }}
@@ -28,7 +29,8 @@ jobs:
   images:
     name: Preview image ${{ matrix.image }}
     if: >-
-      contains(github.event.pull_request.labels.*.name, 'preview')
+      github.event.action != 'closed'
+      && contains(github.event.pull_request.labels.*.name, 'preview')
       && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -94,4 +96,51 @@ jobs:
               await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
             } else {
               await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
+            }
+
+  # A closed pull request's preview images (sha-<each of its commits>) are never deployed
+  # again: master's commits are new ones (squash merges), with images of their own.
+  cleanup:
+    name: Delete the preview's images
+    if: >-
+      github.event.action == 'closed'
+      && contains(github.event.pull_request.labels.*.name, 'preview')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - name: Delete every image version tagged with one of the pull request's commits
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          IMAGES: api worker notifications webhooks web ai migrate
+        with:
+          script: |
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const tags = new Set(commits.map((commit) => `sha-${commit.sha}`));
+            const owner = context.payload.repository.owner;
+            const org = owner.type === "Organization";
+            const scope = org ? { org: owner.login } : { username: owner.login };
+            for (const image of process.env.IMAGES.split(" ")) {
+              const package_name = `${context.repo.repo}/${image}`;
+              const request = { package_type: "container", package_name, ...scope };
+              const list = org
+                ? github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg
+                : github.rest.packages.getAllPackageVersionsForPackageOwnedByUser;
+              const versions = await github.paginate(list, request).catch(() => []);
+              for (const version of versions) {
+                const versionTags = version.metadata?.container?.tags ?? [];
+                // Only versions every tag of which is one of this pull request's.
+                if (versionTags.length === 0 || !versionTags.every((tag) => tags.has(tag))) continue;
+                const remove = org
+                  ? github.rest.packages.deletePackageVersionForOrg
+                  : github.rest.packages.deletePackageVersionForUser;
+                await remove({ ...request, package_version_id: version.id });
+                core.info(`deleted ${package_name}:${versionTags.join(",")}`);
+              }
             }
