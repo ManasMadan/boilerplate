@@ -45,6 +45,21 @@ describe("rate limiter", () => {
     expect((await limiter.consume("ip-2")).allowed).toBe(true);
   });
 
+  it("take() throws RATE_LIMITED with when to retry, past the limit", async () => {
+    const limiter = createRateLimiter(redis, {
+      name: `test-take-${randomUUID()}`,
+      points: 1,
+      windowSeconds: 60,
+    });
+    await limiter.take("k");
+    const error = await limiter.take("k").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      code: "RATE_LIMITED",
+      params: { retryAfterSeconds: expect.any(Number) },
+    });
+  });
+
   it("fails closed or open when Redis is unavailable, as configured", async () => {
     const dead = new Redis("redis://localhost:1", {
       lazyConnect: true,

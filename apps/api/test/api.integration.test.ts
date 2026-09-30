@@ -651,6 +651,20 @@ describe("organizations and the audit trail", () => {
 describe("webhook endpoints", () => {
   const url = "http://127.0.0.1:9/hook";
 
+  it("limits test sends per workspace, so our servers can't flood an endpoint", async () => {
+    const { session } = await signedInUser();
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({
+      url,
+      events: ["todo.created.v1"],
+    });
+    for (let i = 0; i < 10; i++) await session.rpc.webhooks.sendTest({ id: endpoint.id });
+    const limited = await expectError(
+      session.rpc.webhooks.sendTest({ id: endpoint.id }),
+      "RATE_LIMITED",
+    );
+    expect(limited.data.params).toMatchObject({ retryAfterSeconds: expect.any(Number) });
+  });
+
   it("needs a recent sign-in to add one or point it elsewhere", async () => {
     const { session } = await signedInUser();
     const { endpoint } = await session.rpc.webhooks.createEndpoint({

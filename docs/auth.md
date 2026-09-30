@@ -190,7 +190,11 @@ these endpoints for the window; a passkey or an existing session still works.
 Elsewhere, `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`) limits
 assistant questions (20 a minute), AI documents and file uploads (30 an hour), phone
 codes (5 an hour per user, 3 per number, refused when Redis is down), MCP tool calls and
-API keys, all shared across replicas through Redis.
+API keys, all shared across replicas through Redis. Anything that makes our servers call
+a customer's URL is limited per workspace too: webhook test sends (10 a minute),
+redeliveries (60 a minute) and todo changes (600 a minute, one API key's allowance,
+however many keys the workspace spreads them over). `limiter.take(key)` consumes and
+throws `RATE_LIMITED` with `retryAfterSeconds`.
 
 Phone codes can go to any country: there's no list of allowed country codes. Texts to
 some destinations cost far more than others, and SMS pumping targets exactly those, so a

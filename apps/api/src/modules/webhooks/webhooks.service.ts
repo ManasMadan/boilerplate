@@ -13,7 +13,17 @@ import type { EventPayload, WebhookEventName } from "@repo/contracts/events";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
 import { tenantTx } from "@repo/db";
 import type { Producer } from "@repo/jobs";
-import { AppError, type Database, InjectDatabase, keysFromEnv, SecretBox } from "@repo/nest-common";
+import {
+  AppError,
+  createRateLimiter,
+  type Database,
+  InjectDatabase,
+  InjectRedis,
+  keysFromEnv,
+  type RateLimiter,
+  type Redis,
+  SecretBox,
+} from "@repo/nest-common";
 import { env } from "../../env";
 import { emitEvent } from "../../outbox";
 import { BillingService } from "../billing";
@@ -43,12 +53,25 @@ type Changed = EventPayload<"webhook.endpoint_updated.v1">["changed"];
 export class WebhooksService implements OnApplicationShutdown {
   private readonly box = new SecretBox(keysFromEnv(env.ENCRYPTION_KEYS));
 
+  // Each sends a request to the customer's URL: without a limit, our servers could be
+  // pointed at someone's endpoint as a flood.
+  private readonly tests: RateLimiter;
+  private readonly redeliveries: RateLimiter;
+
   constructor(
     @InjectDatabase() private readonly database: Database,
     private readonly repository: WebhooksRepository,
     @Inject(WEBHOOK_DELIVERIES) private readonly deliveries: Producer<"webhook-deliveries">,
     private readonly billing: BillingService,
-  ) {}
+    @InjectRedis() redis: Redis,
+  ) {
+    this.tests = createRateLimiter(redis, { name: "webhook-tests", points: 10, windowSeconds: 60 });
+    this.redeliveries = createRateLimiter(redis, {
+      name: "webhook-redeliveries",
+      points: 60,
+      windowSeconds: 60,
+    });
+  }
 
   async listEndpoints(orgId: string) {
     return (await this.repository.listEndpoints(orgId)).map(toEndpoint);
@@ -174,6 +197,7 @@ export class WebhooksService implements OnApplicationShutdown {
     if (!(await this.repository.endpointExists(orgId, endpointId))) {
       throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: endpointId } });
     }
+    await this.tests.take(orgId);
     await this.deliveries.add(
       "send-test",
       { endpointId, orgId },
@@ -196,6 +220,7 @@ export class WebhooksService implements OnApplicationShutdown {
     if (!(await this.repository.deliveryExists(orgId, deliveryId))) {
       throw new AppError("WEBHOOK_DELIVERY_NOT_FOUND", { params: { id: deliveryId } });
     }
+    await this.redeliveries.take(orgId);
     await this.deliveries.add(
       "redeliver",
       { deliveryId, orgId },
