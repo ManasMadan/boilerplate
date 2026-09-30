@@ -172,9 +172,9 @@ export const WEBHOOK_RETRY_DELAYS_MS = [
   10 * 3_600_000,
 ];
 
-/** Retries with exponential backoff; the defaults every queue starts from. */
 const aiDocumentJob = z.object({ documentId: z.uuid(), orgId: z.uuid() });
 
+/** Retries with exponential backoff; the defaults every queue starts from. */
 const retrying: JobsOptions = { attempts: 5, backoff: { type: "exponential", delay: 2_000 } };
 
 export const queues = {

@@ -44,10 +44,10 @@ function createTransports(): PushTransports {
   return transports;
 }
 
-class TransportsLifecycle implements OnApplicationShutdown {
+export class TransportsLifecycle implements OnApplicationShutdown {
   constructor(@Inject(PUSH_TRANSPORTS) private readonly transports: PushTransports) {}
-  onApplicationShutdown() {
-    (this.transports.ios as ApnsTransport | undefined)?.close();
+  async onApplicationShutdown() {
+    await Promise.all(Object.values(this.transports).map((transport) => transport?.close?.()));
   }
 }
 
