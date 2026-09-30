@@ -82,9 +82,14 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
         const failure = failing.get(page)?.find(({ part }) => request.url().includes(part));
         if (failure) {
           failure.hits += 1;
-          return failure.status
+          if (!failure.status) return route.abort();
+          return failure.body === undefined
             ? route.fulfill({ status: failure.status, body: "" })
-            : route.abort();
+            : route.fulfill({
+                status: failure.status,
+                contentType: "application/json",
+                body: JSON.stringify(failure.body),
+              });
         }
         if (!request.isNavigationRequest() || request.frame() === page.mainFrame())
           return route.fallback();
@@ -108,7 +113,10 @@ const answeredRequests: BrowserCommand<[part: string]> = ({ page }, part) =>
 
 /** Each page's client IP for its current test, and the requests it makes fail. */
 const clientIps = new WeakMap<Page, string>();
-const failing = new WeakMap<Page, { part: string; status?: number; hits: number }[]>();
+const failing = new WeakMap<
+  Page,
+  { part: string; status?: number; body?: unknown; hits: number }[]
+>();
 
 /** Sends these headers with the page's requests for the rest of the test (an app version, say). */
 const requestHeaders: BrowserCommand<[headers: Record<string, string>]> = async (
@@ -120,14 +128,13 @@ const requestHeaders: BrowserCommand<[headers: Record<string, string>]> = async 
 
 /**
  * Makes the page's requests to URLs containing `part` fail for the rest of the test: as
- * if the network dropped them, or with `status` (a gateway's 502 when the API is down).
+ * if the network dropped them, or with `status` (a gateway's 502 when the API is down)
+ * and, if given, `body` as JSON (a refusal the local stack can't produce).
  * Returns nothing; `failedRequests(part)` says how many there have been.
  */
-const failRequests: BrowserCommand<[part: string, options?: { status?: number }]> = (
-  { page },
-  part,
-  options = {},
-) => {
+const failRequests: BrowserCommand<
+  [part: string, options?: { status?: number; body?: unknown }]
+> = ({ page }, part, options = {}) => {
   failing.get(page)?.push({ part, ...options, hits: 0 });
 };
 
@@ -273,7 +280,10 @@ const editSession: BrowserCommand<
   const key = `auth:${decodeURIComponent(cookie.value).split(".")[0]}`;
   const redis = new Redis(REDIS_URL);
   try {
-    const stored = JSON.parse((await redis.get(key)) ?? "null");
+    const stored = JSON.parse((await redis.get(key)) ?? "null") as {
+      session: Record<string, unknown>;
+      user: Record<string, unknown>;
+    } | null;
     if (!stored) throw new Error(`no session at ${key}`);
     Object.assign(stored.session, fields);
     Object.assign(stored.user, userFields);
@@ -440,7 +450,7 @@ declare module "vitest/browser" {
     ): Promise<void>;
     startTest(): Promise<void>;
     requestHeaders(headers: Record<string, string>): Promise<void>;
-    failRequests(part: string, options?: { status?: number }): Promise<void>;
+    failRequests(part: string, options?: { status?: number; body?: unknown }): Promise<void>;
     failedRequests(part: string): Promise<number>;
     totp(secret: string): Promise<string>;
     hardNavigations(): Promise<string[]>;

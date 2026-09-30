@@ -156,6 +156,23 @@ describe("two-step verification", () => {
 });
 
 describe("the password", () => {
+  it("shows a refusal about the new password on it", async () => {
+    const user = await signUp();
+    // Answered as the API refuses a breached password: only production's API checks one
+    // (Have I Been Pwned); the API's own suite covers the check against a stand-in.
+    await commands.failRequests("/api/auth/change-password", {
+      status: 400,
+      body: { code: "PASSWORD_COMPROMISED", message: "compromised" },
+    });
+    const page = await renderPage(<PasswordCard />, { url: "/settings/security" });
+    await userEvent.fill(page.getByLabelText("Current password"), user.password);
+    await userEvent.fill(page.getByLabelText("New password"), `pw-${crypto.randomUUID()}`);
+    await userEvent.click(page.getByRole("button", { name: "Change password" }));
+    await expect
+      .element(page.getByText("This password appeared in a data breach. Choose a different one."))
+      .toBeVisible();
+  });
+
   it("is changed after checking the current one and the new one", async () => {
     const user = await signUp();
     const page = await renderPage(<PasswordCard />, { url: "/settings/security" });
@@ -169,12 +186,6 @@ describe("the password", () => {
     await expect.element(page.getByText("That password is wrong.")).toBeVisible();
 
     await userEvent.fill(current, user.password);
-    await userEvent.fill(next, "password123");
-    await userEvent.click(change);
-    await expect
-      .element(page.getByText("This password appeared in a data breach. Choose a different one."))
-      .toBeVisible();
-
     const password = `pw-${crypto.randomUUID()}`;
     await userEvent.fill(next, password);
     await userEvent.click(change);

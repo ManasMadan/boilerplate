@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { SignUpPage } from "@/modules/auth";
 import { currentUrl, renderPage } from "../render";
 import { newUser, takeOtp } from "../users";
@@ -25,9 +25,15 @@ describe("sign up", () => {
     expect(await takeOtp(user.email)).toMatch(/^\d{6}$/);
   });
 
-  it("refuses a password from a data breach", async () => {
+  it("says why the API refused the account, and stays on the page", async () => {
+    // Answered as the API refuses a breached password: only production's API checks one
+    // (Have I Been Pwned); the API's own suite covers the check against a stand-in.
+    await commands.failRequests("/api/auth/sign-up/email", {
+      status: 400,
+      body: { code: "PASSWORD_COMPROMISED", message: "compromised" },
+    });
     const page = await renderPage(<SignUpPage />, { url: "/sign-up" });
-    await fillIn(page, { ...newUser(), password: "password123" });
+    await fillIn(page, newUser());
     await expect
       .element(page.getByText("This password appeared in a data breach. Choose a different one."))
       .toBeVisible();
