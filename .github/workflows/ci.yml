@@ -29,6 +29,37 @@ env:
   NODE_ENV: test
 
 jobs:
+  # Which areas a pull request touches (scripts/changes.ts): the heavy jobs skip the
+  # areas it doesn't, so a docs-only change doesn't spend an hour of runners. Outside
+  # pull requests everything runs.
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read }
+    outputs:
+      app: ${{ steps.areas.outputs.app }}
+      charts: ${{ steps.areas.outputs.charts }}
+      infra: ${{ steps.areas.outputs.infra }}
+      images: ${{ steps.areas.outputs.images }}
+      scripts: ${{ steps.areas.outputs.scripts }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      # The pull request's merge commit and its first parent, the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 2 }
+      - uses: ./.github/actions/setup
+      - id: areas
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT" == "pull_request" ]]; then
+            bun scripts/changes.ts HEAD^1 | tee -a "$GITHUB_OUTPUT"
+          else
+            bun scripts/changes.ts | tee -a "$GITHUB_OUTPUT"
+          fi
+
   lint:
     name: Lint and boundaries
     runs-on: ubuntu-24.04
@@ -48,6 +79,8 @@ jobs:
 
   types:
     name: Type-check
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions: { contents: read }
@@ -62,6 +95,8 @@ jobs:
 
   unit:
     name: Unit tests
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.scripts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions: { contents: read }
@@ -78,6 +113,8 @@ jobs:
 
   components:
     name: Components (stories, a11y, screenshots)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions: { contents: read }
@@ -110,6 +147,8 @@ jobs:
 
   integration:
     name: Integration tests
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: { contents: read }
@@ -197,6 +236,8 @@ jobs:
   # tests: on one runner the suite alone took over ten minutes, the slowest job by far.
   e2e:
     name: End-to-end tests (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     # The nightly load test holds its load for five minutes on top.
     timeout-minutes: ${{ github.event_name == 'schedule' && 40 || 25 }}
@@ -325,6 +366,8 @@ jobs:
 
   python:
     name: Python service
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions: { contents: read }
@@ -408,6 +451,8 @@ jobs:
 
   codegen:
     name: Generated code is committed
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions: { contents: read }
@@ -437,7 +482,8 @@ jobs:
   # packages/jobs/generated/events.json).
   api-compat:
     name: API compatibility
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: { contents: read }
@@ -519,6 +565,8 @@ jobs:
   # New migrations must be safe to run while the previous release is still serving.
   migrations:
     name: Migration safety
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: { contents: read }
@@ -532,6 +580,8 @@ jobs:
 
   charts:
     name: Helm charts and GitOps
+    needs: changes
+    if: needs.changes.outputs.charts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions: { contents: read }
@@ -561,6 +611,8 @@ jobs:
 
   infra:
     name: OpenTofu
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions: { contents: read }
@@ -584,6 +636,8 @@ jobs:
   # One job per image: loading all seven into one runner's Docker runs it out of disk.
   images:
     name: Container images (${{ matrix.image }})
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.images == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: { contents: read }
@@ -623,6 +677,8 @@ jobs:
   # its own tests, or the next feature starts from broken code (scripts/generators.ts).
   generators:
     name: Code generators
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: { contents: read }
@@ -663,8 +719,10 @@ jobs:
   # with the exceptions docs/testing.md lists), and a pull request's changed lines too.
   coverage:
     name: Coverage
-    needs: [components, integration, python]
+    needs: [changes, components, integration, python]
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -690,7 +748,7 @@ jobs:
   ci-ok:
     name: CI passed
     if: always()
-    needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images, generators, coverage]
+    needs: [changes, pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images, generators, coverage]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
@@ -699,12 +757,24 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
-        # Every job must have succeeded; the only ones allowed to skip are the checks of a
-        # pull request itself (title, API compatibility), outside pull requests.
+        # Every job must have succeeded. The ones allowed to skip: the checks of a pull
+        # request itself (title, API compatibility) outside pull requests, and a job whose
+        # areas the pull request doesn't touch (the changes job's outputs; the job's `if`).
         run: |
           echo "$NEEDS" | jq -e --arg event "$EVENT" '
-            to_entries | all(
+            .changes.outputs as $areas
+            | {
+                types: ["app"], unit: ["app", "scripts"], components: ["app"],
+                integration: ["app"], e2e: ["app"], python: ["app"], codegen: ["app"],
+                migrations: ["app"], charts: ["charts"], infra: ["infra"],
+                images: ["app", "images"], generators: ["app"], "api-compat": ["app"],
+                coverage: ["app"]
+              } as $gates
+            | .changes.result == "success"
+            and (to_entries | all(
               .value.result == "success"
-              or ((.key == "pr-title" or .key == "api-compat")
-                  and .value.result == "skipped" and $event != "pull_request")
-            )' > /dev/null
+              or (.value.result == "skipped" and (
+                ((.key == "pr-title" or .key == "api-compat") and $event != "pull_request")
+                or ((.key | in($gates)) and ($gates[.key] | all($areas[.] == "false")))
+              ))
+            ))' > /dev/null

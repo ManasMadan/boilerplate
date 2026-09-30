@@ -17,7 +17,10 @@ paths:
 - Toolchain through `./.github/actions/setup` (Node from `.nvmrc`, Bun from
   `package.json`, uv on request, the Turborepo cache), not a job's own setup steps.
 - A new CI job goes in `ci-ok`'s `needs` list, the one required check, so branch
-  protection never changes. Jobs run the same commands a developer runs locally
+  protection never changes. A heavy one also `needs: changes` and runs only for the
+  areas it checks (`if: needs.changes.outputs.<area> == 'true'`, areas in
+  `scripts/changes.ts`), with the same areas in `ci-ok`'s `$gates`
+  (`scripts/workflows.test.ts` fails when the two disagree). Jobs run the same commands a developer runs locally
   (`bun run lint`, `bun run test:integration`, …), never a CI-only variant.
 - The pull request title scopes in `ci.yml` repeat `commitlint.config.ts`: change both
   together.

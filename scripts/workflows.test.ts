@@ -206,3 +206,79 @@ describe("deploy.yml's staging bump", () => {
     );
   });
 });
+
+describe("ci.yml's path filters", () => {
+  const { jobs } = workflow("ci.yml");
+  const run = jobs["ci-ok"]?.steps?.[0]?.run as string;
+  const program = /jq -e --arg event "\$EVENT" '([\s\S]*)' > \/dev\/null/.exec(run)?.[1] ?? "";
+  const gates = JSON.parse(
+    (/\{([^}]*)\} as \$gates/.exec(program)?.[1] ?? "")
+      .replace(/([\w-]+):/g, '"$1":')
+      .replace(/""/g, '"')
+      .replace(/^/, "{")
+      .concat("}"),
+  ) as Record<string, string[]>;
+
+  /** What ci-ok decides for these job results and areas. */
+  function passes(event: string, areas: Record<string, string>, results: Record<string, string>) {
+    const needs = {
+      changes: { result: "success", outputs: areas },
+      ...Object.fromEntries(Object.entries(results).map(([job, result]) => [job, { result }])),
+    };
+    return (
+      Bun.spawnSync(["jq", "-e", "--arg", "event", event, program], {
+        stdin: new TextEncoder().encode(JSON.stringify(needs)),
+      }).exitCode === 0
+    );
+  }
+  const areas = (on: string[]) =>
+    Object.fromEntries(
+      ["app", "charts", "infra", "images", "scripts"].map((a) => [a, String(on.includes(a))]),
+    );
+  const skipped = (names: string[]) => Object.fromEntries(names.map((n) => [n, "skipped"]));
+  const heavy = Object.keys(gates);
+
+  it("gates each job on the areas ci-ok lets it skip for", () => {
+    expect(heavy.length).toBeGreaterThan(10);
+    for (const [job, needed] of Object.entries(gates)) {
+      const condition = jobs[job]?.if ?? "";
+      for (const area of needed)
+        expect(condition).toContain(`needs.changes.outputs.${area} == 'true'`);
+    }
+  });
+
+  it("passes a docs-only pull request that ran only lint and the title check", () => {
+    expect(
+      passes("pull_request", areas([]), {
+        lint: "success",
+        "pr-title": "success",
+        ...skipped(heavy),
+      }),
+    ).toBe(true);
+  });
+
+  it("passes a chart change that skipped the app's suites", () => {
+    const ran = { lint: "success", "pr-title": "success", charts: "success", unit: "success" };
+    const rest = skipped(heavy.filter((job) => !(job in ran)));
+    expect(passes("pull_request", areas(["charts", "scripts"]), { ...rest, ...ran })).toBe(true);
+  });
+
+  it("fails an app change whose suites were skipped anyway", () => {
+    expect(
+      passes("pull_request", areas(["app"]), {
+        lint: "success",
+        "pr-title": "success",
+        ...skipped(heavy),
+      }),
+    ).toBe(false);
+  });
+
+  it("fails when a job failed, or the changes job itself did", () => {
+    expect(passes("pull_request", areas([]), { lint: "failure", ...skipped(heavy) })).toBe(false);
+    const needs = { changes: { result: "failure", outputs: {} } };
+    const result = Bun.spawnSync(["jq", "-e", "--arg", "event", "pull_request", program], {
+      stdin: new TextEncoder().encode(JSON.stringify(needs)),
+    });
+    expect(result.exitCode).not.toBe(0);
+  });
+});

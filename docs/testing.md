@@ -242,11 +242,16 @@ The evals run on every change with the local stand-ins; see
 ## What CI runs
 
 On every pull request, push to `master` and merge group (`.github/workflows/ci.yml`).
-Branch protection requires **CI passed**, which succeeds only when all of these do:
+Branch protection requires **CI passed**, which succeeds only when all of these do. On a
+pull request, the first job (`scripts/changes.ts`) says which areas it touches (the app,
+the charts, OpenTofu, the Dockerfiles, the scripts), and a job for an area it doesn't
+touch is skipped: a docs-only change runs only lint and the title check, and a change
+to `deploy/` only the charts and the scripts' tests. **CI passed** accepts a skip only
+for those areas.
 
 | Job | Runs |
 |---|---|
-| Lint and boundaries | `biome ci`, `lint:boundaries`, `lint:unused` |
+| Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, each package's lint) |
 | Type-check | `bun run check-types` |
 | Unit tests | `bun run test` |
 | Components | the stories with coverage, `test:visual` |
