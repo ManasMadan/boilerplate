@@ -33,7 +33,10 @@ export class RealtimeService implements OnApplicationShutdown {
    * errors from the handler, not ones thrown while iterating).
    */
   stream(userId: string, orgId: string, signal: AbortSignal | undefined) {
-    if ((this.open.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) throw new AppError("RATE_LIMITED");
+    if ((this.open.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) {
+      // A slot frees as soon as another tab closes its stream: worth trying again soon.
+      throw new AppError("RATE_LIMITED", { params: { retryAfterSeconds: 5 } });
+    }
     return this.messages(userId, orgId, signal);
   }
 

@@ -17,7 +17,10 @@ Clients branch on codes and translate them; they never read messages. The catalo
    state, 429 limited, 502 an upstream failed. Never 500 for an expected case.
 3. **Its message** as `errors.<CODE>` in every `packages/i18n/messages/*.json`, with ICU
    arguments for its `params` (strings and numbers only), e.g.
-   `"API_KEY_LIMIT_REACHED": "A workspace can have up to {limit} keys."`.
+   `"API_KEY_LIMIT_REACHED": "A workspace can have up to {limit} keys."`. A message with
+   arguments needs them declared in `ERROR_PARAMS` too (`{ limit: z.number().int() }`):
+   then throwing the code without them doesn't compile, and `packages/i18n`'s test fails
+   if a message's placeholders and the declared params differ.
 4. **Throw it**: `throw new AppError("<CODE>", { params: { ... } })` from
    `@repo/nest-common` in a service; `raise AppError("<CODE>", status, params)` in
    `apps/ai` (`app/errors.py`), with the same code.

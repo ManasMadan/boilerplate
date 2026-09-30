@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import en from "../messages/en.json" with { type: "json" };
 import { bundledMessages, createI18n, type MessageSource, negotiateLocale } from "./index";
 
 describe("negotiateLocale", () => {
@@ -45,6 +46,31 @@ describe("catalog completeness", () => {
       for (const code of Object.keys(ERROR_CODES)) {
         expect(messages.errors, `${locale} is missing errors.${code}`).toHaveProperty(code);
       }
+    }
+  });
+
+  it("asks for exactly the params an error code is declared with", async () => {
+    const { ERROR_CODES, ERROR_PARAMS } = await import("@repo/contracts/errors");
+    const messages = en.errors as Record<string, string>;
+    // A message's top-level placeholders ({name}, {name, plural, …}), not the ones nested
+    // inside a plural's branches.
+    const placeholders = (message: string) => {
+      const names = new Set<string>();
+      let depth = 0;
+      for (let i = 0; i < message.length; i++) {
+        if (message[i] === "{") {
+          if (depth === 0) names.add(/^\{\s*(\w+)/.exec(message.slice(i))?.[1] ?? "");
+          depth++;
+        } else if (message[i] === "}") depth--;
+      }
+      return [...names].filter(Boolean).sort();
+    };
+    for (const code of Object.keys(ERROR_CODES)) {
+      const declared =
+        code in ERROR_PARAMS
+          ? Object.keys(ERROR_PARAMS[code as keyof typeof ERROR_PARAMS].shape).sort()
+          : [];
+      expect(placeholders(messages[code] ?? ""), code).toEqual(declared);
     }
   });
 

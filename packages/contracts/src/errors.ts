@@ -87,6 +87,26 @@ export const ERROR_CODES = {
 
 export type ErrorCode = keyof typeof ERROR_CODES;
 
+/**
+ * The parameters a code's message needs (`errors.<CODE>` in packages/i18n), so throwing
+ * the code without them is a type error rather than a message with a hole in it. Codes
+ * not listed take no required parameters. The i18n tests check that each message's
+ * placeholders are exactly these.
+ */
+export const ERROR_PARAMS = {
+  RATE_LIMITED: z.object({ retryAfterSeconds: z.number().int().nonnegative() }),
+  WEBHOOK_ENDPOINT_LIMIT: z.object({ max: z.number().int() }),
+  FILE_TYPE_NOT_ALLOWED: z.object({ types: z.string() }),
+  FILE_TOO_LARGE: z.object({ maxBytes: z.number().int() }),
+  API_KEY_SCOPE_MISSING: z.object({ scope: z.string() }),
+} as const satisfies Partial<Record<ErrorCode, z.ZodObject>>;
+
+type ParamsFree = Record<string, string | number>;
+/** What `code` must be thrown with: its message's parameters, and any others. */
+export type ErrorParams<C extends ErrorCode> = C extends keyof typeof ERROR_PARAMS
+  ? z.infer<(typeof ERROR_PARAMS)[C]> & ParamsFree
+  : ParamsFree;
+
 export const errorCode = z.enum(Object.keys(ERROR_CODES) as ErrorCode[]);
 
 export const isErrorCode = (value: unknown): value is ErrorCode =>
