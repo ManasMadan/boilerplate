@@ -8,5 +8,5 @@
     "types": ["jest"],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "*.ts", "expo-env.d.ts", "uniwind-types.d.ts", ".expo/types/**/*.ts"]
+  "include": ["src", "test", "*.ts", "expo-env.d.ts", "uniwind-types.d.ts", ".expo/types/**/*.ts"]
 }

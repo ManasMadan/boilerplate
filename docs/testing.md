@@ -164,7 +164,12 @@ bun run --cwd apps/web test:e2e                     # against a stack you're alr
 
 ## Mobile
 
-- `bun run --cwd apps/mobile test`: Jest.
+- `bun run --cwd apps/mobile test`: Jest. Screen tests (`src/screens-tests/`) open the
+  whole app at a URL with `openApp` (`test/app.ts`, on expo-router's `renderRouter`), so
+  routing, the protected routes and the real auth and API clients all run. The network is
+  faked at `fetch` with `fakeApi` (`test/fake-api.ts`), which answers each path the way
+  the API does; only native modules without a JavaScript stand-in (secure storage, push,
+  the build's manifest) are mocked, in `jest.setup.ts`.
 - `bun run test:e2e --app mobile`: the app's screens rendered with react-native-web and
   driven by Playwright (`apps/mobile/e2e`), against the API on the mobile web build's own
   origin.

@@ -32,7 +32,9 @@ gotchas; these are the rules.
   environments hold them).
 - Tests: Jest with React Native Testing Library for everything in `src`, at 100% like
   every file: `*.test.ts(x)` next to the file, except screens, whose tests live in
-  `src/screens-tests/` (a file in `src/app` is a route). Playwright
+  `src/screens-tests/` (a file in `src/app` is a route). Screen tests open the whole app
+  with `openApp` and answer its requests with `fakeApi` (`test/`); never `jest.mock` the
+  auth client, the API client or expo-router's screens. Playwright
   against the web build for screens (`bun run test:e2e --app mobile`), Maestro for what
   only a native build shows (`maestro/`, run by hand).
 - The API must keep serving old installed builds: a breaking change raises

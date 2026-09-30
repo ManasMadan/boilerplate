@@ -7,7 +7,7 @@ module.exports = {
   // e2e/ is Playwright's (bun run test:e2e).
   roots: ["<rootDir>/src"],
   setupFiles: ["./jest.setup.ts"],
-  moduleNameMapper: { "^@/(.*)$": "<rootDir>/src/$1" },
+  moduleNameMapper: { "^@/(.*)$": "<rootDir>/src/$1", "\\.css$": "<rootDir>/test/style.js" },
   // Several dependencies ship only ES modules as .mjs (oRPC); Babel compiles them too.
   transform: { "\\.mjs$": "babel-jest" },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "mjs", "cjs", "json"],
