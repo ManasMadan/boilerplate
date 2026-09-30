@@ -419,15 +419,17 @@ jobs:
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - run: bun run gen
-      - name: Fail if generation changed tracked files
+      # Changed files and new ones alike: a generator that starts writing a file nobody
+      # committed is drift too, and git diff doesn't see untracked files.
+      - name: Fail if generation changed or added files
         run: |
-          if ! git diff --exit-code; then
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            git diff
             echo "::error::Generated files are out of date. Run \`bun run gen\` and commit the result."
             exit 1
           fi
 
-  # Conventional pull-request titles: squash merges make them the commit on master, and
-  # the release notes are built from them (scripts/release.ts).
   # The public REST API (/api/v1) and the domain events against the base branch's:
   # removing or narrowing anything third parties call fails, unless the title declares
   # the breaking change (`feat(api)!: …`), which the release notes then list first, for a
@@ -475,6 +477,8 @@ jobs:
             bun scripts/events-compat.ts "$BASE"
           fi
 
+  # Conventional pull-request titles: squash merges make them the commit on master, and
+  # the release notes are built from them (scripts/release.ts).
   pr-title:
     name: Pull request title
     if: github.event_name == 'pull_request'

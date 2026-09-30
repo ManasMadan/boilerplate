@@ -125,3 +125,14 @@ describe("the merge queue", () => {
     expect(jobs.osv?.if).toBeUndefined();
   });
 });
+
+describe("ci.yml's codegen check", () => {
+  const step = workflow("ci.yml").jobs.codegen?.steps?.find(
+    (s) => s.name === "Fail if generation changed or added files",
+  );
+
+  it("fails on new generated files too, not only on changed ones", () => {
+    expect(step?.run).toContain('[[ -n "$(git status --porcelain)" ]]');
+    expect(step?.run).not.toContain("git diff --exit-code");
+  });
+});
