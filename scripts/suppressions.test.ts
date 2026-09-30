@@ -1,8 +1,17 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addedSuppressions, countSuppressions, listedFiles } from "./suppressions";
+import { $ } from "bun";
+import { captureOutput } from "./stand-ins";
+import {
+  addedSuppressions,
+  checkSuppressions,
+  countSuppressions,
+  listedFiles,
+} from "./suppressions";
+
+afterEach(() => mock.restore());
 
 describe("suppressions", () => {
   it.each([
@@ -54,5 +63,23 @@ describe("suppressions", () => {
     );
     expect(listedFiles(root)).toEqual(new Set(["apps/notifications/test/fake-push.ts"]));
     expect(listedFiles(mkdtempSync(join(tmpdir(), "none-")))).toEqual(new Set());
+  });
+});
+
+describe("the check over tracked files", () => {
+  it("fails on an unlisted suppression, and passes once docs/testing.md lists the file", async () => {
+    const root = mkdtempSync(join(tmpdir(), "suppressions-"));
+    await $`git init -q`.cwd(root);
+    mkdirSync(join(root, "apps"));
+    writeFileSync(join(root, "apps/x.ts"), "// @ts-expect-error untyped\n");
+    writeFileSync(join(root, "apps/clean.ts"), "export const a = 1;\n");
+    writeFileSync(join(root, "notes.md"), "// @ts-expect-error in prose\n");
+    await $`git add .`.cwd(root);
+    const printed = captureOutput();
+    expect(checkSuppressions(root)).toBe(1);
+    expect(printed()).toContain("apps/x.ts: @ts-expect-error");
+    mkdirSync(join(root, "docs"));
+    writeFileSync(join(root, "docs/testing.md"), "## Suppressions\n| `apps/x.ts` | untyped |\n");
+    expect(checkSuppressions(root)).toBe(0);
   });
 });

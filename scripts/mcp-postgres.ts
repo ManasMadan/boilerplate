@@ -5,22 +5,7 @@
  * it stops within a second and says what to do, instead of the server hanging past
  * Claude Code's 30-second start limit.
  */
-import { connect } from "node:net";
-import { ENV_EXAMPLE_PATH, ENV_PATH, readEnv } from "./lib";
-
-/** Whether something accepts connections on localhost:`port` within `timeoutMs`. */
-export function listening(port: number, timeoutMs = 1000): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = connect({ host: "127.0.0.1", port });
-    const done = (open: boolean) => {
-      socket.destroy();
-      resolve(open);
-    };
-    socket.setTimeout(timeoutMs, () => done(false));
-    socket.once("connect", () => done(true));
-    socket.once("error", () => done(false));
-  });
-}
+import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv } from "./lib";
 
 /** The local Postgres port: .env's, else the example's default. */
 export function postgresPort(): number {
@@ -29,23 +14,34 @@ export function postgresPort(): number {
   return Number(port ?? 55432);
 }
 
-if (import.meta.main) {
-  const port = postgresPort();
+interface Server {
+  exited: Promise<number>;
+}
+type Start = (
+  command: string[],
+  options: { env: Record<string, string | undefined>; stdio: ["inherit", "inherit", "inherit"] },
+) => Server;
+
+/** Runs the server until it exits; its exit code, or 1 when Postgres isn't up. */
+export async function startServer(
+  port = postgresPort(),
+  start: Start = Bun.spawn,
+  env: Record<string, string | undefined> = process.env,
+): Promise<number> {
   if (!(await listening(port))) {
     console.error(
       `Postgres isn't running on localhost:${port}. Start it with \`bun run db:up\`, then reconnect this server with /mcp.`,
     );
-    process.exit(1);
+    return 1;
   }
-  const server = Bun.spawn(
+  const server = start(
     ["uvx", "--with", "mcp==1.30.0", "postgres-mcp@0.3.0", "--access-mode=restricted"],
     {
-      env: {
-        ...process.env,
-        DATABASE_URI: `postgresql://app_readonly:app_readonly@localhost:${port}/app`,
-      },
+      env: { ...env, DATABASE_URI: `postgresql://app_readonly:app_readonly@localhost:${port}/app` },
       stdio: ["inherit", "inherit", "inherit"],
     },
   );
-  process.exit(await server.exited);
+  return server.exited;
 }
+
+if (import.meta.main) process.exit(await startServer());

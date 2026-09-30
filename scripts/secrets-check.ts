@@ -75,10 +75,12 @@ export function recipientsFor(path: string, sopsConfig: string): string[] | unde
 /** Platform Secrets live under deploy/platform/secrets and must name their namespace. */
 export const isPlatformSecret = (path: string) => path.includes("deploy/platform/secrets/");
 
-if (import.meta.main) {
-  const sopsConfig = readFileSync(".sops.yaml", "utf8");
-  const problems = process.argv
-    .slice(2)
+/** Checks each of `paths` against `.sops.yaml` (its text); the exit code. */
+export function checkSecrets(
+  paths = process.argv.slice(2),
+  sopsConfig = readFileSync(".sops.yaml", "utf8"),
+): number {
+  const problems = paths
     .map((path) => {
       const problem = unsafeSecret(
         basename(path),
@@ -90,10 +92,11 @@ if (import.meta.main) {
     })
     .filter(Boolean);
   for (const problem of problems) console.error(`  \x1b[31m✖\x1b[0m ${problem}`);
-  if (problems.length) {
-    console.error(
-      "\nEncrypt with `sops --encrypt --in-place <file>` (deploy/README.md) and stage it again.",
-    );
-    process.exit(1);
-  }
+  if (problems.length === 0) return 0;
+  console.error(
+    "\nEncrypt with `sops --encrypt --in-place <file>` (deploy/README.md) and stage it again.",
+  );
+  return 1;
 }
+
+if (import.meta.main) process.exit(checkSecrets());

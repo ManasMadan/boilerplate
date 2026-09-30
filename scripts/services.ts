@@ -13,18 +13,12 @@
  * already use. If they don't, it starts nothing: running out of memory makes Docker kill
  * containers, and not necessarily ours.
  */
-import { spawnSync } from "node:child_process";
-import { fail, ok, ROOT, warn } from "./lib";
+import { fail, ok, ROOT, type Run, runSync, warn } from "./lib";
 
 const PROJECT = "boilerplate";
 /** Kept free for Docker itself and the growth of what's already running. */
 const HEADROOM = 512 * 1024 ** 2;
 const MB = 1024 ** 2;
-
-function docker(args: string[]) {
-  const result = spawnSync("docker", args, { cwd: ROOT, encoding: "utf8" });
-  return { ok: result.status === 0, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
-}
 
 const UNITS: Record<string, number> = {
   B: 1,
@@ -43,12 +37,14 @@ function bytes(text: string) {
   return match ? Number(match[1]) * (UNITS[match[2]?.toUpperCase() ?? ""] ?? 0) : 0;
 }
 
-function budget(profileArgs: string[]) {
+/** What starting the profile needs and what Docker has; null (said why) when unknown. */
+function budget(run: Run, profileArgs: string[]) {
+  const docker = (args: string[]) => run("docker", args, { cwd: ROOT });
   const config = docker(["compose", ...profileArgs, "config", "--format", "json"]);
-  if (!config.ok) {
+  if (config.status !== 0) {
     fail("docker compose config");
     console.error(config.stderr);
-    process.exit(1);
+    return null;
   }
   const services = (
     JSON.parse(config.stdout) as {
@@ -64,7 +60,7 @@ function budget(profileArgs: string[]) {
   const unlimited = toStart.filter(([, service]) => !service.mem_limit).map(([name]) => name);
   if (unlimited.length > 0) {
     fail(`every service needs a memory limit in docker-compose.yml: ${unlimited.join(", ")}`);
-    process.exit(1);
+    return null;
   }
   // Compose reports limits in bytes, as a number or a numeric string.
   const needed = toStart.reduce((sum, [, service]) => sum + Number(service.mem_limit ?? 0), 0);
@@ -94,17 +90,33 @@ function budget(profileArgs: string[]) {
   };
 }
 
-const [command, flag] = process.argv.slice(2);
 const PROFILES: Record<string, string> = { "--full": "full", "--mail": "mail" };
-const profile = flag ? PROFILES[flag] : undefined;
-if (flag && !profile) {
-  console.error(`unknown flag ${flag}: use --mail or --full`);
-  process.exit(1);
-}
-const profileArgs = profile ? ["--profile", profile] : [];
 
-if (command === "up" || command === "check") {
-  const { needed, free, total, inUse, starting, oneShots, longRunning } = budget(profileArgs);
+/** `up`, `check` or `down`, with an optional profile flag; the exit code. */
+export function services(argv = process.argv.slice(2), run = runSync): number {
+  const [command, flag] = argv;
+  const profile = flag ? PROFILES[flag] : undefined;
+  if (flag && !profile) {
+    console.error(`unknown flag ${flag}: use --mail or --full`);
+    return 1;
+  }
+  const profileArgs = profile ? ["--profile", profile] : [];
+
+  if (command === "down") {
+    return (
+      run("docker", ["compose", "--profile", "full", "down"], { cwd: ROOT, stdio: "inherit" })
+        .status ?? 1
+    );
+  }
+  if (command !== "up" && command !== "check") {
+    console.error(
+      `usage: bun scripts/services.ts up [--mail|--full] | check [--mail|--full] | down   (project "${PROJECT}")`,
+    );
+    return 1;
+  }
+  const plan = budget(run, profileArgs);
+  if (!plan) return 1;
+  const { needed, free, total, inUse, starting, oneShots, longRunning } = plan;
   const gb = (n: number) => `${(n / 1024 ** 3).toFixed(1)} GB`;
   if (needed > free) {
     fail(
@@ -120,21 +132,21 @@ if (command === "up" || command === "check") {
         "Give Docker more memory (Docker Desktop → Settings → Resources), or stop other containers.",
       );
     }
-    process.exit(1);
+    return 1;
   }
   if (starting.length > 0)
     ok(`${starting.join(", ")} fit in memory (up to ${gb(needed)} of ${gb(free)} free)`);
-  if (command === "check") process.exit(0);
+  if (command === "check") return 0;
   // `up --wait` counts a container that exits as a failure, even with status 0, so the
   // setup steps run on their own once everything they depend on is up.
   const compose = (args: string[]) =>
-    spawnSync("docker", ["compose", ...profileArgs, ...args], { cwd: ROOT, stdio: "inherit" })
-      .status ?? 1;
+    run("docker", ["compose", ...profileArgs, ...args], { cwd: ROOT, stdio: "inherit" }).status ??
+    1;
   const up = compose(["up", "-d", "--wait", ...longRunning]);
-  if (up !== 0) process.exit(up);
+  if (up !== 0) return up;
   for (const name of oneShots) {
     const status = compose(["run", "--rm", name]);
-    if (status !== 0) process.exit(status);
+    if (status !== 0) return status;
   }
   // Postgres runs its init files only on a new volume; the local read-only role (for the
   // Postgres MCP server) is safe to reapply, so a database made before it gets it too.
@@ -153,17 +165,7 @@ if (command === "up" || command === "check") {
     "-f",
     "/docker-entrypoint-initdb.d/02-readonly-role.sql",
   ]);
-  if (readonlyRole !== 0) process.exit(readonlyRole);
-  process.exit(0);
-} else if (command === "down") {
-  const down = spawnSync("docker", ["compose", "--profile", "full", "down"], {
-    cwd: ROOT,
-    stdio: "inherit",
-  });
-  process.exit(down.status ?? 1);
-} else {
-  console.error(
-    `usage: bun scripts/services.ts up [--mail|--full] | check [--mail|--full] | down   (project "${PROJECT}")`,
-  );
-  process.exit(1);
+  return readonlyRole;
 }
+
+if (import.meta.main) process.exit(services());

@@ -1,8 +1,20 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { envLine, parseEnv, removeEnvValue, writeEnvValue } from "./lib";
+import {
+  envLine,
+  fail,
+  listening,
+  ok,
+  parseEnv,
+  removeEnvValue,
+  runSync,
+  warn,
+  writeEnvValue,
+} from "./lib";
+import { captureOutput } from "./stand-ins";
 
 const dir = () => mkdtempSync(join(tmpdir(), "env-"));
 
@@ -58,5 +70,49 @@ describe(".env values", () => {
       ]),
     );
     expect(removeEnvValue(join(dir(), "missing"), "A")).toBe(false);
+  });
+});
+
+describe("running a command", () => {
+  it("returns its status and output as text", () => {
+    const script = "process.stdout.write('out'); process.stderr.write('err'); process.exit(3)";
+    expect(runSync("bun", ["-e", script])).toEqual({ status: 3, stdout: "out", stderr: "err" });
+  });
+
+  it("has no status for a command that doesn't exist", () => {
+    expect(runSync("no-such-command-anywhere", []).status).toBeNull();
+  });
+
+  it("keeps output larger than spawnSync's default limit", () => {
+    const script = "process.stdout.write('x'.repeat(3 * 1024 * 1024))";
+    expect(runSync("bun", ["-e", script]).stdout).toHaveLength(3 * 1024 * 1024);
+  });
+});
+
+describe("whether a port listens", () => {
+  it("sees a port that accepts connections, and not one that refuses them", async () => {
+    const server = createServer().listen(0, "127.0.0.1");
+    await new Promise((resolve) => server.once("listening", resolve));
+    const { port } = server.address() as { port: number };
+    expect(await listening(port)).toBe(true);
+    await new Promise((resolve) => server.close(resolve));
+    const started = Date.now();
+    expect(await listening(port, 500)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+});
+
+describe("the status lines", () => {
+  it("mark each line as passed, a warning or failed", () => {
+    const printed = captureOutput();
+    ok("fine");
+    warn("careful");
+    fail("broken");
+    expect(printed()).toBe(
+      ["  \x1b[32m✔\x1b[0m fine", "  \x1b[33m!\x1b[0m careful", "  \x1b[31m✖\x1b[0m broken"].join(
+        "\n",
+      ),
+    );
+    mock.restore();
   });
 });

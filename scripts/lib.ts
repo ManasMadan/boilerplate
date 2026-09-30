@@ -1,6 +1,10 @@
 /** Small helpers shared by the repo scripts (setup, doctor, env:set). */
+import { type SpawnSyncOptions, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { connect } from "node:net";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { parseEnv as parseEnvFile } from "node:util";
 
 export const ROOT = join(import.meta.dirname, "..");
@@ -70,3 +74,40 @@ export function removeEnvValue(path: string, key: string): boolean {
 export const ok = (message: string) => console.log(`  \x1b[32m✔\x1b[0m ${message}`);
 export const warn = (message: string) => console.log(`  \x1b[33m!\x1b[0m ${message}`);
 export const fail = (message: string) => console.log(`  \x1b[31m✖\x1b[0m ${message}`);
+
+/** What a command did: its exit status (null when it couldn't start) and its output. */
+export interface Ran {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/** How the scripts run a command; tests pass a stand-in that records what would run. */
+export type Run = (command: string, args: string[], options?: SpawnSyncOptions) => Ran;
+
+/**
+ * Runs a command to the end (spawnSync), its output as text unless `stdio` sends it
+ * elsewhere. No output limit: a lint or test run can print more than spawnSync's 1 MB.
+ */
+export function runSync(command: string, args: string[], options: SpawnSyncOptions = {}): Ran {
+  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: Infinity, ...options });
+  return {
+    status: result.status ?? null,
+    stdout: String(result.stdout ?? ""),
+    stderr: String(result.stderr ?? ""),
+  };
+}
+
+/** Whether something accepts connections on `host`:`port` within `timeoutMs`. */
+export async function listening(port: number, timeoutMs = 1000, host = "127.0.0.1") {
+  const socket = connect({ host, port });
+  const open = await Promise.race([
+    once(socket, "connect").then(
+      () => true,
+      () => false,
+    ),
+    sleep(timeoutMs, false, { ref: false }),
+  ]);
+  socket.destroy();
+  return open;
+}

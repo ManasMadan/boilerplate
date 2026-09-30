@@ -1,7 +1,11 @@
-import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isPlatformSecret, recipientsFor, unsafeSecret } from "./secrets-check";
+import { checkSecrets, isPlatformSecret, recipientsFor, unsafeSecret } from "./secrets-check";
+import { captureOutput } from "./stand-ins";
+
+afterEach(() => mock.restore());
 
 const secret = (value: string, extra = "") =>
   `apiVersion: v1\nkind: Secret\nmetadata:\n  name: boilerplate-api\n${extra}stringData:\n  BETTER_AUTH_SECRET: ${value}\n`;
@@ -61,5 +65,25 @@ describe("the secrets check", () => {
     expect(staging).toContain("age1stagingclusterpublickeyreplaceme");
     expect(preview).not.toContain("age1stagingclusterpublickeyreplaceme");
     expect(recipientsFor("README.md", config)).toBeUndefined();
+  });
+});
+
+describe("the check over staged files", () => {
+  it("names each unsafe file and fails, and passes safe ones", () => {
+    const dir = mkdtempSync(join(tmpdir(), "secrets-"));
+    const safe = join(dir, "api.sops.yaml");
+    const plain = join(dir, "web.sops.yaml");
+    writeFileSync(safe, encrypted);
+    writeFileSync(plain, secret("hunter2"));
+    const printed = captureOutput();
+    expect(checkSecrets([safe], "creation_rules: []\n")).toBe(0);
+    expect(printed()).toBe("");
+    expect(checkSecrets([safe, plain], "creation_rules: []\n")).toBe(1);
+    expect(printed()).toContain(`${plain}: not encrypted`);
+    expect(printed()).not.toContain(safe);
+  });
+
+  it("reads the repository's .sops.yaml by default", () => {
+    expect(checkSecrets([])).toBe(0);
   });
 });

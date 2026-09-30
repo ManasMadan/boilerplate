@@ -19,12 +19,11 @@
  * (CI starts its own); the services run as NODE_ENV=test, since production refuses the
  * local stand-ins the suite relies on. What runs is still the production build.
  */
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { mkdirSync, openSync, readFileSync } from "node:fs";
-import { connect } from "node:net";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { fail, ok, ROOT } from "./lib";
+import { fail, listening, ok, ROOT, runSync } from "./lib";
 
 const MOBILE_WEB = "http://localhost:3100";
 
@@ -62,136 +61,170 @@ const SERVICES = [
 
 const BUILT = ["@repo/api", "@repo/worker", "@repo/notifications", "@repo/webhooks", "@repo/web"];
 const READY_TIMEOUT_MS = 90_000;
-const LOGS = join(ROOT, "logs");
 
-function listening(url: string) {
+/** Whether something accepts connections at the URL's host and port. */
+export const listeningAt = (url: string) => {
   const { hostname, port } = new URL(url);
-  return new Promise<boolean>((resolve) => {
-    const socket = connect({ host: hostname, port: Number(port) });
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("error", () => resolve(false));
-  });
+  return listening(Number(port), 1000, hostname);
+};
+
+/** What the run starts and waits with; the tests replace them. */
+export interface Stack {
+  run: typeof runSync;
+  start: (
+    command: string,
+    args: string[],
+    options: SpawnOptions,
+  ) => Pick<ChildProcess, "pid" | "exitCode">;
+  kill: (pid: number, signal: NodeJS.Signals) => unknown;
+  isListening: (url: string) => Promise<boolean>;
+  fetch: (url: string) => Promise<{ ok: boolean }>;
+  sleep: (ms: number) => Promise<unknown>;
+  onSignal: (signal: NodeJS.Signals, handler: () => void) => unknown;
+  exit: (code: number) => unknown;
+  logs: string;
+  readyTimeoutMs: number;
 }
 
-async function ready(url: string, child: ChildProcess) {
-  const deadline = Date.now() + READY_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) return false;
-    const response = await fetch(url).catch(() => undefined);
-    if (response?.ok) return true;
-    await sleep(500);
+const REAL: Stack = {
+  run: runSync,
+  start: spawn,
+  kill: process.kill.bind(process),
+  isListening: listeningAt,
+  fetch,
+  sleep,
+  onSignal: process.on.bind(process),
+  exit: process.exit.bind(process),
+  logs: join(ROOT, "logs"),
+  readyTimeoutMs: READY_TIMEOUT_MS,
+};
+
+/** Builds, starts the stack, runs the suites `argv` picks and stops it; the exit code. */
+export async function e2e(
+  argv = process.argv.slice(2),
+  given: Partial<Stack> = {},
+): Promise<number> {
+  const stack = { ...REAL, ...given };
+
+  async function ready(url: string, child: Pick<ChildProcess, "exitCode">) {
+    const deadline = Date.now() + stack.readyTimeoutMs;
+    while (Date.now() < deadline) {
+      if (child.exitCode !== null) return false;
+      const response = await stack.fetch(url).catch(() => undefined);
+      if (response?.ok) return true;
+      await stack.sleep(500);
+    }
+    return false;
   }
-  return false;
-}
 
-const busy = (
-  await Promise.all(
-    SERVICES.map(async (s) => (s.ready && (await listening(s.ready)) ? s : undefined)),
-  )
-).filter((s) => s !== undefined);
-if (busy.length > 0) {
-  for (const s of busy) fail(`${s.name}: something already listens on ${new URL(s.ready).host}`);
-  console.error(
-    "Stop the running stack first, or test against it with `bun run --cwd apps/web test:e2e`.",
-  );
-  process.exit(1);
-}
+  const busy = (
+    await Promise.all(
+      SERVICES.map(async (s) => (s.ready && (await stack.isListening(s.ready)) ? s : undefined)),
+    )
+  ).filter((s) => s !== undefined);
+  if (busy.length > 0) {
+    for (const s of busy) fail(`${s.name}: something already listens on ${new URL(s.ready).host}`);
+    console.error(
+      "Stop the running stack first, or test against it with `bun run --cwd apps/web test:e2e`.",
+    );
+    return 1;
+  }
 
-const args = process.argv.slice(2);
-const appFlag = args.indexOf("--app");
-const playwrightArgs =
-  appFlag === -1 ? args : args.filter((_, i) => i !== appFlag && i !== appFlag + 1);
-// Sharded (`--shard=2/4`, CI runs four), the browser suites split and the load test,
-// which isn't Playwright, runs on the first shard only.
-const shard = playwrightArgs.find((arg) => arg.startsWith("--shard="));
-const everything =
-  !shard || shard.startsWith("--shard=1/") ? ["web", "mobile", "load"] : ["web", "mobile"];
-const apps = appFlag === -1 ? everything : [args[appFlag + 1]];
-if (!apps.every((app) => app === "web" || app === "mobile" || app === "load")) {
-  fail("--app is web, mobile or load");
-  process.exit(1);
-}
+  const args = argv;
+  const appFlag = args.indexOf("--app");
+  const playwrightArgs =
+    appFlag === -1 ? args : args.filter((_, i) => i !== appFlag && i !== appFlag + 1);
+  // Sharded (`--shard=2/4`, CI runs four), the browser suites split and the load test,
+  // which isn't Playwright, runs on the first shard only.
+  const shard = playwrightArgs.find((arg) => arg.startsWith("--shard="));
+  const everything =
+    !shard || shard.startsWith("--shard=1/") ? ["web", "mobile", "load"] : ["web", "mobile"];
+  const apps = appFlag === -1 ? everything : [args[appFlag + 1]];
+  if (!apps.every((app) => app === "web" || app === "mobile" || app === "load")) {
+    fail("--app is web, mobile or load");
+    return 1;
+  }
 
-for (const command of [
-  ["bunx", "turbo", "run", "build", ...BUILT.map((p) => `--filter=${p}`)],
-  ["bun", "run", "--cwd", "apps/mobile", "build:web"],
-]) {
-  const build = spawnSync(command[0] as string, command.slice(1), {
-    cwd: ROOT,
-    stdio: "inherit",
-    env: { ...process.env, NODE_ENV: "production" },
-  });
-  if (build.status !== 0) process.exit(build.status ?? 1);
-}
+  for (const [command = "", ...rest] of [
+    ["bunx", "turbo", "run", "build", ...BUILT.map((p) => `--filter=${p}`)],
+    ["bun", "run", "--cwd", "apps/mobile", "build:web"],
+  ]) {
+    const build = stack.run(command, rest, {
+      cwd: ROOT,
+      stdio: "inherit",
+      env: { ...process.env, NODE_ENV: "production" },
+    });
+    if (build.status !== 0) return build.status ?? 1;
+  }
 
-mkdirSync(LOGS, { recursive: true });
-const running: { name: string; process: ChildProcess }[] = [];
+  mkdirSync(stack.logs, { recursive: true });
+  const running: { name: string; process: Pick<ChildProcess, "pid" | "exitCode"> }[] = [];
 
-function stopAll() {
-  for (const { process: child } of running) {
-    // Each service runs in its own process group (bun → uv → python, for example).
-    if (child.pid && child.exitCode === null) {
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch {
-        // Already gone.
+  function stopAll() {
+    for (const { process: child } of running) {
+      // Each service runs in its own process group (bun → uv → python, for example).
+      if (child.pid && child.exitCode === null) {
+        try {
+          stack.kill(-child.pid, "SIGTERM");
+        } catch {
+          // Already gone.
+        }
       }
     }
   }
-}
-process.on("SIGINT", () => {
-  stopAll();
-  process.exit(130);
-});
-process.on("SIGTERM", () => {
-  stopAll();
-  process.exit(143);
-});
+  stack.onSignal("SIGINT", () => {
+    stopAll();
+    stack.exit(130);
+  });
+  stack.onSignal("SIGTERM", () => {
+    stopAll();
+    stack.exit(143);
+  });
 
-let status = 1;
-try {
-  for (const service of SERVICES) {
-    const log = openSync(join(LOGS, `${service.name}.log`), "w");
-    const child = spawn("bun", ["run", ...service.run], {
-      cwd: join(ROOT, service.cwd),
-      // The mobile web build signs users in from its own origin.
-      env: { ...process.env, NODE_ENV: "test", APP_ORIGINS: MOBILE_WEB },
-      stdio: ["ignore", log, log],
-      detached: true,
-    });
-    running.push({ name: service.name, process: child });
-  }
-  for (const [index, service] of SERVICES.entries()) {
-    const child = running[index]?.process;
-    if (!service.ready || !child) continue;
-    if (!(await ready(service.ready, child))) {
-      const log = readFileSync(join(LOGS, `${service.name}.log`), "utf8");
-      console.error(log.split("\n").slice(-50).join("\n"));
-      throw new Error(`${service.name} never became ready (logs/${service.name}.log)`);
+  let status = 1;
+  try {
+    for (const service of SERVICES) {
+      const log = openSync(join(stack.logs, `${service.name}.log`), "w");
+      const child = stack.start("bun", ["run", ...service.run], {
+        cwd: join(ROOT, service.cwd),
+        // The mobile web build signs users in from its own origin.
+        env: { ...process.env, NODE_ENV: "test", APP_ORIGINS: MOBILE_WEB },
+        stdio: ["ignore", log, log],
+        detached: true,
+      });
+      running.push({ name: service.name, process: child });
     }
-    ok(`${service.name} ready`);
+    for (const [index, service] of SERVICES.entries()) {
+      const child = running[index]?.process;
+      if (!service.ready || !child) continue;
+      if (!(await ready(service.ready, child))) {
+        const log = readFileSync(join(stack.logs, `${service.name}.log`), "utf8");
+        console.error(log.split("\n").slice(-50).join("\n"));
+        throw new Error(`${service.name} never became ready (logs/${service.name}.log)`);
+      }
+      ok(`${service.name} ready`);
+    }
+    status = 0;
+    for (const app of apps) {
+      const suite =
+        app === "load"
+          ? stack.run("bun", ["run", "test:load"], {
+              cwd: join(ROOT, "load"),
+              stdio: "inherit",
+              env: { ...process.env, NODE_ENV: "test" },
+            })
+          : stack.run("bunx", ["playwright", "test", ...playwrightArgs], {
+              cwd: join(ROOT, `apps/${app}`),
+              stdio: "inherit",
+            });
+      if (suite.status !== 0) status = suite.status ?? 1;
+    }
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  } finally {
+    stopAll();
   }
-  status = 0;
-  for (const app of apps) {
-    const suite =
-      app === "load"
-        ? spawnSync("bun", ["run", "test:load"], {
-            cwd: join(ROOT, "load"),
-            stdio: "inherit",
-            env: { ...process.env, NODE_ENV: "test" },
-          })
-        : spawnSync("bunx", ["playwright", "test", ...playwrightArgs], {
-            cwd: join(ROOT, `apps/${app}`),
-            stdio: "inherit",
-          });
-    if (suite.status !== 0) status = suite.status ?? 1;
-  }
-} catch (error) {
-  fail(error instanceof Error ? error.message : String(error));
-} finally {
-  stopAll();
+  return status;
 }
-process.exit(status);
+
+if (import.meta.main) process.exit(await e2e());

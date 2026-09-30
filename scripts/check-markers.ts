@@ -23,24 +23,25 @@ export function findMarkers(path: string, text: string): string[] {
     .flatMap((line, index) => (MARKER.test(line) ? [`${path}:${index + 1}: ${line.trim()}`] : []));
 }
 
-if (import.meta.main) {
+/** Reports every marker in the files git tracks under `root`; the exit code. */
+export function checkMarkers(root = ROOT): number {
   // Only files git tracks, and only those that mention it at all (git grep is fast).
   const candidates = spawnSync("git", ["grep", "-l", "-I", "-z", "-e", "ponytail:"], {
-    cwd: ROOT,
+    cwd: root,
     encoding: "utf8",
   })
     .stdout.split("\0")
     .filter(Boolean);
   const found = candidates.flatMap((path) =>
-    findMarkers(path, readFileSync(join(ROOT, path), "utf8")),
+    findMarkers(path, readFileSync(join(root, path), "utf8")),
   );
   if (found.length === 0) {
     ok("no ponytail: markers in tracked source");
-  } else {
-    for (const line of found) fail(line);
-    console.log(
-      "\nRewrite each as a plain comment that says why (and the limit, if there is one).",
-    );
-    process.exit(1);
+    return 0;
   }
+  for (const line of found) fail(line);
+  console.log("\nRewrite each as a plain comment that says why (and the limit, if there is one).");
+  return 1;
 }
+
+if (import.meta.main) process.exit(checkMarkers());

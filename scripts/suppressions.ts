@@ -26,7 +26,11 @@ export const SUPPRESSIONS: Record<string, RegExp> = {
 };
 
 /** Files that name the patterns as data: this module, its test and the hook's. */
-export const DEFINES_THEM = new Set(["scripts/suppressions.ts", "scripts/suppressions.test.ts"]);
+export const DEFINES_THEM = new Set([
+  "scripts/suppressions.ts",
+  "scripts/suppressions.test.ts",
+  ".claude/hooks/suppressions.test.ts",
+]);
 
 /** Source files the rules apply to. */
 export const CODE = /\.(ts|tsx|js|mjs|cjs|py)$/;
@@ -85,16 +89,17 @@ export function unlisted(root: string, files: string[]): { path: string; kinds: 
     .filter(({ kinds }) => kinds.length > 0);
 }
 
-if (import.meta.main) {
-  const root = join(import.meta.dir, "..");
+/** Reports every tracked file under `root` with an unlisted suppression; the exit code. */
+export function checkSuppressions(root = join(import.meta.dir, "..")): number {
   const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: root }).stdout.toString().split("\n");
   const found = unlisted(root, tracked);
   for (const { path, kinds } of found)
     console.error(`  \x1b[31m✖\x1b[0m ${path}: ${kinds.join(", ")}`);
-  if (found.length) {
-    console.error(
-      "\nFix the cause, or list the file with the reason in docs/testing.md (Coverage exceptions, Skipped tests or Suppressions).",
-    );
-    process.exit(1);
-  }
+  if (found.length === 0) return 0;
+  console.error(
+    "\nFix the cause, or list the file with the reason in docs/testing.md (Coverage exceptions, Skipped tests or Suppressions).",
+  );
+  return 1;
 }
+
+if (import.meta.main) process.exit(checkSuppressions());

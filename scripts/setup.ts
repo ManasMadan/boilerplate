@@ -9,39 +9,45 @@
  */
 
 import { copyFileSync, existsSync } from "node:fs";
-import { $ } from "bun";
 // By path, not package name: setup writes .env before `bun install` has linked packages.
 import { fillPlaceholders } from "../packages/testing/src/secrets";
-import { ENV_EXAMPLE_PATH, ENV_PATH, ok, readEnv, writeEnvValue } from "./lib";
+import { ENV_EXAMPLE_PATH, ENV_PATH, ok, readEnv, runSync, writeEnvValue } from "./lib";
 
-console.log("\n1. Environment");
-if (!existsSync(ENV_PATH)) {
-  copyFileSync(ENV_EXAMPLE_PATH, ENV_PATH);
-  ok("Created .env from .env.example");
-}
-const env = readEnv(ENV_PATH);
-for (const [key, value] of readEnv(ENV_EXAMPLE_PATH)) {
-  if (!env.has(key)) writeEnvValue(ENV_PATH, key, value);
-}
-// Placeholders become fresh secrets in each variable's format (the VAPID pair together).
-const current = Object.fromEntries(readEnv(ENV_PATH));
-for (const [key, value] of Object.entries(fillPlaceholders(current))) {
-  if (value !== current[key]) {
-    writeEnvValue(ENV_PATH, key, value);
-    ok(`Generated ${key}`);
+/** The steps after .env, each a command that must pass before the next. */
+const STEPS: [string, string[]][] = [
+  ["2. Dependencies", ["bun", "install"]],
+  ["3. Local services", ["bun", "scripts/services.ts", "up"]],
+  ["4. Database", ["bun", "run", "db:deploy"]],
+  ["5. Code generation", ["bun", "run", "gen"]],
+];
+
+/** Writes `envPath` from `examplePath`, then runs the steps; the exit code. */
+export function setup({ run = runSync, envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH } = {}) {
+  console.log("\n1. Environment");
+  if (!existsSync(envPath)) {
+    copyFileSync(examplePath, envPath);
+    ok("Created .env from .env.example");
   }
+  const env = readEnv(envPath);
+  for (const [key, value] of readEnv(examplePath)) {
+    if (!env.has(key)) writeEnvValue(envPath, key, value);
+  }
+  // Placeholders become fresh secrets in each variable's format (the VAPID pair together).
+  const current = Object.fromEntries(readEnv(envPath));
+  for (const [key, value] of Object.entries(fillPlaceholders(current))) {
+    if (value !== current[key]) {
+      writeEnvValue(envPath, key, value);
+      ok(`Generated ${key}`);
+    }
+  }
+
+  for (const [title, [command = "", ...args]] of STEPS) {
+    console.log(`\n${title}`);
+    const { status } = run(command, args, { stdio: "inherit" });
+    if (status !== 0) return status ?? 1;
+  }
+  console.log("\nSetup complete. Start everything with `bun dev`.\n");
+  return 0;
 }
 
-console.log("\n2. Dependencies");
-await $`bun install`;
-
-console.log("\n3. Local services");
-await $`bun scripts/services.ts up`;
-
-console.log("\n4. Database");
-await $`bun run db:deploy`;
-
-console.log("\n5. Code generation");
-await $`bun run gen`;
-
-console.log("\nSetup complete. Start everything with `bun dev`.\n");
+if (import.meta.main) process.exit(setup());
