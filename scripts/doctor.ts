@@ -100,7 +100,9 @@ export function doctor({
         `Missing in .env: ${missing.join(", ")}. Run \`bun run setup\`: it adds them, generating the secrets.`,
       );
     if (unknown.length)
-      warn(`In .env but not in .env.example (renamed or removed?): ${unknown.join(", ")}`);
+      warn(
+        `In .env but not in .env.example (renamed or removed?): ${unknown.join(", ")}. Remove them with \`bun run env:unset ${unknown.join(" ")}\`.`,
+      );
     if (placeholders.length)
       problem(`Still set to a placeholder: ${placeholders.join(", ")}. Run \`bun run setup\`.`);
     if (!missing.length && !placeholders.length)

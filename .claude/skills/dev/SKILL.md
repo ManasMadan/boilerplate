@@ -26,8 +26,9 @@ description: Start, stop or troubleshoot the local development stack. Use when t
 
 `bun dev` and `bun dev:full` are long-running terminal UIs: in an agent session, start
 them with the Bash tool's `run_in_background` and read their output from there, never
-in the foreground (the call would hang until its timeout). The first `dev:full` waits
-several minutes for ClamAV's virus signatures.
+in the foreground (the call would hang until its timeout). On a first `dev:full`, ClamAV
+starts in the background while it downloads its virus signatures (several minutes):
+uploads stay pending until then.
 
 ## Several branches at once
 

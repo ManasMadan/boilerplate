@@ -107,4 +107,22 @@ describe("the other commands", () => {
     expect(services(["up", "--everything"], fakeRun().run)).toBe(1);
     expect(printed()).toContain("unknown flag --everything");
   });
+
+  it("starts ClamAV without waiting for its signatures, and says so", () => {
+    const printed = captureOutput();
+    config.services = { ...config.services, clamav: { mem_limit: GB } } as typeof config.services;
+    try {
+      const { run, calls } = docker(8 * GB, "");
+      expect(services(["up", "--full"], run)).toBe(0);
+      expect(calls).toContain("docker compose --profile full up -d --wait postgres valkey");
+      expect(calls).toContain("docker compose --profile full up -d clamav");
+      expect(printed()).toContain("Starting clamav in the background");
+      expect(
+        services(["up", "--full"], docker(8 * GB, "", { "up -d clamav": { status: 5 } }).run),
+      ).toBe(5);
+    } finally {
+      const { clamav: _, ...rest } = config.services as Record<string, unknown>;
+      config.services = rest as typeof config.services;
+    }
+  });
 });

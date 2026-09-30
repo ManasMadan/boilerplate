@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "./lib";
-import { setup } from "./setup";
+import { main, setup, syncEnv } from "./setup";
 import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -52,5 +52,27 @@ describe("setup", () => {
     expect(calls).toHaveLength(2);
     expect(printed()).not.toContain("Setup complete.");
     expect(setup({ run: fakeRun(() => ({ status: null })).run, ...files("") })).toBe(1);
+  });
+
+  it("syncs .env on its own, as bun dev does before starting", () => {
+    captureOutput();
+    const paths = files("PORT=4000\nAUTH_SECRET=change-me\n");
+    const { run, calls } = fakeRun();
+    expect(main(["--env"], { run, ...paths })).toBe(0);
+    expect(calls).toEqual([]);
+    const env = parseEnv(readFileSync(paths.envPath, "utf8"));
+    expect(env.get("PORT")).toBe("4000");
+    expect(env.get("NEW")).toBe("x");
+    expect(env.get("AUTH_SECRET")).not.toBe("change-me");
+  });
+
+  it("runs the whole setup without --env, and syncs directly when asked", () => {
+    captureOutput();
+    const { run, calls } = fakeRun();
+    expect(main([], { run, ...files() })).toBe(0);
+    expect(calls).toHaveLength(4);
+    const paths = files("");
+    syncEnv(paths.envPath, paths.examplePath);
+    expect(parseEnv(readFileSync(paths.envPath, "utf8")).get("NEW")).toBe("x");
   });
 });

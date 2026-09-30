@@ -42,9 +42,10 @@ Docker Desktop's default is 2 GB, enough for the core only: raise it in Settings
 Resources, or stop other containers. `bun scripts/services.ts check --full` says whether
 the full profile would fit without starting anything.
 
-**The first `dev:full` seems stuck.** ClamAV downloads its virus signatures on its first
-start, which can take several minutes, and the start waits until it's healthy.
-`docker compose logs clamav --tail 20` shows the download.
+**Uploads stay pending on a first `dev:full`.** ClamAV downloads its virus signatures on
+its first start, which can take several minutes; it starts in the background so the rest
+doesn't wait, and the worker scans uploads once it answers.
+`docker compose logs -f clamav` shows the download.
 
 **Uploads stay pending after the stack has run for hours.** The local ClamAV can stop
 answering; the worker logs `clamd timed out`. `docker compose restart clamav`.

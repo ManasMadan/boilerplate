@@ -92,6 +92,13 @@ function budget(run: Run, profileArgs: string[]) {
 
 const PROFILES: Record<string, string> = { "--full": "full", "--mail": "mail" };
 
+/**
+ * Started without waiting for them to be healthy: ClamAV downloads its virus signatures
+ * on a new volume (up to six minutes), and nothing else needs it to start. The worker
+ * retries a scan until clamd answers, so uploads just stay pending meanwhile.
+ */
+const IN_BACKGROUND = new Set(["clamav"]);
+
 /** `up`, `check` or `down`, with an optional profile flag; the exit code. */
 export function services(argv = process.argv.slice(2), run = runSync): number {
   const [command, flag] = argv;
@@ -142,10 +149,23 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
   const compose = (args: string[]) =>
     run("docker", ["compose", ...profileArgs, ...args], { cwd: ROOT, stdio: "inherit" }).status ??
     1;
-  const up = compose(["up", "-d", "--wait", ...longRunning]);
+  const background = longRunning.filter((name) => IN_BACKGROUND.has(name));
+  const up = compose([
+    "up",
+    "-d",
+    "--wait",
+    ...longRunning.filter((name) => !IN_BACKGROUND.has(name)),
+  ]);
   if (up !== 0) return up;
   for (const name of oneShots) {
     const status = compose(["run", "--rm", name]);
+    if (status !== 0) return status;
+  }
+  if (background.length > 0) {
+    warn(
+      `Starting ${background.join(", ")} in the background: on a first start ClamAV downloads its virus signatures (up to 6 minutes), and uploads stay pending until it answers (\`docker compose logs -f clamav\`).`,
+    );
+    const status = compose(["up", "-d", ...background]);
     if (status !== 0) return status;
   }
   // Postgres runs its init files only on a new volume; the local read-only role (for the

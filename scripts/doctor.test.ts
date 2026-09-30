@@ -87,7 +87,9 @@ describe("doctor", () => {
     expect(output).toContain(`Node v12.0.0 found, ${node} expected`);
     expect(output).toContain(`Bun 1.3.999; CI and the images use ${pinnedBun}`);
     expect(output).toContain("Missing in .env: A.");
-    expect(output).toContain("In .env but not in .env.example (renamed or removed?): OLD");
+    expect(output).toContain(
+      "In .env but not in .env.example (renamed or removed?): OLD. Remove them with `bun run env:unset OLD`.",
+    );
     expect(output).toContain("Still set to a placeholder: SECRET.");
     expect(output).toContain("valkey is not running");
     expect(output).toContain("mailpit is not running");

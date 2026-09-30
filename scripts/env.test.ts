@@ -49,9 +49,17 @@ describe("env:unset", () => {
     expect(printed()).toContain("A isn't in .env");
   });
 
+  it("removes several at once, as the doctor suggests for stale ones", () => {
+    writeFileSync(file, "A=1\nB=2\nC=3\n");
+    expect(envUnset(["A", "C"], file)).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe("B=2\n");
+  });
+
   it("refuses a missing or badly named variable", () => {
     expect(envUnset([], file)).toBe(1);
     expect(envUnset(["a"], file)).toBe(1);
+    expect(envUnset(["A", "b"], file)).toBe(1);
+    expect(readFileSync(file, "utf8")).toBe("A=1\n");
     expect(printed()).toContain("Usage: bun run env:unset KEY");
   });
 });
