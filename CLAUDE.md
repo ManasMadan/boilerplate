@@ -66,8 +66,11 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
   that bundle docs, read the installed version's docs first:
   `node_modules/next/dist/docs/`, `node_modules/turbo/docs/`.
 - Generated files (`**/generated/**`, `*.gen.ts`, `openapi.json`, `apps/ai/app/contracts/`),
-  applied migrations, lockfiles and `.env` are never edited by hand; hooks block most of
-  them. Change the source and regenerate.
+  shipped migrations, lockfiles, SOPS files and `.env` are never edited by hand: the edit
+  and Bash guards refuse them (`.claude/hooks/file-rules.ts`), and ask the user before
+  Claude changes its own guard rails (hooks, settings, commit hooks, lint rules). Change
+  the source and regenerate. A new suppression, skipped or focused test, or coverage
+  pragma is refused too, unless docs/testing.md lists it with its reason.
 - When you finish a change, the Stop hook checks what changed: Biome on the changed files,
   lint, types and unit tests of the affected packages (ruff and basedpyright for
   `apps/ai`), types and tests of `scripts/` and the hooks when they changed, and knip. It

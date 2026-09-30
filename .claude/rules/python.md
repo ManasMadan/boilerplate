@@ -19,8 +19,8 @@ paths:
   `apps/ai/openapi.json`. After changing a route or model run `bun run gen` and commit
   `openapi.json` and the regenerated client. `operation_id` becomes the TS function name.
 - `app/contracts/**` is generated from `packages/jobs` (datamodel-codegen). Do not edit
-  it; change the zod schema in `packages/jobs` and run `bun run gen`. The edit guard hook
-  does not cover this directory, so this rule is the only thing stopping you.
+  it; change the zod schema in `packages/jobs` and run `bun run gen`. The edit and Bash
+  guards refuse writes to it.
 - Errors: `raise AppError("CODE", status, params)` from `app/errors.py`, with a code that
   exists in `packages/contracts/src/errors.ts`. Anything else becomes `INTERNAL`.
 - Settings come from `app/settings.py` (`get_settings()`); new variables go there and

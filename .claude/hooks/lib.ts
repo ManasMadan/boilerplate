@@ -26,8 +26,36 @@ export interface HookInput {
   source?: string;
 }
 
-export async function readInput(): Promise<HookInput> {
-  return JSON.parse(await Bun.stdin.text()) as HookInput;
+/**
+ * The hook's event. A guard passes `failClosed`: an event it can't read blocks the tool
+ * call (exit 2, the reason on stderr for Claude) instead of letting it through.
+ */
+export async function readInput({ failClosed = false } = {}): Promise<HookInput> {
+  try {
+    return JSON.parse(await Bun.stdin.text()) as HookInput;
+  } catch (error) {
+    if (!failClosed) throw error;
+    process.stderr.write(
+      `The hook couldn't read its event, so the call is blocked: ${String(error)}`,
+    );
+    process.exit(2);
+  }
+}
+
+/** The text an Edit, MultiEdit or Write replaces and writes, for rules that look at it. */
+export function editedText(input: HookInput): { before?: string; after?: string } {
+  const tool = input.tool_input ?? {};
+  const edits = Array.isArray(tool.edits)
+    ? (tool.edits as { old_string?: unknown; new_string?: unknown }[])
+    : [tool];
+  const join = (values: unknown[]) => {
+    const texts = values.filter((value): value is string => typeof value === "string");
+    return texts.length ? texts.join("\n") : undefined;
+  };
+  return {
+    before: join(edits.map((edit) => edit.old_string)),
+    after: join([...edits.map((edit) => edit.new_string), tool.content]),
+  };
 }
 
 export function respond(output: Record<string, unknown>): never {

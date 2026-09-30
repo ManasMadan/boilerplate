@@ -39,7 +39,10 @@
       },
       "suspicious": {
         "noExplicitAny": "error",
-        "noConsole": "error"
+        "noConsole": "error",
+        // An error, not the preset's warning: its safe fix quietly turns @ts-ignore into
+        // @ts-expect-error, which then passes.
+        "noTsIgnore": "error"
       },
       "style": {
         "noNonNullAssertion": "error",
