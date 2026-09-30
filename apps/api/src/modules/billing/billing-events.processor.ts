@@ -10,10 +10,10 @@
  * owns the billing schema and holds the Stripe key; at scale it moves to its own worker
  * deployment unchanged.
  */
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import { events } from "@repo/contracts/events";
 import { parseJob, queuePrefix } from "@repo/jobs";
-import { runWithContext } from "@repo/nest-common";
+import { JobProcessor, runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import * as z from "zod";
 import { env } from "../../env";
@@ -45,7 +45,7 @@ interface StripeObject {
 }
 
 @Processor("events-billing", { concurrency: 5, prefix: queuePrefix("events-billing") })
-export class BillingEventsProcessor extends WorkerHost {
+export class BillingEventsProcessor extends JobProcessor {
   constructor(
     private readonly billing: BillingService,
     @InjectCriticalNotifications() private readonly notifications: CriticalNotifications,

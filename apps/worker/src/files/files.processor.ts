@@ -15,7 +15,7 @@
  * files), fed by the same `files` queue.
  */
 import { createHash } from "node:crypto";
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import { Inject } from "@nestjs/common";
 import { type FileRejection, type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
 import { realtimeChannel } from "@repo/contracts/realtime";
@@ -25,6 +25,7 @@ import {
   InjectDatabase,
   InjectPinoLogger,
   InjectRedis,
+  JobProcessor,
   PinoLogger,
   type Redis,
   STORAGE,
@@ -48,7 +49,7 @@ class Rejected extends Error {
 }
 
 @Processor("files", { concurrency: env.FILES_CONCURRENCY, prefix: queuePrefix("files") })
-export class FilesProcessor extends WorkerHost {
+export class FilesProcessor extends JobProcessor {
   constructor(
     @InjectDatabase() private readonly database: Database,
     @Inject(STORAGE) private readonly storage: Storage | null,

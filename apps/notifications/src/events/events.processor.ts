@@ -8,10 +8,10 @@
  * Email feedback (a provider's bounce or spam complaint, from apps/webhooks) goes to the
  * suppression list instead, so the address is never emailed again.
  */
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import { type EventEnvelope, events } from "@repo/contracts/events";
 import { type NotificationPayload, notificationPayload, parseJob, queuePrefix } from "@repo/jobs";
-import { runWithContext } from "@repo/nest-common";
+import { JobProcessor, runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { Dispatcher } from "../dispatch/dispatcher";
 import { DeliveryPolicy } from "../dispatch/policy";
@@ -49,7 +49,7 @@ function notificationFor(event: EventEnvelope): NotificationPayload | undefined 
 }
 
 @Processor("events-notifications", { concurrency: 10, prefix: queuePrefix("events-notifications") })
-export class EventsProcessor extends WorkerHost {
+export class EventsProcessor extends JobProcessor {
   constructor(
     private readonly dispatcher: Dispatcher,
     private readonly policy: DeliveryPolicy,

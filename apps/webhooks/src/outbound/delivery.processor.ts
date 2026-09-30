@@ -2,7 +2,7 @@
  * Consumes webhook-deliveries. Retries use the Standard Webhooks schedule through a
  * custom backoff (WEBHOOK_RETRY_DELAYS_MS), so a job's attempts map to delivery attempts.
  */
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import {
   createProducer,
   type JobName,
@@ -10,7 +10,7 @@ import {
   queuePrefix,
   WEBHOOK_RETRY_DELAYS_MS,
 } from "@repo/jobs";
-import { InjectRedis, type Redis, runWithContext } from "@repo/nest-common";
+import { InjectRedis, JobProcessor, type Redis, runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { env } from "../env";
 import { DeliveryService } from "./delivery.service";
@@ -26,7 +26,7 @@ class DeliveryFailed extends Error {}
       WEBHOOK_RETRY_DELAYS_MS[attemptsMade - 1] ?? (WEBHOOK_RETRY_DELAYS_MS.at(-1) as number),
   },
 })
-export class DeliveryProcessor extends WorkerHost {
+export class DeliveryProcessor extends JobProcessor {
   private readonly queue;
 
   constructor(

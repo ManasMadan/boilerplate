@@ -19,9 +19,10 @@ producer and consumer can be different versions during a rollout.
    `jobId` is required: a UUIDv7 or a natural key, so a retried request enqueues once.
 3. Consume in the owning service: `BullModule.registerQueue({ name, prefix: queuePrefix(name) })`
    in its module, and a `@Processor(name, { concurrency, prefix: queuePrefix(name) })`
-   class extending `WorkerHost` whose `process` starts with
-   `parseJob("<queue>", "<job>", job.data)` (see `apps/worker/src/files/`). The
-   handler must be idempotent: jobs are delivered at least once.
+   class extending `JobProcessor` (`@repo/nest-common`, never `WorkerHost` directly: it
+   logs failed jobs) whose `process` starts with `parseJob("<queue>", "<job>", job.data)`
+   (see `apps/worker/src/files/`). The handler must be idempotent: jobs are delivered at
+   least once.
 4. Scale: add the queue to the consuming service's `keda.queues` in
    `deploy/charts/stack/values.yaml`. A queue KEDA scales must not use job priorities.
 5. Scheduled work: a job on the `maintenance` queue and a cron line in `SCHEDULES` in

@@ -1,6 +1,6 @@
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import { type NotificationQueue, parseJob, queuePrefix } from "@repo/jobs";
-import { runWithContext } from "@repo/nest-common";
+import { JobProcessor, runWithContext } from "@repo/nest-common";
 import type { Job } from "bullmq";
 import { DigestService } from "../digest/digest.service";
 import { env } from "../env";
@@ -35,7 +35,7 @@ async function handle(queue: NotificationQueue, job: Job, dispatcher: Dispatcher
   concurrency: env.NOTIFICATIONS_CRITICAL_CONCURRENCY,
   prefix: queuePrefix("notifications-critical"),
 })
-export class CriticalNotificationsProcessor extends WorkerHost {
+export class CriticalNotificationsProcessor extends JobProcessor {
   constructor(private readonly dispatcher: Dispatcher) {
     super();
   }
@@ -48,7 +48,7 @@ export class CriticalNotificationsProcessor extends WorkerHost {
   concurrency: env.NOTIFICATIONS_BULK_CONCURRENCY,
   prefix: queuePrefix("notifications-bulk"),
 })
-export class BulkNotificationsProcessor extends WorkerHost {
+export class BulkNotificationsProcessor extends JobProcessor {
   constructor(
     private readonly dispatcher: Dispatcher,
     private readonly digests: DigestService,

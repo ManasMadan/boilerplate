@@ -7,10 +7,16 @@
  * deploying is all it takes). BullMQ runs each occurrence once, whatever the replica
  * count, so there's no separate cron or leader election.
  */
-import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq";
+import { InjectQueue, Processor } from "@nestjs/bullmq";
 import type { OnApplicationBootstrap } from "@nestjs/common";
 import { type JobName, parseJob, queuePrefix } from "@repo/jobs";
-import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import {
+  type Database,
+  InjectDatabase,
+  InjectPinoLogger,
+  JobProcessor,
+  PinoLogger,
+} from "@repo/nest-common";
 import type { Job, Queue } from "bullmq";
 import { env } from "../env";
 import { FilesCleanup } from "../files/files.cleanup";
@@ -31,7 +37,7 @@ const PARTITIONS_BACK = 1;
 const PARTITIONS_AHEAD = 3;
 
 @Processor("maintenance", { concurrency: 1, prefix: queuePrefix("maintenance") })
-export class MaintenanceProcessor extends WorkerHost implements OnApplicationBootstrap {
+export class MaintenanceProcessor extends JobProcessor implements OnApplicationBootstrap {
   constructor(
     @InjectDatabase() private readonly database: Database,
     @InjectQueue("maintenance") private readonly queue: Queue,

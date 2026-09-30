@@ -30,13 +30,19 @@ because producer and consumer can be different versions during a rolling deploy:
 
 ```ts
 @Processor("files", { concurrency: env.FILES_CONCURRENCY, prefix: queuePrefix("files") })
-export class FilesProcessor extends WorkerHost {
+export class FilesProcessor extends JobProcessor {
   async process(job: Job) {
     const { meta, payload } = parseJob("files", "process", job.data);
     ...
   }
 }
 ```
+
+`JobProcessor` (`@repo/nest-common`) is `WorkerHost` plus logging: every failed job is
+logged with its queue, id, attempt and the error's causes, as "job failed; it will be
+retried" or "job failed for good", and worker errors too. A test fails any processor
+that extends `WorkerHost` directly. `parseJob` throws BullMQ's `UnrecoverableError` for
+a payload that doesn't match its schema, so that job fails at once instead of retrying.
 
 Jobs are stored as `{ meta, payload }`. `meta` carries the producer's request id, user
 and organization; consumers restore it with `runWithContext`, so their logs share the

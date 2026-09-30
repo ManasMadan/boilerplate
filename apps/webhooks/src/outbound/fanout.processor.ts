@@ -4,7 +4,7 @@
  * (endpoint, event), and its job id is the delivery id, so a redelivered event neither
  * creates nor sends anything twice.
  */
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import { eventEnvelope } from "@repo/contracts/events";
 import { withTenant } from "@repo/db";
 import { createProducer, parseJob, queuePrefix } from "@repo/jobs";
@@ -12,13 +12,14 @@ import {
   type Database,
   InjectDatabase,
   InjectRedis,
+  JobProcessor,
   type Redis,
   runWithContext,
 } from "@repo/nest-common";
 import type { Job } from "bullmq";
 
 @Processor("events-webhooks", { concurrency: 10, prefix: queuePrefix("events-webhooks") })
-export class FanoutProcessor extends WorkerHost {
+export class FanoutProcessor extends JobProcessor {
   private readonly deliveries;
 
   constructor(

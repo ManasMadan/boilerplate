@@ -1,3 +1,4 @@
+import { UnrecoverableError } from "bullmq";
 import { describe, expect, it } from "vitest";
 import { createProducer, parseJob } from "./producer";
 import { queues, WEBHOOK_RETRY_DELAYS_MS } from "./queues";
@@ -24,8 +25,9 @@ describe("parseJob", () => {
         meta: {},
         payload: { ...payload, to: { email: "nope", locale: "en" } },
       }),
-    ).toThrow();
-    expect(() => parseJob("notifications-critical", "send", payload)).toThrow();
+    ).toThrow(UnrecoverableError);
+    // Retrying can't fix it, so the job fails at once rather than with full backoff.
+    expect(() => parseJob("notifications-critical", "send", payload)).toThrow(UnrecoverableError);
   });
 });
 
