@@ -7,7 +7,7 @@ import { createDb, type Db, tenantTx, transaction } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 import { runWithContext } from "../src/context";
 import { createOutbox } from "../src/outbox";
 

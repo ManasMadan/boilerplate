@@ -20,7 +20,7 @@ import { errorData, errorIssue, errorResponse } from "@repo/contracts/api/base";
 import { ERROR_CODES, errorCode } from "@repo/contracts/errors";
 import { events } from "@repo/contracts/events";
 import { REALTIME_REDIS_PREFIX, realtimeChannel, realtimeMessage } from "@repo/contracts/realtime";
-import { z } from "zod";
+import * as z from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
 const out = join(import.meta.dirname, "..", "generated", "schemas");

@@ -5,7 +5,7 @@
  */
 import { coreEnv, csv, databaseEnv, port, redisEnv } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
+import * as z from "zod";
 
 const positive = z.coerce.number().int().positive();
 

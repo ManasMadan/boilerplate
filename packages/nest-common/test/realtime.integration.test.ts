@@ -4,7 +4,7 @@ import { getEventListeners } from "node:events";
 import { eventually } from "@repo/testing/eventually";
 import { Redis } from "ioredis";
 import { afterAll, describe, expect, it } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 import { createRealtime } from "../src/realtime";
 import { redisDatabase } from "../src/testing";
 

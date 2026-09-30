@@ -11,7 +11,7 @@
  *
  * so a shared variable has one name, one validation rule and one default everywhere.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 /**
  * A comma-separated list: items trimmed, empty ones dropped ("a, b," → ["a", "b"]).

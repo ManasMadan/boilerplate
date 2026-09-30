@@ -13,7 +13,7 @@
  * auto-increment ids restart after a Redis flush and must never be used for that.
  */
 import { type ConnectionOptions, type JobsOptions, Queue, UnrecoverableError } from "bullmq";
-import { z } from "zod";
+import * as z from "zod";
 import {
   type JobMeta,
   type JobName,

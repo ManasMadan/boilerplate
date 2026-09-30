@@ -9,7 +9,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DATABASE, type Database } from "@repo/nest-common";
-import { z } from "zod";
+import * as z from "zod";
 import { AUTH, type Auth } from "./auth/auth.module";
 import { env } from "./env";
 import { signInLoadUsers } from "./seed/load-users";

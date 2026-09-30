@@ -5,7 +5,7 @@
  */
 import { coreEnv, databaseEnv, port, redisEnv, requiredInProduction } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
+import * as z from "zod";
 import { productionSmtpProblem } from "./channels/email/smtp-url";
 
 /** @public Every variable, for the check that each is documented (scripts/env-docs.test.ts). */

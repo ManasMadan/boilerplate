@@ -51,9 +51,30 @@
         "noSkippedTests": "error",
         "noFocusedTests": "error"
       },
+      "complexity": {
+        "noUselessCatch": "error"
+      },
       "style": {
         "noNonNullAssertion": "error",
-        "useImportType": "error"
+        "useImportType": "error",
+        // Reassigning a parameter hides what the caller passed; name the new value.
+        "noParameterAssign": "error",
+        // One way to import zod everywhere, `import * as z from "zod"`: in code that reaches
+        // the browser the bundler keeps only the members used, while `import { z }` binds
+        // zod's prebuilt namespace object and ships all of zod, every language's messages
+        // included (~57 kB gzipped). Server code follows the same style so a file can move
+        // between the two without a rewrite.
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "zod": {
+                "importNames": ["z", "default"],
+                "message": "Use `import * as z from \"zod\"`, which the bundler can prune (see biome.jsonc)."
+              }
+            }
+          }
+        }
       },
       "nursery": {
         "noFloatingPromises": "error",
@@ -67,29 +88,6 @@
       // credentials: both are in docs/testing.md's "Skipped tests" table.
       "includes": ["apps/web/e2e/captcha.spec.ts", "apps/web/e2e/google.spec.ts"],
       "linter": { "rules": { "suspicious": { "noSkippedTests": "off" } } }
-    },
-    {
-      // Code that reaches the browser imports zod as `import * as z from "zod"`: the
-      // bundler keeps only the members used. `import { z }` binds zod's prebuilt namespace
-      // object and ships all of zod, every language's messages included (~57 kB gzipped).
-      "includes": ["packages/contracts/src/**", "packages/client/src/**", "apps/web/src/**"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "paths": {
-                  "zod": {
-                    "importNames": ["z", "default"],
-                    "message": "Use `import * as z from \"zod\"`, which the bundler can prune (see biome.jsonc)."
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
     },
     {
       // Theme tokens set each variable once per @variant (light, dark); Biome reads the

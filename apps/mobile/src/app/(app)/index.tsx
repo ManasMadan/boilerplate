@@ -11,7 +11,7 @@ import { Controller, useForm } from "react-hook-form";
 import { FlatList, RefreshControl, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslations } from "use-intl";
-import type { z } from "zod";
+import type * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";

@@ -20,7 +20,7 @@
  * be committed without its change, so that doesn't compile.
  */
 import { Prisma, type Tx } from "@repo/db";
-import type { z } from "zod";
+import type * as z from "zod";
 import { currentContext } from "./context";
 
 /** Who and where, when the request context doesn't know (e.g. auth flows before a session exists). */

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Logger } from "@nestjs/common";
 import { Redis } from "ioredis";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 import { CacheService } from "../src/cache";
 import { AppError } from "../src/errors";
 import { IdempotencyStore } from "../src/idempotency";

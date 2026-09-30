@@ -13,7 +13,7 @@
  */
 import { EventSourceParserStream } from "eventsource-parser/stream";
 import { SignJWT } from "jose";
-import type { z } from "zod";
+import type * as z from "zod";
 import { createClient } from "./generated/client";
 import { createDocument, deleteDocument, listDocuments, sentiment } from "./generated/sdk.gen";
 import type { AnswerData, ErrorCode, ErrorIssue } from "./generated/types.gen";

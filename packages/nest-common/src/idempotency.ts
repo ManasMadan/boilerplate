@@ -16,7 +16,7 @@
  * the request rather than run the operation twice or return the wrong type.
  */
 import type { Redis } from "ioredis";
-import { z } from "zod";
+import * as z from "zod";
 import { AppError } from "./errors";
 
 const TTL_SECONDS = 24 * 60 * 60;

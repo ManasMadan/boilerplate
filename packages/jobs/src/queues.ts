@@ -23,7 +23,7 @@ import {
 } from "@repo/contracts/events";
 import { locales } from "@repo/i18n";
 import type { JobsOptions } from "bullmq";
-import { z } from "zod";
+import * as z from "zod";
 
 /**
  * BullMQ key prefix for a queue: the queue name in braces, i.e. a Redis Cluster hash

@@ -18,7 +18,7 @@
  */
 import { EventEmitter } from "node:events";
 import type { Redis } from "ioredis";
-import type { z } from "zod";
+import type * as z from "zod";
 
 /**
  * Redis channel prefix. The Python service publishes on the same channels, named from

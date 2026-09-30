@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "use-intl";
-import { z } from "zod";
+import * as z from "zod";
 import { FormField } from "@/components/form-field";
 import { Screen } from "@/components/screen";
 import { Button } from "@/components/ui/button";

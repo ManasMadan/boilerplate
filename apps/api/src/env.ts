@@ -9,7 +9,7 @@
  */
 import { coreEnv, csv, databaseEnv, port, redisEnv, storageEnv } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
+import * as z from "zod";
 import { parseAuthSecrets } from "./auth/secrets";
 
 /** @public Every variable, for the check that each is documented (scripts/env-docs.test.ts). */

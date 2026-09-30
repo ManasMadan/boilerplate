@@ -16,7 +16,7 @@
  * row-level security.
  */
 import type { Redis } from "ioredis";
-import type { z } from "zod";
+import type * as z from "zod";
 
 const CACHE_VERSION = "v1";
 
