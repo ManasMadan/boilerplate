@@ -50,6 +50,13 @@ applies to the function's owner too, so every table it reads or writes under FOR
 an `owner_functions` policy for `migrator`, or it silently sees no rows; the database's
 security tests fail on any that lacks one.
 
+Prisma's errors that mean something to a client become catalog errors wherever they
+surface (`fromPrismaError` in `packages/nest-common`, applied to procedures and to the
+HTTP error filter): a unique constraint lost to a concurrent write or a write conflict is
+`CONFLICT`, a row gone between reading and writing is `NOT_FOUND`, and a pool or
+transaction timeout is `SERVICE_UNAVAILABLE`. Anything else stays `INTERNAL`. A call that
+means something more specific (`PHONE_NUMBER_TAKEN`) still catches its own.
+
 ## Row-level security
 
 Tenant tables have `ENABLE` and `FORCE ROW LEVEL SECURITY` (FORCE applies the policy to

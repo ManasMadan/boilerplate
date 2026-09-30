@@ -25,7 +25,7 @@ import { API_KEY_HEADER, type ApiKeyScope, contract, type ErrorData } from "@rep
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
-import { AppError, currentContext, updateContext } from "@repo/nest-common";
+import { AppError, currentContext, fromPrismaError, updateContext } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
 import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
@@ -63,8 +63,10 @@ export type LogError = (error: unknown, level: "error" | "debug") => void;
  * 500 or more is our fault and is logged, cause and all (UPSTREAM_UNAVAILABLE wraps the
  * real failure); a 4xx is logged at debug when it carries a cause.
  */
-export function toContractError(error: unknown, log: LogError): ORPCError<ErrorCode, unknown> {
+export function toContractError(thrown: unknown, log: LogError): ORPCError<ErrorCode, unknown> {
   const requestId = currentContext()?.requestId;
+  // A Prisma error a client can act on (a conflict, a row gone) becomes its catalog code.
+  const error = fromPrismaError(thrown) ?? thrown;
   if (error instanceof AppError) {
     if (error.status >= 500) log(error, "error");
     else if (error.cause !== undefined) log(error, "debug");

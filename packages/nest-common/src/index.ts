@@ -13,6 +13,7 @@ export * from "./idempotency";
 export * from "./job-processor";
 export * from "./logging";
 export * from "./outbox";
+export * from "./prisma-errors";
 export * from "./rate-limit";
 export * from "./realtime";
 export * from "./redis";

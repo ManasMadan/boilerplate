@@ -1,3 +1,4 @@
+import { Prisma } from "@repo/db";
 import { AppError } from "@repo/nest-common";
 import { describe, expect, it, vi } from "vitest";
 import { toContractError } from "./procedures";
@@ -24,5 +25,15 @@ describe("errors from procedures", () => {
     const mapped = toContractError(new Error("boom"), log);
     expect(mapped.code).toBe("INTERNAL");
     expect(log).toHaveBeenCalledWith(expect.any(Error), "error");
+  });
+
+  it("turns a Prisma error a client can act on into its catalog code", () => {
+    const log = vi.fn();
+    const unique = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+      code: "P2002",
+      clientVersion: "test",
+    });
+    expect(toContractError(unique, log).code).toBe("CONFLICT");
+    expect(log).not.toHaveBeenCalledWith(expect.anything(), "error");
   });
 });

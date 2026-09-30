@@ -19,6 +19,7 @@ import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { AppError } from "./errors";
 import { describeError } from "./job-processor";
+import { fromPrismaError } from "./prisma-errors";
 
 type Params = Record<string, string | number>;
 
@@ -61,7 +62,8 @@ export function codeForStatus(status: number): ErrorCode {
 
 /** What an error thrown outside a procedure means, as a catalog error. */
 export function toHttpError(error: unknown): { code: ErrorCode; params: Params } {
-  if (error instanceof AppError) return { code: error.code, params: error.params };
+  const known = error instanceof AppError ? error : fromPrismaError(error);
+  if (known) return { code: known.code, params: known.params };
   if (error instanceof HttpException) return { code: codeForStatus(error.getStatus()), params: {} };
   const status = (error as Partial<FastifyError>)?.statusCode;
   return { code: typeof status === "number" ? codeForStatus(status) : "INTERNAL", params: {} };
