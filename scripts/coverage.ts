@@ -46,21 +46,22 @@ const add = <K>(map: Map<K, number>, key: K, hits: number) =>
 /**
  * Parses an LCOV report into `coverage`, summing hits with what's there already. Paths
  * become relative to the repository (`base` is the directory the report's relative
- * paths are relative to).
+ * paths are relative to). Only the files under `owns` are read, when it's given.
  */
 export function mergeLcov(
   coverage: Map<string, FileCoverage>,
   lcov: string,
   base: string,
   root = ROOT,
+  owns?: RegExp,
 ) {
   let file: FileCoverage | undefined;
   for (const line of lcov.split("\n")) {
     const [tag, rest = ""] = line.split(/:(.*)/s);
     if (tag === "SF") {
       const path = relative(root, rest.startsWith("/") ? rest : join(base, rest));
-      file = coverage.get(path) ?? empty();
-      coverage.set(path, file);
+      file = owns && !owns.test(path) ? undefined : (coverage.get(path) ?? empty());
+      if (file) coverage.set(path, file);
       continue;
     }
     if (!file) continue;
@@ -112,8 +113,13 @@ export function toLcov(coverage: Map<string, FileCoverage>) {
     .join("\n");
 }
 
-/** Where the suites leave their reports, and the directory each one's paths are from. */
-export function reports(root = ROOT): { path: string; base: string }[] {
+/**
+ * Where the suites leave their reports, and the directory each one's paths are from.
+ * Bun's report counts only for scripts/ and the hooks: it counts a function's first line
+ * as code and v8 doesn't, so its view of a package file a script imports would add a
+ * line the package's own suite never lists, and the merge would call it missed.
+ */
+export function reports(root = ROOT): { path: string; base: string; owns?: RegExp }[] {
   return [
     ...["apps", "packages"].flatMap((dir) =>
       existsSync(join(root, dir))
@@ -123,7 +129,7 @@ export function reports(root = ROOT): { path: string; base: string }[] {
           }))
         : [],
     ),
-    { path: "coverage/bun/lcov.info", base: root },
+    { path: "coverage/bun/lcov.info", base: root, owns: /^(scripts|\.claude\/hooks)\// },
   ];
 }
 
@@ -148,8 +154,8 @@ export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): numb
     console.error("No coverage reports: run `bun run test:coverage` first.");
     return 1;
   }
-  for (const { path, base } of found)
-    mergeLcov(coverage, readFileSync(join(root, path), "utf8"), base, root);
+  for (const { path, base, owns } of found)
+    mergeLcov(coverage, readFileSync(join(root, path), "utf8"), base, root, owns);
   mkdirSync(join(root, "coverage"), { recursive: true });
   const measured = new Map([...coverage].filter(([path]) => isSource(path)));
   writeFileSync(join(root, "coverage/merged.lcov"), `${toLcov(measured)}\n`);

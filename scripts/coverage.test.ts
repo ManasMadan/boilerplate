@@ -151,6 +151,17 @@ describe("the check", () => {
     expect(merged).not.toContain("full.test.ts");
   });
 
+  it("judges a package's file by vitest's view of it, not by what bun saw of it", async () => {
+    // Bun counts a function's first line as a line of code and v8 doesn't: a package file
+    // a script imports would miss that line in the merge, though its own suite ran it.
+    const root = await repo({
+      "packages/pkg/src/index.ts": "",
+      "packages/pkg/coverage/lcov.info": report("src/index.ts", ["DA:2,1"]),
+      "coverage/bun/lcov.info": report("packages/pkg/src/index.ts", ["DA:1,0", "DA:2,0"]),
+    });
+    expect(run(["packages"], root).code).toBe(0);
+  });
+
   it("passes when every file in scope is covered", async () => {
     const root = await repo({
       "packages/pkg/src/index.ts": "",
