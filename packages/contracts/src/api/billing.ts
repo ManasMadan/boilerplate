@@ -1,7 +1,17 @@
 /** The organization's plan (owners and admins only). */
 import * as z from "zod";
 import { billingIntervals, planNames, subscriptionStatuses } from "../billing";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  ...WORKSPACE_ERRORS,
+  "FEATURE_DISABLED",
+  "UPSTREAM_UNAVAILABLE",
+  "ALREADY_SUBSCRIBED",
+  "NO_SUBSCRIPTION",
+  "ENTITLEMENT_REQUIRED",
+);
 
 export const entitlementsSchema = z.object({
   members: z.number().int().nullable(),
@@ -41,7 +51,7 @@ export const invoiceSchema = z.object({
 });
 
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Billing"], summary });
+  base.errors(errors).route({ method, path, tags: ["Billing"], summary });
 
 export const billingContract = {
   overview: route("GET", "/billing", "The organization's plan and subscription").output(

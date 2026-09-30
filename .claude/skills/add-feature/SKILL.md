@@ -26,7 +26,9 @@ The todo feature is the reference for every layer: copy its shape, not just its 
 3. **Contract.** Add the fields to the item schema and the writes (`create`, `update`,
    `delete`) with input schemas and limits, like `packages/contracts/src/api/todo.ts`.
    New error codes go in `packages/contracts/src/errors.ts` and `errors.<CODE>` in every
-   `packages/i18n/messages/*.json`. For API-key access, add a scope to
+   `packages/i18n/messages/*.json`, and every code the module's services throw goes in the
+   module's `errorsOf(...)` (outside production the API refuses to answer an undeclared
+   one, so the integration tests find a missing one). For API-key access, add a scope to
    `packages/contracts/src/api/scopes.ts` and describe it under `workspace.apiKeys.scopes`.
 4. **API.** Repository: every query through `withTenant`/`tenantTx`, `read` for lists,
    `write` for changes. Service: each change and its domain event (`emitEvent`, events

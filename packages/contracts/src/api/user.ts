@@ -1,6 +1,17 @@
 import * as z from "zod";
 import { phoneCodeSchema, phoneNumberSchema } from "../auth";
-import { base } from "./base";
+import { base, errorsOf } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  "FRESH_SESSION_REQUIRED",
+  "PHONE_CODE_INVALID",
+  "PHONE_NUMBER_TAKEN",
+  // Setting the picture checks the upload it names.
+  "FEATURE_DISABLED",
+  "FILE_NOT_FOUND",
+  "FILE_NOT_READY",
+);
 
 export const meSchema = z.object({
   id: z.uuid(),
@@ -15,7 +26,7 @@ export const meSchema = z.object({
 });
 
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Account"], summary });
+  base.errors(errors).route({ method, path, tags: ["Account"], summary });
 
 export const userContract = {
   me: route("GET", "/me", "The signed-in user").output(meSchema),

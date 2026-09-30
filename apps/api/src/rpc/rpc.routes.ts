@@ -32,15 +32,37 @@ export interface MountOptions {
   publicUrl: string;
   release: string;
   exposeDocs: boolean;
+  /**
+   * Refuse to answer a code the procedure's contract doesn't declare (a bug in the
+   * contract): on everywhere but production, so tests and development catch it.
+   */
+  strictErrors: boolean;
 }
 
 export async function mountRpc(fastify: FastifyInstance, router: AppRouter, options: MountOptions) {
   // Converts every error to the contract's shape, for both protocols.
-  const mapErrors = async ({ next }: { next: () => Promise<unknown> }) => {
+  const mapErrors = async ({
+    next,
+    path,
+    procedure,
+  }: {
+    next: () => Promise<unknown>;
+    path: readonly string[];
+    procedure: { "~orpc": { errorMap: Record<string, unknown> } };
+  }) => {
     try {
       return await next();
     } catch (error) {
-      throw toContractError(error, options.logError);
+      const mapped = toContractError(error, options.logError);
+      if (options.strictErrors && !(mapped.code in procedure["~orpc"].errorMap)) {
+        throw toContractError(
+          new Error(`${path.join(".")} threw ${mapped.code}, which its contract doesn't declare`, {
+            cause: error,
+          }),
+          options.logError,
+        );
+      }
+      throw mapped;
     }
   };
 

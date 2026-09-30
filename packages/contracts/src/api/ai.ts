@@ -5,7 +5,17 @@
  */
 import { eventIterator } from "@orpc/contract";
 import * as z from "zod";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  ...WORKSPACE_ERRORS,
+  "FEATURE_DISABLED",
+  "ENTITLEMENT_REQUIRED",
+  "UPSTREAM_UNAVAILABLE",
+  "DOCUMENT_NOT_FOUND",
+  "AI_BUDGET_EXCEEDED",
+);
 
 export const SENTIMENT_TEXT_MAX_LENGTH = 5_000;
 export const DOCUMENT_TITLE_MAX_LENGTH = 200;
@@ -43,7 +53,7 @@ export const assistantEventSchema = z.discriminatedUnion("type", [
 export type AssistantEvent = z.infer<typeof assistantEventSchema>;
 
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["AI"], summary });
+  base.errors(errors).route({ method, path, tags: ["AI"], summary });
 
 export const aiContract = {
   sentiment: route("POST", "/ai/sentiment", "Classify the sentiment of a text")

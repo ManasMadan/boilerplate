@@ -8,8 +8,16 @@
  * hash is stored.
  */
 import * as z from "zod";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
 import { API_KEY_PREFIX, API_KEY_SCOPES } from "./scopes";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  ...WORKSPACE_ERRORS,
+  "FRESH_SESSION_REQUIRED",
+  "API_KEY_LIMIT_REACHED",
+  "API_KEY_NOT_FOUND",
+);
 
 export const API_KEY_NAME_MAX_LENGTH = 64;
 export const API_KEY_LIMIT = 50;
@@ -51,10 +59,12 @@ export const createApiKeyInput = z.object({
 
 export const apiKeysContract = {
   list: base
+    .errors(errors)
     .route({ method: "GET", path: "/api-keys", tags: ["API keys"], summary: "List API keys" })
     .output(z.array(apiKeySchema)),
   /** API_KEY_LIMIT keys per workspace (API_KEY_LIMIT_REACHED beyond that). */
   create: base
+    .errors(errors)
     .route({
       method: "POST",
       path: "/api-keys",
@@ -72,6 +82,7 @@ export const apiKeysContract = {
     ),
   /** The key stops working immediately (API_KEY_NOT_FOUND for another workspace's key). */
   revoke: base
+    .errors(errors)
     .route({
       method: "DELETE",
       path: "/api-keys/{id}",

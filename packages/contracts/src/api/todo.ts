@@ -1,7 +1,10 @@
 /** The example feature. Copy this file's shape for new features. */
 import * as z from "zod";
 import { page, pageInput } from "../pagination";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(...WORKSPACE_ERRORS, "TODO_NOT_FOUND", "TODO_VERSION_CONFLICT");
 
 export const TODO_TITLE_MAX_LENGTH = 200;
 
@@ -27,6 +30,7 @@ export const deleteTodoInput = z.object({ id: z.uuid() });
 
 export const todoContract = {
   list: base
+    .errors(errors)
     .meta({ apiKeyScope: "todos:read" })
     .route({
       method: "GET",
@@ -37,6 +41,7 @@ export const todoContract = {
     .input(pageInput)
     .output(page(todoSchema)),
   create: base
+    .errors(errors)
     .meta({ apiKeyScope: "todos:write" })
     .route({
       method: "POST",
@@ -48,6 +53,7 @@ export const todoContract = {
     .input(createTodoInput)
     .output(todoSchema),
   setCompleted: base
+    .errors(errors)
     .meta({ apiKeyScope: "todos:write" })
     .route({
       method: "PATCH",
@@ -58,6 +64,7 @@ export const todoContract = {
     .input(setTodoCompletedInput)
     .output(todoSchema),
   delete: base
+    .errors(errors)
     .meta({ apiKeyScope: "todos:write" })
     .route({
       method: "DELETE",

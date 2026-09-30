@@ -7,7 +7,10 @@ import {
   notificationChannels,
 } from "../notifications";
 import { page, pageInput } from "../pagination";
-import { base } from "./base";
+import { base, errorsOf } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf("UNSUBSCRIBE_LINK_INVALID");
 
 const inAppType = z.enum(
   Object.keys(inAppNotifications) as [
@@ -74,7 +77,7 @@ export const pushDeviceSchema = z.discriminatedUnion("platform", [
 export type PushDeviceInput = z.infer<typeof pushDeviceSchema>;
 
 const route = (method: "GET" | "POST" | "PATCH", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Notifications"], summary });
+  base.errors(errors).route({ method, path, tags: ["Notifications"], summary });
 
 export const notificationsContract = {
   list: route("GET", "/notifications", "In-app notifications, newest first")

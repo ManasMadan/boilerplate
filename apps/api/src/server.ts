@@ -77,6 +77,7 @@ export function createApiServer() {
           publicUrl: env.BETTER_AUTH_URL,
           release: env.RELEASE,
           exposeDocs: env.NODE_ENV !== "production",
+          strictErrors: env.NODE_ENV !== "production",
         },
       );
     },

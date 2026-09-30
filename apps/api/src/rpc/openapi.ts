@@ -7,7 +7,7 @@
 import { isContractProcedure } from "@orpc/contract";
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { API_KEY_HEADER, contract, type ProcedureMeta } from "@repo/contracts/api";
+import { API_KEY_HEADER, contract, errorData, type ProcedureMeta } from "@repo/contracts/api";
 
 export async function openApiDocument({
   version,
@@ -19,6 +19,8 @@ export async function openApiDocument({
   const spec = await new OpenAPIGenerator({
     schemaConverters: [new ZodToJsonSchemaConverter()],
   }).generate(contract, {
+    // One definition every error response refers to, not a copy per status per operation.
+    commonSchemas: { ErrorData: { schema: errorData } },
     info: { title: "Boilerplate API", version },
     servers: [{ url: serverUrl }],
     components: {

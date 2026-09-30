@@ -8,11 +8,11 @@ import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import { ORGANIZATION_LIMIT, PENDING_INVITATION_LIMIT } from "@repo/contracts/auth";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
-import { createSignedTokens, S3Storage } from "@repo/nest-common";
+import { AppError, createSignedTokens, S3Storage } from "@repo/nest-common";
 import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PhoneService } from "../src/modules/user/phone.service";
 import { publishRealtime } from "../src/realtime";
 import {
@@ -109,6 +109,16 @@ describe("error responses", () => {
     const outdated = await send("/api/v1/todos", { headers: { "x-app-version": "1.0.0" } });
     expect(outdated.status).toBe(400);
     expect((await outdated.json()).code).toBe("CLIENT_OUTDATED");
+  });
+
+  it("refuses, outside production, to answer a code the procedure's contract doesn't declare", async () => {
+    const { session } = await signedInUser();
+    const { TodoService } = await import("../src/modules/todo");
+    const todos = harness.app.get(TodoService);
+    // A code the todo contract has no business returning.
+    const list = vi.spyOn(todos, "list").mockRejectedValueOnce(new AppError("PHONE_CODE_INVALID"));
+    await expectError(session.rpc.todo.list({ limit: 1 }), "INTERNAL");
+    list.mockRestore();
   });
 
   it("gives better-auth's errors the same envelope, keeping their codes", async () => {

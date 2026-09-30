@@ -5,7 +5,19 @@
 import * as z from "zod";
 import { webhookEvents } from "../events";
 import { page, pageInput } from "../pagination";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  ...WORKSPACE_ERRORS,
+  "FRESH_SESSION_REQUIRED",
+  "ENTITLEMENT_REQUIRED",
+  "UPSTREAM_UNAVAILABLE",
+  "WEBHOOK_ENDPOINT_NOT_FOUND",
+  "WEBHOOK_DELIVERY_NOT_FOUND",
+  "WEBHOOK_ENDPOINT_LIMIT",
+  "WEBHOOK_URL_NOT_ALLOWED",
+);
 
 export const WEBHOOK_ENDPOINT_LIMIT = 20;
 /**
@@ -61,7 +73,7 @@ const endpointId = z.object({ id: z.uuid() });
 const withSecret = z.object({ secret: z.string().startsWith("whsec_") });
 
 const route = (method: "GET" | "POST" | "PATCH" | "DELETE", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Webhooks"], summary });
+  base.errors(errors).route({ method, path, tags: ["Webhooks"], summary });
 
 export const webhooksContract = {
   listEndpoints: route("GET", "/webhooks/endpoints", "List webhook endpoints").output(

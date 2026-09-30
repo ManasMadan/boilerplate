@@ -6,7 +6,18 @@
  */
 import * as z from "zod";
 import { fileRejections, fileStatuses, uploadPurposeNames } from "../files";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(
+  ...WORKSPACE_ERRORS,
+  "FEATURE_DISABLED",
+  "FILE_NOT_FOUND",
+  "FILE_NOT_READY",
+  "FILE_NOT_UPLOADED",
+  "FILE_TOO_LARGE",
+  "FILE_TYPE_NOT_ALLOWED",
+);
 
 export const fileSchema = z.object({
   id: z.uuid(),
@@ -22,7 +33,7 @@ export const fileSchema = z.object({
 export type FileInfo = z.infer<typeof fileSchema>;
 
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
-  base.route({ method, path, tags: ["Files"], summary });
+  base.errors(errors).route({ method, path, tags: ["Files"], summary });
 
 export const filesContract = {
   createUpload: route("POST", "/files/uploads", "Start an upload")

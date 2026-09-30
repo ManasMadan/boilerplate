@@ -1,7 +1,10 @@
 /** The organization's audit log (owners and admins only). */
 import * as z from "zod";
 import { page, pageInput } from "../pagination";
-import { base } from "./base";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/** The codes this module's procedures throw, on top of the common ones. */
+const errors = errorsOf(...WORKSPACE_ERRORS);
 
 export const auditEntrySchema = z.object({
   id: z.uuid(),
@@ -19,6 +22,7 @@ export type AuditEntry = z.infer<typeof auditEntrySchema>;
 
 export const auditContract = {
   list: base
+    .errors(errors)
     .meta({ apiKeyScope: "audit:read" })
     .route({
       method: "GET",
