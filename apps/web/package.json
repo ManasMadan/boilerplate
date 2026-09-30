@@ -26,6 +26,7 @@
     "@repo/ui": "workspace:*",
     "@t3-oss/env-nextjs": "catalog:",
     "@tanstack/react-query": "catalog:",
+    "better-auth": "catalog:",
     "geist": "^1.7.2",
     "lucide-react": "catalog:",
     "next": "catalog:",

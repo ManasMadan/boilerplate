@@ -23,6 +23,11 @@ describe("the proxy", () => {
 
   it("sends signed-in visitors of auth pages to the dashboard", () => {
     expect(getRedirectUrl(proxy(request("/sign-in", true)))).toBe(`${SITE}/dashboard`);
+    // Over HTTPS better-auth names the cookie with the __Secure- prefix.
+    const secure = new NextRequest(`${SITE}/sign-in`, {
+      headers: { cookie: "__Secure-better-auth.session_token=abc" },
+    });
+    expect(getRedirectUrl(proxy(secure))).toBe(`${SITE}/dashboard`);
   });
 
   it("keeps auth pages reachable for an app's OAuth request, signed in or not", () => {
