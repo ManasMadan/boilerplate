@@ -28,6 +28,7 @@ import {
   InjectRedis,
   PinoLogger,
   type Redis,
+  rows,
 } from "@repo/nest-common";
 import type { Queue } from "bullmq";
 import * as z from "zod";
@@ -76,10 +77,12 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
 
   /** Queues today's digest for every user with items whose digest time has come. */
   async scheduleDue(now = new Date()) {
-    const rows = await this.database.read.$queryRaw<{ id: string }[]>`
-      SELECT notifications.users_with_digest_items() AS id`;
+    const withItems = await rows(
+      z.object({ id: z.uuid() }),
+      this.database.read.$queryRaw`SELECT notifications.users_with_digest_items() AS id`,
+    );
     const users = await this.database.read.user.findMany({
-      where: { id: { in: rows.map((row) => row.id) } },
+      where: { id: { in: withItems.map((user) => user.id) } },
       select: { id: true, timezone: true },
     });
     const due = users.flatMap((user) => {

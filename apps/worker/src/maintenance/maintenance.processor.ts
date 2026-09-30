@@ -16,11 +16,17 @@ import {
   InjectPinoLogger,
   JobProcessor,
   PinoLogger,
+  row,
 } from "@repo/nest-common";
 import type { Job, Queue } from "bullmq";
+import * as z from "zod";
 import { env } from "../env";
 import { FilesCleanup } from "../files/files.cleanup";
 import { OUTBOX_SOURCES } from "../outbox/sources";
+
+// What the retention functions return: how many they made, dropped or deleted.
+const int = z.object({ n: z.number().int() });
+const count = z.object({ n: z.bigint() });
 
 type Task = JobName<"maintenance">;
 
@@ -72,33 +78,50 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
       case "audit-partitions": {
         const cutoff = new Date();
         cutoff.setUTCMonth(cutoff.getUTCMonth() - env.AUDIT_RETENTION_MONTHS);
-        const [created] = await db.$queryRaw<[{ n: number }]>`
-          SELECT audit.ensure_partitions(${PARTITIONS_BACK}::int, ${PARTITIONS_AHEAD}::int) AS n`;
-        const [dropped] = await db.$queryRaw<[{ n: number }]>`
-          SELECT audit.drop_partitions_before(${cutoff}::timestamptz) AS n`;
+        const created = await row(
+          int,
+          db.$queryRaw`
+            SELECT audit.ensure_partitions(${PARTITIONS_BACK}::int, ${PARTITIONS_AHEAD}::int) AS n`,
+        );
+        const dropped = await row(
+          int,
+          db.$queryRaw`SELECT audit.drop_partitions_before(${cutoff}::timestamptz) AS n`,
+        );
         result.created = created.n;
         result.dropped = dropped.n;
         break;
       }
       case "outbox-retention":
         for (const source of OUTBOX_SOURCES) {
-          const [outbox] = await db.$queryRawUnsafe<[{ n: bigint }]>(
-            `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
-            env.OUTBOX_RETENTION_DAYS,
+          const outbox = await row(
+            count,
+            db.$queryRawUnsafe(
+              `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
+              env.OUTBOX_RETENTION_DAYS,
+            ),
           );
-          const [processed] = await db.$queryRawUnsafe<[{ n: bigint }]>(
-            `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
-            env.PROCESSED_EVENT_RETENTION_DAYS,
+          const processed = await row(
+            count,
+            db.$queryRawUnsafe(
+              `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
+              env.PROCESSED_EVENT_RETENTION_DAYS,
+            ),
           );
           result[`${source}.outbox`] = Number(outbox.n);
           result[`${source}.processed`] = Number(processed.n);
         }
         {
-          const [history] = await db.$queryRaw<[{ n: bigint }]>`
-            SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`;
+          const history = await row(
+            count,
+            db.$queryRaw`
+              SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`,
+          );
           result["webhooks.history"] = Number(history.n);
-          const [notifications] = await db.$queryRaw<[{ n: bigint }]>`
-            SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`;
+          const notifications = await row(
+            count,
+            db.$queryRaw`
+              SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`,
+          );
           result["notifications.history"] = Number(notifications.n);
         }
         break;
@@ -106,7 +129,7 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
         Object.assign(result, await this.files.run());
         break;
       case "session-retention": {
-        const [purged] = await db.$queryRaw<[{ n: bigint }]>`SELECT auth.purge_expired() AS n`;
+        const purged = await row(count, db.$queryRaw`SELECT auth.purge_expired() AS n`);
         result.expired = Number(purged.n);
         break;
       }

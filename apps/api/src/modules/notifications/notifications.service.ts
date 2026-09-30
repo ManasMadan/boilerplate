@@ -27,7 +27,9 @@ import {
   InjectDatabase,
   InjectRedis,
   type Redis,
+  row,
 } from "@repo/nest-common";
+import * as z from "zod";
 import { env } from "../../env";
 import { publishRealtime } from "../../realtime";
 
@@ -168,11 +170,13 @@ export class NotificationsService {
     if (session.impersonatedBy) throw new AppError("FORBIDDEN");
     const { userId } = session;
     return userTx(this.database.write, userId, async (tx) => {
-      const [row] = await tx.$queryRaw<{ id: string }[]>`
-        SELECT notifications.register_device(
-          ${device.platform}, ${deviceToken(device)}, ${appVersion ?? null}, ${session.id}::uuid
-        ) AS id`;
-      const id = row?.id as string;
+      const { id } = await row(
+        z.object({ id: z.uuid() }),
+        tx.$queryRaw`
+          SELECT notifications.register_device(
+            ${device.platform}, ${deviceToken(device)}, ${appVersion ?? null}, ${session.id}::uuid
+          ) AS id`,
+      );
       const stale = await tx.notificationDevice.findMany({
         where: { userId },
         orderBy: { lastSeenAt: "desc" },

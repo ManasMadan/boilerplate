@@ -12,8 +12,10 @@ import {
   type I18n,
   REDIS,
   type Redis,
+  row,
 } from "@repo/nest-common";
 import { Logger } from "nestjs-pino";
+import * as z from "zod";
 import { AppModule } from "./app.module";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.module";
 import { mountAuth } from "./auth/auth.routes";
@@ -50,9 +52,12 @@ export function createApiServer() {
         keys: () => auth.api.getJwks(),
         // On the primary: a disconnect must be seen by the very next request.
         grantActive: async (clientId, userId, orgId) => {
-          const [row] = await database.write.$queryRaw<[{ active: boolean }]>`
-            SELECT auth.mcp_grant_active(${clientId}, ${userId}::uuid, ${orgId}::uuid) AS active`;
-          return row.active;
+          const { active } = await row(
+            z.object({ active: z.boolean() }),
+            database.write.$queryRaw`
+              SELECT auth.mcp_grant_active(${clientId}, ${userId}::uuid, ${orgId}::uuid) AS active`,
+          );
+          return active;
         },
         redis: app.get<Redis>(REDIS),
         server: {

@@ -19,4 +19,5 @@ export * from "./realtime";
 export * from "./redis";
 export * from "./safe-fetch";
 export * from "./signed-token";
+export * from "./sql";
 export * from "./storage";

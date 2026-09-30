@@ -8,7 +8,8 @@
  * after the provider accepted a message but before `finish`: that message may go twice.
  */
 import { Injectable } from "@nestjs/common";
-import { type Database, InjectDatabase } from "@repo/nest-common";
+import { type Database, InjectDatabase, rows } from "@repo/nest-common";
+import * as z from "zod";
 
 export type DeliveryStatus = "sent" | "failed" | "skipped" | "suppressed";
 
@@ -26,15 +27,18 @@ export class DeliveryLog {
     template: string,
     userId: string | null,
   ): Promise<boolean> {
-    const rows = await this.database.write.$queryRaw<{ id: string }[]>`
+    const claimed = await rows(
+      z.object({ id: z.uuid() }),
+      this.database.write.$queryRaw`
       INSERT INTO notifications.delivery (idempotency_key, channel, template, user_id, status, updated_at)
       VALUES (${key}, ${channel}, ${template}, ${userId}::uuid, 'sending', now())
       ON CONFLICT (idempotency_key) DO UPDATE SET status = 'sending', updated_at = now()
       WHERE notifications.delivery.status = 'failed'
          OR (notifications.delivery.status = 'sending'
              AND notifications.delivery.updated_at < now() - ${STALE_SENDING}::interval)
-      RETURNING id`;
-    return rows.length > 0;
+      RETURNING id`,
+    );
+    return claimed.length > 0;
   }
 
   async finish(
