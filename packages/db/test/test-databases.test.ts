@@ -55,11 +55,17 @@ describe("dropping a test database", () => {
   it("names a connection a test left open", async () => {
     const testDb = await createTestDatabase();
     const leak = new pg.Client({ connectionString: testDb.urlFor("app_api") });
-    await leak.connect();
+    const named = new pg.Client({
+      connectionString: testDb.urlFor("app_worker"),
+      application_name: "leaky-service",
+    });
+    await Promise.all([leak.connect(), named.connect()]);
     try {
-      await expect(testDb.drop(200)).rejects.toThrow(/connections still open: app_api \(pid \d+/);
+      const drop = testDb.drop(200);
+      await expect(drop).rejects.toThrow(/connections still open: .*app_api \(pid \d+\)/);
+      await expect(drop).rejects.toThrow(/app_worker \(pid \d+, leaky-service\)/);
     } finally {
-      await leak.end();
+      await Promise.all([leak.end(), named.end()]);
       await testDb.drop();
     }
   });

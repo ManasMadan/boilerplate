@@ -58,15 +58,16 @@ function urlFor(database: string, role: string) {
 }
 
 /**
- * Applies all migrations to the template database. Call once per test run; concurrent
- * runs (several packages under turbo) take turns on an advisory lock.
+ * Applies all migrations to the template database (`app_test`, or the one named). Call
+ * once per test run; concurrent runs (several packages under turbo) take turns on an
+ * advisory lock.
  *
  * If a migration recorded in the template no longer matches its file (it was edited
  * before shipping, or removed), the template's schemas are rebuilt from scratch: deploy
  * alone would keep the old version. Extensions (created by a superuser at bootstrap)
  * live in `public` and stay.
  */
-export async function prepareTemplate() {
+export async function prepareTemplate(template = TEMPLATE) {
   // The lock is held from the maintenance database: Postgres refuses to clone a database
   // anyone is connected to, so nothing but the work below may touch the template.
   const lock = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
@@ -74,7 +75,7 @@ export async function prepareTemplate() {
   try {
     await lock.query("SELECT pg_advisory_lock($1)", [TEMPLATE_LOCK]);
     await dropAbandonedTestDatabases();
-    const client = new pg.Client({ connectionString: urlFor(TEMPLATE, "migrator") });
+    const client = new pg.Client({ connectionString: urlFor(template, "migrator") });
     await client.connect();
     try {
       if (await isStale(client)) {
@@ -91,7 +92,7 @@ export async function prepareTemplate() {
     }
     execFileSync("bunx", ["prisma", "migrate", "deploy"], {
       cwd: DB_PACKAGE,
-      env: { ...process.env, MIGRATOR_DATABASE_URL: urlFor(TEMPLATE, "migrator") },
+      env: { ...process.env, MIGRATOR_DATABASE_URL: urlFor(template, "migrator") },
       stdio: "pipe",
     });
   } finally {

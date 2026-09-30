@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type Db, tenantTx, withTenant } from "../src";
+import { createDb, type Db, tenantTx, withTenant, withUser } from "../src";
 import { createTestDatabase, type TestDatabase } from "../src/testing";
 
 let testDb: TestDatabase;
@@ -74,6 +74,7 @@ describe("row-level security", () => {
     const tenant = withTenant(api, orgA);
     // The type allows no arguments (so real calls don't compile); the runtime also throws.
     expect(() => tenant.$transaction()).toThrow(/tenantTx/);
+    expect(() => withUser(api, userId).$transaction()).toThrow(/userTx/);
   });
 
   it("never leaks across tenants under concurrent pooled requests", async () => {
