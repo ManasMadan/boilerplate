@@ -35,8 +35,11 @@ devcontainer has only OpenTofu, kubectl and Helm of them.
 - [ ] Your domains in `deploy/environments/{staging,production}/`: `site.host`,
       `storage.uploads.host` and `corsOrigins` (data.yaml), `EMAIL_FROM`. The
       `example.com` values there are placeholders.
-- [ ] Drop what you don't need with its skill (`.claude/skills`): each optional feature
-      is off until its variables are set, so unused ones cost nothing but code.
+- [ ] Drop what you don't need: each optional feature is off until its variables are
+      set, so an unused one costs nothing but code. To remove one completely (code,
+      tables in a later release, env, copy, docs, tests), follow the remove-feature
+      runbook (`.claude/skills/remove-feature/SKILL.md`, or `/remove-feature <feature>`
+      in Claude Code).
 
 ## 2. Develop locally
 

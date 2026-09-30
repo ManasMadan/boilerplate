@@ -15,6 +15,9 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | Types | `bun run check-types` |
 | Unit tests (fast, cached) | `bun run test` |
 | Integration tests (real Postgres/Valkey/Mailpit) | `bun run test:integration` |
+| Coverage against every package's floor (needs the full profile) | `bun run test:coverage` |
+| Tests of `scripts/` and the Claude Code hooks | `bun test ./scripts/ ./.claude/hooks/` |
+| Every check that applies to a change | the `verify` skill |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
 | New database migration | `bun run db:migrate` |
 | Set a secret in .env (you cannot read .env) | `bun run env:set KEY=value` |
@@ -84,6 +87,11 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   checks in the background before finishing. It doesn't run the boundary checks,
   integration or e2e tests: for anything touching the database, queues or HTTP, run the
   `verify` skill.
+- Long-running commands go in the background (the Bash tool's `run_in_background`),
+  never in the foreground: `bun dev` and `bun dev:full` never exit, and
+  `test:integration`, `test:coverage`, `test:e2e`, `charts:check` and
+  `bun scripts/generators.ts` take longer than the tool's two-minute default. Wait for
+  them to finish before reporting a result.
 - Commits: Conventional Commits with a workspace scope, e.g. `feat(api): add todo sharing`.
 - New environment variables go in the service's `src/env.ts`, `.env.example`, and
   docs/environment.md, in the same change.
@@ -91,11 +99,19 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
 ## Claude Code setup
 
 - `.claude/rules/`: per-area rules that load when you open matching files (api,
-  contracts, client, web, db, jobs and events, notifications, python, infra, tests,
-  i18n, security). Each app and `packages/db` also has its own `CLAUDE.md`.
-- `.claude/agents/`: `reviewer`, `security-reviewer`, `migration-reviewer` and
-  `verifier`. Use them before calling a change done.
-- `.claude/skills/`: step-by-step procedures (setup, dev, verify, ...).
+  contracts, client, web, ui, mobile, db, jobs and events, notifications, python, infra,
+  ci, scripts, generators, tests, i18n, security, docs, the Claude setup itself, and
+  coding standards for every TypeScript and Python file). Each app and `packages/db`
+  also has its own `CLAUDE.md`.
+- `.claude/agents/`: reviewers that read and never edit (`reviewer`,
+  `security-reviewer`, `migration-reviewer`, `python-reviewer`, `frontend-reviewer`,
+  `i18n-checker`, `ci-triager`), `verifier` (runs the checks), `test-writer` (adds tests,
+  raises coverage) and `docs-sync` (fixes docs that drifted). Each skill ends by naming
+  the ones to run; run them before calling a change done.
+- `.claude/skills/`: step-by-step procedures, also the humans' runbooks
+  (`docs/README.md` lists them). The `swap-*` skills, releases, rollbacks, secret
+  rotation, opening a pull request, adding an app and removing a feature are started by
+  the user (`/<name>`), never on your own.
 - `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
   database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
   only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and
