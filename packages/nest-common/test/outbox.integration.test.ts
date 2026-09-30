@@ -3,14 +3,16 @@
  * event becomes, and whose organization, actor and request it names.
  */
 import { randomUUID } from "node:crypto";
-import { events } from "@repo/contracts/events";
 import { createDb, type Db, tenantTx, transaction } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { runWithContext } from "../src/context";
 import { createOutbox } from "../src/outbox";
 
+// A catalog of the test's own: plumbing knows no domain events.
+const events = { "todo.created.v1": z.object({ todoId: z.uuid(), title: z.string() }) };
 const { emitEvent, emitAnyEvent } = createOutbox("app", events);
 let testDb: TestDatabase;
 let db: Db;
