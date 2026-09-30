@@ -179,8 +179,10 @@ Running it again changes nothing; it refuses to run in production.
 
 ## Restore drill
 
-`bun run db:restore-drill` (`scripts/restore-drill.ts`) proves a backup restores: it
-dumps the database with `pg_dump` (custom format), restores it into a scratch database
+`bun run db:restore-drill` (`scripts/restore-drill.ts`) proves a logical backup restores
+(the clusters' own backups are Barman base backups and WAL: deploy/README.md, "Backups
+and restore", says how to try those in staging): it dumps the database with `pg_dump`
+(custom format), restores it into a scratch database
 and requires an identical fingerprint: each table's row count and content hash,
 row-level security flags and policies, grants, default privileges, functions, triggers,
 extensions and sequence positions. The scratch database and dump are removed either

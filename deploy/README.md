@@ -289,8 +289,13 @@ cluster when it creates it, so restoring means a new cluster from the backups.
 5. Set `restore.enabled` back to `false` (an existing cluster ignores its bootstrap
    either way) and keep the new `backups.serverName`: it's where backups go now.
 
-`bun run db:restore-drill` proves locally that a backup restores to the same data,
-grants and policies (docs/database.md).
+`bun run db:restore-drill` (docs/database.md) proves that a `pg_dump` of the database
+restores to the same data, grants and policies. It doesn't test these backups: the
+clusters' are Barman base backups and WAL, which only a CloudNativePG recovery restores,
+and kind has no backups to try (no cert-manager for the plugin). Try them in staging,
+once after setting up and then every few months: the procedure above with
+`restore.enabled` and a new `backups.serverName`, then check the recovered database
+serves the site and has yesterday's rows.
 
 ## What a lost node takes down
 
