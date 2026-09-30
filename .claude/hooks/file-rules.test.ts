@@ -12,6 +12,7 @@ describe("the file rules", () => {
     [".envrc", "deny"],
     [".env.example", "allow"],
     ["deploy/environments/staging/secrets/api.sops.yaml", "deny"],
+    [".sops.yaml", "ask"],
     ["apps/api/openapi.json", "deny"],
     ["packages/db/src/generated/prisma/client.ts", "deny"],
     ["apps/ai/app/contracts/jobs.py", "deny"],

@@ -32,7 +32,7 @@ const IMAGE_TAG = /^\s*tag:/m;
  * dependency rules. A change to one needs the user to look at it.
  */
 const GUARD_RAILS =
-  /^(\.claude\/settings\.json|\.claude\/hooks\/|\.husky\/|biome\.jsonc$|knip\.jsonc$|\.dependency-cruiser\.cjs$|\.gitleaksignore$|\.trivyignore\.yaml$|osv-scanner\.toml$)/;
+  /^(\.claude\/settings\.json|\.claude\/hooks\/|\.husky\/|biome\.jsonc$|knip\.jsonc$|\.dependency-cruiser\.cjs$|\.gitleaksignore$|\.trivyignore\.yaml$|osv-scanner\.toml$|\.sops\.yaml$)/;
 
 /** The rule for one change, or null when it's allowed. */
 export function verdictFor({ path, shipped = false, before, after }: Change): Verdict {
@@ -41,7 +41,8 @@ export function verdictFor({ path, shipped = false, before, after }: Change): Ve
       "Environment files hold secrets and are not edited by Claude. Use `bun run env:set KEY=value`, and add new variables to .env.example.",
     );
   }
-  if (path.endsWith(".sops.yaml")) {
+  // An encrypted file, not `.sops.yaml` itself (who can decrypt what: a guard rail).
+  if (path.endsWith(".sops.yaml") && path !== ".sops.yaml") {
     return deny(
       "SOPS files are encrypted and carry a MAC over their content, so a direct edit breaks them. The user edits them with `sops <file>` (the rotate-secrets skill).",
     );

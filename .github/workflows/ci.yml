@@ -44,6 +44,8 @@ jobs:
       # Unused files, exports and dependencies, and dependencies used but not declared
       # (knip.jsonc).
       - run: bun run lint:unused
+      # Shortcut markers left as comments (scripts/check-markers.ts).
+      - run: bun run lint:markers
 
   types:
     name: Type-check

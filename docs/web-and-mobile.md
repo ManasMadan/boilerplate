@@ -169,8 +169,8 @@ turn them on:
    placeholder names say what goes there). Use the bundle ids and package names your
    rename gave the app.
 2. Apple requires `Content-Type: application/json` for the extensionless file, and Next
-   serves unknown extensions as `application/octet-stream`: add a `headers()` entry in
-   `apps/web/next.config.ts` for `/.well-known/apple-app-site-association`.
+   serves unknown extensions as `application/octet-stream`, so `apps/web/next.config.ts`
+   sets that header for `/.well-known/apple-app-site-association`.
 3. In `apps/mobile/app.config.ts`: `ios.associatedDomains` with `applinks:<site host>`
    (and `webcredentials:<site host>` for passkeys), and `android.intentFilters` with
    `autoVerify: true`, scheme `https`, your host and the paths the app handles

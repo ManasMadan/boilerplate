@@ -61,6 +61,11 @@ const config: NextConfig = {
   async headers() {
     // The Content-Security-Policy is set per request in src/proxy.ts (it needs a nonce).
     return [
+      // iOS reads this file (universal links) only when served as JSON; it has no extension.
+      {
+        source: "/.well-known/apple-app-site-association",
+        headers: [{ key: "Content-Type", value: "application/json" }],
+      },
       {
         source: "/:path*",
         headers: [
