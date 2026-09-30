@@ -13,7 +13,7 @@
 
 import { rawBodies, runWithContext, updateContext } from "@repo/nest-common";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { contextFor, toHeaders } from "../http-context";
+import { contextFor, fromWebResponse, toHeaders, toWebRequest } from "../http-context";
 import type { Auth } from "./auth";
 
 /**
@@ -62,22 +62,8 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
         const session = await auth.api.getSession({ headers });
         if (session) updateContext({ userId: session.user.id });
       }
-      const body = Buffer.isBuffer(request.body) ? request.body : undefined;
-      const response = await auth.handler(
-        new Request(url, {
-          method: request.method,
-          headers,
-          ...(body !== undefined && { body: new Uint8Array(body) }),
-        }),
-      );
-
-      reply.status(response.status);
-      for (const [key, value] of response.headers) {
-        if (key.toLowerCase() !== "set-cookie") reply.header(key, value);
-      }
-      const cookies = response.headers.getSetCookie();
-      if (cookies.length) reply.header("set-cookie", cookies);
-      const answer = response.body ? Buffer.from(await response.arrayBuffer()) : null;
+      const response = await auth.handler(toWebRequest(request, url, headers));
+      const answer = await fromWebResponse(reply, response);
       const error =
         answer && response.status >= 400
           ? authErrorBody(answer, response.status, request.id)

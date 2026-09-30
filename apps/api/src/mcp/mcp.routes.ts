@@ -20,7 +20,7 @@ import {
   updateContext,
 } from "@repo/nest-common";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { contextFor, toHeaders } from "../http-context";
+import { contextFor, fromWebResponse, toWebRequest } from "../http-context";
 import { createMcpServer, type McpServerDependencies } from "./mcp.server";
 import type { TokenVerifierOptions } from "./mcp.tokens";
 import { createTokenVerifier } from "./mcp.tokens";
@@ -90,13 +90,8 @@ export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
       });
       await server.connect(transport);
       try {
-        const body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : undefined;
         const response = await transport.handleRequest(
-          new Request(new URL(request.url, options.siteUrl), {
-            method: request.method,
-            headers: toHeaders(request),
-            ...(body && { body }),
-          }),
+          toWebRequest(request, new URL(request.url, options.siteUrl)),
           {
             authInfo: {
               token: caller.token,
@@ -106,9 +101,7 @@ export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
             },
           },
         );
-        reply.status(response.status);
-        for (const [key, value] of response.headers) reply.header(key, value);
-        return reply.send(response.body ? Buffer.from(await response.arrayBuffer()) : null);
+        return reply.send(await fromWebResponse(reply, response));
       } finally {
         await server.close();
       }
