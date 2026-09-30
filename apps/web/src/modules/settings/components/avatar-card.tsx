@@ -75,8 +75,10 @@ export function AvatarCard() {
 
   if (!system?.features.files || !me) return null;
 
-  async function choose(chosen: File | undefined) {
-    if (input.current) input.current.value = "";
+  async function choose(picker: HTMLInputElement) {
+    const chosen = picker.files?.[0];
+    // Cleared, so choosing the same file again still counts as a change.
+    picker.value = "";
     if (!chosen) return;
     setProblem(null);
     const refused = checkUpload("avatar", chosen);
@@ -115,7 +117,7 @@ export function AvatarCard() {
               hidden
               accept={uploadPurposes.avatar.types.join(",")}
               disabled={busy}
-              onChange={(event) => void choose(event.target.files?.[0])}
+              onChange={(event) => void choose(event.currentTarget)}
             />
             <Button
               variant="outline"
