@@ -73,11 +73,11 @@ export const COMMON_ERRORS = [
   "TIMEOUT",
 ] as const satisfies readonly ErrorCode[];
 
-/** What a call in a workspace adds: none active, or an API key without the scope. */
-export const WORKSPACE_ERRORS = [
-  "NO_ACTIVE_ORGANIZATION",
-  "API_KEY_SCOPE_MISSING",
-] as const satisfies readonly ErrorCode[];
+/**
+ * What a call in a workspace adds: none active. A module with procedures API keys may
+ * call adds API_KEY_SCOPE_MISSING too, for a key without the scope.
+ */
+export const WORKSPACE_ERRORS = ["NO_ACTIVE_ORGANIZATION"] as const satisfies readonly ErrorCode[];
 
 /**
  * A limit on how often a procedure may be called, applied by the API's request pipeline

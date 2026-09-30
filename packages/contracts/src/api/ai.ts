@@ -10,8 +10,8 @@ import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf(
   ...WORKSPACE_ERRORS,
+  "API_KEY_SCOPE_MISSING",
   "FEATURE_DISABLED",
-  "ENTITLEMENT_REQUIRED",
   "UPSTREAM_UNAVAILABLE",
   "DOCUMENT_NOT_FOUND",
   "AI_BUDGET_EXCEEDED",

@@ -4,7 +4,12 @@ import { page, pageInput } from "../pagination";
 import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
-const errors = errorsOf(...WORKSPACE_ERRORS, "TODO_NOT_FOUND", "TODO_VERSION_CONFLICT");
+const errors = errorsOf(
+  ...WORKSPACE_ERRORS,
+  "API_KEY_SCOPE_MISSING",
+  "TODO_NOT_FOUND",
+  "TODO_VERSION_CONFLICT",
+);
 
 export const TODO_TITLE_MAX_LENGTH = 200;
 

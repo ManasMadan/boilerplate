@@ -1,11 +1,16 @@
 /**
- * Rules every procedure of the router follows, checked over all of them: it checks who's
- * calling (a session, or an API key where the contract allows one), unless it's one of
- * the public endpoints listed here, each with its reason.
+ * Rules every procedure of the router follows, checked over all of them:
+ *
+ *   - it checks who's calling (a session, or an API key where the contract allows one),
+ *     unless it's one of the public endpoints listed here, each with its reason;
+ *   - the error codes its contract declares are ones its code can throw (the other way
+ *     round, an undeclared code, is refused at runtime outside production: strictErrors
+ *     in rpc.routes.ts).
  */
+import { readdirSync, readFileSync } from "node:fs";
 import type { INestApplication } from "@nestjs/common";
 import { call, isProcedure } from "@orpc/server";
-import type { ProcedureMeta } from "@repo/contracts/api";
+import { COMMON_ERRORS, contract, type ProcedureMeta } from "@repo/contracts/api";
 import { isAppError, type Redis } from "@repo/nest-common";
 import { describe, expect, it } from "vitest";
 import type { Auth } from "../auth/auth";
@@ -75,5 +80,62 @@ describe("authorization", () => {
       const { rateLimit } = (procedure as Procedure)["~orpc"].meta as ProcedureMeta;
       expect(rateLimit === undefined || "exempt" in rateLimit, path).toBe(true);
     }
+  });
+});
+
+describe("declared errors", () => {
+  const modules = new URL("../modules/", import.meta.url);
+  const sourceOf = (dir: string) =>
+    readdirSync(new URL(`${dir}/`, modules), { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+      .map((file) => readFileSync(new URL(`${dir}/${file}`, modules), "utf8"))
+      .join("\n");
+  /** The module's own source and that of the modules it imports, transitively. */
+  function reachable(dir: string, seen = new Set<string>()): string {
+    seen.add(dir);
+    const source = sourceOf(dir);
+    const imported = [...source.matchAll(/from "\.\.\/([\w-]+)"/g)].map(
+      (match) => match[1] as string,
+    );
+    return [
+      source,
+      ...imported.filter((name) => !seen.has(name)).map((name) => reachable(name, seen)),
+    ].join("\n");
+  }
+
+  // Codes the builders throw (procedures.ts), and the routers that use such a builder.
+  const BUILDER_CODES: Record<string, RegExp> = {
+    NO_ACTIVE_ORGANIZATION: /\b(inOrg|orgAdmin|freshAdmin)\./,
+    FRESH_SESSION_REQUIRED: /\b(fresh|freshAdmin)\.|requireFresh\(/,
+  };
+  const common = new Set<string>(COMMON_ERRORS);
+  const thrownIn = (source: string) =>
+    new Set([...source.matchAll(/"([A-Z][A-Z_]+)"/g)].map((match) => match[1] as string));
+
+  it("knows every code the builders throw", () => {
+    const source = readFileSync(new URL("./procedures.ts", import.meta.url), "utf8");
+    const own = [...thrownIn(source)].filter((code) => !common.has(code));
+    expect(own.sort()).toEqual(Object.keys(BUILDER_CODES).sort());
+  });
+
+  it("are codes each module can throw, beyond the ones any call can fail with", () => {
+    const unthrown: string[] = [];
+    for (const [name, procedures] of Object.entries(contract)) {
+      const dir = name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+      const source = reachable(dir);
+      const thrown = thrownIn(source);
+      const all = Object.values(procedures);
+      // An API key without the procedure's scope (modules/api-keys).
+      if (all.some((procedure) => (procedure["~orpc"].meta as ProcedureMeta).apiKeyScope))
+        thrown.add("API_KEY_SCOPE_MISSING");
+      for (const [code, builders] of Object.entries(BUILDER_CODES))
+        if (builders.test(source)) thrown.add(code);
+      const declared = new Set(
+        all.flatMap((procedure) => Object.keys(procedure["~orpc"].errorMap)),
+      );
+      for (const code of declared)
+        if (!common.has(code) && !thrown.has(code)) unthrown.push(`${name}: ${code}`);
+    }
+    expect(unthrown).toEqual([]);
   });
 });

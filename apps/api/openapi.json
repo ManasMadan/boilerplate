@@ -8928,34 +8928,6 @@
                           "const": true
                         },
                         "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
                           "const": "FRESH_SESSION_REQUIRED"
                         },
                         "status": {
@@ -10097,34 +10069,6 @@
                           "const": true
                         },
                         "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
                           "const": "FRESH_SESSION_REQUIRED"
                         },
                         "status": {
@@ -11108,34 +11052,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -16274,69 +16190,6 @@
               }
             }
           },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
           "403": {
             "description": "403",
             "content": {
@@ -17444,69 +17297,6 @@
                         "message": {
                           "type": "string",
                           "default": "UNAUTHENTICATED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -18722,69 +18512,6 @@
               }
             }
           },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
           "403": {
             "description": "403",
             "content": {
@@ -19841,69 +19568,6 @@
                         "message": {
                           "type": "string",
                           "default": "UNAUTHENTICATED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -21154,69 +20818,6 @@
                         "message": {
                           "type": "string",
                           "default": "UNAUTHENTICATED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -23572,34 +23173,6 @@
                           "const": true
                         },
                         "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
                           "const": "FRESH_SESSION_REQUIRED"
                         },
                         "status": {
@@ -24862,34 +24435,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -26192,34 +25737,6 @@
                           "const": true
                         },
                         "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
                           "const": "FRESH_SESSION_REQUIRED"
                         },
                         "status": {
@@ -27383,34 +26900,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -28618,34 +28107,6 @@
                           "const": true
                         },
                         "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
                           "const": "FRESH_SESSION_REQUIRED"
                         },
                         "status": {
@@ -29811,34 +29272,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -31160,34 +30593,6 @@
                           "const": true
                         },
                         "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
                           "const": "FRESH_SESSION_REQUIRED"
                         },
                         "status": {
@@ -32353,34 +31758,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -33588,34 +32965,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -43409,62 +42758,6 @@
                       "type": "object",
                       "properties": {
                         "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
                           "const": false
                         },
                         "code": {
@@ -44578,62 +43871,6 @@
                         "message": {
                           "type": "string",
                           "default": "Forbidden"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -45781,62 +45018,6 @@
                       "type": "object",
                       "properties": {
                         "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
                           "const": false
                         },
                         "code": {
@@ -46953,69 +46134,6 @@
               }
             }
           },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
           "403": {
             "description": "403",
             "content": {
@@ -47065,34 +46183,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -48123,69 +47213,6 @@
               }
             }
           },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
           "403": {
             "description": "403",
             "content": {
@@ -48235,34 +47262,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -49271,69 +48270,6 @@
               }
             }
           },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
           "403": {
             "description": "403",
             "content": {
@@ -49383,34 +48319,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -50464,69 +49372,6 @@
               }
             }
           },
-          "402": {
-            "description": "402",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "ENTITLEMENT_REQUIRED"
-                        },
-                        "status": {
-                          "const": 402
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "ENTITLEMENT_REQUIRED"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": false
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "number"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "data": {}
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
           "403": {
             "description": "403",
             "content": {
@@ -50576,34 +49421,6 @@
                         "message": {
                           "type": "string",
                           "default": "NO_ACTIVE_ORGANIZATION"
-                        },
-                        "data": {
-                          "$ref": "#/components/schemas/ErrorData"
-                        }
-                      },
-                      "required": [
-                        "defined",
-                        "code",
-                        "status",
-                        "message",
-                        "data"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "defined": {
-                          "const": true
-                        },
-                        "code": {
-                          "const": "API_KEY_SCOPE_MISSING"
-                        },
-                        "status": {
-                          "const": 403
-                        },
-                        "message": {
-                          "type": "string",
-                          "default": "API_KEY_SCOPE_MISSING"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"

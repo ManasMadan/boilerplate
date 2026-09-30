@@ -10,7 +10,6 @@ const errors = errorsOf(
   "UPSTREAM_UNAVAILABLE",
   "ALREADY_SUBSCRIBED",
   "NO_SUBSCRIPTION",
-  "ENTITLEMENT_REQUIRED",
 );
 
 export const entitlementsSchema = z.object({

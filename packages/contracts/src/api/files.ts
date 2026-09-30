@@ -6,11 +6,10 @@
  */
 import * as z from "zod";
 import { fileRejections, fileStatuses, uploadPurposeNames } from "../files";
-import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf(
-  ...WORKSPACE_ERRORS,
   "FEATURE_DISABLED",
   "FILE_NOT_FOUND",
   "FILE_NOT_READY",

@@ -4,7 +4,7 @@ import { page, pageInput } from "../pagination";
 import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
-const errors = errorsOf(...WORKSPACE_ERRORS);
+const errors = errorsOf(...WORKSPACE_ERRORS, "API_KEY_SCOPE_MISSING");
 
 export const auditEntrySchema = z.object({
   id: z.uuid(),
