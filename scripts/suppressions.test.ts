@@ -42,7 +42,15 @@ describe("suppressions", () => {
     mkdirSync(join(root, "docs"));
     writeFileSync(
       join(root, "docs/testing.md"),
-      "Prose `apps/x.ts` isn't a row.\n\n| File | Why |\n|---|---|\n| `apps/notifications/test/fake-push.ts:25` | untyped module |\n",
+      [
+        "## Coverage exceptions",
+        "Prose `apps/x.ts` isn't a row.",
+        "| File | Why |",
+        "|---|---|",
+        "| `apps/notifications/test/fake-push.ts:25` | untyped module |",
+        "## Not tested automatically",
+        "| `apps/y.test.ts` | a table that allows nothing |",
+      ].join("\n"),
     );
     expect(listedFiles(root)).toEqual(new Set(["apps/notifications/test/fake-push.ts"]));
     expect(listedFiles(mkdtempSync(join(tmpdir(), "none-")))).toEqual(new Set());

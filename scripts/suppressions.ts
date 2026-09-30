@@ -48,13 +48,23 @@ export function addedSuppressions(before: string, after: string): string[] {
     .map(([name]) => name);
 }
 
-/** The files the exceptions tables in docs/testing.md name (a backticked path in a row). */
+/** The sections of docs/testing.md whose tables allow a suppression. */
+export const EXCEPTION_SECTIONS = ["## Coverage exceptions", "## Skipped tests"];
+
+/**
+ * The files the exceptions tables in docs/testing.md name (a backticked path in a row
+ * under one of EXCEPTION_SECTIONS; other tables in the file allow nothing).
+ */
 export function listedFiles(root: string): Set<string> {
   const doc = join(root, "docs/testing.md");
   if (!existsSync(doc)) return new Set();
+  let inExceptions = false;
   const rows = readFileSync(doc, "utf8")
     .split("\n")
-    .filter((line) => line.startsWith("|"));
+    .filter((line) => {
+      if (line.startsWith("## ")) inExceptions = EXCEPTION_SECTIONS.includes(line.trim());
+      return inExceptions && line.startsWith("|");
+    });
   const paths = rows.flatMap((row) =>
     [...row.matchAll(/`([^`\s]+\.[a-z]+)(:\d+)?`/g)].map((m) => m[1] as string),
   );
