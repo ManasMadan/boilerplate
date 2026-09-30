@@ -142,6 +142,24 @@ To add a tool: give it a scope in `packages/contracts/src/mcp.ts` (and the API's
 policy in `apps/api/src/auth/auth.ts`), register it in `create_mcp_server` behind that
 scope, and cover it in `tests/test_mcp.py`.
 
+### Why there are two MCP servers
+
+The API has its own MCP server (`apps/api/src/mcp`, at `/api/mcp`) for the TypeScript
+features, and this one serves the documents. We keep them apart on purpose: each
+language owns the tools over its own data. The document tools are this service's
+retrieval (embeddings, pgvector, the relevance floor) running under the same row-level
+security as its routes; served from the API they'd be a second HTTP hop through
+`packages/ai-client` for every call, and the API would grow tool schemas for data it
+doesn't own. Each server is its own OAuth resource with its own audience, so a token
+for one can't be replayed against the other, and each can be deployed, scaled and rate
+limited with its service.
+
+The cost is that an MCP client connects twice (two resources, two gateway routes), and
+the token checks exist in both languages. Both verify tokens the same way against the
+API's JWKS and `auth.mcp_grant_active`, and `tests/test_mcp.py` and the API's OAuth
+integration test cover each side. If one connection becomes the requirement, move the
+document tools into the API's server behind `@repo/ai-client` and delete this one.
+
 ## Database models
 
 Prisma owns the DDL (`packages/db/prisma/schema/ai.prisma`). `app/db/models.py` describes
