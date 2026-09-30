@@ -806,7 +806,7 @@ describe("notifications service", () => {
 
   /** A time zone where it's past the digest hour now, and one where it isn't yet. */
   async function digestZones() {
-    const { localClock } = await import("../src/digest/local-clock");
+    const { wallClock: localClock } = await import("../src/wall-clock");
     const zones = [
       "Pacific/Pago_Pago",
       "Pacific/Honolulu",

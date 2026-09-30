@@ -54,7 +54,7 @@ import {
 } from "@repo/contracts/mcp";
 import { parseOrgRole } from "@repo/contracts/roles";
 import { type Db, transaction } from "@repo/db";
-import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
+import { isLocale, isTimeZone, type Locale, negotiateLocale } from "@repo/i18n";
 import type { JobMeta, Producer } from "@repo/jobs";
 import { currentContext } from "@repo/nest-common";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
@@ -785,13 +785,3 @@ export function createAuth({
 }
 
 export type Auth = ReturnType<typeof createAuth>;
-
-function isTimeZone(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}

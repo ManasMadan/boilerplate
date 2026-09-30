@@ -33,7 +33,7 @@ import { DeliveryLog } from "../dispatch/delivery-log";
 import { DeliveryPolicy } from "../dispatch/policy";
 import { RecipientResolver } from "../dispatch/recipients";
 import { env } from "../env";
-import { localClock } from "./local-clock";
+import { wallClock } from "../wall-clock";
 
 // A few minutes past the hour, away from the top-of-the-hour rush.
 const SCHEDULE = "5 * * * *";
@@ -78,7 +78,7 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
       select: { id: true, timezone: true },
     });
     const due = users.flatMap((user) => {
-      const { hour, date } = localClock(user.timezone ?? "UTC", now);
+      const { hour, date } = wallClock(user.timezone, now);
       return hour >= env.DIGEST_HOUR ? [{ userId: user.id, date }] : [];
     });
     if (due.length > 0) {
