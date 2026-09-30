@@ -4,12 +4,16 @@ import { checksFor, touchesEverything } from "./checks";
 const labels = (changed: string[]) => checksFor(changed).map((check) => check.label);
 
 describe("the Stop hook's checks", () => {
-  it("run Biome on changed code and turbo for the packages", () => {
+  it("run Biome on changed code, turbo for the packages, and the changed lines' unit coverage", () => {
     expect(labels(["apps/api/src/main.ts"])).toEqual([
       "Biome on the changed files",
       "lint, types and unit tests of the affected packages",
+      "unit tests and the coverage of the changed lines",
       "knip",
     ]);
+    expect(labels(["apps/api/test/x.test.ts"])).not.toContain(
+      "unit tests and the coverage of the changed lines",
+    );
     const biome = checksFor(["apps/api/src/main.ts", "docs/x.md"])[0];
     expect(biome?.command.slice(-1)).toEqual(["apps/api/src/main.ts"]);
   });
@@ -18,15 +22,14 @@ describe("the Stop hook's checks", () => {
     expect(labels(["scripts/lib.ts"])).toEqual([
       "Biome on the changed files",
       "types of scripts/",
-      "tests of scripts/ and the hooks",
+      "unit tests and the coverage of the changed lines",
       "knip",
     ]);
     const hooks = checksFor([".claude/hooks/lib.ts"]);
     expect(hooks.map((check) => check.command.join(" "))).toContain("bunx tsc -p .claude/hooks");
     expect(hooks.find((check) => check.command[0] === "bun")?.command).toEqual([
       "bun",
-      "test",
-      "./.claude/hooks/",
+      "scripts/unit-coverage.ts",
     ]);
   });
 

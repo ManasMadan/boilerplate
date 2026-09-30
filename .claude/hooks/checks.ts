@@ -11,6 +11,7 @@ export interface Check {
 /** Files turbo's `--affected` can't see: nothing in a workspace package owns them. */
 const outsidePackages = (file: string) => !/^(apps|packages)\//.test(file);
 const LINTED = /\.(ts|tsx|js|mjs|cjs|json|jsonc|css)$/;
+const UNIT_TESTED = /^(apps|packages)\/[^/]+\/src\/.+\.tsx?$/;
 
 /** The checks for `changed` (repo-relative paths that still exist), cheapest first. */
 export function checksFor(changed: string[]): Check[] {
@@ -51,16 +52,12 @@ export function checksFor(changed: string[]): Check[] {
   if (hooks) {
     checks.push({ label: "types of the hooks", command: ["bunx", "tsc", "-p", ".claude/hooks"] });
   }
-  if (scripts || hooks) {
+  // Runs the unit tests of scripts/, the hooks and the packages that own a changed file,
+  // with coverage, and fails on a changed line they leave uncovered.
+  if (scripts || hooks || changed.some((file) => UNIT_TESTED.test(file))) {
     checks.push({
-      label: "tests of scripts/ and the hooks",
-      command: [
-        "bun",
-        "test",
-        // Paths, not names: `bun test` treats a bare word as a filter and skips dot folders.
-        ...(scripts ? ["./scripts/"] : []),
-        ...(hooks ? ["./.claude/hooks/"] : []),
-      ],
+      label: "unit tests and the coverage of the changed lines",
+      command: ["bun", "scripts/unit-coverage.ts"],
     });
   }
   // Unused files, exports and dependencies: whenever code or a manifest changed.

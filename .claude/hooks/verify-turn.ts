@@ -1,8 +1,9 @@
 /**
  * Stop: if this turn changed files, run the fast checks on what changed (checks.ts:
  * Biome on the changed files; lint, types and unit tests of the affected packages; types
- * and tests of scripts/ and the hooks when they changed, which turbo can't see; knip)
- * and send Claude back to fix what fails. Guard rails:
+ * of scripts/ and the hooks when they changed, which turbo can't see; the unit tests of
+ * what changed with coverage, failing on a changed line they don't cover
+ * (scripts/unit-coverage.ts); knip) and send Claude back to fix what fails. Guard rails:
  * - skipped when the working tree's content is what it was at the prompt (turn-start.ts);
  * - capped at 60 seconds: a timeout tells Claude which checks didn't run and blocks until
  *   it has run them, so a slow check is never a silent pass;

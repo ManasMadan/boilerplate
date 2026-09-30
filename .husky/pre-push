@@ -5,5 +5,8 @@ bunx tsc -p scripts
 bunx tsc -p .claude/hooks
 bunx tsc -p turbo/generators
 bun test ./scripts/ ./.claude/hooks/
+# Every line the branch changes in a unit-tested file is covered by its unit tests (CI's
+# diff-cover checks the rest against every suite merged).
+bun scripts/unit-coverage.ts --branch
 # Unused files, exports and dependencies (knip): quick, and CI fails on them.
 bun run lint:unused
