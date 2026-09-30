@@ -117,6 +117,17 @@ describe("every workflow", () => {
       });
   });
 
+  it("pins every action by commit, with its version beside it", () => {
+    const unpinned = files.flatMap((file) =>
+      readFileSync(join(ROOT, ".github/workflows", file), "utf8")
+        .split("\n")
+        .filter((line) => /^\s*(- )?uses: (?!\.\/)/.test(line))
+        .filter((line) => !/@[0-9a-f]{40} # v?\d\S*$/.test(line))
+        .map((line) => `${file}: ${line.trim()}`),
+    );
+    expect(unpinned).toEqual([]);
+  });
+
   it("gives every job a timeout, so a hung one doesn't burn six hours", () => {
     const missing = files.flatMap((file) =>
       Object.entries(workflow(file).jobs)
@@ -124,6 +135,42 @@ describe("every workflow", () => {
         .map(([name]) => `${file}: ${name}`),
     );
     expect(missing).toEqual([]);
+  });
+});
+
+describe("claude-review.yml", () => {
+  const { on, jobs } = workflow("claude-review.yml");
+  const review = jobs.review as Job & { permissions?: Record<string, string> };
+  const action = review.steps?.find((step) =>
+    step.uses?.startsWith("anthropics/claude-code-action@"),
+  );
+  const args = String(action?.with?.claude_args);
+
+  it("reviews only the repository's own pull requests, once it has opted in", () => {
+    expect(Object.keys(on)).toEqual(["pull_request"]);
+    expect(review.if).toContain("vars.CLAUDE_REVIEW == 'true'");
+    expect(review.if).toContain(
+      "github.event.pull_request.head.repo.full_name == github.repository",
+    );
+  });
+
+  it("can comment and nothing else", () => {
+    expect(review.permissions).toEqual({ contents: "read", "pull-requests": "write" });
+    expect(args).toContain("--permission-mode dontAsk");
+    expect(args).toMatch(/--max-turns \d+/);
+    const tools = /--allowedTools "([^"]+)"/.exec(args)?.[1]?.split(",") ?? [];
+    expect(tools).toContain("Agent");
+    for (const tool of tools)
+      expect(tool).toMatch(
+        /^(Read|Glob|Grep|Agent|Bash\((git (diff|log|show)|gh pr (comment|diff|view)) \*\))$/,
+      );
+  });
+
+  it("asks for the repository's own reviewer agents", () => {
+    for (const agent of ["reviewer", "security-reviewer", "migration-reviewer"]) {
+      expect(String(action?.with?.prompt)).toContain(`\`${agent}\``);
+      expect(readdirSync(join(ROOT, ".claude/agents"))).toContain(`${agent}.md`);
+    }
   });
 });
 
@@ -160,6 +207,7 @@ describe("the GitHub-only parts", () => {
     ["actions/dependency-review-action", "dependency review"],
     ["ghcr.io", "GHCR"],
     ["actions/create-github-app-token", "the GitHub App"],
+    ["anthropics/claude-code-action", "`claude-code-action`"],
   ];
 
   it("are each in docs/deploy.md with what replaces them", () => {

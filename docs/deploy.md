@@ -184,5 +184,6 @@ replacement on another host:
 | CodeQL, code scanning, dependency review | security.yml's checks and the ruleset's gate | Semgrep, Trivy and OSV-Scanner run as failing jobs |
 | GHCR (`ghcr.io`) | the image registry | Harbor, Zot, Forgejo's or GitLab's registry |
 | the GitHub App (`create-github-app-token`) | the staging bump past the ruleset, Renovate | a bot account's token |
+| `claude-code-action` | the optional Claude review of pull requests (claude-review.yml) | `claude -p` with the same prompt, `--permission-mode dontAsk` and tool list in any CI job |
 | `gh` in `scripts/release.ts` | a release's CI runs, opening the promotion pull request | `tea` (Forgejo) or `glab` (GitLab) |
 | Argo CD's `pullRequest.github` generator | one preview per labelled pull request | its `gitea` and `gitlab` generators |

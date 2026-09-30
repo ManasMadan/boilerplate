@@ -69,6 +69,9 @@ devcontainer has only OpenTofu, kubectl and Helm of them.
       key in that cluster's `argocd-notifications-secret` (deploy/README.md).
 - [ ] `TOFU_TARGETS`, a repository variable listing the environments that get a plan
       on infrastructure pull requests, e.g. `["staging", "production"]`. Unset, no plans.
+- [ ] Optional: a Claude Code review on every pull request (`claude-review.yml`, the
+      repository's own reviewer agents, one comment, never a required check). Set the
+      `CLAUDE_REVIEW` repository variable to `true` and the `ANTHROPIC_API_KEY` secret.
 - [ ] Under an organization rather than a personal account, the gitleaks action in
       `security.yml` needs a license: get a free one at gitleaks.io, store it as the
       `GITLEAKS_LICENSE` repository secret, and pass it to the step
