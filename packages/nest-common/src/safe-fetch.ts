@@ -8,7 +8,9 @@
  *   address (loopback, private, link-local, cloud metadata, CGNAT, multicast; IPv4 and
  *   IPv6, including IPv4-mapped IPv6), then connects to exactly the address it checked,
  *   so a DNS answer cannot change between check and connect;
- * - follows redirects itself (at most 3), re-checking each hop;
+ * - follows redirects itself (at most 3), re-checking each hop, or not at all with
+ *   `followRedirects: false` (webhook delivery: a redirect would carry the body and its
+ *   signature somewhere else, and Standard Webhooks senders don't follow them);
  * - requires https unless `allowHttp` is set, and caps time and response size.
  *
  * The network layer adds a second wall: service egress NetworkPolicies only allow the
@@ -27,6 +29,8 @@ export interface SafeFetchOptions {
   timeoutMs?: number;
   maxResponseBytes?: number;
   allowHttp?: boolean;
+  /** When false, a redirect is the answer (its status), not followed. Default true. */
+  followRedirects?: boolean;
   /**
    * Exact private addresses to permit, for tests and local development only (e.g.
    * `["127.0.0.1"]` for a local receiver). Everything else private stays blocked.
@@ -78,6 +82,7 @@ export async function safeFetch(
     timeoutMs = 10_000,
     maxResponseBytes = 1_000_000,
     allowHttp = false,
+    followRedirects = true,
     allowedPrivateAddresses = [],
   } = options;
   const dispatcher = new Agent({ connect: { lookup: guardedLookup(allowedPrivateAddresses) } });
@@ -107,7 +112,7 @@ export async function safeFetch(
       });
 
       const location = response.headers.get("location");
-      if (response.status >= 300 && response.status < 400 && location) {
+      if (followRedirects && response.status >= 300 && response.status < 400 && location) {
         await response.body?.cancel();
         current = new URL(location, current);
         continue;

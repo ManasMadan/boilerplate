@@ -70,7 +70,9 @@ Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.process
 Most queues retry 5 times with exponential backoff from 2 s. `events-realtime` retries 3
 times, 1 s apart (a nudge is worthless later). `webhook-deliveries` retries 8 times on
 the Standard Webhooks schedule (`WEBHOOK_RETRY_DELAYS_MS`: 5 s, 5 min, 30 min, 2 h,
-5 h, 10 h, 10 h), about a day in all. `maintenance` retries 3 times from a minute.
+5 h, 10 h, 10 h), about a day in all; a delivery answered with a redirect counts as
+failed and isn't followed, since that would send the signed body somewhere the customer
+didn't register. `maintenance` retries 3 times from a minute.
 
 A job that fails validation or runs out of attempts stays in BullMQ's failed set for
 its queue's `removeOnFail` age: an hour on `notifications-critical` (its payloads can

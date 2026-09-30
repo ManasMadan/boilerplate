@@ -92,6 +92,9 @@ export class DeliveryService {
         maxResponseBytes: 64 * 1024,
         allowHttp: env.NODE_ENV !== "production",
         allowedPrivateAddresses: env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES,
+        // A redirect is a failed delivery: following it would send the body and its
+        // signature to wherever it points.
+        followRedirects: false,
       });
       status = response.status;
     } catch (cause) {

@@ -29,11 +29,17 @@ describe("isPublicAddress", () => {
 describe("safeFetch", () => {
   let server: Server;
   let base: string;
+  let hitElsewhere = 0;
 
   beforeAll(async () => {
     server = createServer((req, res) => {
       if (req.url === "/redirect-internal") {
         res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data" }).end();
+      } else if (req.url === "/redirect-home") {
+        res.writeHead(307, { location: "/elsewhere" }).end();
+      } else if (req.url === "/elsewhere") {
+        hitElsewhere++;
+        res.end("followed");
       } else if (req.url === "/big") {
         res.end("x".repeat(2_000));
       } else {
@@ -57,6 +63,19 @@ describe("safeFetch", () => {
     await expect(safeFetch("http://example.com/")).rejects.toMatchObject({
       code: "DESTINATION_NOT_ALLOWED",
     });
+  });
+
+  it("answers with the redirect itself when told not to follow it", async () => {
+    const local = { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1"] };
+    const stopped = await safeFetch(`${base}/redirect-home`, {
+      ...local,
+      method: "POST",
+      body: "signed",
+      followRedirects: false,
+    });
+    expect(stopped.status).toBe(307);
+    expect(hitElsewhere).toBe(0);
+    expect((await safeFetch(`${base}/redirect-home`, local)).body).toBe("followed");
   });
 
   it("re-checks every redirect hop", async () => {

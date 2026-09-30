@@ -33,6 +33,7 @@ let deliveries: Deliveries;
 // ---------------------------------------------------------------------------- receiver
 
 interface Received {
+  path: string;
   headers: IncomingHttpHeaders;
   body: string;
 }
@@ -152,7 +153,12 @@ beforeAll(async () => {
       body += chunk;
     });
     request.on("end", () => {
-      received.push({ headers: request.headers, body });
+      received.push({ path: request.url ?? "", headers: request.headers, body });
+      // An endpoint that moved: it points the sender somewhere else.
+      if (request.url === "/moved") {
+        response.writeHead(307, { location: "/hook" }).end();
+        return;
+      }
       response.statusCode = answers.shift() ?? 200;
       response.end("ok");
     });
@@ -295,6 +301,14 @@ describe("outbound deliveries", () => {
       attempts: 2,
       last_status: 503,
     });
+  });
+
+  it("treats a redirect as a failed delivery, and never sends the signed body on", async () => {
+    const { orgId, endpointId } = await endpoint({ url: receiverUrl.replace("/hook", "/moved") });
+    const deliveryId = await deliveries.createTest(orgId, endpointId);
+    expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("failed");
+    expect(await delivery(deliveryId)).toMatchObject({ status: "failed", last_status: 307 });
+    expect(received.map((request) => request.path)).toEqual(["/moved"]);
   });
 
   it("disables an endpoint that has failed for longer than the limit, and says so", async () => {
