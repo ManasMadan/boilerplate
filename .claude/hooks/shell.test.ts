@@ -27,6 +27,7 @@ describe("the files a command writes", () => {
       ["notes.md", "done.txt"],
     ],
     ["sudo tee /etc/hosts < file", ["/etc/hosts"]],
+    ["echo hi > my\\ notes.md", ["my notes.md"]],
   ])("%s", (command, expected) => {
     expect(writeTargets(command)).toEqual(expected);
   });

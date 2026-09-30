@@ -13,7 +13,11 @@ paths:
   say how and let the user decide.
 - Hooks are TypeScript run with Bun, one file per hook event plus shared code in
   `lib.ts`, `checks.ts`, `file-rules.ts`, `shell.ts` and `suppressions.ts`. Logic lives
-  in those shared modules with a `*.test.ts` beside each. `tsc -p .claude/hooks` runs in
+  in those shared modules with a `*.test.ts` beside each. Each hook exports a handler
+  that takes the event, and what it would run or check as parameters with the real ones
+  as defaults, and returns its answer; `import.meta.main` is one line that calls it,
+  usually `process.exit(await runHook(handler))` (`runHook` in lib.ts reads the event
+  from stdin and writes the answer). Tests call the handler with stand-ins. `tsc -p .claude/hooks` runs in
   `bun run check-types`, and `bun test ./.claude/hooks/` in the pre-push hook and CI. A hook fails
   closed where a wrong "allow" is costly, and every message it sends says what to do.
 - Skills are `.claude/skills/<name>/SKILL.md`: frontmatter, then numbered steps with the

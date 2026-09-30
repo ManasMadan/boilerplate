@@ -3,6 +3,7 @@
  * with JSON on stdout (https://code.claude.com/docs/en/hooks). Keep them fast: they run
  * on every matching tool call.
  */
+import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { $ } from "bun";
@@ -26,20 +27,41 @@ export interface HookInput {
   source?: string;
 }
 
+/** What a hook answers: JSON for Claude Code, or nothing. */
+export type HookOutput = Record<string, unknown> | undefined;
+
+interface Streams {
+  /** Where the event comes from, and the answer and a guard's refusal go. */
+  stdin?: { text(): Promise<string> };
+  stdout?: { write(text: string): unknown };
+  stderr?: { write(text: string): unknown };
+}
+
 /**
- * The hook's event. A guard passes `failClosed`: an event it can't read blocks the tool
- * call (exit 2, the reason on stderr for Claude) instead of letting it through.
+ * Runs a hook: reads its event from stdin, writes the handler's answer as JSON and
+ * returns the exit code. A guard passes `failClosed`: an event it can't read blocks the
+ * tool call (exit 2, the reason on stderr for Claude) instead of letting it through.
  */
-export async function readInput({ failClosed = false } = {}): Promise<HookInput> {
+export async function runHook(
+  handler: (input: HookInput) => HookOutput | Promise<HookOutput>,
+  {
+    failClosed = false,
+    stdin = Bun.stdin,
+    stdout = process.stdout,
+    stderr = process.stderr,
+  }: Streams & { failClosed?: boolean } = {},
+): Promise<number> {
+  let input: HookInput;
   try {
-    return JSON.parse(await Bun.stdin.text()) as HookInput;
+    input = JSON.parse(await stdin.text()) as HookInput;
   } catch (error) {
     if (!failClosed) throw error;
-    process.stderr.write(
-      `The hook couldn't read its event, so the call is blocked: ${String(error)}`,
-    );
-    process.exit(2);
+    stderr.write(`The hook couldn't read its event, so the call is blocked: ${String(error)}`);
+    return 2;
   }
+  const output = await handler(input);
+  if (output) stdout.write(JSON.stringify(output));
+  return 0;
 }
 
 /** The text an Edit, MultiEdit or Write replaces and writes, for rules that look at it. */
@@ -56,11 +78,6 @@ export function editedText(input: HookInput): { before?: string; after?: string 
     before: join(edits.map((edit) => edit.old_string)),
     after: join([...edits.map((edit) => edit.new_string), tool.content]),
   };
-}
-
-export function respond(output: Record<string, unknown>): never {
-  process.stdout.write(JSON.stringify(output));
-  process.exit(0);
 }
 
 /**
@@ -87,6 +104,21 @@ export const turnFile = (session: string) => join(STATE_DIR, `turn-${session}.tx
 export const stopCountFile = (session: string) => join(STATE_DIR, `stop-${session}.count`);
 /** The tree the Stop hook last asked for the full checks on (so it asks once per state). */
 export const askedFile = (session: string) => join(STATE_DIR, `asked-${session}.txt`);
+
+/** Whether `path` is on `branch`, i.e. it has shipped. */
+export function isShipped(branch: string, path: string, cwd = ROOT): boolean {
+  return spawnSync("git", ["cat-file", "-e", `${branch}:${path}`], { cwd }).status === 0;
+}
+
+/** Runs a command quietly, whatever its exit code; its code and output. */
+export async function shell(command: string[], cwd = ROOT) {
+  const result = await $`${command}`.cwd(cwd).quiet().nothrow();
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
+  };
+}
 
 /** Files changed against HEAD, untracked ones included, that still exist. */
 export async function changedFiles(cwd = ROOT): Promise<string[]> {

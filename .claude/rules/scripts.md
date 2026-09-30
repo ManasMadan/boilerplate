@@ -11,10 +11,14 @@ behind a `package.json` script).
 - Each script starts with a comment saying what it does, how to run it, and what it
   needs. Shared helpers are in `scripts/lib.ts` (`ROOT`, `ok`/`warn`/`fail`, `.env`
   reading and writing): use them, don't copy them.
-- Logic that can be tested is an exported function; the command-line part runs under
-  `if (import.meta.main)`. Tests are `scripts/<name>.test.ts` with `bun:test`, run by
-  `bun test ./scripts/` (the pre-push hook and CI's unit job). Non-trivial logic gets a
-  test.
+- A script's work is an exported function that takes what it touches as parameters,
+  with the real ones as defaults: the command runner (`runSync` in `scripts/lib.ts`),
+  argv, the environment, file paths. `if (import.meta.main)` is one line that calls it
+  and exits with its code. Tests are `scripts/<name>.test.ts` with `bun:test`, run by
+  `bun test ./scripts/` (the pre-push hook and CI's unit job), and never run Docker,
+  kind, psql or anything else that changes the machine: `fakeRun` in
+  `scripts/stand-ins.ts` records the commands instead, `captureOutput` what's printed,
+  and files and git repositories are temporary ones. Non-trivial logic gets a test.
 - Types: `tsc -p scripts` (part of `bun run check-types`); new files are covered by
   `scripts/tsconfig.json` automatically. knip treats every `scripts/*.ts` as an entry.
 - A script never prints a secret and never reads `.env` values it doesn't need;

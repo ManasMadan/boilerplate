@@ -5,8 +5,13 @@
  */
 
 import { rmSync } from "node:fs";
-import { readInput, stopCountFile, treeFingerprint, turnFile } from "./lib";
+import { type HookInput, runHook, stopCountFile, treeFingerprint, turnFile } from "./lib";
 
-const input = await readInput();
-await Bun.write(turnFile(input.session_id), await treeFingerprint());
-rmSync(stopCountFile(input.session_id), { force: true });
+/** Records the tree as the turn starts; answers nothing. */
+export async function turnStart(input: HookInput, fingerprint = treeFingerprint) {
+  await Bun.write(turnFile(input.session_id), await fingerprint());
+  rmSync(stopCountFile(input.session_id), { force: true });
+  return undefined;
+}
+
+if (import.meta.main) process.exit(await runHook(turnStart));
