@@ -85,7 +85,7 @@ export class FilesProcessor extends JobProcessor {
       await this.storage.delete(quarantine);
       return;
     }
-    if (file.status !== "pending" && file.status !== "processing") return;
+    // Pending or processing, the only other statuses (a check constraint says so).
     await db.file.update({ where: { id: fileId }, data: { status: "processing" } });
 
     try {

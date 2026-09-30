@@ -3,7 +3,7 @@
  * `integration` (test/, against real Postgres and Redis from docker compose).
  */
 import { applyTestEnvironment } from "@repo/testing/environment";
-import { coverage } from "@repo/vitest-config";
+import { coverage, decoratorMetadata } from "@repo/vitest-config";
 import { defineConfig } from "vitest/config";
 
 // .env.example's values (not the developer's .env), before global setup and the workers.
@@ -12,6 +12,7 @@ applyTestEnvironment();
 const env = { NODE_ENV: "test", LOG_LEVEL: "silent" };
 
 export default defineConfig({
+  plugins: [decoratorMetadata()],
   test: {
     coverage: coverage(),
     projects: [

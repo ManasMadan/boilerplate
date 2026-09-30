@@ -48,6 +48,15 @@ interface OutboxRow {
 /** Between 1 and 3 seconds: replicas that lost the database together don't return together. */
 const reconnectDelayMs = () => 1_000 + Math.random() * 2_000;
 
+/** Ends a listener connection, which may be gone already (its error then says nothing new). */
+async function closeQuietly(client: pg.Client | undefined) {
+  try {
+    await client?.end();
+  } catch {
+    // Already closed.
+  }
+}
+
 @Injectable()
 export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdown {
   private listener: pg.Client | undefined;
@@ -73,7 +82,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     this.stopped = true;
     clearInterval(this.poller);
     clearTimeout(this.reconnect);
-    await this.listener?.end().catch(() => undefined);
+    await closeQuietly(this.listener);
     // Let the batch in flight commit, so it isn't republished by the next replica.
     await this.draining;
   }
@@ -164,7 +173,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
       this.listener = client;
     } catch (error) {
       this.log.warn({ err: error }, "outbox listener could not connect; polling meanwhile");
-      await client.end().catch(() => undefined);
+      await closeQuietly(client);
       this.scheduleReconnect();
     }
   }
@@ -173,7 +182,7 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     if (this.stopped || this.reconnect) return;
     const previous = this.listener;
     this.listener = undefined;
-    void previous?.end().catch(() => undefined);
+    void closeQuietly(previous);
     this.reconnect = setTimeout(() => {
       this.reconnect = undefined;
       void this.listen();

@@ -3,11 +3,19 @@
  * audit log, retention and the database guarantees behind them.
  */
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { queuePrefix } from "@repo/jobs";
-import { createRedis, S3Storage } from "@repo/nest-common";
+import {
+  createRedis,
+  DATABASE,
+  type Database,
+  type PinoLogger,
+  S3Storage,
+} from "@repo/nest-common";
 import { redisDatabase } from "@repo/nest-common/testing";
 import { Queue } from "bullmq";
 import pg from "pg";
@@ -84,6 +92,27 @@ async function audited(ids: string[]) {
   });
 }
 
+/** A port nothing listens on yet (for the service main.ts starts). */
+async function freePort() {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+/** A job on one of the worker's queues, as BullMQ has it. */
+async function jobIn(queue: string, jobId: string) {
+  const bull = new Queue(queue, {
+    connection: createRedis(process.env.REDIS_URL as string),
+    prefix: queuePrefix(queue),
+  });
+  const job = await bull.getJob(jobId);
+  const state = await job?.getState();
+  await bull.close();
+  return { job, state };
+}
+
 async function eventually<T>(
   fn: () => Promise<T>,
   done: (value: T) => boolean,
@@ -106,6 +135,9 @@ beforeAll(async () => {
     RELAY_POLL_INTERVAL_MS: "200",
     ...S3,
     CLAMAV_URL: process.env.CLAMAV_URL ?? "tcp://localhost:53310",
+    // For the service main.ts starts, at the end.
+    PORT: String(await freePort()),
+    LOAD_SHEDDING: "off",
   });
   const redis = createRedis(process.env.REDIS_URL as string);
   await redis.flushdb();
@@ -223,6 +255,75 @@ describe("outbox relay", () => {
       (published) => published !== null,
     );
     expect(await audited([id as string])).toEqual([id]);
+  });
+});
+
+describe("outbox relay, when things go wrong", () => {
+  const listeners = async () =>
+    (
+      await asRole("postgres", (client) =>
+        client.query<{ pid: number }>(
+          "SELECT pid FROM pg_stat_activity WHERE datname = $1 AND application_name = 'worker-outbox-listener'",
+          [testDb.name],
+        ),
+      )
+    ).rows.map((row) => row.pid);
+
+  it("reconnects its listener after losing the connection", async () => {
+    const [before] = await listeners();
+    expect(before).toBeDefined();
+    await asRole("postgres", (client) => client.query("SELECT pg_terminate_backend($1)", [before]));
+    const after = await eventually(listeners, (pids) => pids.length === 1 && pids[0] !== before);
+    expect(after).toHaveLength(1);
+    expect(after[0]).not.toBe(before);
+    const [id] = await emit(1);
+    expect(
+      await eventually(
+        () => audited([id as string]),
+        (found) => found.length === 1,
+      ),
+    ).toEqual([id]);
+  });
+
+  it("hands on who caused an event, and audits one without a payload", async () => {
+    const [actorId, orgId] = [randomUUID(), randomUUID()];
+    const [id] = await asRole("app_api", async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO app.outbox_event (name, key, payload, org_id, actor_id, request_id)
+         VALUES ('todo.created.v1', 'k', 'null', $1, $2, 'req-7') RETURNING id`,
+        [orgId, actorId],
+      );
+      return inserted.rows.map((row) => row.id);
+    });
+    await eventually(
+      () => audited([id as string]),
+      (found) => found.length === 1,
+    );
+    const [entry] = (
+      await asRole("postgres", (client) =>
+        client.query("SELECT payload, actor_id, request_id FROM audit.audit_log WHERE id = $1", [
+          id,
+        ]),
+      )
+    ).rows;
+    expect(entry).toEqual({ payload: {}, actor_id: actorId, request_id: "req-7" });
+    const { job } = await jobIn("events-audit", id as string);
+    expect(job?.data.meta).toEqual({ requestId: "req-7", userId: actorId, orgId });
+  });
+
+  it("nudges no screen for a todo event without an organization", async () => {
+    const [id] = await emit(1, null);
+    // Audited means relayed: its realtime job was queued in the same step.
+    await eventually(
+      () => audited([id as string]),
+      (found) => found.length === 1,
+    );
+    // Done jobs leave that queue at once; a failed one would stay.
+    const settled = await eventually(
+      () => jobIn("events-realtime", id as string),
+      ({ state }) => state === undefined,
+    );
+    expect(settled.state).toBeUndefined();
   });
 });
 
@@ -477,6 +578,58 @@ describe("maintenance", () => {
     });
   });
 
+  it("runs a task when its schedule comes round", async () => {
+    const queue = new Queue("maintenance", {
+      connection: createRedis(process.env.REDIS_URL as string),
+      prefix: queuePrefix("maintenance"),
+    });
+    const job = await queue.add("session-retention", { meta: {}, payload: {} });
+    const done = await eventually(
+      () => job.isCompleted(),
+      (completed) => completed,
+    );
+    expect(done).toBe(true);
+    await queue.close();
+  });
+
+  it("forgets abandoned uploads, and removes queued objects however many there are", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "red" } })
+      .png()
+      .toBuffer();
+    const userId = randomUUID();
+    const fileId = randomUUID();
+    await asRole("postgres", async (client) => {
+      await client.query(
+        `INSERT INTO auth."user" (id, name, email, updated_at) VALUES ($1, 'U', $2, now())`,
+        [userId, `${userId}@test.dev`],
+      );
+      await client.query(
+        `INSERT INTO files.file (id, user_id, purpose, filename, declared_type, declared_size, created_at, updated_at)
+         VALUES ($1, $2, 'avatar', 'me.png', 'image/png', $3, now() - interval '2 days', now())`,
+        [fileId, userId, png.length],
+      );
+      // More than one batch of objects left behind by deleted files.
+      await client.query(
+        "INSERT INTO files.object_deletion (key) SELECT 'files/gone-' || $1 || '-' || n FROM generate_series(1, 501) n",
+        [fileId],
+      );
+    });
+    await storage.write(`quarantine/${fileId}`, png, "image/png");
+
+    const result = await maintenance.run("files-cleanup");
+    expect(result.stale).toBeGreaterThanOrEqual(1);
+    expect(result.objects).toBeGreaterThanOrEqual(503);
+    expect(await storage.head(`quarantine/${fileId}`)).toBeNull();
+    expect(await maintenance.run("files-cleanup")).toEqual({ stale: 0, objects: 0 });
+
+    // With files off there's no storage to clean.
+    const { FilesCleanup } = await import("../src/files/files.cleanup");
+    expect(await new FilesCleanup(app.get<Database>(DATABASE), null).run()).toEqual({
+      stale: 0,
+      objects: 0,
+    });
+  });
+
   it("registers every schedule with BullMQ once", async () => {
     const queue = new Queue("maintenance", {
       connection: createRedis(process.env.REDIS_URL as string),
@@ -694,6 +847,66 @@ describe("uploads", () => {
     ).toEqual([]);
   });
 
+  it("forgets an upload whose row is gone, and refuses to check files when they're off", async () => {
+    await files.check(randomUUID());
+    const { FilesProcessor } = await import("../src/files/files.processor");
+    const redis = createRedis(process.env.REDIS_URL as string);
+    const off = new FilesProcessor(
+      app.get<Database>(DATABASE),
+      null,
+      { scan: async () => ({ clean: true }) },
+      redis,
+      { info: () => undefined, warn: () => undefined } as unknown as PinoLogger,
+    );
+    await expect(off.check(randomUUID())).rejects.toThrow(/files are off/);
+    await redis.quit();
+  });
+
+  it("leaves an upload for the job's retry when the virus scan can't run", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "red" } })
+      .png()
+      .toBuffer();
+    const { fileId } = await upload(png);
+    const { FilesProcessor } = await import("../src/files/files.processor");
+    const redis = createRedis(process.env.REDIS_URL as string);
+    const clamdDown = new FilesProcessor(
+      app.get<Database>(DATABASE),
+      storage,
+      {
+        scan: async () => {
+          throw new Error("clamd: connection refused");
+        },
+      },
+      redis,
+      { info: () => undefined, warn: () => undefined } as unknown as PinoLogger,
+    );
+    await expect(clamdDown.check(fileId)).rejects.toThrow("clamd: connection refused");
+    await redis.quit();
+    expect(await row(fileId)).toMatchObject({ status: "processing", reject_reason: null });
+    expect(await storage.head(`quarantine/${fileId}`)).not.toBeNull();
+  });
+
+  it("rejects an upload whose object never arrived, or is over the limit", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "red" } })
+      .png()
+      .toBuffer();
+    const missing = await upload(png);
+    await storage.delete(`quarantine/${missing.fileId}`);
+    await files.check(missing.fileId);
+    expect(await row(missing.fileId)).toMatchObject({
+      status: "rejected",
+      reject_reason: "FILE_UNREADABLE",
+    });
+    const huge = Buffer.alloc(5_000_001, 1);
+    const tooLarge = await upload(huge, "image/png");
+    await files.check(tooLarge.fileId);
+    expect(await row(tooLarge.fileId)).toMatchObject({
+      status: "rejected",
+      reject_reason: "FILE_TOO_LARGE",
+    });
+    expect(await storage.head(`quarantine/${tooLarge.fileId}`)).toBeNull();
+  });
+
   it("only the uploader and the worker see a pending upload", async () => {
     const { userId, fileId } = await upload(Buffer.from("x"));
     const seenBy = async (viewer: string) =>
@@ -711,5 +924,17 @@ describe("uploads", () => {
         client.query("UPDATE files.file SET purpose = 'x' WHERE id = $1", [fileId]),
       ),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("main", () => {
+  it("starts the service on its port, answering health checks", async () => {
+    const { app: service } = await import("../src/main");
+    try {
+      const live = await fetch(`http://127.0.0.1:${process.env.PORT}/health/live`);
+      expect(live.status).toBe(200);
+    } finally {
+      await service.close();
+    }
   });
 });
