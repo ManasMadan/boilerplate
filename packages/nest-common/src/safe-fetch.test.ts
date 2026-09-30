@@ -54,7 +54,8 @@ describe("safeFetch", () => {
         res.end("ok");
       }
     });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    // Both loopbacks: `localhost` may resolve to either, or both.
+    await new Promise<void>((resolve) => server.listen(0, "::", resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -73,7 +74,7 @@ describe("safeFetch", () => {
       params: { hostname: "localhost" },
     });
     await expect(
-      safeFetch(`${named}/`, { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1"] }),
+      safeFetch(`${named}/`, { allowHttp: true, allowedPrivateAddresses: ["127.0.0.1", "::1"] }),
     ).resolves.toMatchObject({ status: 200, body: "ok" });
     // A name that doesn't resolve fails as the lookup did.
     await expect(safeFetch("http://unknown-host.invalid/", { allowHttp: true })).rejects.toThrow(
@@ -149,21 +150,35 @@ describe("safeFetch", () => {
 });
 
 describe("guardedLookup", () => {
+  const both = async () => [
+    { address: "127.0.0.1", family: 4 },
+    { address: "::1", family: 6 },
+  ];
   const resolve = (all: boolean, allowlist: string[] = []) =>
     new Promise<unknown[]>((done) => {
-      guardedLookup(allowlist)("localhost", { all }, (...args: unknown[]) => done(args));
+      guardedLookup(allowlist, both)("localhost", { all }, (...args: unknown[]) => done(args));
     });
 
-  it("answers in the shape it was asked for, with only the permitted address", async () => {
-    expect(await resolve(true, ["127.0.0.1"])).toEqual([
-      null,
-      [{ address: "127.0.0.1", family: 4 }],
-    ]);
-    expect(await resolve(false, ["127.0.0.1"])).toEqual([null, "127.0.0.1", 4]);
+  it("answers in the shape it was asked for, with the first address", async () => {
+    const allowlist = ["127.0.0.1", "::1"];
+    expect(await resolve(true, allowlist)).toEqual([null, [{ address: "127.0.0.1", family: 4 }]]);
+    expect(await resolve(false, allowlist)).toEqual([null, "127.0.0.1", 4]);
   });
 
-  it("refuses a name with no permitted address", async () => {
-    const [error] = await resolve(false);
+  it("refuses a name unless every address it answers with is permitted", async () => {
+    expect((await resolve(false))[0]).toMatchObject({ code: "DESTINATION_NOT_ALLOWED" });
+    // One public-or-allowed address isn't enough: the other is where it could go next.
+    expect((await resolve(false, ["127.0.0.1"]))[0]).toMatchObject({
+      code: "DESTINATION_NOT_ALLOWED",
+    });
+  });
+
+  it("refuses a name with no addresses at all", async () => {
+    const [error] = await new Promise<unknown[]>((done) => {
+      guardedLookup([], async () => [])("nothing.test", { all: false }, (...args: unknown[]) =>
+        done(args),
+      );
+    });
     expect(error).toMatchObject({ code: "DESTINATION_NOT_ALLOWED" });
   });
 });
