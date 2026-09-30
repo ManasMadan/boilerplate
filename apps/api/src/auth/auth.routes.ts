@@ -11,7 +11,7 @@
  * joining them with commas (what a plain header copy does) corrupts cookie attributes.
  */
 
-import { runWithContext, updateContext } from "@repo/nest-common";
+import { rawBodies, runWithContext, updateContext } from "@repo/nest-common";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { contextFor, toHeaders } from "../http-context";
 import type { Auth } from "./auth";
@@ -90,10 +90,7 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
     });
 
   fastify.register((scope, _options, done) => {
-    scope.removeAllContentTypeParsers();
-    scope.addContentTypeParser("*", { parseAs: "buffer" }, (_request, body, next) =>
-      next(null, body),
-    );
+    rawBodies(scope);
     scope.route({ method: ["GET", "POST"], url: "/api/auth/*", handler: handle });
     for (const url of DISCOVERY_PATHS)
       scope.route({ method: ["GET", "HEAD"], url, handler: handle });

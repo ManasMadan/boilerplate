@@ -6,7 +6,7 @@
  * body land on the web app's /unsubscribe page instead.
  */
 
-import { sendError } from "@repo/nest-common";
+import { rawBodies, sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import type { NotificationsService } from "./notifications.service";
 
@@ -17,10 +17,7 @@ export function mountOneClickUnsubscribe(
   fastify.register((scope, _options, done) => {
     // The body is a form field we don't need; accept it without parsing (replacing the
     // app's form parser in this scope only).
-    scope.removeContentTypeParser("application/x-www-form-urlencoded");
-    scope.addContentTypeParser("application/x-www-form-urlencoded", (_request, _payload, next) =>
-      next(null, undefined),
-    );
+    rawBodies(scope, "application/x-www-form-urlencoded");
     scope.post<{ Querystring: { token?: string } }>(
       "/api/v1/notifications/unsubscribe",
       async (request, reply) => {

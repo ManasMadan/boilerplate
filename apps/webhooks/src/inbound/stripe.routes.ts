@@ -10,7 +10,7 @@
  */
 import { type Prisma, transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";
-import { sendError } from "@repo/nest-common";
+import { rawBodies, sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import Stripe from "stripe";
 import { emitEvent } from "../outbox";
@@ -23,10 +23,7 @@ export function mountStripe(
   fastify.register((scope, _options, done) => {
     // Raw bytes for this route only (this plugin scope): the signature covers the body
     // exactly as sent, so the JSON parser inherited from the app is replaced here.
-    scope.removeContentTypeParser("application/json");
-    scope.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) =>
-      done(null, body),
-    );
+    rawBodies(scope, "application/json");
 
     scope.post("/webhooks/stripe", async (request, reply) => {
       if (!secret) return sendError(reply, "NOT_FOUND");

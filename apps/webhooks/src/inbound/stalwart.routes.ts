@@ -22,7 +22,7 @@
  */
 import { type Prisma, transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";
-import { sendError } from "@repo/nest-common";
+import { rawBodies, sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import { emitEvent } from "../outbox";
 import {
@@ -41,10 +41,7 @@ export function mountStalwart(
 ) {
   fastify.register((scope, _options, done) => {
     // Raw bytes for this route only: the signature covers the body exactly as sent.
-    scope.removeContentTypeParser("application/json");
-    scope.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) =>
-      done(null, body),
-    );
+    rawBodies(scope, "application/json");
 
     scope.post("/webhooks/stalwart", async (request, reply) => {
       if (!secrets) return sendError(reply, "NOT_FOUND");

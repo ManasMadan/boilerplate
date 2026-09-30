@@ -15,6 +15,7 @@ import {
   type AppError,
   createRateLimiter,
   type Redis,
+  rawBodies,
   runWithContext,
   updateContext,
 } from "@repo/nest-common";
@@ -115,10 +116,7 @@ export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
 
   fastify.register((scope, _options, done) => {
     // The transport reads the JSON-RPC body itself, exactly as sent.
-    scope.removeAllContentTypeParsers();
-    scope.addContentTypeParser("*", { parseAs: "buffer" }, (_request, body, next) =>
-      next(null, body),
-    );
+    rawBodies(scope);
     scope.route({ method: ["GET", "POST", "DELETE"], url: MCP_PATH, handler: handle });
     done();
   });
