@@ -116,10 +116,6 @@ jobs:
         env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
-      valkey:
-        image: valkey/valkey:9.1.2-alpine
-        ports: ["6379:6379"]
-        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
       mailpit:
         image: axllent/mailpit:v1.31.3
         ports: ["1025:1025", "8025:8025"]
@@ -150,6 +146,11 @@ jobs:
       # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
       - name: Start object storage and virus scanning
         run: docker compose --profile files up -d rustfs clamav
+      # Compose's Valkey, not a service container: the suites need more logical databases
+      # than the default 16 (docs/testing.md), which only its command line can set.
+      - name: Start Valkey
+        env: { VALKEY_PORT: "6379" }
+        run: docker compose up -d --wait valkey
       # With uv: the api's AI client is generated from the Python service's OpenAPI.
       - uses: ./.github/actions/setup
         with: { python: "true" }

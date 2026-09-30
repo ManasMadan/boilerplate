@@ -93,7 +93,7 @@ describe.skipIf(!STALWART_URL)("mail through Stalwart", () => {
     Object.assign(process.env, {
       WEBHOOKS_DATABASE_URL: testDb.urlFor("app_webhooks"),
       LOAD_SHEDDING: "off",
-      REDIS_URL: redisDatabase(4),
+      REDIS_URL: redisDatabase(16),
       ENCRYPTION_KEYS: `test:${randomBytes(32).toString("base64")}`,
       STALWART_WEBHOOK_SECRET: SECRET,
     });

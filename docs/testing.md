@@ -32,11 +32,13 @@ background when a tool times out commands (an agent's shell, for one).
 - Each test file gets its own Postgres database cloned from a migrated template, and
   connects as the service's own role, so a missing grant or row-level security policy
   fails here (see [database.md](database.md#test-databases)).
-- Each suite uses its own Redis database number, and 0 is the dev stack's. Every other
-  one is taken: the api's files 1 to 5, 7 to 10 and 13 (one per file, `startApi(<n>)`),
-  webhooks 11, nest-common and jobs 12, notifications 14, worker 15, Python 6, and
-  webhooks' Stalwart suite 4, which it shares with the api's OAuth suite. A new suite has
-  no free number, so give it a key prefix of its own instead.
+- Each suite uses its own Valkey database number, and 0 is the dev stack's. Valkey has
+  32 (the `--databases` flag in `docker-compose.yml`, which CI's integration job runs too).
+  Taken: the api's files 1 to 5, 7 to 10 and 13 (one per file, `startApi(<n>)`),
+  webhooks 11, nest-common 12, notifications 14, worker 15, webhooks' Stalwart suite 16
+  and Python 6. A new suite takes the next free number, 17 onwards;
+  `scripts/redis-databases.test.ts` fails when two suites that flush share one. A change
+  to the flag needs the local container recreated (`docker compose up -d valkey`).
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker
   compose publishes), its placeholder secrets replaced by fresh ones and its empty
   values left unset, so they behave the same on every machine and in CI. Anything

@@ -51,9 +51,20 @@ services:
     image: valkey/valkey:9.1.2-alpine
     # Queued jobs live here: never evict keys (noeviction) and persist with AOF.
     # A memory ceiling below the container's limit: when full, writes fail with an error
-    # instead of the container being killed.
+    # instead of the container being killed. 32 logical databases: the test suites each
+    # take one (docs/testing.md).
     command:
-      ["valkey-server", "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction"]
+      [
+        "valkey-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "200mb",
+        "--maxmemory-policy",
+        "noeviction",
+        "--databases",
+        "32",
+      ]
     ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${VALKEY_PORT:-56379}:6379"]
     mem_limit: 256m
     volumes: [valkey:/data]
