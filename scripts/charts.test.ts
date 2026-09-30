@@ -76,6 +76,11 @@ describe("the charts check", () => {
     expect(calls).toContain(
       `helm template preview ${root}/deploy/charts/data --namespace preview -f ${root}/deploy/environments/preview/data.yaml --set preview.namespace=pr-1`,
     );
+    // An optional feature no environment turns on, rendered on with the chart's values.
+    expect(calls).toContain(
+      `helm template optional ${root}/deploy/charts/data --namespace optional --set storage.uploads.host=files.a.b --set storage.uploads.corsOrigins[0]=https://a.b --set valkey.replication.enabled=true`,
+    );
+    expect(printed()).toContain("Valkey replication is valid Kubernetes");
     // Both of an environment's charts, validated together.
     const inputs = options.map((given) => given.input);
     expect(inputs).toContain(
@@ -142,6 +147,8 @@ describe("the charts check", () => {
         return { status: 1, stderr: "production data broke" };
       }
       if (line.startsWith("helm template mail ")) return { status: 1, stderr: "mail broke" };
+      if (line.startsWith("helm template optional "))
+        return { status: 1, stderr: "optional broke" };
       if (line.includes("-s templates/rules.yaml")) return { status: 1, stderr: "rules broke" };
       if (line.startsWith("helm template argocd argo-cd")) return { stdout: "name: argocd-cm\n" };
       return undefined;
@@ -154,6 +161,7 @@ describe("the charts check", () => {
     expect(output).toContain("production data broke");
     expect(calls.filter((line) => line.startsWith("helm template qa"))).toEqual([]);
     expect(output).toContain("mail broke");
+    expect(output).toContain("optional broke");
     expect(output).toContain("rules broke");
     expect(calls.some((line) => line.includes("promtool"))).toBe(false);
     expect(output).toContain("the sops plugin or its sidecar is missing from the output");

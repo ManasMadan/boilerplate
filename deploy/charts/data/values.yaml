@@ -56,8 +56,8 @@ postgres:
     # RFC 3339 (2026-09-30T08:15:00Z); empty restores to the end of the archived WAL.
     targetTime: ""
 
-# Valkey (a single node: queues, sessions, rate limits, caches). Its connection details
-# are in the `secretName` Secret (host, port, password, url).
+# Valkey (queues, sessions, rate limits, caches; one node unless `replication` is on).
+# Its connection details are in the `secretName` Secret (host, port, password, url).
 valkey:
   image: docker.io/valkey/valkey:9.1.2-alpine
   secretName: valkey
@@ -70,6 +70,21 @@ valkey:
   # BullMQ needs every key kept: never evict, and persist to disk. At most 60% of the
   # memory limit: the append-only rewrite forks, and copies what's written meanwhile.
   maxmemory: 300mb
+  # Survive losing a node: `replicas` Valkey nodes (a primary, the rest replicas), each
+  # with a Sentinel that promotes a replica when the primary is gone, and a proxy in
+  # front that the services' REDIS_URL already names. Needs as many nodes as replicas to
+  # survive one (deploy/README.md, "What a lost node takes down"). Turning it on for a
+  # running release keeps the data: the first node is the old one and starts as primary.
+  replication:
+    enabled: false
+    # Odd, so a majority of Sentinels can always agree.
+    replicas: 3
+    proxy:
+      image: docker.io/haproxy:3.4.6-alpine
+      replicas: 2
+      resources:
+        requests: { cpu: 20m, memory: 32Mi }
+        limits: { memory: 128Mi }
 
 # Object storage with RustFS (S3 API). Two separate servers: `uploads`, which the
 # browser reaches at `host` through the gateway (presigned URLs), and `backups`, which

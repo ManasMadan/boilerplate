@@ -23,6 +23,18 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{- printf "%s-valkey" (include "data.name" .) -}}
 {{- end -}}
 
+{{/*
+What a replicated Valkey node's scripts read (files/valkey-*.sh): every node's host name
+and this pod's, the Service in front of it. (list $ nodes)
+*/}}
+{{- define "data.valkeyNodeEnv" -}}
+{{- $root := index . 0 -}}
+- { name: NODES, value: {{ join " " (index . 1) | quote }} }
+- name: POD_NAME
+  valueFrom: { fieldRef: { fieldPath: metadata.name } }
+- { name: SELF, value: "$(POD_NAME).{{ $root.Release.Namespace }}.svc.cluster.local" }
+{{- end -}}
+
 {{- define "data.valkeyHost" -}}
 {{- printf "%s.%s.svc.cluster.local" (include "data.valkey" .) .Release.Namespace -}}
 {{- end -}}

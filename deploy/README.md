@@ -305,14 +305,20 @@ disk on a one-node cluster. What each one needs to survive losing a node:
 | Part | Now | When its node is lost | The way to more |
 |---|---|---|---|
 | Postgres | `postgres.instances` (2 in production), placed on different nodes where there are several | on one node, both instances go with the disk: restore from the backups (and the offsite copy) | three nodes or more, so the instances really are on different disks; CloudNativePG fails over by itself |
-| Valkey | one pod, append-only file on its node | it stays Pending until the node is back, and queues, sessions and rate limits stop with it | Valkey with Sentinel (a primary, two replicas, three sentinels), with the services' `REDIS_URL` pointing at the sentinels; or Valkey Cluster (every queue key already has a hash tag) |
+| Valkey | one pod, append-only file on its node | it stays Pending until the node is back, and queues, sessions and rate limits stop with it | `valkey.replication.enabled` in the environment's `data.yaml`: three nodes (`replication.replicas`, odd), each with a Sentinel that promotes a replica within seconds of the primary going, behind a proxy that the services' `REDIS_URL` already names, so nothing else changes. Needs three nodes or more to survive losing one; turning it on keeps the data (the first node is the old one) |
 | RustFS (uploads, backups) | one server each | uploads stop, and are only in the offsite copy | RustFS in distributed mode (four or more drives across nodes), or any S3 outside the cluster |
 | Stalwart | one pod on the mail node, which SPF and reverse DNS name | no mail leaves: sign-in codes, resets and invitations stop | a second mail node in SPF and the MX records, or a relay (`relay`, see Mail) |
 | The services | two replicas or more, spread across nodes | nothing, on two nodes or more | more replicas and nodes |
 
 Valkey's `maxmemory` stays at 60% of its memory limit or less (the chart refuses more):
 rewriting the append-only file forks the server, and whatever is written meanwhile is
-copied, so a rewrite under load with no headroom gets it OOM-killed.
+copied, so a rewrite under load with no headroom gets it OOM-killed. A replica's first
+sync forks the primary the same way.
+
+With replication on, a failover drops the connections to the old primary; the services
+reconnect on their own, and a job a worker held at that moment is retried by BullMQ once
+its lock expires. Writes the old primary accepted in its last second, before a replica
+had them, can be lost (replication is asynchronous).
 
 ## Mail
 

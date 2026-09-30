@@ -226,6 +226,83 @@ tests:
     asserts:
       - contains: { path: "spec.template.spec.containers[0].args", content: 1gb }
 
+  - it: points the services' Valkey host at the one node by default
+    template: valkey.yaml
+    documentSelector: { path: metadata.name, value: demo-valkey }
+    asserts:
+      - equal: { path: spec.selector, value: { app.kubernetes.io/name: valkey, app.kubernetes.io/instance: demo } }
+        documentSelector: { path: kind, value: Service }
+
+  - it: with replication, puts a proxy behind the services' Valkey host
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    asserts:
+      # The Service the services' REDIS_URL names is the one that selects the proxy.
+      - equal: { path: metadata.name, value: demo-valkey }
+        documentSelector:
+          path: 'spec.selector["app.kubernetes.io/name"]'
+          value: valkey-proxy
+      # A name per node, found even while it isn't ready.
+      - equal: { path: spec.selector, value: { statefulset.kubernetes.io/pod-name: demo-valkey-2 } }
+        documentSelector: { path: metadata.name, value: demo-valkey-2 }
+      - equal: { path: spec.publishNotReadyAddresses, value: true }
+        documentSelector: { path: metadata.name, value: demo-valkey-2 }
+
+  - it: with replication, runs every node with a Sentinel beside it
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true, valkey.replication.replicas: 5 }
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - equal: { path: spec.replicas, value: 5 }
+      - equal: { path: "spec.template.spec.containers[0].command", value: [sh, -c] }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: "--replicaof" }
+      - matchRegex: { path: "spec.template.spec.containers[1].args[0]", pattern: "exec valkey-sentinel" }
+      - contains:
+          path: "spec.template.spec.containers[1].env"
+          content: { name: QUORUM, value: "3" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: NODES
+            value: demo-valkey-0.apps.svc.cluster.local demo-valkey-1.apps.svc.cluster.local demo-valkey-2.apps.svc.cluster.local demo-valkey-3.apps.svc.cluster.local demo-valkey-4.apps.svc.cluster.local
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: SELF, value: "$(POD_NAME).apps.svc.cluster.local" }
+      - equal: { path: "spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem", value: true }
+
+  - it: with replication, forwards only to the node that says it's the primary
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: 'tcp-check send "AUTH \$\{VALKEY_PASSWORD\}\\r\\n"' }
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: "tcp-check expect string role:master" }
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: "on-marked-down shutdown-sessions" }
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: "server node-2 demo-valkey-2.apps.svc.cluster.local:6379" }
+
+  - it: with replication, lets the services and KEDA reach the proxy, and the Sentinels each other
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    documentSelector: { path: kind, value: NetworkPolicy }
+    asserts:
+      - contains:
+          path: spec.podSelector.matchExpressions
+          content: { key: app.kubernetes.io/name, operator: In, values: [valkey, valkey-proxy] }
+      - equal: { path: "spec.ingress[0].ports", value: [{ port: 6379 }, { port: 26379 }] }
+
+  - it: with replication, never drains more than one node or the last proxy
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels
+          value: { app.kubernetes.io/name: valkey, app.kubernetes.io/instance: demo }
+        documentSelector: { path: spec.maxUnavailable, value: 1 }
+      - equal:
+          path: spec.selector.matchLabels
+          value: { app.kubernetes.io/name: valkey-proxy, app.kubernetes.io/instance: demo }
+        documentSelector: { path: spec.minAvailable, value: 1 }
+
   - it: runs the uploads server with its keys from the storage Secret
     template: storage.yaml
     documentSelector: { path: kind, value: StatefulSet }

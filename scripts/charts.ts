@@ -7,6 +7,7 @@
  *   2. renders both application charts for every environment in deploy/environments,
  *      as Argo CD would, and validates each manifest against the Kubernetes API and the
  *      CRDs it uses (Gateway API, KEDA, CloudNativePG, Barman Cloud) with kubeconform;
+ *      and the optional features no environment turns on (OPTIONAL), the same way;
  *   3. the platform: our charts rendered and validated the same way, every add-on chart
  *      at its pinned version with our values (their own schemas reject unknown keys),
  *      Argo CD's chart with deploy/argocd/argo-cd-values.yaml, and the Argo CD manifests;
@@ -70,6 +71,14 @@ const OWN_CHARTS: Record<string, string[]> = {
   "deploy/platform/jaeger": [],
   "deploy/platform/alerts": ["--set", "domain=example.com", "--set", "email=ops@example.com"],
 };
+
+/**
+ * Features that are off in every environment, rendered on and validated all the same, so
+ * turning one on isn't the first time its manifests meet the schemas. Chart → values.
+ */
+const OPTIONAL: [label: string, chart: string, values: string[]][] = [
+  ["Valkey replication", "deploy/charts/data", ["--set", "valkey.replication.enabled=true"]],
+];
 
 /** An add-on's definition (deploy/platform/addons). */
 const fields = (file: string) =>
@@ -186,6 +195,20 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
     if (rendered.length === 2) {
       check(`${env}: manifests are valid Kubernetes`, kubeconform(rendered.join("\n---\n")));
     }
+  }
+
+  for (const [label, chart, values] of OPTIONAL) {
+    const result = exec("helm", [
+      "template",
+      "optional",
+      join(root, chart),
+      "--namespace",
+      "optional",
+      ...(OWN_CHARTS[chart] ?? []),
+      ...values,
+    ]);
+    check(`${label} renders`, result);
+    if (result.ok) check(`${label} is valid Kubernetes`, kubeconform(result.output));
   }
 
   // ---------------------------------------------------------------------------- platform
