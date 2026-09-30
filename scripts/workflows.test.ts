@@ -56,6 +56,15 @@ describe("infra.yml", () => {
 describe("every workflow", () => {
   const files = readdirSync(join(ROOT, ".github/workflows")).filter((f) => f.endsWith(".yml"));
 
+  it("starts every job with harden-runner", () => {
+    const missing = files.flatMap((file) =>
+      Object.entries(workflow(file).jobs)
+        .filter(([, job]) => !job.steps?.[0]?.uses?.startsWith("step-security/harden-runner@"))
+        .map(([name]) => `${file}: ${name}`),
+    );
+    expect(missing).toEqual([]);
+  });
+
   it("gives every job a timeout, so a hung one doesn't burn six hours", () => {
     const missing = files.flatMap((file) =>
       Object.entries(workflow(file).jobs)
@@ -209,7 +218,8 @@ describe("deploy.yml's staging bump", () => {
 
 describe("ci.yml's path filters", () => {
   const { jobs } = workflow("ci.yml");
-  const run = jobs["ci-ok"]?.steps?.[0]?.run as string;
+  const run = jobs["ci-ok"]?.steps?.find((step) => step.name === "Require every job to succeed")
+    ?.run as string;
   const program = /jq -e --arg event "\$EVENT" '([\s\S]*)' > \/dev\/null/.exec(run)?.[1] ?? "";
   const gates = JSON.parse(
     (/\{([^}]*)\} as \$gates/.exec(program)?.[1] ?? "")

@@ -11,7 +11,8 @@ paths:
 - Least privilege: the workflow sets `permissions: {}` and each job asks for exactly
   what it uses (`contents: read`, and more only where it writes). `actions/checkout`
   with `persist-credentials: false` unless the job pushes.
-- The first step of every job is `step-security/harden-runner`.
+- The first step of every job is `step-security/harden-runner` (`scripts/workflows.test.ts`
+  refuses a job without it).
 - Every job has a `timeout-minutes`, sized to about twice its normal run
   (`scripts/workflows.test.ts` refuses a job without one).
 - Toolchain through `./.github/actions/setup` (Node from `.nvmrc`, Bun from
