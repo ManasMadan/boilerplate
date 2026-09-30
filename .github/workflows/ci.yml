@@ -548,6 +548,13 @@ jobs:
           # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
           VERSION: v1.1.2
         run: helm plugin install https://github.com/helm-unittest/helm-unittest --version "$VERSION" --verify=false
+      # The schemas kubeconform downloads (scripts/charts.ts): the same ones every run, so
+      # a run only fetches those a pin change moved.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.cache/kubeconform
+          key: kubeconform-${{ hashFiles('scripts/charts.ts') }}
+          restore-keys: kubeconform-
       # Lint, unit tests, every environment rendered and validated against the Kubernetes
       # and CRD schemas, the platform add-ons at their pinned versions, the Argo CD manifests.
       - run: bun run charts:check

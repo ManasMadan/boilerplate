@@ -19,7 +19,7 @@
  * https://github.com/helm-unittest/helm-unittest`) and either kubeconform or Docker.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail, ok, ROOT } from "./lib";
 import { recipientsFor, unsafeSecret } from "./secrets-check";
@@ -81,10 +81,20 @@ function run(command: string, args: string[], input?: string) {
 }
 
 const hasKubeconform = run("kubeconform", ["-v"]).ok;
+/**
+ * Where kubeconform keeps the schemas it downloads: every environment and chart asks for
+ * the same few dozen, and fetching each again for every one made a run take minutes on a
+ * slow connection. CI caches the directory too (ci.yml's charts job).
+ */
+const SCHEMA_CACHE = join(ROOT, "node_modules/.cache/kubeconform");
+mkdirSync(SCHEMA_CACHE, { recursive: true });
+
 function kubeconform(manifests: string) {
-  const args = [
+  const args = (cache: string) => [
     "-strict",
     "-summary",
+    "-cache",
+    cache,
     "-kubernetes-version",
     KUBERNETES_VERSION,
     "-schema-location",
@@ -94,8 +104,23 @@ function kubeconform(manifests: string) {
     "-",
   ];
   return hasKubeconform
-    ? run("kubeconform", args, manifests)
-    : run("docker", ["run", "--rm", "-i", "--memory=256m", KUBECONFORM_IMAGE, ...args], manifests);
+    ? run("kubeconform", args(SCHEMA_CACHE), manifests)
+    : run(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "-i",
+          "--memory=256m",
+          "--user",
+          `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`,
+          "-v",
+          `${SCHEMA_CACHE}:/cache`,
+          KUBECONFORM_IMAGE,
+          ...args("/cache"),
+        ],
+        manifests,
+      );
 }
 
 /** `promtool check rules` on a rendered PrometheusRule. */

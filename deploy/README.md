@@ -23,7 +23,9 @@ deploy/
 `bun run charts:check` lints every chart of ours and runs its unit tests, renders the
 application for every environment and the platform, validates all of it against
 Kubernetes and the CRDs it uses, renders every add-on at its pinned version with our
-values, and refuses any file in a `secrets/` directory that isn't SOPS-encrypted.
+values, and refuses any file in a `secrets/` directory that isn't SOPS-encrypted. The
+schemas kubeconform validates against are downloaded once into
+`node_modules/.cache/kubeconform` (CI caches that directory too).
 
 ## Two releases per environment
 
