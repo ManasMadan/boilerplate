@@ -111,6 +111,12 @@ nudge to the organization when a document changes, so the web app refreshes
 (`app/realtime.py`: the message models and the channel's Redis name are generated from
 `packages/contracts/src/realtime.ts`, so both sides agree on them).
 
+BullMQ's Python package is pinned (`pyproject.toml`) and upgraded together with the Node
+one: both change the same queues in Redis with the same Lua scripts, and
+`tests/test_bullmq_pair.py` fails when the scripts the two bundle differ. Delayed jobs
+can start up to a second late on the Python side, whose blocking connection doesn't
+read the Redis version.
+
 In Kubernetes it's the `ai-worker` deployment (same image, `python -m app.worker`,
 scaled by KEDA on the queue). Locally `bun dev:full` starts both (apps/ai's `dev` runs
 FastAPI and the worker, which restarts when a Python file changes). To run the worker on
@@ -140,7 +146,8 @@ scope, and cover it in `tests/test_mcp.py`.
 
 Prisma owns the DDL (`packages/db/prisma/schema/ai.prisma`). `app/db/models.py` describes
 the same tables in SQLAlchemy, and `tests/test_models_match_db.py` fails when they drift
-from the migrated database. The service connects as `app_ai`.
+from the migrated database. They're hand-written because generating them (sqlacodegen)
+follows the foreign keys into `auth` and drags those tables in too. The service connects as `app_ai`.
 
 ## Commands
 

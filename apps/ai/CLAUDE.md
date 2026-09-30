@@ -36,6 +36,8 @@ server for documents. Internal only: callers sign a short-lived JWT with
 - The database schema is owned by Prisma migrations. Change it there, then update
   `app/db/models.py`; `tests/test_models_match_db.py` fails on drift.
 - The service connects as `app_ai` and cannot see rows without `app.org_id` set.
+- BullMQ is pinned in `pyproject.toml` and upgraded together with the Node package;
+  `tests/test_bullmq_pair.py` fails when their Lua scripts differ.
 - Token budgets per org and per run are enforced in `app/usage.py`: `reserve` before a
   run, cap the run at the reservation, and `settle` in a `finally` with the run's
   `RunUsage`, so every way it can end is counted. New model calls go through the same

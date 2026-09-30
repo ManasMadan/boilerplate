@@ -2,6 +2,13 @@
 each job's payload model, the Redis prefix and the job options are all generated from
 the TypeScript definitions (app/contracts), so both languages agree on where jobs live,
 what they carry and how they retry.
+
+BullMQ's Node and Python packages are upgraded as a pair (the Python one is pinned in
+pyproject.toml). They keep a queue's state in the same Redis keys and change it with the
+same Lua scripts, so versions whose scripts differ can corrupt a queue the other side is
+using; tests/test_bullmq_pair.py fails when they do. The Python package's blocking
+connection also doesn't read the Redis version, so a delayed job can start up to a
+second late on this side.
 """
 
 from collections.abc import Awaitable, Callable

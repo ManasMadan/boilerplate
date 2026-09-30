@@ -5,6 +5,11 @@ models describe the same tables, and tests/test_models_match_db.py fails if they
 from the migrated database. Foreign keys to other schemas (auth.organization,
 auth.user) exist in the database but aren't modelled: this service never reads those
 tables.
+
+They're written by hand rather than generated with sqlacodegen because generating them
+from the database follows those foreign keys and drags the auth tables in as models,
+which this service must not have; the drift test gives the same guarantee a generator
+would.
 """
 
 import datetime
