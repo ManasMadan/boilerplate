@@ -77,6 +77,7 @@ jobs:
     name: Publish, attest and sign
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions: { contents: read, packages: write, id-token: write, attestations: write }
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -138,6 +139,7 @@ jobs:
     name: Deploy to staging
     needs: publish
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     environment: staging
     permissions: { contents: write }
     env:

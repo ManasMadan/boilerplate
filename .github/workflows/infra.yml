@@ -52,6 +52,7 @@ jobs:
   targets:
     name: Environments
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions: {}
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}

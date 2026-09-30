@@ -32,6 +32,7 @@ jobs:
   lint:
     name: Lint and boundaries
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -50,6 +51,7 @@ jobs:
   types:
     name: Type-check
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -63,6 +65,7 @@ jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -78,6 +81,7 @@ jobs:
   components:
     name: Components (stories, a11y, screenshots)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -109,6 +113,7 @@ jobs:
   integration:
     name: Integration tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions: { contents: read }
     services:
       postgres:
@@ -323,6 +328,7 @@ jobs:
   python:
     name: Python service
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions: { contents: read }
     services:
       postgres:
@@ -381,6 +387,7 @@ jobs:
     name: Evals (${{ vars.EVAL_MODEL }})
     if: github.event_name == 'schedule' && vars.EVAL_MODEL != ''
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions: { contents: read }
     defaults:
       run: { working-directory: apps/ai }
@@ -404,6 +411,7 @@ jobs:
   codegen:
     name: Generated code is committed
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -431,6 +439,7 @@ jobs:
     name: API compatibility
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions: { contents: read }
     env:
       BASE: ${{ github.event.pull_request.base.sha }}
@@ -472,6 +481,7 @@ jobs:
     name: Pull request title
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions: { pull-requests: read }
     steps:
       - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
@@ -508,6 +518,7 @@ jobs:
   migrations:
     name: Migration safety
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -520,6 +531,7 @@ jobs:
   charts:
     name: Helm charts and GitOps
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -541,6 +553,7 @@ jobs:
   infra:
     name: OpenTofu
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions: { contents: read }
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -563,6 +576,7 @@ jobs:
   images:
     name: Container images (${{ matrix.image }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions: { contents: read }
     strategy:
       fail-fast: false
@@ -669,6 +683,7 @@ jobs:
     if: always()
     needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images, generators, coverage]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions: {}
     steps:
       - name: Require every job to succeed

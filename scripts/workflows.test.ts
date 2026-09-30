@@ -3,7 +3,7 @@
  * gets which secrets, what runs when, and the rules every job follows (.claude/rules/ci.md).
  */
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
@@ -49,5 +49,18 @@ describe("infra.yml", () => {
   it("plans without taking the state lock, which read-only bucket keys can't", () => {
     const step = plan.steps?.find((s) => s.name === "Plan");
     expect(step?.run).toContain("-lock=false");
+  });
+});
+
+describe("every workflow", () => {
+  const files = readdirSync(join(ROOT, ".github/workflows")).filter((f) => f.endsWith(".yml"));
+
+  it("gives every job a timeout, so a hung one doesn't burn six hours", () => {
+    const missing = files.flatMap((file) =>
+      Object.entries(workflow(file).jobs)
+        .filter(([, job]) => job["timeout-minutes"] === undefined)
+        .map(([name]) => `${file}: ${name}`),
+    );
+    expect(missing).toEqual([]);
   });
 });

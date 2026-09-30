@@ -12,7 +12,8 @@ paths:
   what it uses (`contents: read`, and more only where it writes). `actions/checkout`
   with `persist-credentials: false` unless the job pushes.
 - The first step of every job is `step-security/harden-runner`.
-- Every job has a `timeout-minutes`, sized to about twice its normal run.
+- Every job has a `timeout-minutes`, sized to about twice its normal run
+  (`scripts/workflows.test.ts` refuses a job without one).
 - Toolchain through `./.github/actions/setup` (Node from `.nvmrc`, Bun from
   `package.json`, uv on request, the Turborepo cache), not a job's own setup steps.
 - A new CI job goes in `ci-ok`'s `needs` list, the one required check, so branch
