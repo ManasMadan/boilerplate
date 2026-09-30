@@ -12,7 +12,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import type { Contract } from "@repo/contracts/api";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { type NotificationPayload, parseJob, queuePrefix } from "@repo/jobs";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import pg from "pg";
@@ -71,7 +71,7 @@ export async function startApi(
     ...env,
   });
   const redis = new Redis(process.env.REDIS_URL as string, { maxRetriesPerRequest: null });
-  await redis.flushdb();
+  await flushTestDatabase(redis);
   const { createApiServer } = await import("../src/server");
   const app: NestFastifyApplication = await createApiServer();
   await app.listen({ port: 0, host: "127.0.0.1" });

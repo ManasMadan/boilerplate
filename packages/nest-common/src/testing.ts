@@ -1,6 +1,7 @@
 /**
  * Helpers for integration tests (not part of the runtime surface).
  */
+import type { Redis } from "ioredis";
 
 /**
  * The local Redis/Valkey at REDIS_URL, but a specific logical database, so a test
@@ -12,4 +13,20 @@ export function redisDatabase(index: number): string {
   const url = new URL(process.env.REDIS_URL as string);
   url.pathname = `/${index}`;
   return url.toString();
+}
+
+/**
+ * Empties the suite's own database. A number the server doesn't have leaves ioredis on
+ * database 0 (it logs the refusal and carries on), which is the dev stack's: this checks
+ * where the connection really is before flushing, and refuses 0.
+ */
+export async function flushTestDatabase(redis: Redis) {
+  const info = String(await redis.call("CLIENT", "INFO"));
+  const db = Number(/\bdb=(\d+)/.exec(info)?.[1] ?? 0);
+  if (db === 0) {
+    throw new Error(
+      "Refusing to flush Valkey database 0, the dev stack's: the suite's own database doesn't exist. Recreate Valkey with the databases docker-compose.yml asks for (`docker compose up -d valkey`).",
+    );
+  }
+  await redis.flushdb();
 }

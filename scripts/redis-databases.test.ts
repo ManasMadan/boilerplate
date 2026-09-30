@@ -24,7 +24,7 @@ const claims = files.flatMap((path) => {
       path,
       pkg: path.split("/").slice(0, 2).join("/"),
       db: Number(match[1] ?? match[2]),
-      flushes: /flushdb\(\)|startApi\(/.test(text),
+      flushes: /flushdb\(\)|flushTestDatabase\(|startApi\(/.test(text),
     }),
   );
 });

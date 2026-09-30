@@ -12,7 +12,7 @@ import { createDb } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer, type Producer, queuePrefix } from "@repo/jobs";
 import { createRedis, DATABASE, I18N, PinoLogger, REDIS } from "@repo/nest-common";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -70,7 +70,7 @@ describe("notifications service", () => {
     process.env.PORT = String(await freePort());
     process.env.LOAD_SHEDDING = "off";
     const redis = createRedis(process.env.REDIS_URL);
-    await redis.flushdb();
+    await flushTestDatabase(redis);
     await redis.quit();
     // Imported after the env is set: env.ts validates at import time.
     const { AppModule } = await import("../src/app.module");

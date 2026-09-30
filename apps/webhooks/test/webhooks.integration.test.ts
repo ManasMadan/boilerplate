@@ -11,7 +11,7 @@ import type { EventName } from "@repo/contracts/events";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer } from "@repo/jobs";
 import { createRedis, keysFromEnv, SecretBox } from "@repo/nest-common";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import pg from "pg";
 import { Webhook } from "standardwebhooks";
 import Stripe from "stripe";
@@ -218,7 +218,7 @@ beforeAll(async () => {
     PORT: String(await freePort()),
   });
   const redis = createRedis(process.env.REDIS_URL as string);
-  await redis.flushdb();
+  await flushTestDatabase(redis);
   await redis.quit();
   const { createWebhooksServer } = await import("../src/server");
   const { DeliveryService } = await import("../src/outbound/delivery.service");

@@ -14,7 +14,7 @@ import type { AddressInfo } from "node:net";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createRedis } from "@repo/nest-common";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import nodemailer from "nodemailer";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -98,7 +98,7 @@ describe.skipIf(!STALWART_URL)("mail through Stalwart", () => {
       STALWART_WEBHOOK_SECRET: SECRET,
     });
     const redis = createRedis(process.env.REDIS_URL as string);
-    await redis.flushdb();
+    await flushTestDatabase(redis);
     await redis.quit();
     const { createWebhooksServer } = await import("../src/server");
     app = await createWebhooksServer();

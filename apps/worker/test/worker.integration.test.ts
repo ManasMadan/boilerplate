@@ -16,7 +16,7 @@ import {
   type PinoLogger,
   S3Storage,
 } from "@repo/nest-common";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import { Queue } from "bullmq";
 import pg from "pg";
 import sharp from "sharp";
@@ -140,7 +140,7 @@ beforeAll(async () => {
     LOAD_SHEDDING: "off",
   });
   const redis = createRedis(process.env.REDIS_URL as string);
-  await redis.flushdb();
+  await flushTestDatabase(redis);
   await redis.quit();
   const { AppModule } = await import("../src/app.module");
   const { OutboxRelay } = await import("../src/outbox/relay.service");
