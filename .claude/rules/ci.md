@@ -12,7 +12,13 @@ paths:
   what it uses (`contents: read`, and more only where it writes). `actions/checkout`
   with `persist-credentials: false` unless the job pushes.
 - The first step of every job is `step-security/harden-runner` (`scripts/workflows.test.ts`
-  refuses a job without it).
+  refuses a job without it). A job whose traffic is known runs it with
+  `egress-policy: block` and its `allowed-endpoints`; the rest run `audit`. To move one to
+  block: open a recent run of the job on master, follow the harden-runner link in the
+  job's summary (StepSecurity's insights for that run), check the outbound calls it lists
+  over a few runs (a nightly one too, if the job does more then), put those hosts in
+  `allowed-endpoints` and switch the policy. A new tool that downloads something then
+  needs its host added in the same change, or the job fails at that step.
 - Every job has a `timeout-minutes`, sized to about twice its normal run
   (`scripts/workflows.test.ts` refuses a job without one).
 - Toolchain through `./.github/actions/setup` (Node from `.nvmrc`, Bun from

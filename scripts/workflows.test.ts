@@ -65,6 +65,51 @@ describe("every workflow", () => {
     expect(missing).toEqual([]);
   });
 
+  it("audits every job's egress, or blocks all but the endpoints it lists", () => {
+    const wrong = files.flatMap((file) =>
+      Object.entries(workflow(file).jobs).flatMap(([name, job]) => {
+        const options = job.steps?.[0]?.with ?? {};
+        const policy = options["egress-policy"];
+        const endpoints = String(options["allowed-endpoints"] ?? "")
+          .split(/\s+/)
+          .filter(Boolean);
+        if (policy === "audit" && endpoints.length === 0) return [];
+        if (policy === "block" && endpoints.every((e) => /^[\w*.-]+:\d+$/.test(e))) return [];
+        return [`${file}: ${name}`];
+      }),
+    );
+    expect(wrong).toEqual([]);
+  });
+
+  it("gives a job that blocks egress what the setup action downloads from", () => {
+    const blocking = files.flatMap((file) =>
+      Object.values(workflow(file).jobs).filter(
+        (job) => job.steps?.[0]?.with?.["egress-policy"] === "block",
+      ),
+    );
+    expect(blocking.length).toBeGreaterThan(0);
+    for (const job of blocking) {
+      const endpoints = String(job.steps?.[0]?.with?.["allowed-endpoints"]).split(/\s+/);
+      if (job.steps?.some((step) => step.uses === "./.github/actions/setup"))
+        expect(endpoints).toEqual(
+          expect.arrayContaining([
+            "github.com:443",
+            "registry.npmjs.org:443",
+            "*.blob.core.windows.net:443",
+          ]),
+        );
+    }
+  });
+
+  it("blocks egress where the traffic is known: the area check, the title check, ci-ok", () => {
+    const { jobs } = workflow("ci.yml");
+    for (const name of ["changes", "pr-title", "ci-ok"])
+      expect({ name, policy: jobs[name]?.steps?.[0]?.with?.["egress-policy"] }).toEqual({
+        name,
+        policy: "block",
+      });
+  });
+
   it("gives every job a timeout, so a hung one doesn't burn six hours", () => {
     const missing = files.flatMap((file) =>
       Object.entries(workflow(file).jobs)
