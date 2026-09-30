@@ -9,6 +9,7 @@ import { ORGANIZATION_LIMIT, PENDING_INVITATION_LIMIT } from "@repo/contracts/au
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
 import { AppError, createSignedTokens, S3Storage } from "@repo/nest-common";
+import { eventually } from "@repo/testing/eventually";
 import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import pg from "pg";
@@ -23,6 +24,7 @@ import {
   LOCAL_STORAGE,
   newEmail,
   newPassword,
+  queuedNotification,
   startApi,
   takeNotification,
   takeOtp,
@@ -302,8 +304,14 @@ describe("sign-up and verification", () => {
       await session.auth("/email-otp/send-verification-otp", { email, type: "email-verification" });
     }
     for (let i = 0; i < 2; i++) await session.auth("/sign-in/email", { email, password });
+    // Codes go out in the background: once the limit has counted all eleven (the last
+    // one refused), every code that will be queued has been.
+    await eventually(
+      () => harness.redis.get(`{rl:email:codesPerRecipient}:${email.toLowerCase()}`),
+      (count) => count === "11",
+    );
     for (let i = 0; i < 10; i++) await takeOtp(harness, email);
-    await expect(takeOtp(harness, email)).rejects.toThrow(/No auth.otp queued/);
+    expect(await queuedNotification(harness, "auth.otp", email)).toBeUndefined();
   });
 
   it("issues no session until the email is verified, and queues the code in the browser's language", async () => {
@@ -523,9 +531,8 @@ describe("account security", () => {
       newPassword: newPassword(),
     });
     expect(failed.status).toBe(400);
-    await expect(takeNotification(harness, "auth.security-alert", email)).rejects.toThrow(
-      /No auth.security-alert/,
-    );
+    // An alert is recorded before the request answers: there's nothing to wait for.
+    expect(await queuedNotification(harness, "auth.security-alert", email)).toBeUndefined();
   });
 
   it("changing the email needs codes from both addresses and alerts the old one", async () => {
@@ -1193,21 +1200,40 @@ describe("webhook endpoints", () => {
 });
 
 describe("realtime", () => {
-  /** Reads a stream until `count` messages arrive (or 3 s pass). */
+  /** Reads a stream until `count` messages arrive. */
   async function read(stream: AsyncIterable<unknown>, count: number) {
     const received: unknown[] = [];
-    const reading = (async () => {
-      for await (const message of stream) {
-        received.push(message);
-        if (received.length === count) return;
-      }
-    })();
-    await Promise.race([reading, new Promise((resolve) => setTimeout(resolve, 3_000))]);
+    for await (const message of stream) {
+      received.push(message);
+      if (received.length === count) break;
+    }
     return received;
+  }
+
+  /** Waits until Redis has this process subscribed to each of the channels. */
+  async function subscribed(...channels: string[]) {
+    for (const channel of channels) {
+      await eventually(
+        async () => (await harness.redis.pubsub("NUMSUB", `realtime:${channel}`))[1],
+        (subscribers) => Number(subscribers) > 0,
+      );
+    }
   }
 
   it("refuses an eleventh stream for one user with a typed error, and frees slots on close", async () => {
     const { session } = await signedInUser();
+    const me = await session.rpc.user.me();
+    const { RealtimeService } = await import("../src/modules/realtime");
+    const realtime = harness.app.get(RealtimeService);
+    /** Whether the server would open another stream for this user now (opening none). */
+    const full = () => {
+      try {
+        realtime.stream(me.id, me.activeOrganizationId as string, undefined);
+        return false;
+      } catch {
+        return true;
+      }
+    };
     const controllers = Array.from({ length: 10 }, () => new AbortController());
     const streams = await Promise.all(
       controllers.map((controller) =>
@@ -1216,7 +1242,7 @@ describe("realtime", () => {
     );
     // Iterating is what opens each stream on the server.
     const readers = streams.map((stream) => read(stream, 1));
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await eventually(full, (isFull) => isFull);
     await expectError(
       (async () => {
         const extra = await session.rpc.realtime.subscribe();
@@ -1227,36 +1253,35 @@ describe("realtime", () => {
     for (const controller of controllers) controller.abort();
     // Aborting ends each reader with an AbortError: expected.
     await Promise.allSettled(readers);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    // Closed streams give their slots back.
-    const controller = new AbortController();
-    const again = await session.rpc.realtime.subscribe(undefined, { signal: controller.signal });
-    let refused: unknown;
-    const reading = read(again, 1).catch((error: unknown) => {
-      refused = error;
+    // Closed streams give their slots back: a new one opens and delivers.
+    await eventually(full, (isFull) => !isFull);
+    const again = await session.rpc.realtime.subscribe();
+    const reading = read(again, 1);
+    await subscribed(realtimeChannel.user(me.id));
+    await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
+      type: "notifications.changed",
     });
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(refused).toBeUndefined();
-    controller.abort();
-    await reading;
+    expect(await reading).toEqual([{ type: "notifications.changed" }]);
   });
 
   it("streams messages for the user and their active workspace only", async () => {
     const { session } = await signedInUser();
     const me = await session.rpc.user.me();
+    const orgId = me.activeOrganizationId as string;
     const controller = new AbortController();
     const stream = await session.rpc.realtime.subscribe(undefined, { signal: controller.signal });
-    await new Promise((resolve) => setTimeout(resolve, 200)); // subscribed
+    const reading = read(stream, 2);
+    await subscribed(realtimeChannel.user(me.id), realtimeChannel.org(orgId));
     await publishRealtime(harness.redis, realtimeChannel.org(randomUUID()), {
       type: "todos.changed",
     });
-    await publishRealtime(harness.redis, realtimeChannel.org(me.activeOrganizationId as string), {
+    await publishRealtime(harness.redis, realtimeChannel.org(orgId), {
       type: "todos.changed",
     });
     await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
       type: "notifications.changed",
     });
-    const received = await read(stream, 2);
+    const received = await reading;
     controller.abort();
     expect(received).toEqual([{ type: "todos.changed" }, { type: "notifications.changed" }]);
   });
@@ -1270,13 +1295,11 @@ describe("realtime", () => {
       .get(RealtimeService)
       .stream(me.id, me.activeOrganizationId as string, undefined);
     const first = stream.next();
-    const channel = `realtime:${realtimeChannel.user(me.id)}`;
-    for (let i = 0; i < 100; i++) {
-      const [, subscribers] = (await harness.redis.pubsub("NUMSUB", channel)) as [string, number];
-      if (subscribers > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    await harness.redis.publish(channel, JSON.stringify({ type: "not.in.the.contract" }));
+    await subscribed(realtimeChannel.user(me.id));
+    await harness.redis.publish(
+      `realtime:${realtimeChannel.user(me.id)}`,
+      JSON.stringify({ type: "not.in.the.contract" }),
+    );
     await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
       type: "notifications.changed",
     });
@@ -1629,9 +1652,8 @@ describe("phone number", () => {
     const me = await session.rpc.user.me();
     expect((await session.rpc.user.removePhone()).phoneNumber).toBeNull();
     expect(await outboxEvents(me.id)).toEqual([]);
-    await expect(takeNotification(harness, "auth.security-alert", email)).rejects.toThrow(
-      /No auth.security-alert/,
-    );
+    // An alert is recorded before the request answers: there's nothing to wait for.
+    expect(await queuedNotification(harness, "auth.security-alert", email)).toBeUndefined();
   });
 
   it("a number that can't be saved fails as INTERNAL, not as taken", async () => {

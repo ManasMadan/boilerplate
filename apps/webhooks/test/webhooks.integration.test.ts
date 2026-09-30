@@ -12,6 +12,7 @@ import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer } from "@repo/jobs";
 import { createRedis, keysFromEnv, SecretBox } from "@repo/nest-common";
 import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
+import { eventually } from "@repo/testing/eventually";
 import pg from "pg";
 import { Webhook } from "standardwebhooks";
 import Stripe from "stripe";
@@ -169,19 +170,6 @@ async function freePort() {
   return port;
 }
 
-async function eventually<T>(
-  fn: () => Promise<T> | T,
-  done: (value: T) => boolean,
-  timeoutMs = 15_000,
-) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = await fn();
-    if (done(value) || Date.now() > deadline) return value;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}
-
 // ---------------------------------------------------------------------------- setup
 
 beforeAll(async () => {
@@ -289,15 +277,23 @@ describe("outbound deliveries", () => {
   });
 
   it("only sends subscribed events, and nothing for other organizations", async () => {
-    const { orgId } = await endpoint({ events: ["todo.deleted.v1"] });
-    await publish(orgId, "todo.created.v1");
-    await publish(randomUUID(), "todo.deleted.v1");
+    const { orgId, endpointId } = await endpoint({ events: ["todo.deleted.v1"] });
+    const created = await publish(orgId, "todo.created.v1");
+    const elsewhere = await publish(randomUUID(), "todo.deleted.v1");
     const deleted = await publish(orgId, "todo.deleted.v1");
+    for (const event of [created, elsewhere, deleted]) await processed("events-webhooks", event.id);
+    // Every event has been handled and made one delivery between them: nothing else is on
+    // its way.
+    const rows = await asRole("postgres", (client) =>
+      client.query("SELECT count(*)::int AS n FROM webhooks.delivery WHERE endpoint_id = $1", [
+        endpointId,
+      ]),
+    );
+    expect(rows.rows[0].n).toBe(1);
     await eventually(
       () => received.length,
-      (n) => n >= 1,
+      (n) => n === 1,
     );
-    await new Promise((resolve) => setTimeout(resolve, 500));
     expect(received.map((r) => (JSON.parse(r.body) as { type: string }).type)).toEqual([
       "todo.deleted.v1",
     ]);
@@ -317,7 +313,7 @@ describe("outbound deliveries", () => {
     );
     await producer.add("event", { ...event }, { jobId: `${event.id}-again` });
     await producer.close();
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await processed("events-webhooks", `${event.id}-again`);
     const rows = await asRole("postgres", (client) =>
       client.query("SELECT count(*)::int AS n FROM webhooks.delivery WHERE endpoint_id = $1", [
         endpointId,

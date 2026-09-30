@@ -6,6 +6,7 @@
 import type { AddressInfo } from "node:net";
 import { Controller, Get, type INestApplication, Module, type Type } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import { eventually } from "@repo/testing/eventually";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 // Through the package's entry point, as the services import it.
 import {
@@ -146,13 +147,11 @@ describe("load shedding", () => {
     // A container this small is over its limit at once.
     vi.spyOn(process, "constrainedMemory").mockReturnValue(1024);
     const app = await build(UnregisteredModule);
-    const deadline = Date.now() + 5_000;
-    let response = await get(app, "/health/live");
-    while (response.statusCode !== 503 && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      response = await get(app, "/health/live");
-    }
-    expect(response.statusCode).toBe(503);
+    const response = await eventually(
+      () => get(app, "/health/live"),
+      (current) => current.statusCode === 503,
+      { timeout: 5_000 },
+    );
     expect(response.headers["retry-after"]).toBe("5");
     expect(response.json()).toMatchObject({ code: "SERVICE_UNAVAILABLE" });
   });

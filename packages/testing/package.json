@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "UNLICENSED",
-  "description": "Helpers the end-to-end suites share (web and mobile): authenticator codes.",
+  "description": "Helpers the test suites share: authenticator codes, the test environment, waiting for background work.",
   "type": "module",
   "exports": {
     "./*": "./src/*.ts"

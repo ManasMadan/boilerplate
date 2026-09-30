@@ -1,6 +1,7 @@
 /** RealtimeHub against the docker compose Valkey (private database). */
 import { randomUUID } from "node:crypto";
 import { getEventListeners } from "node:events";
+import { eventually } from "@repo/testing/eventually";
 import { Redis } from "ioredis";
 import { afterAll, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -29,9 +30,13 @@ async function collect(channels: string[], count: number, publish: () => Promise
       if (received.length === count) controller.abort();
     }
   })();
-  await new Promise((resolve) => setTimeout(resolve, 100)); // let SUBSCRIBE land
+  for (const channel of channels) await subscribed(channel, 1);
   await publish();
-  await Promise.race([reading, new Promise((resolve) => setTimeout(resolve, 2_000))]);
+  await eventually(
+    () => received.length,
+    (n) => n === count,
+    { timeout: 2_000 },
+  );
   controller.abort();
   await reading;
   return received;
@@ -47,9 +52,11 @@ async function subscribers(channel: string) {
 
 /** Waits until Redis counts `count` subscriptions to the channel. */
 async function subscribed(channel: string, count: number) {
-  const deadline = Date.now() + 2_000;
-  while ((await subscribers(channel)) < count && Date.now() < deadline)
-    await new Promise((resolve) => setTimeout(resolve, 10));
+  await eventually(
+    () => subscribers(channel),
+    (n) => n >= count,
+    { timeout: 2_000, interval: 10 },
+  );
 }
 
 describe("RealtimeHub", () => {
@@ -64,11 +71,14 @@ describe("RealtimeHub", () => {
         if (listeners.length === 20) controller.abort();
       }
     })();
-    await new Promise((resolve) => setTimeout(resolve, 100)); // let SUBSCRIBE land
+    await subscribed(channel, 1);
     // One at a time, so the stream waits (and would add a listener) before each.
     for (let i = 0; i < 20; i++) {
       await publishRealtime(redis, channel, { type: "todos.changed" });
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await eventually(
+        () => listeners.length,
+        (n) => n === i + 1,
+      );
     }
     await reading;
     expect(listeners).toHaveLength(20);

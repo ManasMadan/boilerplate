@@ -17,6 +17,7 @@ import {
   S3Storage,
 } from "@repo/nest-common";
 import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
+import { eventually } from "@repo/testing/eventually";
 import { Queue } from "bullmq";
 import pg from "pg";
 import sharp from "sharp";
@@ -111,19 +112,6 @@ async function jobIn(queue: string, jobId: string) {
   const state = await job?.getState();
   await bull.close();
   return { job, state };
-}
-
-async function eventually<T>(
-  fn: () => Promise<T>,
-  done: (value: T) => boolean,
-  timeoutMs = 15_000,
-) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = await fn();
-    if (done(value) || Date.now() > deadline) return value;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
 }
 
 beforeAll(async () => {

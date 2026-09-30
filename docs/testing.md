@@ -52,6 +52,12 @@ background when a tool times out commands (an agent's shell, for one).
 - Services are built in-process (`createApiServer()` and the like); emails are read
   back from Mailpit, push and Twilio go to local fakes (`apps/notifications/test`), and
   Stripe to `packages/fake-stripe`.
+- Nothing sleeps for a fixed time. A test waits for what it's waiting on:
+  `eventually(read, done)` from `@repo/testing/eventually`, `vi.waitFor` or
+  `expect.poll`. To show that something did not happen, it first waits for a signal that
+  the work is over (the job completed, the delivery row written, Redis counting the
+  subscriber), then checks once. A delay stays only where it stands in for slow work on
+  purpose, with a comment saying so.
 
 A few tests need real third parties and are skipped without them
 (`E2E_CIMD_CLIENT_ID`, see [environment.md](environment.md#tests-and-tooling)).

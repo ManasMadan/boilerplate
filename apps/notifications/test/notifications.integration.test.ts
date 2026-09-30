@@ -13,6 +13,7 @@ import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer, type Producer, queuePrefix } from "@repo/jobs";
 import { createRedis, DATABASE, I18N, PinoLogger, REDIS } from "@repo/nest-common";
 import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
+import { eventually } from "@repo/testing/eventually";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -27,15 +28,15 @@ interface MailpitMessage {
   To: { Address: string }[];
 }
 
-async function waitForEmail(to: string, timeoutMs = 15_000): Promise<MailpitMessage> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const res = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`);
-    const body = (await res.json()) as { messages: MailpitMessage[] };
-    if (body.messages[0]) return body.messages[0];
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`No email for ${to} within ${timeoutMs}ms`);
+async function waitForEmail(to: string): Promise<MailpitMessage> {
+  return eventually(
+    async () => {
+      const res = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`);
+      return ((await res.json()) as { messages: MailpitMessage[] }).messages[0];
+    },
+    (message): message is MailpitMessage => message !== undefined,
+    { interval: 200 },
+  );
 }
 
 /** A port nothing listens on yet. */
@@ -152,9 +153,8 @@ describe("notifications service", () => {
       { jobId },
     );
     await waitForEmail(to);
-    // Give the worker a moment to acknowledge completion after the SMTP send.
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(await producer.queue.getJob(jobId)).toBeUndefined();
+    // The worker acknowledges completion just after the SMTP send.
+    await expect.poll(() => producer.queue.getJob(jobId)).toBeUndefined();
   });
 
   it("rejects payloads that break the contract before they reach the queue", async () => {
@@ -205,17 +205,15 @@ describe("notifications service", () => {
     return jobId;
   }
 
-  async function settle(jobId: string, deliveries: number) {
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline) {
-      const rows = await sql<{ status: string }>(
-        "SELECT status FROM notifications.delivery WHERE idempotency_key LIKE $1 AND status <> 'sending'",
-        [`${jobId}:%`],
-      );
-      if (rows.length >= deliveries) return rows;
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
-    throw new Error(`deliveries for ${jobId} didn't settle`);
+  function settle(jobId: string, deliveries: number) {
+    return eventually(
+      () =>
+        sql<{ status: string }>(
+          "SELECT status FROM notifications.delivery WHERE idempotency_key LIKE $1 AND status <> 'sending'",
+          [`${jobId}:%`],
+        ),
+      (rows) => rows.length >= deliveries,
+    );
   }
 
   it("puts a notification in the inbox and emails it with a one-click unsubscribe", async () => {
@@ -329,10 +327,7 @@ describe("notifications service", () => {
         },
         { jobId: eventId },
       );
-      const deadline = Date.now() + 10_000;
-      while ((await queue.getJobState(eventId)) !== "completed" && Date.now() < deadline)
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(await queue.getJobState(eventId)).toBe("completed");
+      await expect.poll(() => queue.getJobState(eventId), { timeout: 10_000 }).toBe("completed");
     };
     const reasons = async () =>
       (
@@ -703,8 +698,8 @@ describe("notifications service", () => {
     );
     const jobId = await reminder(user.id);
     await settle(jobId, 2);
-    // Give a stray push the time it would take.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Every channel is tried within the job: once it's done, no push is on its way.
+    expect(await finished(bulk.queue, jobId)).toBe("completed");
     expect(await pushStatuses(jobId)).toEqual([]);
     expect(deliveredTo(token)).toEqual([]);
   });
@@ -745,11 +740,7 @@ describe("notifications service", () => {
 
     // Quiet hours are over.
     await job?.promote();
-    const deadline = Date.now() + 15_000;
-    while (deliveredTo(token).length === 0 && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    expect(deliveredTo(token)).toHaveLength(1);
+    await expect.poll(() => deliveredTo(token), { timeout: 15_000 }).toHaveLength(1);
     expect((await pushStatuses(jobId)).map((row) => row.status)).toEqual(["sent"]);
   });
   // ------------------------------------------------------------------------------- sms
@@ -774,14 +765,11 @@ describe("notifications service", () => {
     return jobId;
   }
 
-  async function settleSms(jobId: string) {
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline) {
-      const rows = (await smsStatuses(jobId)).filter((row) => row.status !== "sending");
-      if (rows.length > 0) return rows;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    throw new Error(`the text for ${jobId} didn't settle`);
+  function settleSms(jobId: string) {
+    return eventually(
+      async () => (await smsStatuses(jobId)).filter((row) => row.status !== "sending"),
+      (rows) => rows.length > 0,
+    );
   }
 
   const newPhone = () => `+1415${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
@@ -963,7 +951,8 @@ describe("notifications service", () => {
     );
     await (await digests()).send(user.id, dateIn(due));
     await (await digests()).scheduleDue();
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    // The day's digest job is the one already done (the same id is never queued twice).
+    expect(await finished(bulk.queue, `digest-${user.id}-${dateIn(due)}`)).toBe("completed");
     const search = (await (
       await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${user.email}`)}`)
     ).json()) as { messages: unknown[] };
@@ -1107,13 +1096,11 @@ describe("notifications service", () => {
   }
 
   /** Waits until BullMQ has finished the job, one way or the other. */
-  async function finished(queue: Queue, jobId: string) {
-    const deadline = Date.now() + 15_000;
-    for (;;) {
-      const state = await (await queue.getJob(jobId))?.getState();
-      if (state === "completed" || state === "failed" || Date.now() > deadline) return state;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+  function finished(queue: Queue, jobId: string) {
+    return eventually(
+      async () => (await queue.getJob(jobId))?.getState(),
+      (state) => state === "completed" || state === "failed",
+    );
   }
 
   async function mailText(email: string) {

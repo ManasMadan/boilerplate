@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { BullModule, Processor } from "@nestjs/bullmq";
 import { type LoggerService, Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { eventually } from "@repo/testing/eventually";
 import { Queue, UnrecoverableError } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { JobProcessor } from "../src/job-processor";
@@ -49,13 +50,12 @@ afterAll(async () => {
   await app.close();
 });
 
-async function failedLog(jobId: string) {
-  for (let i = 0; i < 100; i++) {
-    const entry = errors.find((args) => (args[0] as { jobId?: string })?.jobId === jobId);
-    if (entry) return entry;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  throw new Error(`no failure logged for job ${jobId}`);
+function failedLog(jobId: string) {
+  return eventually(
+    () => errors.find((args) => (args[0] as { jobId?: string })?.jobId === jobId),
+    (entry): entry is unknown[] => entry !== undefined,
+    { timeout: 5_000 },
+  );
 }
 
 describe("JobProcessor", () => {

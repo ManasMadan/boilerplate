@@ -1,5 +1,6 @@
 /** Failed jobs, listed and put back, on a real Valkey. */
 import { randomUUID } from "node:crypto";
+import { eventually } from "@repo/testing/eventually";
 import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -17,12 +18,7 @@ let succeed = false;
 const handled: string[] = [];
 let worker: Worker;
 
-async function until(check: () => Promise<boolean>) {
-  const deadline = Date.now() + 10_000;
-  while (!(await check()) && Date.now() < deadline)
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  return check();
-}
+const until = (check: () => Promise<boolean>) => eventually(check, (ok) => ok, { timeout: 10_000 });
 
 beforeAll(async () => {
   worker = new Worker(

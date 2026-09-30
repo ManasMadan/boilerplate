@@ -3,6 +3,7 @@
  * the real queues (the command opens them by name), with job ids of this run's own.
  */
 import { randomUUID } from "node:crypto";
+import { eventually } from "@repo/testing/eventually";
 import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -18,12 +19,7 @@ const queue = new Queue(NAME, { connection, prefix: queuePrefix(NAME) });
 const id = `cli-${randomUUID()}`;
 let worker: Worker;
 
-async function until(check: () => Promise<boolean>) {
-  const deadline = Date.now() + 10_000;
-  while (!(await check()) && Date.now() < deadline)
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  return check();
-}
+const until = (check: () => Promise<boolean>) => eventually(check, (ok) => ok, { timeout: 10_000 });
 const failed = (job = id) => until(async () => (await queue.getJob(job))?.isFailed() ?? false);
 
 /** Runs the command; what it printed and its exit code. */

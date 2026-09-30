@@ -15,6 +15,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createRedis } from "@repo/nest-common";
 import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
+import { eventually } from "@repo/testing/eventually";
 import nodemailer from "nodemailer";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -56,15 +57,6 @@ async function jmap(method: string, args: Record<string, unknown>) {
 }
 /** Settings written through the API apply on a reload. */
 const reload = () => jmap("x:Action/set", { create: { r: { "@type": "ReloadSettings" } } });
-
-async function eventually<T>(fn: () => Promise<T>, done: (value: T) => boolean, timeoutMs: number) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = await fn();
-    if (done(value) || Date.now() > deadline) return value;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-}
 
 describe.skipIf(!STALWART_URL)("mail through Stalwart", () => {
   let testDb: TestDatabase;
@@ -145,7 +137,7 @@ describe.skipIf(!STALWART_URL)("mail through Stalwart", () => {
         return ((await response.json()) as { messages: { ID: string }[] }).messages;
       },
       (messages) => messages.length > 0,
-      20_000,
+      { timeout: 20_000, interval: 250 },
     );
     expect(found).toHaveLength(1);
     const headers = (await (
@@ -182,7 +174,7 @@ describe.skipIf(!STALWART_URL)("mail through Stalwart", () => {
           [to],
         ),
       (rows) => rows.length > 0,
-      45_000,
+      { timeout: 45_000, interval: 250 },
     );
     expect(feedback.map((row) => row.payload)).toEqual([
       { provider: "stalwart", kind: "bounce", address: to },

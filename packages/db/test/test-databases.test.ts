@@ -45,7 +45,8 @@ describe("dropping a test database", () => {
     const testDb = await createTestDatabase();
     const service = new pg.Client({ connectionString: testDb.urlFor("app_api") });
     await service.connect();
-    // FORCE can't end another role's session: without the wait this drop fails.
+    // FORCE can't end another role's session: without the wait this drop fails. The
+    // delay is on purpose: the connection closes while the drop is already waiting.
     const closing = new Promise((resolve) => setTimeout(resolve, 300)).then(() => service.end());
     await testDb.drop();
     await closing;

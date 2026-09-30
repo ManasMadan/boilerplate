@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
 import { createProducer } from "@repo/jobs";
+import { eventually } from "@repo/testing/eventually";
 import type { Job } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSession, type Harness, newEmail, newPassword, startApi, takeOtp } from "./harness";
@@ -103,11 +104,10 @@ describe("features off", () => {
       },
       { jobId: id },
     );
-    let state = await job.getState();
-    for (let i = 0; i < 200 && state !== "completed" && state !== "failed"; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      state = await job.getState();
-    }
+    const state = await eventually(
+      () => job.getState(),
+      (current) => current === "completed" || current === "failed",
+    );
     await events.queue.close();
     expect(state).toBe("completed");
   });

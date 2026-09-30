@@ -21,6 +21,7 @@ describe("CacheService", () => {
     let loads = 0;
     const load = async () => {
       loads += 1;
+      // A slow load on purpose, so the other nine ask while it's still running.
       await new Promise((resolve) => setTimeout(resolve, 50));
       return { plan: "pro" };
     };
@@ -138,6 +139,7 @@ describe("IdempotencyStore", () => {
   it("rejects a concurrent duplicate and allows a retry after a failure", async () => {
     const store = new IdempotencyStore(redis);
     const key = randomUUID();
+    // A slow operation on purpose, still running when the duplicate arrives.
     const slow = store.run(
       key,
       z.string(),

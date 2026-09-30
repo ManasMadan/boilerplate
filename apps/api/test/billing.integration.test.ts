@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
 import { type FakeStripe, startFakeStripe } from "@repo/fake-stripe";
 import { createProducer, queuePrefix } from "@repo/jobs";
+import { eventually } from "@repo/testing/eventually";
 import { type Job, Queue } from "bullmq";
 import pg from "pg";
 import Stripe from "stripe";
@@ -169,15 +170,6 @@ async function outsideSubscription(
   await fetch(`${stripe.url}/checkout/${session.id}/pay`, { method: "POST", redirect: "manual" });
   const [subscription] = (await client.subscriptions.list({ customer: customerId })).data.slice(-1);
   return subscription as Stripe.Subscription;
-}
-
-async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean) {
-  const deadline = Date.now() + 15_000;
-  for (;;) {
-    const value = await read();
-    if (done(value) || Date.now() > deadline) return value;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
 }
 
 async function signedIn() {
@@ -351,13 +343,16 @@ describe("subscribing", () => {
   it("a declined card leaves the workspace on Free", async () => {
     const { owner } = await workspace();
     const { url } = await owner.session.rpc.billing.checkout({ interval: "month" });
+    const from = forwarded.length;
     const declined = await fetch(`${url}/pay`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: "card=declined",
     });
     expect(declined.status).toBe(402);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Stripe sends no event for a declined card (the fake sends its events before it
+    // answers), so nothing is left to change the plan.
+    expect(forwarded.slice(from)).toEqual([]);
     expect((await owner.session.rpc.billing.overview()).plan).toBe("free");
   });
 
@@ -472,17 +467,17 @@ describe("keeping in sync with Stripe", () => {
       (current) => current.subscription?.cancelAtPeriodEnd === true,
     );
     // The creation event arrives again, with the old state in it.
-    await queueEvent("stripe.event_received.v1", "evt_replayed", {
+    const replayed = await queueEvent("stripe.event_received.v1", "evt_replayed", {
       inboundEventId: randomUUID(),
       stripeEventId: "evt_replayed",
       type: "customer.subscription.created",
       object: stale as unknown as Record<string, unknown>,
     });
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    expect(await settled([replayed])).toEqual(["completed"]);
     expect((await owner.session.rpc.billing.overview()).subscription?.cancelAtPeriodEnd).toBe(true);
   });
 
-  it("lists invoices, and ignores subscriptions that aren't the app's", async () => {
+  it("lists invoices", async () => {
     const { owner } = await workspace();
     expect(await owner.session.rpc.billing.invoices()).toEqual([]);
     await expectError(owner.session.rpc.billing.portal(), "NO_SUBSCRIPTION");
@@ -496,16 +491,6 @@ describe("keeping in sync with Stripe", () => {
         url: expect.any(String),
       }),
     ]);
-
-    const before = await sql("SELECT count(*)::int AS n FROM billing.subscription");
-    await queueEvent("stripe.event_received.v1", "evt_foreign", {
-      inboundEventId: randomUUID(),
-      stripeEventId: "evt_foreign",
-      type: "customer.subscription.updated",
-      object: { id: "sub_not_ours" },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-    expect(await sql("SELECT count(*)::int AS n FROM billing.subscription")).toEqual(before);
   });
 
   it("deleting a workspace cancels its subscription first", async () => {

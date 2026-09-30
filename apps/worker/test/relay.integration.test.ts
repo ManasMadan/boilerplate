@@ -9,6 +9,7 @@ import type { EventEnvelope } from "@repo/contracts/events";
 import { createDatabase, type Database } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import type { PinoLogger } from "@repo/nest-common";
+import { eventually } from "@repo/testing/eventually";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { EventBus } from "../src/outbox/event-bus";
@@ -62,15 +63,6 @@ const published = async (id: string) =>
       [id],
     )
   )[0]?.published_at ?? null;
-
-async function eventually<T>(fn: () => Promise<T> | T, done: (value: T) => boolean) {
-  const deadline = Date.now() + 15_000;
-  for (;;) {
-    const value = await fn();
-    if (done(value) || Date.now() > deadline) return value;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-}
 
 /** What the relay logged, by level and message. */
 function recorder() {

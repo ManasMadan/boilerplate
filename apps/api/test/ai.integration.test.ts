@@ -342,10 +342,7 @@ describe("AI features", () => {
       break;
     }
     controller.abort();
-    for (let i = 0; i < 200 && !closed.has(org); i++) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    expect(closed.has(org)).toBe(true);
+    await expect.poll(() => closed.has(org), { timeout: 5_000 }).toBe(true);
   });
 
   it("passes on what the service's error says, params included", async () => {

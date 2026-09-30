@@ -46,5 +46,8 @@ Which kind goes where:
   file below 100% is either tested, trimmed, or listed with its reason in "Coverage
   exceptions" in docs/testing.md. No coverage pragmas. The `test-writer` agent writes
   missing tests.
+- No fixed sleeps. Wait for the condition with `eventually` (`@repo/testing/eventually`),
+  `vi.waitFor` or `expect.poll`; to prove something didn't happen, wait for a signal that
+  the work finished (job completed, row written, `PUBSUB NUMSUB`), then check once.
 - A bug fix starts with a test that fails without the fix.
 - Tenancy changes need a test that a second organization cannot see or change the row.
