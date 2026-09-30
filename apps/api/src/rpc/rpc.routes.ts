@@ -23,11 +23,11 @@ import { runWithContext } from "@repo/nest-common";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { contextFor, toHeaders } from "../http-context";
 import { openApiDocument } from "./openapi";
-import { toContractError } from "./procedures";
+import { type LogError, toContractError } from "./procedures";
 import type { AppRouter } from "./router";
 
 export interface MountOptions {
-  logError: (error: unknown) => void;
+  logError: LogError;
   publicUrl: string;
   release: string;
   exposeDocs: boolean;

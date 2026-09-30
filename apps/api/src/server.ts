@@ -7,6 +7,7 @@ import {
   createServer,
   DATABASE,
   type Database,
+  describeError,
   I18N,
   type I18n,
   REDIS,
@@ -67,7 +68,8 @@ export function createApiServer() {
           app,
         ),
         {
-          logError: (error) => logger.error(error, "unhandled error in procedure"),
+          logError: (error, level) =>
+            logger[level]({ err: describeError(error) }, "error in procedure"),
           publicUrl: env.BETTER_AUTH_URL,
           release: env.RELEASE,
           exposeDocs: env.NODE_ENV !== "production",

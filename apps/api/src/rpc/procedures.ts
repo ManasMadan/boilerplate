@@ -55,13 +55,19 @@ export function requireFresh(caller: Pick<OrgCaller, "signedInAt">) {
 
 type ErrorParams = ErrorData["params"];
 
-/** Maps anything thrown inside a procedure to the contract's error shape. */
-export function toContractError(
-  error: unknown,
-  log: (error: unknown) => void,
-): ORPCError<ErrorCode, unknown> {
+/** How a procedure's error is logged: "error" for our faults, "debug" for the client's. */
+export type LogError = (error: unknown, level: "error" | "debug") => void;
+
+/**
+ * Maps anything thrown inside a procedure to the contract's error shape. An AppError of
+ * 500 or more is our fault and is logged, cause and all (UPSTREAM_UNAVAILABLE wraps the
+ * real failure); a 4xx is logged at debug when it carries a cause.
+ */
+export function toContractError(error: unknown, log: LogError): ORPCError<ErrorCode, unknown> {
   const requestId = currentContext()?.requestId;
   if (error instanceof AppError) {
+    if (error.status >= 500) log(error, "error");
+    else if (error.cause !== undefined) log(error, "debug");
     return new ORPCError(error.code, {
       status: error.status,
       data: { params: error.params, requestId },
@@ -89,7 +95,7 @@ export function toContractError(
       });
     }
   }
-  log(error);
+  log(error, "error");
   return new ORPCError("INTERNAL", { status: 500, data: { params: {} as ErrorParams, requestId } });
 }
 
