@@ -7,7 +7,7 @@
  *                       operators do after a key rotation (k8s:up runs it too)
  *   bun run k8s:down    delete the cluster (`bun run docker:clean` also removes the images)
  *
- * Then open http://boilerplate.localhost (email: `kubectl -n boilerplate port-forward
+ * Then open http://localhost (email: `kubectl -n boilerplate port-forward
  * svc/mailpit 8025`, then http://localhost:8025).
  *
  * What differs from a cluster: no Argo CD, cert-manager, KEDA or mail server. The data
@@ -20,7 +20,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,15 +28,20 @@ import { fail, ok, ROOT } from "./lib";
 
 const CLUSTER = "boilerplate";
 const NAMESPACE = "boilerplate";
-const HOST = "boilerplate.localhost";
+const HOST = "localhost";
+/** The address the stack sends email from, and signs in to Mailpit as. */
+const MAIL_DOMAIN = "boilerplate.localhost";
 /** The uploads bucket's public host (deploy/environments/local/data.yaml). */
-const FILES_HOST = "files.boilerplate.localhost";
+const FILES_HOST = "files.localhost";
 const STACK = "boilerplate";
 const DATA = "boilerplate-data";
 const IMAGES = ["api", "worker", "notifications", "webhooks", "web", "ai", "migrate"];
 const MIN_DOCKER_MEMORY_GB = 8;
 const BUILDER = "boilerplate";
-const BUILD_MEMORY = "4g";
+// CI's runners have room to build every image at once while the cluster comes up; a
+// laptop builds one at a time after it, in a builder whose memory is capped.
+const IN_CI = process.env.CI === "true";
+const BUILD_MEMORY = IN_CI ? "8g" : "4g";
 
 /**
  * Where to install an add-on from, as the clusters install it (deploy/platform/addons),
@@ -74,6 +79,26 @@ function step(label: string, command: string, args: string[], input?: string) {
     if (result.stderr) console.error(result.stderr.trim());
     process.exit(1);
   }
+  ok(label);
+}
+
+/**
+ * step(), without blocking: steps that don't depend on each other run side by side. The
+ * output goes to a file, not a pipe, so a long build never stalls while a blocking step
+ * runs; it's shown when the step fails.
+ */
+async function stepAsync(label: string, command: string, args: string[]) {
+  const log = join(tmpdir(), `k8s-${label.replace(/\W+/g, "-")}-${process.pid}.log`);
+  const fd = openSync(log, "w");
+  const child = Bun.spawn([command, ...args], { cwd: ROOT, stdout: fd, stderr: fd });
+  const code = await child.exited;
+  closeSync(fd);
+  if (code !== 0) {
+    fail(label);
+    console.error(readFileSync(log, "utf8").trim().split("\n").slice(-80).join("\n"));
+    process.exit(1);
+  }
+  rmSync(log, { force: true });
   ok(label);
 }
 
@@ -187,7 +212,7 @@ function secrets() {
   const unsubscribe = secret();
   const aiService = secret();
   // Mailpit takes any login; production settings still want one.
-  const smtpUrl = `smtps://no-reply%40${HOST}:${secret(16)}@mailpit:1025`;
+  const smtpUrl = `smtps://no-reply%40${MAIL_DOMAIN}:${secret(16)}@mailpit:1025`;
   // Generated together: shared values (encryption keys, service secret) must match.
   const services: Record<string, Record<string, string>> = {
     api: {
@@ -320,14 +345,57 @@ async function reencrypt() {
   }
 }
 
+/**
+ * Every image, as boilerplate/<image>:dev, in a builder of our own: its memory is capped
+ * (a build can't starve other containers) and its cache goes away with
+ * `bun run docker:clean`. In CI all at once, reading the layers deploy.yml caches on
+ * master when GitHub's cache is reachable; locally one image at a time.
+ */
+async function buildImages() {
+  if (!run("docker", ["buildx", "inspect", BUILDER], { quiet: true }).ok) {
+    step("image builder", "docker", [
+      "buildx",
+      "create",
+      "--name",
+      BUILDER,
+      "--driver",
+      "docker-container",
+      "--driver-opt",
+      `memory=${BUILD_MEMORY}`,
+      "--driver-opt",
+      "default-load=true",
+    ]);
+  }
+  const bake = (targets: string[]) => [
+    "buildx",
+    "bake",
+    ...targets,
+    "--builder",
+    BUILDER,
+    "--load",
+    "--set",
+    "*.args.RELEASE=dev",
+    ...(IN_CI && process.env.ACTIONS_CACHE_URL
+      ? ["--set", "*.cache-from=type=gha,scope=amd64"]
+      : []),
+  ];
+  if (IN_CI) {
+    await stepAsync(`images (${IMAGES.join(", ")})`, "docker", bake(IMAGES));
+    return;
+  }
+  for (const image of IMAGES) await stepAsync(`image ${image}`, "docker", bake([image]));
+}
+
 async function up() {
   preflight();
+  // Only our charts need our images: in CI they build while the cluster gets ready.
+  const images = IN_CI ? buildImages() : undefined;
   if (!run("kind", ["get", "clusters"], { quiet: true }).stdout.split("\n").includes(CLUSTER)) {
     step("cluster", "kind", ["create", "cluster", "--config", "deploy/local/kind.yaml"]);
   } else {
     ok("cluster (exists)");
   }
-  step("Envoy Gateway", "helm", [
+  const envoy = stepAsync("Envoy Gateway", "helm", [
     "upgrade",
     "--install",
     "eg",
@@ -337,7 +405,7 @@ async function up() {
     `kind-${CLUSTER}`,
     "--wait",
   ]);
-  step("CloudNativePG", "helm", [
+  const cnpg = stepAsync("CloudNativePG", "helm", [
     "upgrade",
     "--install",
     "cnpg",
@@ -347,6 +415,7 @@ async function up() {
     `kind-${CLUSTER}`,
     "--wait",
   ]);
+  await Promise.all([envoy, cnpg]);
   kubectl(["create", "namespace", "gateway-system"]);
   kubectl(["create", "namespace", NAMESPACE]);
   mailpitCertificate();
@@ -366,33 +435,27 @@ async function up() {
     "deploy/local/mailpit.yaml",
   ]);
 
-  // A builder of our own: its memory is capped (a build can't starve other containers)
-  // and its cache goes away with `bun run docker:clean`. One image at a time.
-  if (!run("docker", ["buildx", "inspect", BUILDER], { quiet: true }).ok) {
-    step("image builder", "docker", [
-      "buildx",
-      "create",
-      "--name",
-      BUILDER,
-      "--driver",
-      "docker-container",
-      "--driver-opt",
-      `memory=${BUILD_MEMORY}`,
-      "--driver-opt",
-      "default-load=true",
+  const data = () =>
+    stepAsync("data (Postgres, Valkey, RustFS; credentials generated)", "helm", [
+      "upgrade",
+      "--install",
+      DATA,
+      join(ROOT, "deploy/charts/data"),
+      "-f",
+      join(ROOT, "deploy/environments/local/data.yaml"),
+      "--namespace",
+      NAMESPACE,
+      "--kube-context",
+      `kind-${CLUSTER}`,
+      "--wait",
+      "--timeout",
+      "10m",
     ]);
-  }
-  for (const image of IMAGES) {
-    step(`image ${image}`, "docker", [
-      "buildx",
-      "bake",
-      image,
-      "--builder",
-      BUILDER,
-      "--load",
-      "--set",
-      "*.args.RELEASE=dev",
-    ]);
+  if (images === undefined) {
+    await buildImages();
+    await data();
+  } else {
+    await Promise.all([images, data()]);
   }
   step("images loaded into the cluster", "kind", [
     "load",
@@ -402,21 +465,6 @@ async function up() {
     ...IMAGES.map((image) => `boilerplate/${image}:dev`),
   ]);
 
-  step("data (Postgres, Valkey, RustFS; credentials generated)", "helm", [
-    "upgrade",
-    "--install",
-    DATA,
-    join(ROOT, "deploy/charts/data"),
-    "-f",
-    join(ROOT, "deploy/environments/local/data.yaml"),
-    "--namespace",
-    NAMESPACE,
-    "--kube-context",
-    `kind-${CLUSTER}`,
-    "--wait",
-    "--timeout",
-    "10m",
-  ]);
   step("Postgres ready", "kubectl", [
     "--context",
     `kind-${CLUSTER}`,
