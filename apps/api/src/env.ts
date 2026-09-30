@@ -7,7 +7,7 @@
  * variables; see src/features.ts. Add new variables here, to .env.example and to
  * docs/environment.md in the same change.
  */
-import { coreEnv, databaseEnv, port, redisEnv, storageEnv } from "@repo/nest-common";
+import { coreEnv, csv, databaseEnv, port, redisEnv, storageEnv } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 import { parseAuthSecrets } from "./auth/secrets";
@@ -44,16 +44,7 @@ export const envSchema = {
    * app's web build, for example. Native apps need nothing here (their scheme is
    * trusted by the Expo plugin).
    */
-  APP_ORIGINS: z
-    .string()
-    .default("")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean),
-    )
-    .pipe(z.array(z.url())),
+  APP_ORIGINS: csv.prefault("").pipe(z.array(z.url())),
 
   /** Oldest web/mobile app version still supported; older clients get CLIENT_OUTDATED. */
   MINIMUM_CLIENT_VERSION: z
@@ -93,15 +84,7 @@ export const envSchema = {
   // Encrypts webhook signing secrets at rest (apps/webhooks decrypts them to sign).
   ENCRYPTION_KEYS: z.string().min(1),
   // Exact private IPs webhook endpoints may use, for local development and tests only.
-  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: z
-    .string()
-    .default("")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean),
-    ),
+  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: csv.prefault(""),
   // Optional: the Python AI service, and the secret this API signs its calls with
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),

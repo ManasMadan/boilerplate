@@ -21,7 +21,7 @@ import { createHash, randomInt, randomUUID, timingSafeEqual } from "node:crypto"
 import { Injectable } from "@nestjs/common";
 import { PHONE_CODE_EXPIRES_IN, PHONE_CODE_LENGTH } from "@repo/contracts/auth";
 import { transaction } from "@repo/db";
-import { isLocale } from "@repo/i18n";
+import { localeOrDefault } from "@repo/i18n";
 import {
   AppError,
   createRateLimiter,
@@ -105,7 +105,7 @@ export class PhoneService {
       "send",
       {
         template: "auth.phone-code",
-        to: { phone: phoneNumber, locale: isLocale(locale) ? locale : "en" },
+        to: { phone: phoneNumber, locale: localeOrDefault(locale) },
         data: { code, expiresInMinutes: Math.round(PHONE_CODE_EXPIRES_IN / MINUTE) },
       },
       { jobId: randomUUID(), meta: jobMeta() },
@@ -179,7 +179,7 @@ export class PhoneService {
             template: "auth.security-alert",
             to: {
               email: updated.email,
-              locale: isLocale(updated.locale) ? updated.locale : "en",
+              locale: localeOrDefault(updated.locale),
               // The number that was on the account: after a change, the old one hears of it.
               ...((previous ?? phoneNumber) && { phone: (previous ?? phoneNumber) as string }),
             },

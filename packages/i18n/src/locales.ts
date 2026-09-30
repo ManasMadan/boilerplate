@@ -11,6 +11,10 @@ export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (locales as readonly string[]).includes(value);
 }
 
+/** The locale to use for a stored value: itself when supported, else the default. */
+export const localeOrDefault = (value: unknown): Locale =>
+  isLocale(value) ? value : defaultLocale;
+
 /** Whether `value` is a time zone this runtime knows ("Europe/Lisbon", "UTC"). */
 export function isTimeZone(value: unknown): value is string {
   if (typeof value !== "string" || value === "") return false;

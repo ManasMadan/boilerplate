@@ -3,7 +3,7 @@
  * @repo/nest-common's fragments; add new ones here, to .env.example and to
  * docs/environment.md.
  */
-import { coreEnv, databaseEnv, port, redisEnv } from "@repo/nest-common";
+import { coreEnv, csv, databaseEnv, port, redisEnv } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
@@ -25,16 +25,7 @@ export const envSchema = {
   // Optional: the signature key of our Stalwart mail server's webhook (hard bounces
   // become suppressions); /webhooks/stalwart answers 404 without it. Comma-separated to
   // accept a new and an old key at once while rotating: Stalwart signs with one.
-  STALWART_WEBHOOK_SECRET: z
-    .string()
-    .transform((value) =>
-      value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean),
-    )
-    .pipe(z.array(z.string().min(32)).min(1))
-    .optional(),
+  STALWART_WEBHOOK_SECRET: csv.pipe(z.array(z.string().min(32)).min(1)).optional(),
 
   WEBHOOK_DELIVERY_CONCURRENCY: positive.default(20),
   WEBHOOK_TIMEOUT_MS: positive.max(60_000).default(15_000),
@@ -42,15 +33,7 @@ export const envSchema = {
   WEBHOOK_AUTO_DISABLE_HOURS: positive.default(120),
   // Exact private IPs endpoints may point to, for local development and tests only
   // (e.g. "127.0.0.1"). Refused in production: customer URLs must be public.
-  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: z
-    .string()
-    .default("")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean),
-    ),
+  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: csv.prefault(""),
 };
 
 export const env = createEnv({

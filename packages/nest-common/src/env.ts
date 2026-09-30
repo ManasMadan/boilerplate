@@ -13,6 +13,17 @@
  */
 import { z } from "zod";
 
+/**
+ * A comma-separated list: items trimmed, empty ones dropped ("a, b," → ["a", "b"]).
+ * `.prefault("…")` gives it a value when unset; `.pipe(...)` checks the items.
+ */
+export const csv = z.string().transform((value) =>
+  value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean),
+);
+
 export const nodeEnv = z.enum(["development", "test", "production"]).default("development");
 export const logLevel = z
   .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
@@ -30,15 +41,7 @@ export const coreEnv = {
    * limits, lockout and audit logs, so trusting everyone would let any caller forge it.
    * Kubernetes: the gateway's pod range (the private `uniquelocal` ranges cover it).
    */
-  TRUSTED_PROXIES: z
-    .string()
-    .default("loopback")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean),
-    ),
+  TRUSTED_PROXIES: csv.prefault("loopback"),
   /**
    * Shed load (503) when the process is saturated. Off only where many instances share
    * one machine on purpose, like the integration tests, whose parallel test files would

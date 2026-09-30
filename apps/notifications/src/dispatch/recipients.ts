@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { defaultLocale, isLocale, type Locale, timeZoneOrUtc } from "@repo/i18n";
+import { type Locale, localeOrDefault, timeZoneOrUtc } from "@repo/i18n";
 import type { NotificationPayload } from "@repo/jobs";
 import { type Database, InjectDatabase, rows } from "@repo/nest-common";
 import * as z from "zod";
@@ -30,7 +30,7 @@ const toRecipient = (user: UserRow): Recipient => ({
   email: user.email,
   phone: null,
   name: user.name,
-  locale: isLocale(user.locale) ? user.locale : defaultLocale,
+  locale: localeOrDefault(user.locale),
   timeZone: timeZoneOrUtc(user.timezone),
 });
 

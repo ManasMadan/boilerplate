@@ -5,6 +5,7 @@ import es from "../messages/es.json" with { type: "json" };
 import {
   bundledMessages,
   createI18n,
+  localeOrDefault,
   type MessageSource,
   negotiateLocale,
   timeZoneOrUtc,
@@ -17,6 +18,14 @@ describe("negotiateLocale", () => {
     expect(negotiateLocale("de")).toBe("en");
     expect(negotiateLocale(["es"])).toBe("es");
     expect(negotiateLocale(undefined)).toBe("en");
+  });
+});
+
+describe("localeOrDefault", () => {
+  it("keeps a supported locale and falls back to the default for anything else", () => {
+    expect(localeOrDefault("es")).toBe("es");
+    expect(localeOrDefault("fr")).toBe("en");
+    expect(localeOrDefault(null)).toBe("en");
   });
 });
 
