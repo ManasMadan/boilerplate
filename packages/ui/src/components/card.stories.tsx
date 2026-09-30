@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Button } from "./button";
 import {
   Card,
@@ -30,4 +31,15 @@ export const Default: Story = {
       <CardFooter className="text-muted-foreground text-sm">Recommended</CardFooter>
     </Card>
   ),
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText("Two-step verification")).toHaveAttribute(
+      "data-slot",
+      "card-title",
+    );
+    // The header's action is a real button, named by its label.
+    await expect(canvas.getByRole("button", { name: "Turn on" })).toBeEnabled();
+    await expect(
+      canvas.getByText("It protects your account even if your password leaks."),
+    ).toBeVisible();
+  },
 };
