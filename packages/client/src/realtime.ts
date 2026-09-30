@@ -16,6 +16,22 @@ import { useApi } from "./provider";
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
 
+/**
+ * Waits `ms`, or until `signal` aborts. Each wait removes its own abort listener, so a
+ * long session of reconnects doesn't pile them up on the signal.
+ */
+export function abortableSleep(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
 /** Calls `onMessage` for every realtime message while mounted; `key` changes reopen the stream. */
 export function useRealtime(
   onMessage: (message: RealtimeMessage) => void,
@@ -32,11 +48,6 @@ export function useRealtime(
   useEffect(() => {
     if (key === null || key === undefined) return;
     const controller = new AbortController();
-    const sleep = (ms: number) =>
-      new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, ms);
-        controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
-      });
 
     void (async () => {
       let delay = RETRY_MIN_MS;
@@ -54,7 +65,7 @@ export function useRealtime(
           const code = errorCode(error);
           if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") return;
         }
-        await sleep(delay);
+        await abortableSleep(delay, controller.signal);
         delay = Math.min(delay * 2, RETRY_MAX_MS);
       }
     })();

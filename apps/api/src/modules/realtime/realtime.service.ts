@@ -8,7 +8,7 @@
  */
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import { realtimeChannel } from "@repo/contracts/realtime";
-import { AppError, InjectRedis, type Redis } from "@repo/nest-common";
+import { AppError, InjectPinoLogger, InjectRedis, PinoLogger, type Redis } from "@repo/nest-common";
 import { RealtimeHub } from "../../realtime";
 
 const STREAM_LIFETIME_MS = 10 * 60_000;
@@ -19,8 +19,13 @@ export class RealtimeService implements OnApplicationShutdown {
   private readonly hub: InstanceType<typeof RealtimeHub>;
   private readonly open = new Map<string, number>();
 
-  constructor(@InjectRedis() redis: Redis) {
-    this.hub = new RealtimeHub(redis);
+  constructor(
+    @InjectRedis() redis: Redis,
+    @InjectPinoLogger(RealtimeService.name) log: PinoLogger,
+  ) {
+    this.hub = new RealtimeHub(redis, (channel) =>
+      log.warn({ channel }, "dropped a realtime message outside the contract"),
+    );
   }
 
   /**

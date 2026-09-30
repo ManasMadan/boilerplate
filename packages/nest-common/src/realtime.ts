@@ -42,12 +42,23 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
     private readonly local = new EventEmitter().setMaxListeners(0);
     private readonly refs = new Map<string, number>();
 
-    constructor(redis: Redis) {
+    /**
+     * `onDropped` hears about messages outside the contract (or not JSON at all), which
+     * are dropped: they come from Redis, where anything can publish.
+     */
+    constructor(redis: Redis, onDropped: (channel: string, raw: string) => void = () => {}) {
       // A connection in subscriber mode can't run other commands, so it gets its own.
       this.subscriber = redis.duplicate();
       this.subscriber.on("message", (channel: string, raw: string) => {
-        const parsed = schema.safeParse(JSON.parse(raw));
+        let json: unknown;
+        try {
+          json = JSON.parse(raw);
+        } catch {
+          return onDropped(channel, raw);
+        }
+        const parsed = schema.safeParse(json);
         if (parsed.success) this.local.emit(channel.slice(PREFIX.length), parsed.data);
+        else onDropped(channel, raw);
       });
     }
 
@@ -60,20 +71,24 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
         if (buffer.length > MAX_BUFFERED) buffer.shift();
         wake?.();
       };
+      // One listener for the stream's whole life, not one per wait.
+      const onAbort = () => wake?.();
+      signal.addEventListener("abort", onAbort, { once: true });
       for (const channel of channels) this.local.on(channel, onMessage);
-      await Promise.all(channels.map((channel) => this.retain(channel)));
       try {
+        // Inside the try: if subscribing fails, the finally still undoes the rest.
+        await Promise.all(channels.map((channel) => this.retain(channel)));
         while (!signal.aborted) {
           if (buffer.length === 0) {
             await new Promise<void>((resolve) => {
               wake = resolve;
-              signal.addEventListener("abort", () => resolve(), { once: true });
             });
             wake = undefined;
           }
           while (buffer.length > 0 && !signal.aborted) yield buffer.shift() as Message;
         }
       } finally {
+        signal.removeEventListener("abort", onAbort);
         for (const channel of channels) this.local.off(channel, onMessage);
         await Promise.all(channels.map((channel) => this.release(channel)));
       }
