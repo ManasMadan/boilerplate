@@ -130,11 +130,11 @@ bundle id, so all three install side by side:
 
 `.github/workflows/mobile.yml` moves the app like the other services:
 
-- a push to `master` touching the app or the packages it uses publishes an over-the-air
-  update to the `preview` channel;
-- a release tag (`v1.4.0`, docs/deploy.md) builds both platforms with the `production`
-  profile and submits them to the App Store and Google Play; the release check makes sure
-  `version` in `app.config.ts` is that version;
+- once CI has passed on a merge to `master` that touched the app or the packages it uses,
+  an over-the-air update goes to the `preview` channel;
+- once a release tag (`v1.4.0`, docs/deploy.md) has passed its check, both platforms build
+  with the `production` profile and are submitted to the App Store and Google Play; the
+  check makes sure `version` in `app.config.ts` is that version;
 - a manual run publishes an update to `preview` or `production` (a hotfix).
 
 Updates reach only builds of the same app version (`runtimeVersion: appVersion`), so

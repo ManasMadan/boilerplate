@@ -93,5 +93,6 @@ Stalwart and RustFS); these need the real environment, once:
 
 [deploy.md](deploy.md), "Releases → production", and the release skill.
 
-- [ ] The first release: `git tag v0.1.0 && git push origin v0.1.0`, then
+- [ ] The first release, on a commit that deployed to staging (the merge, or the staging
+      bump right after it): `git tag v0.1.0 && git push origin v0.1.0`, then
       `bun run promote v0.1.0` to open production's promotion pull request.

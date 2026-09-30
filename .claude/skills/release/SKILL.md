@@ -15,14 +15,17 @@ request (docs/deploy.md, "Releases → production"; the code is `scripts/release
 2. **The mobile version.** `version` in `apps/mobile/app.config.ts` must equal it (store
    builds carry it, and over-the-air updates only reach builds of their version). Bump
    it in a pull request and merge that first; the release check refuses a mismatch.
-3. **Tag** the merged commit on `master`, with the user's go-ahead (it's a push):
-   `git tag v<version> <commit> && git push origin v<version>`. release.yml checks it and
-   publishes the GitHub release; mobile.yml starts the store builds.
-4. **Promote.** Once deploy.yml has passed for that commit
-   (`gh run list --workflow deploy.yml --commit <sha>`) and staging is healthy:
-   `bun run promote v<version>` opens `chore(infra): deploy v<version> to production`,
-   which sets `image.tag` in `deploy/environments/production/stack.yaml` to `sha-<commit>`.
-   It runs as the user, so CI runs on the pull request.
+3. **Tag** a commit that deployed, with the user's go-ahead (it's a push): the merge once
+   deploy.yml has passed for it (`gh run list --workflow deploy.yml --commit <sha>`), or
+   the staging bump right after it (master's head, usually; a release of it ships the
+   merge's images). `git tag v<version> <commit> && git push origin v<version>`.
+   release.yml checks it (it waits while CI and deploy.yml still run, and refuses a
+   commit with no images) and publishes the GitHub release; mobile.yml starts the store
+   builds once that passed. Tags can't be moved, so check before pushing.
+4. **Promote.** Once staging is healthy on those images: `bun run promote v<version>`
+   opens `chore(infra): deploy v<version> to production`, which sets `image.tag` in
+   `deploy/environments/production/stack.yaml` to the release's images. It runs as the
+   user, so CI runs on the pull request.
 5. **Deploy** by merging it. Argo CD syncs `production-data` and `production-stack`;
    production admits only images deploy.yml signed on `master`. Watch it as in the
    deploy skill, with the production cluster's context.

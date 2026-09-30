@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { mobileVersion, releaseNotes, withImageTag } from "./release";
+import {
+  mobileVersion,
+  type ReleaseFacts,
+  releaseImageTag,
+  releaseNotes,
+  withImageTag,
+} from "./release";
 
 const commit = (subject: string, body = "") => ({ hash: "abc1234", subject, body });
 
@@ -63,5 +69,37 @@ describe("promoting", () => {
 
   it("refuses values without an image.tag", () => {
     expect(() => withImageTag("site:\n  host: a\n", "sha-1")).toThrow("No image.tag");
+  });
+});
+
+describe("a release's images", () => {
+  const STAGING = "deploy/environments/staging/stack.yaml";
+  // master: merge (deployed) ← bump ([skip ci], repoints staging at the merge's images).
+  const facts = (overrides: Partial<ReleaseFacts> = {}): ReleaseFacts => ({
+    deployed: (commit) => commit === "merge",
+    changedFiles: (commit) => (commit === "bump" ? [STAGING] : ["apps/api/src/main.ts"]),
+    parent: (commit) => (commit === "bump" ? "merge" : "older"),
+    stagingTag: (commit) => (commit === "bump" ? "sha-merge" : "sha-older"),
+    ...overrides,
+  });
+
+  it("are the commit's own once deploy.yml passed for it", () => {
+    expect(releaseImageTag("merge", facts())).toBe("sha-merge");
+  });
+
+  it("are the parent's for the staging bump right after it", () => {
+    expect(releaseImageTag("bump", facts())).toBe("sha-merge");
+  });
+
+  it("don't exist for a commit that never deployed", () => {
+    expect(releaseImageTag("older", facts())).toBeUndefined();
+  });
+
+  it("aren't borrowed by a bump that changes anything else, or points elsewhere", () => {
+    expect(
+      releaseImageTag("bump", facts({ changedFiles: () => [STAGING, "apps/api/src/main.ts"] })),
+    ).toBeUndefined();
+    expect(releaseImageTag("bump", facts({ stagingTag: () => "sha-older" }))).toBeUndefined();
+    expect(releaseImageTag("bump", facts({ deployed: () => false }))).toBeUndefined();
   });
 });

@@ -67,21 +67,27 @@ git tag v1.4.0 && git push origin v1.4.0
 bun run promote v1.4.0
 ```
 
-The tag starts `.github/workflows/release.yml`, which checks it (a version, on master,
-and the same as `version` in `apps/mobile/app.config.ts`, which store builds carry: bump
-that in a pull request first) and publishes the GitHub release with notes grouped from
-the Conventional Commit titles since the previous tag (`scripts/release.ts`). Choose the
-number from them (`bun scripts/release.ts notes HEAD` shows what's unreleased): a
-breaking change (`!`) is a new major version, a `feat` a minor one.
+Tag a commit that deployed: the merge once deploy.yml has passed for it, or the staging
+bump deploy.yml commits right after (usually master's head; it has no images of its own,
+so a release of it ships its parent's, which is the same code). The tag starts
+`.github/workflows/release.yml`, which checks it: a version, on master, with images
+(waiting while CI and deploy.yml still run on the commit), and the same as `version` in
+`apps/mobile/app.config.ts`, which store builds carry (bump that in a pull request
+first). It then publishes the GitHub release with notes grouped from the Conventional
+Commit titles since the previous tag (`scripts/release.ts`), and mobile.yml starts the
+store builds once it has passed. Choose the number from the notes
+(`bun scripts/release.ts notes HEAD` shows what's unreleased): a breaking change (`!`) is
+a new major version, a `feat` a minor one.
 
 `bun run promote` opens the promotion pull request (`release/production-v<version>`),
 from your own GitHub login so CI runs on it: it sets `image.tag` in
-`deploy/environments/production/stack.yaml` to that commit's images, the ones already
-running on staging, and refuses until deploy.yml has passed for the commit. Merging the
+`deploy/environments/production/stack.yaml` to the release's images (the same rule as the
+check), the ones already running on staging, and refuses when there are none. Merging the
 promotion is the deploy.
 
 The mobile app follows the same events on EAS (`mobile.yml`, see
-[web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)).
+[web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)): updates once
+CI has passed on master, store builds once a release has.
 
 ## Rollback
 
