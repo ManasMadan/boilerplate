@@ -107,10 +107,12 @@ restart that service once synced, then revoke the old key.
 
 ## A cluster's age key
 
-It decrypts every Secret of its environment. To replace it: `age-keygen` a new pair, put
-the new public key in `.sops.yaml` next to the old, `sops updatekeys` every file of that
-environment, commit; replace the `sops-age` Secret in `argocd` (apply the new key as
-`TF_VAR_sops_age_key` with `sops_keys_version` raised by one in tfvars, since OpenTofu
-can't see a write-only key change; `infra/tofu/README.md`) and restart the repo server; then remove the old
-public key from `.sops.yaml` and `updatekeys` again. A leaked key means every secret it
-could decrypt is leaked too: rotate those values as well.
+It decrypts every Secret of its environment, and lives in three places that change
+together: the `sops-age` Secret in `argocd`, the `infra-<env>` environment's
+`SOPS_AGE_KEY` on GitHub, and the operator's safe copy. The steps are in
+`deploy/README.md`, "Replacing a cluster's age key": the new public key next to the old
+in `.sops.yaml` and `sops updatekeys`; the new private key in `SOPS_AGE_KEY` with
+`sops_keys_version` raised by one in tfvars, then apply (OpenTofu can't see a write-only
+key change) and restart the repo server; then remove the old public key and `updatekeys`
+again. A leaked key means every secret it could decrypt is leaked too: rotate those
+values as well.

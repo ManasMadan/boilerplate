@@ -167,6 +167,30 @@ theirs. `charts:check` fails on any file there that isn't an encrypted Secret, o
 namespace where there shouldn't be one. The plain manifest must never be committed:
 encrypt it before `git add`.
 
+### Replacing a cluster's age key
+
+The cluster's private key lives in three places, and all three change together: the
+`sops-age` Secret in `argocd` (written by OpenTofu's bootstrap, which keeps it in
+neither its state nor its plans), the `SOPS_AGE_KEY` secret of the `infra-<env>` GitHub
+environment (what `infra.yml` applies with), and wherever you keep your safe copy. To
+replace it, because it leaked or someone who had it left:
+
+1. `age-keygen -o <env>.agekey`, and add its public key to the environment's rule in
+   `.sops.yaml`, next to the old one.
+2. `sops updatekeys` every file of the environment (`environments/<env>/secrets/` and
+   `platform/secrets/<env>/`), and commit: every Secret now decrypts with either key.
+3. Put the new private key in `SOPS_AGE_KEY` (`gh secret set SOPS_AGE_KEY --env
+   infra-<env> < <env>.agekey`) and in your safe copy, raise `sops_keys_version` by one
+   in the environment's tfvars, and apply (`infra.yml`, or `tofu apply` with
+   `TF_VAR_sops_age_key`): OpenTofu can't see a write-only key change, so the version is
+   what makes it write the new one.
+4. Restart the repo server (`kubectl -n argocd rollout restart deploy/argocd-repo-server`)
+   and check an Application still syncs.
+5. Remove the old public key from `.sops.yaml`, `updatekeys` again and commit. If the old
+   key leaked, every value it could decrypt leaked too: rotate those as well (the
+   rotate-secrets skill). The previews' key (`preview.txt`, `SOPS_PREVIEW_AGE_KEY`) is
+   replaced the same way, in `.sops.yaml`'s preview rule.
+
 ## Re-encrypting after a key rotation
 
 The stack has a suspended CronJob, `<release>-reencrypt`, that never runs on its own.

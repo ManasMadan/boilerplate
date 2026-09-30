@@ -83,6 +83,19 @@ run "installs_the_sops_key_for_argo_cd" {
   }
 }
 
+# Replacing an age key (deploy/README.md): OpenTofu can't see a write-only value change,
+# so raising the version is what rewrites the Secret.
+run "rewrites_the_keys_when_their_version_is_raised" {
+  command = apply
+  variables {
+    sops_keys_version = 2
+  }
+  assert {
+    condition     = kubernetes_secret_v1.sops_age.data_wo_revision == 2
+    error_message = "a raised sops_keys_version writes the keys again"
+  }
+}
+
 run "keeps_the_preview_key_apart" {
   command = apply
   variables {
