@@ -2,11 +2,12 @@
  * Code generators: `bun run gen:new` picks one interactively, or name it and pass the
  * answers in order:
  *
- *   bun run gen:new api-feature --args projects project project
+ *   bun run gen:new api-feature --args projects project project '{"name":"Launch"}'
  *   bun run gen:new package --args money "Formatting and arithmetic for amounts of money."
  *
- * Each writes files that already pass lint, types and knip, wires them in, and formats
- * everything it touched. The .claude/skills add-feature and add-package say what to do next.
+ * Each writes files that already pass lint, types, knip and their tests, wires them in,
+ * and formats everything it touched; CI runs both into a scratch copy to keep it so
+ * (scripts/generators.ts). The .claude/skills add-feature and add-package say what to do next.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -59,6 +60,23 @@ export default function generator(plop: PlopTypes.NodePlopAPI): void {
           "Prisma client accessor of its table (already in packages/db/prisma/schema, with org_id and RLS), e.g. project:",
         default: (answers: PlopTypes.Answers) => plop.getHelper("camelCase")(answers.item),
         validate: (value: string) => CAMEL.test(value) || "The camelCase accessor, e.g. timeEntry",
+      },
+      {
+        type: "input",
+        name: "row",
+        message:
+          'The columns a test row needs besides org_id, as JSON (the generated test inserts rows), e.g. {"name": "Launch"}:',
+        default: "{}",
+        validate: (value: string) => {
+          try {
+            const row: unknown = JSON.parse(value);
+            return (
+              (typeof row === "object" && row !== null && !Array.isArray(row)) || "A JSON object"
+            );
+          } catch {
+            return 'A JSON object, e.g. {"name": "Launch"}';
+          }
+        },
       },
     ],
     actions: [
@@ -140,6 +158,9 @@ export default function generator(plop: PlopTypes.NodePlopAPI): void {
         type: "append",
         path: "apps/api/test/api.integration.test.ts",
         templateFile: "templates/api-feature/integration-test.ts.hbs",
+        // plop's uniqueness check turns the rendered test into an unescaped regular
+        // expression, which `??` breaks; the module name is new (validated), so skip it.
+        unique: false,
       },
       format(({ name }) => {
         const kebab = plop.getHelper("kebabCase")(name);

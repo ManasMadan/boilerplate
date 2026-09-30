@@ -9,14 +9,17 @@ The todo feature is the reference for every layer: copy its shape, not just its 
 
 1. **Table.** If the feature stores data, add the model first (db-change skill): tenant
    table with `org_id`, forced row-level security and grants, then `bun run gen`.
-2. **Scaffold.** `bun run gen:new api-feature --args <name> <item> <model>`, e.g.
-   `bun run gen:new api-feature --args projects project project` (`<model>` is the
-   Prisma client accessor). It writes and wires:
+2. **Scaffold.** `bun run gen:new api-feature --args <name> <item> <model> '<row>'`, e.g.
+   `bun run gen:new api-feature --args projects project project '{"name":"Launch"}'`
+   (`<model>` is the Prisma client accessor, `<row>` the columns a test row needs
+   besides `org_id`, as JSON). It writes and wires:
    - `packages/contracts/src/api/<name>.ts`, registered in `packages/contracts/src/api/index.ts`
    - `apps/api/src/modules/<name>/` (module, repository, service, router, index), registered
      in `apps/api/src/app.module.ts` and `apps/api/src/rpc/router.ts`
    - `packages/client/src/api/<name>/list.ts` (an infinite-query hook)
-   - a `describe` block at the end of `apps/api/test/api.integration.test.ts`
+   - a `describe` block at the end of `apps/api/test/api.integration.test.ts`: empty for a
+     new workspace, another workspace's rows never listed, paging, 401 signed out, 422 on
+     a bad page size
    The scaffold is one `list` procedure that returns `id` and `createdAt`; everything
    else is yours.
 3. **Contract.** Add the fields to the item schema and the writes (`create`, `update`,

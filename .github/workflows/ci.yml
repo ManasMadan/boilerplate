@@ -556,10 +556,50 @@ jobs:
             "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed --ignorefile /trivyignore.yaml \
             --severity CRITICAL,HIGH "$IMAGE"
 
+  # The code generators (turbo/generators): each one's output must pass lint, types and
+  # its own tests, or the next feature starts from broken code (scripts/generators.ts).
+  generators:
+    name: Code generators
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read }
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports: ["1025:1025", "8025:8025"]
+    env:
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+      SMTP_URL: smtp://localhost:1025
+      MAILPIT_URL: http://localhost:8025
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      - run: bun run db:deploy
+      # In place: this checkout is thrown away afterwards.
+      - run: bun scripts/generators.ts --in-place
+
   ci-ok:
     name: CI passed
     if: always()
-    needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images]
+    needs: [pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images, generators]
     runs-on: ubuntu-24.04
     permissions: {}
     steps:
