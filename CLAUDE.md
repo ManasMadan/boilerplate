@@ -115,7 +115,8 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   the user (`/<name>`), never on your own.
 - `.claude/settings.json`: Bash commands run without a prompt only when listed (named
   `bun run` scripts, the repo's tools, read-only git and gh); the Bash guard hook asks
-  before commits, pushes, GitHub changes, infrastructure, destructive scripts, new
+  before commits, pushes, GitHub changes, infrastructure, destructive scripts, stopping
+  or deleting Docker containers, volumes or images, new
   dependencies and a `bunx` tool that isn't installed. Secrets files (`.env`, keys,
   tfvars and tfstate, load-test sessions) are denied to the Read tool; a shell command
   could still print them, so never try. There is no sandbox: Docker and the local

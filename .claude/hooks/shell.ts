@@ -206,6 +206,16 @@ function worktrunkVerdict(
   return null;
 }
 
+/** Whether a docker command stops or deletes something (`compose down`, `volume rm`, ...). */
+function dockerRemoves([, sub = "", third = "", ...rest]: string[]) {
+  if (["rm", "rmi", "kill", "stop"].includes(sub)) return true;
+  // Past compose's own flags (`-p x`, `--profile full`).
+  if (sub === "compose")
+    return [third, ...rest].some((word) => ["down", "rm", "kill", "stop"].includes(word));
+  const objects = ["volume", "container", "image", "network", "system", "builder", "buildx"];
+  return objects.includes(sub) && ["rm", "prune"].includes(third);
+}
+
 /** What the policy says about one simple command, or null. */
 function commandVerdict({ env, words }: Simple, installed: (bin: string) => boolean): Verdict {
   const [program = "", sub = "", third = ""] = words;
@@ -283,6 +293,12 @@ function commandVerdict({ env, words }: Simple, installed: (bin: string) => bool
   if (program === "wt") {
     const wt = worktrunkVerdict(sub, third, has);
     if (wt) return wt;
+  }
+  // Docker is shared by every checkout and every other project on the machine.
+  if (program === "docker" && dockerRemoves(words)) {
+    return ask(
+      "This stops or deletes Docker containers, volumes or images that other checkouts and projects may use.",
+    );
   }
   if (program === "tofu" && ["apply", "destroy", "import", "state"].includes(sub)) {
     return ask("This changes real infrastructure or its state.");
