@@ -7,11 +7,15 @@
  */
 import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv } from "./lib";
 
-/** The local Postgres port: .env's, else the example's default. */
-export function postgresPort(): number {
-  const port =
-    readEnv(ENV_PATH).get("POSTGRES_PORT") ?? readEnv(ENV_EXAMPLE_PATH).get("POSTGRES_PORT");
-  return Number(port ?? 55432);
+/**
+ * The local Postgres port: .env's, else .env.example's, the one place its default is
+ * written (docker-compose.yml reads the same variable).
+ */
+export function postgresPort(envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH): number {
+  const port = readEnv(envPath).get("POSTGRES_PORT") ?? readEnv(examplePath).get("POSTGRES_PORT");
+  if (port === undefined)
+    throw new Error(`POSTGRES_PORT is in neither ${envPath} nor ${examplePath}`);
+  return Number(port);
 }
 
 interface Server {

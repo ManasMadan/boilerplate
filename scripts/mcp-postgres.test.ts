@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { postgresPort, startServer } from "./mcp-postgres";
 import { captureOutput } from "./stand-ins";
 
@@ -25,8 +28,18 @@ async function closedPort() {
 }
 
 describe("the Postgres MCP server's start", () => {
-  it("uses a port from the environment files", () => {
+  it("uses .env's port, else .env.example's, and refuses to guess one", () => {
     expect(Number.isInteger(postgresPort())).toBe(true);
+    const dir = mkdtempSync(join(tmpdir(), "mcp-postgres-"));
+    const env = join(dir, ".env");
+    const example = join(dir, ".env.example");
+    writeFileSync(example, "POSTGRES_PORT=55432\n");
+    expect(postgresPort(env, example)).toBe(55432);
+    writeFileSync(env, "POSTGRES_PORT=55433\n");
+    expect(postgresPort(env, example)).toBe(55433);
+    writeFileSync(env, "");
+    writeFileSync(example, "");
+    expect(() => postgresPort(env, example)).toThrow("POSTGRES_PORT is in neither");
   });
 
   it("starts the server as the read-only role on the local port, and exits with it", async () => {

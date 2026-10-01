@@ -80,14 +80,11 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   Claude changes its own guard rails (hooks, settings, commit hooks, lint rules). Change
   the source and regenerate. A new suppression, skipped or focused test, or coverage
   pragma is refused too, unless docs/testing.md lists it with its reason.
-- When you finish a change, the Stop hook checks what changed: Biome on the changed files,
-  lint, types and unit tests of the affected packages (ruff and basedpyright for
-  `apps/ai`), types and tests of `scripts/` and the hooks when they changed, and knip. It
-  re-checks after each fix (up to 3 times a turn), and when a change is too wide for its
-  60 s (a root `package.json`, the lockfile, a timeout) it asks you to run the full
-  checks in the background before finishing. It doesn't run the boundary checks,
-  integration or e2e tests: for anything touching the database, queues or HTTP, run the
-  `verify` skill.
+- When you finish a change, the Stop hook runs the fast checks on what changed and sends
+  you back to fix what fails; what it runs, its limits and when it asks for the full
+  checks are in one place, the header of `.claude/hooks/verify-turn.ts`. It doesn't run
+  the boundary checks, integration or e2e tests: for anything touching the database,
+  queues or HTTP, run the `verify` skill.
 - Long-running commands go in the background (the Bash tool's `run_in_background`),
   never in the foreground: `bun dev` and `bun dev:full` never exit, and
   `test:integration`, `test:coverage`, `test:e2e`, `charts:check` and
