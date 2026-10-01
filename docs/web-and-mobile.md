@@ -161,14 +161,14 @@ Verified https links fix both; each platform checks a file on the site's own hos
 Opening an invitation link only shows the invitation, whoever opened it: joining takes a
 tap on Accept.
 
-One case they don't cover: after social sign-in, better-auth's Expo plugin hands the
-session to the app in the `boilerplate://` redirect (`?cookie=`), and it only does so
-for a custom scheme, never an https link. On iOS the sign-in sheet
-(`ASWebAuthenticationSession`) returns that URL to the app that opened it; on Android
-the redirect goes through the OS, so another app claiming the scheme could catch it.
-Closing that needs the redirect to carry a one-time code the app exchanges with a
-verifier it kept, instead of the cookie; until then, prefer email codes and passkeys
-on Android.
+Social sign-in still comes back through the scheme, and on Android that redirect goes
+through the OS, where another app claiming the scheme could catch it. So the redirect
+never carries the session (better-auth's Expo plugin would put the cookie in it): the
+app asks the API for a hand-off first, signs in with the hand-off's id in its callback
+URL, and trades the id and a secret it kept for the session afterwards, once
+(`signInWithGoogle` in `src/lib/auth-client.ts`, `apps/api/src/auth/mobile-sign-in.ts`).
+A caught link holds only the id. This is the protection RFC 8252 gives native apps with
+PKCE, so the callback doesn't need a verified link.
 
 
 | Platform | File | What goes in it |
@@ -195,8 +195,8 @@ turn them on:
    [Statement List tester](https://developers.google.com/digital-asset-links/tools/generator)
    for `assetlinks.json`, and on a device, a link to `/invitations/<id>` opening the app.
 
-The sign-in callback still uses the scheme (better-auth's Expo plugin builds it), so
-moving it to a verified link is a code change in `src/lib/auth-client.ts` as well.
+The sign-in callback keeps using the scheme: the hand-off above makes catching it
+worthless, and a verified link can't hand the session over by itself either.
 
 ### Native flows (Maestro)
 

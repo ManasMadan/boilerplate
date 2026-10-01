@@ -11,7 +11,7 @@ import { Screen } from "@/components/screen";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAuthErrorMessage, useAuthSchemas } from "@/hooks/use-auth";
-import { authClient } from "@/lib/auth-client";
+import { authClient, signInWithGoogle } from "@/lib/auth-client";
 
 export default function SignIn() {
   const t = useTranslations();
@@ -40,6 +40,13 @@ export default function SignIn() {
     // With two-step verification on, the auth client continues on /two-factor instead.
     if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) router.replace("/");
   });
+
+  const google = async () => {
+    setFailure(undefined);
+    const { signedIn, error } = await signInWithGoogle();
+    if (error) setFailure(errorMessage(error));
+    if (signedIn) router.replace("/");
+  };
 
   return (
     <Screen title={t("auth.signInTitle")} description={t("auth.signInDescription")}>
@@ -70,10 +77,7 @@ export default function SignIn() {
         <Text>{t("common.signIn")}</Text>
       </Button>
       {system?.features.google ? (
-        <Button
-          variant="outline"
-          onPress={() => authClient.signIn.social({ provider: "google", callbackURL: "/" })}
-        >
+        <Button variant="outline" onPress={google}>
           <Text>{t("auth.google")}</Text>
         </Button>
       ) : null}
