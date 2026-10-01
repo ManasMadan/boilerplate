@@ -63,3 +63,38 @@ repoServer:
     - name: sops-age
       secret:
         secretName: sops-age
+
+# Notifications: a pull request's preview posts its address on the pull request once Argo
+# CD has deployed it (the previews ApplicationSet subscribes each preview's stack), so
+# the address comes from the cluster's own domain and nothing else has to repeat it. They
+# go through the repository's GitHub App (Pull requests: write), whose id, installation
+# id and private key are the `argocd-notifications-secret` Secret in this namespace, from
+# deploy/platform/secrets/<environment>/ on the cluster hosting previews. Without it,
+# nothing is posted; Argo CD runs the same.
+notifications:
+  secret:
+    create: false
+  notifiers:
+    service.github: |
+      appID: $github-appID
+      installationID: $github-installationID
+      privateKey: $github-privateKey
+  triggers:
+    # Once per commit: when that commit's images are running and healthy.
+    trigger.on-preview-deployed: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+        oncePer: app.metadata.annotations["boilerplate.dev/head-sha"]
+        send: [preview-deployed]
+  templates:
+    # On the pull request whose head is that commit; later commits update the comment.
+    template.preview-deployed: |
+      message: Preview deployed
+      github:
+        repoURLPath: "{{ (index .app.spec.sources 0).repoURL }}"
+        revisionPath: '{{ index .app.metadata.annotations "boilerplate.dev/head-sha" }}'
+        pullRequestComment:
+          commentTag: preview
+          content: |
+            Preview of `{{ index .app.metadata.annotations "boilerplate.dev/head-sha" | trunc 7 }}`: {{ index .app.metadata.annotations "boilerplate.dev/url" }}
+
+            Removing the `preview` label deletes it.

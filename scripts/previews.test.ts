@@ -42,6 +42,56 @@ describe("the previews ApplicationSet", () => {
   it("decrypts the preview Secrets with the preview key", () => {
     expect(patch).toMatch(/name: sops\s+env:\s+- \{ name: AGE_KEY, value: preview \}/);
   });
+
+  // The address is the cluster's domain, once: the site's host and what's posted.
+  it("serves and announces one address, from the cluster's domain", () => {
+    expect(patch).toContain(
+      '{{- $host := printf "pr-%v.preview.%s" .number (index .metadata.annotations "boilerplate.dev/domain") }}',
+    );
+    expect(patch).toMatch(/- name: site\.host\s+value: "\{\{ \$host \}\}"/);
+    expect(patch).toContain('boilerplate.dev/url: "https://{{ $host }}"');
+    expect(patch).toContain('boilerplate.dev/head-sha: "{{ .head_sha }}"');
+    expect(patch).toContain('notifications.argoproj.io/subscribe.on-preview-deployed.github: ""');
+  });
+});
+
+describe("a preview's address on its pull request", () => {
+  const argocd = Bun.YAML.parse(read("deploy/argocd/argo-cd-values.yaml")) as {
+    notifications: {
+      secret: { create: boolean };
+      triggers: Record<string, string>;
+      templates: Record<string, string>;
+    };
+  };
+  const { notifications } = argocd;
+
+  it("is posted by Argo CD once the commit runs, on the pull request of that commit", () => {
+    const [trigger] = Bun.YAML.parse(
+      notifications.triggers["trigger.on-preview-deployed"] ?? "",
+    ) as { when: string; oncePer: string; send: string[] }[];
+    expect(trigger?.when).toContain("app.status.health.status == 'Healthy'");
+    expect(trigger?.oncePer).toBe('app.metadata.annotations["boilerplate.dev/head-sha"]');
+    expect(trigger?.send).toEqual(["preview-deployed"]);
+    const template = Bun.YAML.parse(notifications.templates["template.preview-deployed"] ?? "") as {
+      github: { revisionPath: string; pullRequestComment: { content: string; commentTag: string } };
+    };
+    expect(template.github.revisionPath).toBe(
+      '{{ index .app.metadata.annotations "boilerplate.dev/head-sha" }}',
+    );
+    expect(template.github.pullRequestComment.content).toContain(
+      '{{ index .app.metadata.annotations "boilerplate.dev/url" }}',
+    );
+  });
+
+  it("uses credentials from the SOPS secrets, never a Secret the chart makes", () => {
+    expect(notifications.secret.create).toBe(false);
+  });
+
+  it("isn't repeated in a repository variable", () => {
+    const workflow = read(".github/workflows/preview.yml");
+    expect(workflow).not.toContain("PREVIEW_DOMAIN");
+    expect(workflow).not.toContain("createComment");
+  });
 });
 
 describe("a preview's mail", () => {

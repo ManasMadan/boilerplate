@@ -167,6 +167,12 @@ App runs Renovate (`renovate.yml`, configured in `renovate.json5`).
 3. In this repository: variable `BOT_APP_CLIENT_ID` (the App's client ID) and secret
    `BOT_APP_PRIVATE_KEY` (the key file's contents).
 4. Add the App to the `master` ruleset's bypass list.
+5. On the cluster hosting previews, Argo CD posts each preview's address on its pull
+   request as the same App: its App ID, installation id (`gh api
+   "repos/$REPO/installation" --jq .id`) and private key go in that environment's
+   `argocd-notifications-secret` (`github-appID`, `github-installationID`,
+   `github-privateKey`), a SOPS file in `deploy/platform/secrets/<env>/` (deploy/README.md).
+   Do it before `rm "$PEM"` above.
 
 Without the App the deploy workflow falls back to `GITHUB_TOKEN` and says so in a
 warning, and Renovate doesn't run.
@@ -192,7 +198,6 @@ skipped until its values exist.
 | Name | Kind | For |
 |---|---|---|
 | `BOT_APP_CLIENT_ID`, `BOT_APP_PRIVATE_KEY` | variable, secret | the GitHub App above |
-| `PREVIEW_DOMAIN` | variable | the preview link posted on pull requests (`preview.yml`) |
 | `EVAL_MODEL` | variable | nightly evals against a real model, e.g. `anthropic:claude-sonnet-5` |
 | `EVAL_EMBEDDINGS`, `EVAL_JUDGE_MODEL`, `EVAL_MIN_PASS_RATE`, `EVAL_MIN_RELEVANCE` | variables | the rest of the nightly evals' settings (`apps/ai/evals`) |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | secrets | the providers those models use |

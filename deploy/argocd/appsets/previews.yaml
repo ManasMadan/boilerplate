@@ -7,6 +7,7 @@
 # charts never come from the PR: a fork's could run any image with those Secrets. So a
 # PR's chart changes show up once merged, not in its preview. It gets its own database
 # and Valkey. Removing the label or closing the PR deletes the preview and its namespace.
+# Once deployed, its address is posted on the PR (Argo CD's notifications).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -75,7 +76,18 @@ spec:
             duration: 10s
             factor: 2
             maxDuration: 5m
+  # The stack's Application carries the preview's address and commit, and asks Argo CD's
+  # notifications to post the address on the pull request once it's deployed
+  # (argo-cd-values.yaml): the domain is the cluster's, read here and nowhere else.
   templatePatch: |
+    {{- $host := printf "pr-%v.preview.%s" .number (index .metadata.annotations "boilerplate.dev/domain") }}
+    {{- if eq .chart "stack" }}
+    metadata:
+      annotations:
+        notifications.argoproj.io/subscribe.on-preview-deployed.github: ""
+        boilerplate.dev/head-sha: "{{ .head_sha }}"
+        boilerplate.dev/url: "https://{{ $host }}"
+    {{- end }}
     spec:
       sources:
         - repoURL: https://github.com/ManasMadan/boilerplate.git
@@ -93,7 +105,7 @@ spec:
               - name: image.tag
                 value: "sha-{{ .head_sha }}"
               - name: site.host
-                value: 'pr-{{ .number }}.preview.{{ index .metadata.annotations "boilerplate.dev/domain" }}'
+                value: "{{ $host }}"
               - name: observability.enabled
                 value: {{ eq (index .metadata.labels "boilerplate.dev/observability" | default "") "true" | quote }}
               {{- end }}

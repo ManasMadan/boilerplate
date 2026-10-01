@@ -1,9 +1,10 @@
 # Pull-request previews. Adding the `preview` label (maintainers only) builds the
 # pull request's images as sha-<head commit> and pushes them; Argo CD's previews
 # ApplicationSet then deploys that commit to its own namespace, at
-# https://pr-<number>.preview.<domain>, and this workflow posts the link. New pushes
-# rebuild; removing the label or closing the pull request deletes the preview, and
-# closing it also deletes its images from GHCR.
+# https://pr-<number>.preview.<domain>, and posts the address on the pull request once
+# it runs (deploy/argocd/argo-cd-values.yaml, notifications). New pushes rebuild;
+# removing the label or closing the pull request deletes the preview, and closing it
+# also deletes its images from GHCR.
 #
 # Only branches of this repository get previews: a fork's code never runs with the
 # token that pushes images. Argo CD deploys the images with the target branch's charts
@@ -66,37 +67,6 @@ jobs:
           set: |
             *.platform=linux/amd64
             *.cache-from=type=gha,scope=${{ matrix.image }}-amd64
-
-  comment:
-    name: Preview address
-    needs: images
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: { pull-requests: write }
-    env:
-      SHA: ${{ github.event.pull_request.head.sha }}
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with: { egress-policy: audit }
-      - name: Post the preview's address
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
-        with:
-          script: |
-            const number = context.payload.pull_request.number;
-            const marker = "<!-- preview -->";
-            const url = process.env.DOMAIN
-              ? `https://pr-${number}.preview.${process.env.DOMAIN}`
-              : `pr-${number}.preview.<your domain> (set the PREVIEW_DOMAIN repository variable)`;
-            const body = `${marker}\nPreview of \`${process.env.SHA.slice(0, 7)}\`: ${url}\n\nArgo CD deploys it within a couple of minutes; removing the \`preview\` label deletes it.`;
-            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: number });
-            const existing = comments.find((comment) => comment.body?.startsWith(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
-            } else {
-              await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
-            }
 
   # A closed pull request's preview images (sha-<each of its commits>) are never deployed
   # again: master's commits are new ones (squash merges), with images of their own.

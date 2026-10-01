@@ -129,9 +129,11 @@ schema. If a migration itself is wrong, fix forward with a new one.
 
 Adding the `preview` label to a pull request from this repository (not a fork) runs
 `.github/workflows/preview.yml`: it builds the head commit's images (amd64) as
-`sha-<commit>` and comments the address, `https://pr-<number>.preview.<domain>` (the
-`PREVIEW_DOMAIN` repository variable). Argo CD's previews ApplicationSet deploys it to its
-own namespace with its own database and Valkey, and the Secrets every preview shares
+`sha-<commit>`. Argo CD's previews ApplicationSet deploys it, at
+`https://pr-<number>.preview.<domain>` (the domain of the cluster hosting previews, from
+OpenTofu), and once it's running Argo CD's notifications post that address on the pull
+request through the GitHub App (`argocd-notifications-secret`, deploy/README.md). It runs
+in its own namespace with its own database and Valkey, and the Secrets every preview shares
 (`deploy/environments/preview/secrets/`). A preview's mail never leaves it: it goes to a
 Mailpit in its namespace (`kubectl -n pr-<number> port-forward svc/mailpit 8025`), so a
 pull request's code can't mail real people or spend the domain's reputation. Argo CD

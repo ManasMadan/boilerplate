@@ -63,9 +63,10 @@ devcontainer has only OpenTofu, kubectl and Helm of them.
       choose its visibility.
 - [ ] The `preview` label, which maintainers put on a pull request to give it an
       environment: `gh label create preview --description "Deploy a preview environment"`.
-      Set the `PREVIEW_DOMAIN` repository variable to the domain of the cluster that hosts
-      previews (links are `https://pr-<number>.preview.<PREVIEW_DOMAIN>`; the cluster
-      itself reads its domain from OpenTofu's bootstrap, so the two must agree).
+      The address (`https://pr-<number>.preview.<domain>`, the domain of the cluster that
+      hosts previews) is posted on the pull request by Argo CD once the preview runs: give
+      the GitHub App Pull requests: write, and put its app id, installation id and private
+      key in that cluster's `argocd-notifications-secret` (deploy/README.md).
 - [ ] `TOFU_TARGETS`, a repository variable listing the environments that get a plan
       on infrastructure pull requests, e.g. `["staging", "production"]`. Unset, no plans.
 - [ ] Under an organization rather than a personal account, the gitleaks action in

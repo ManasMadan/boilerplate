@@ -103,6 +103,7 @@ There are two kinds of secret, and each has one home:
 | `rfc2136-tsig` in `cert-manager`, with DNS of your own (RFC 2136) | `secret` (the TSIG key, base64) | `platform/secrets/<env>/` |
 | `external-dns-rfc2136` in `external-dns`, likewise | `host`, `zone`, `tsig-keyname`, `tsig-secret`, `tsig-secret-alg` | `platform/secrets/<env>/` |
 | `github-token` in `argocd`, on the cluster hosting previews | `token` (reads pull requests) | `platform/secrets/<env>/` |
+| `argocd-notifications-secret` in `argocd`, on the cluster hosting previews | `github-appID`, `github-installationID`, `github-privateKey` (the repository's GitHub App, with Pull requests: write: it posts each preview's address) | `platform/secrets/<env>/` |
 | `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
 | `grafana-admin` in `observability`, only on clusters with observability (its namespace exists nowhere else) | `admin-user`, `admin-password` | `platform/secrets/<env>/` |
 | `alertmanager-smtp` in `observability`, likewise | `password` (the mail server's `SMTP_PASSWORD`, which Alertmanager sends alerts with) | `platform/secrets/<env>/` |
