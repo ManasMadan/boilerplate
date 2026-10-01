@@ -1,6 +1,7 @@
 # Auth
 
-Authentication is better-auth, configured in one place: `apps/api/src/auth/auth.ts`. It
+Authentication is better-auth, configured in one place: `apps/api/src/auth/auth.ts`, with
+its hooks in `auth-hooks.ts` and its larger plugins in `auth-plugins.ts` beside it. It
 is served under `/api/auth/*` on the site's own origin (the gateway, or the web app's
 rewrites locally, route it to apps/api), so session cookies are first-party. Web and
 mobile use the better-auth client from `packages/client/src/auth/client.ts`; oRPC
@@ -44,8 +45,8 @@ ships with it.
 - The mobile app uses better-auth's Expo plugin: the session lives in the device's secure
   storage and travels in a header; its `boilerplate://` scheme is a trusted origin.
   Social sign-in goes through the plugin's `/expo-authorization-proxy` redirect, which
-  only sends people to a provider's sign-in page (`PROVIDER_ORIGINS` in `auth.ts`; add a
-  provider's origin there along with the provider). The link back to the app never
+  only sends people to a provider's sign-in page (`PROVIDER_ORIGINS` in `auth-hooks.ts`; add
+  a provider's origin there along with the provider). The link back to the app never
   carries the session (`apps/api/src/auth/mobile-sign-in.ts`): the app gets a hand-off id
   and secret from `POST /mobile/sign-in/start`, signs in with the id in its callback
   URL, and trades both for the session cookies at `POST /mobile/sign-in/finish`, once.

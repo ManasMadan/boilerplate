@@ -110,7 +110,7 @@ Free. With billing off, every organization has every entitlement.
 Checks happen where the feature is used: `BillingService.require(orgId, "webhooks")`
 throws `ENTITLEMENT_REQUIRED`, and the member limit is enforced by better-auth's
 organization plugin (`membershipLimit`, and `beforeCreateInvitation` in
-`apps/api/src/auth/auth.ts`). Clients read the plan and entitlements from
+`apps/api/src/auth/auth-plugins.ts`). Clients read the plan and entitlements from
 `billing.overview` to hide or badge features.
 
 To add an entitlement: add it to both plans, check it with `require` where the feature

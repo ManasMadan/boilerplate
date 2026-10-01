@@ -58,6 +58,12 @@
         "noExcessiveCognitiveComplexity": {
           "level": "error",
           "options": { "maxAllowedComplexity": 15 }
+        },
+        // Sixty lines is a screen: past that a function does more than one thing. Tests are
+        // exempt (overrides below): a describe block is as long as its list of cases.
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": { "maxLines": 60 }
         }
       },
       "style": {
@@ -92,6 +98,17 @@
     }
   },
   "overrides": [
+    {
+      "includes": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/test/**",
+        "**/e2e/**",
+        "**/*.stories.tsx"
+      ],
+      "linter": { "rules": { "complexity": { "noExcessiveLinesPerFunction": "off" } } }
+    },
     {
       // Playwright's conditional skip, for the two browser tests that need real
       // credentials: both are in docs/testing.md's "Skipped tests" table.

@@ -55,6 +55,34 @@ export class DeliveryService {
     return secrets;
   }
 
+  /** Posts the body to the endpoint: the status it answered, or why there was none. */
+  private async post(
+    url: string,
+    headers: Record<string, string>,
+    body: string,
+    ids: { orgId: string; deliveryId: string },
+  ): Promise<{ status?: number; error?: WebhookDeliveryError }> {
+    try {
+      const response = await safeFetch(url, {
+        method: "POST",
+        headers,
+        body,
+        timeoutMs: env.WEBHOOK_TIMEOUT_MS,
+        maxResponseBytes: 64 * 1024,
+        allowHttp: env.NODE_ENV !== "production",
+        allowedPrivateAddresses: env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES,
+        // A redirect is a failed delivery: following it would send the body and its
+        // signature to wherever it points.
+        followRedirects: false,
+      });
+      return { status: response.status };
+    } catch (cause) {
+      const error = deliveryError(cause);
+      this.log.info({ ...ids, error, err: describeError(cause) }, "webhook attempt failed");
+      return { error };
+    }
+  }
+
   /** One attempt. `isLastAttempt`: no retry follows if this one fails. */
   async attempt(orgId: string, deliveryId: string, isLastAttempt: boolean): Promise<AttemptResult> {
     const tenant = withTenant(this.database.write, orgId);
@@ -96,29 +124,10 @@ export class DeliveryService {
       ...signatureHeaders(this.secretsOf(delivery.endpoint), delivery.eventId, delivery.body),
     };
     const started = performance.now();
-    let status: number | undefined;
-    let error: WebhookDeliveryError | undefined;
-    try {
-      const response = await safeFetch(delivery.endpoint.url, {
-        method: "POST",
-        headers,
-        body: delivery.body,
-        timeoutMs: env.WEBHOOK_TIMEOUT_MS,
-        maxResponseBytes: 64 * 1024,
-        allowHttp: env.NODE_ENV !== "production",
-        allowedPrivateAddresses: env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES,
-        // A redirect is a failed delivery: following it would send the body and its
-        // signature to wherever it points.
-        followRedirects: false,
-      });
-      status = response.status;
-    } catch (cause) {
-      error = deliveryError(cause);
-      this.log.info(
-        { orgId, deliveryId, error, err: describeError(cause) },
-        "webhook attempt failed",
-      );
-    }
+    const { status, error } = await this.post(delivery.endpoint.url, headers, delivery.body, {
+      orgId,
+      deliveryId,
+    });
     const succeeded = status !== undefined && status >= 200 && status < 300;
     let outcome: AttemptResult = "retry";
     if (succeeded) outcome = "succeeded";

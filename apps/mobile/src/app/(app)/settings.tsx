@@ -22,13 +22,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { data: session, refetch } = authClient.useSession();
   const workspaces = useWorkspacesQuery(authClient);
-  const register = useRegisterDeviceMutation();
-  const [push, setPush] = useState<PushState>();
   const [failure, setFailure] = useState<string>();
-
-  useEffect(() => {
-    void pushState().then(setPush);
-  }, []);
 
   async function switchWorkspace(organizationId: string) {
     const { error } = await authClient.organization.setActive({ organizationId });
@@ -42,17 +36,6 @@ export default function Settings() {
     const { error } = await authClient.updateUser({ locale });
     if (error) return setFailure(errorMessage(error));
     await refetch();
-  }
-
-  async function enablePush() {
-    const device = await devicePushToken();
-    setPush(await pushState());
-    if (device) {
-      register.mutate(
-        { device, appVersion },
-        { onError: (error) => setFailure(errorMessage(error)) },
-      );
-    }
   }
 
   async function signOut() {
@@ -125,12 +108,7 @@ export default function Settings() {
           <CardTitle>{t("settings.notifications")}</CardTitle>
         </CardHeader>
         <CardContent className="gap-3">
-          <PushStatus
-            push={push}
-            enabled={push === "granted" && register.isSuccess}
-            busy={register.isPending}
-            onEnable={enablePush}
-          />
+          <PushStatus onFailure={setFailure} />
         </CardContent>
       </Card>
       <View className="items-center">
@@ -143,27 +121,36 @@ export default function Settings() {
 }
 
 /** Where push notifications stand on this device, or the button that turns them on. */
-function PushStatus({
-  push,
-  enabled,
-  busy,
-  onEnable,
-}: {
-  push: PushState | undefined;
-  enabled: boolean;
-  busy: boolean;
-  onEnable: () => void;
-}) {
+function PushStatus({ onFailure }: { onFailure: (message: string) => void }) {
   const t = useTranslations("mobile");
+  const errorMessage = useApiErrorMessage();
+  const register = useRegisterDeviceMutation();
+  const [push, setPush] = useState<PushState>();
+
+  useEffect(() => {
+    void pushState().then(setPush);
+  }, []);
+
+  async function onEnable() {
+    const device = await devicePushToken();
+    setPush(await pushState());
+    if (device) {
+      register.mutate(
+        { device, appVersion },
+        { onError: (error) => onFailure(errorMessage(error)) },
+      );
+    }
+  }
+
   if (push === "unavailable") {
     return <Text className="text-muted-foreground">{t("settings.pushUnavailable")}</Text>;
   }
   if (push === "denied") {
     return <Text className="text-muted-foreground">{t("settings.pushDenied")}</Text>;
   }
-  if (enabled) return <Text>{t("settings.pushEnabled")}</Text>;
+  if (push === "granted" && register.isSuccess) return <Text>{t("settings.pushEnabled")}</Text>;
   return (
-    <Button onPress={onEnable} disabled={busy || push === undefined}>
+    <Button onPress={onEnable} disabled={register.isPending || push === undefined}>
       <Text>{t("settings.enablePush")}</Text>
     </Button>
   );

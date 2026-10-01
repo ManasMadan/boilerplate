@@ -30,6 +30,93 @@ const PREFIX = REALTIME_CHANNEL_PREFIX;
 /** Messages a slow stream may fall behind by before the oldest are dropped. */
 const MAX_BUFFERED = 100;
 
+/** A message from Redis checked against the contract (anything can publish there). */
+function parseMessage<S extends z.ZodType>(schema: S, raw: string) {
+  try {
+    return schema.safeParse(JSON.parse(raw));
+  } catch {
+    return { success: false as const };
+  }
+}
+
+/** Fans Redis messages out to streams; one subscriber connection per hub. */
+class Hub<S extends z.ZodType> {
+  private readonly subscriber: Redis;
+  private readonly local = new EventEmitter().setMaxListeners(0);
+  private readonly refs = new Map<string, number>();
+
+  /**
+   * `onDropped` hears about messages outside the contract (or not JSON at all), which
+   * are dropped: they come from Redis, where anything can publish.
+   */
+  constructor(
+    schema: S,
+    redis: Redis,
+    onDropped: (channel: string, raw: string) => void = () => undefined,
+  ) {
+    // A connection in subscriber mode can't run other commands, so it gets its own.
+    this.subscriber = redis.duplicate();
+    this.subscriber.on("message", (channel: string, raw: string) => {
+      const message = parseMessage(schema, raw);
+      if (message.success) this.local.emit(channel.slice(PREFIX.length), message.data);
+      else onDropped(channel, raw);
+    });
+  }
+
+  /** Messages on these channels until `signal` aborts. */
+  async *stream(channels: string[], signal: AbortSignal): AsyncGenerator<z.infer<S>> {
+    const buffer: z.infer<S>[] = [];
+    let wake: (() => void) | undefined;
+    const onMessage = (message: z.infer<S>) => {
+      buffer.push(message);
+      if (buffer.length > MAX_BUFFERED) buffer.shift();
+      wake?.();
+    };
+    // One listener for the stream's whole life, not one per wait.
+    const onAbort = () => wake?.();
+    signal.addEventListener("abort", onAbort, { once: true });
+    for (const channel of channels) this.local.on(channel, onMessage);
+    try {
+      // Inside the try: if subscribing fails, the finally still undoes the rest.
+      await Promise.all(channels.map((channel) => this.retain(channel)));
+      // The buffer is empty each time round: the inner loop drains it, and nothing
+      // arrives between that and setting `wake` (no await in between).
+      while (!signal.aborted) {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+        wake = undefined;
+        while (buffer.length > 0 && !signal.aborted) yield buffer.shift() as z.infer<S>;
+      }
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+      for (const channel of channels) this.local.off(channel, onMessage);
+      await Promise.all(channels.map((channel) => this.release(channel)));
+    }
+  }
+
+  private async retain(channel: string) {
+    const count = (this.refs.get(channel) ?? 0) + 1;
+    this.refs.set(channel, count);
+    if (count === 1) await this.subscriber.subscribe(PREFIX + channel);
+  }
+
+  private async release(channel: string) {
+    // retain() counted it before its first await, so it's there.
+    const count = (this.refs.get(channel) as number) - 1;
+    if (count > 0) {
+      this.refs.set(channel, count);
+      return;
+    }
+    this.refs.delete(channel);
+    await this.subscriber.unsubscribe(PREFIX + channel);
+  }
+
+  async close() {
+    await this.subscriber.quit();
+  }
+}
+
 export function createRealtime<S extends z.ZodType>(schema: S) {
   type Message = z.infer<S>;
 
@@ -37,82 +124,10 @@ export function createRealtime<S extends z.ZodType>(schema: S) {
     await redis.publish(PREFIX + channel, JSON.stringify(schema.parse(message)));
   }
 
-  class RealtimeHub {
-    private readonly subscriber: Redis;
-    private readonly local = new EventEmitter().setMaxListeners(0);
-    private readonly refs = new Map<string, number>();
-
-    /**
-     * `onDropped` hears about messages outside the contract (or not JSON at all), which
-     * are dropped: they come from Redis, where anything can publish.
-     */
-    constructor(redis: Redis, onDropped: (channel: string, raw: string) => void = () => undefined) {
-      // A connection in subscriber mode can't run other commands, so it gets its own.
-      this.subscriber = redis.duplicate();
-      this.subscriber.on("message", (channel: string, raw: string) => {
-        let json: unknown;
-        try {
-          json = JSON.parse(raw);
-        } catch {
-          return onDropped(channel, raw);
-        }
-        const parsed = schema.safeParse(json);
-        if (parsed.success) this.local.emit(channel.slice(PREFIX.length), parsed.data);
-        else onDropped(channel, raw);
-      });
-    }
-
-    /** Messages on these channels until `signal` aborts. */
-    async *stream(channels: string[], signal: AbortSignal): AsyncGenerator<Message> {
-      const buffer: Message[] = [];
-      let wake: (() => void) | undefined;
-      const onMessage = (message: Message) => {
-        buffer.push(message);
-        if (buffer.length > MAX_BUFFERED) buffer.shift();
-        wake?.();
-      };
-      // One listener for the stream's whole life, not one per wait.
-      const onAbort = () => wake?.();
-      signal.addEventListener("abort", onAbort, { once: true });
-      for (const channel of channels) this.local.on(channel, onMessage);
-      try {
-        // Inside the try: if subscribing fails, the finally still undoes the rest.
-        await Promise.all(channels.map((channel) => this.retain(channel)));
-        // The buffer is empty each time round: the inner loop drains it, and nothing
-        // arrives between that and setting `wake` (no await in between).
-        while (!signal.aborted) {
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-          wake = undefined;
-          while (buffer.length > 0 && !signal.aborted) yield buffer.shift() as Message;
-        }
-      } finally {
-        signal.removeEventListener("abort", onAbort);
-        for (const channel of channels) this.local.off(channel, onMessage);
-        await Promise.all(channels.map((channel) => this.release(channel)));
-      }
-    }
-
-    private async retain(channel: string) {
-      const count = (this.refs.get(channel) ?? 0) + 1;
-      this.refs.set(channel, count);
-      if (count === 1) await this.subscriber.subscribe(PREFIX + channel);
-    }
-
-    private async release(channel: string) {
-      // retain() counted it before its first await, so it's there.
-      const count = (this.refs.get(channel) as number) - 1;
-      if (count > 0) {
-        this.refs.set(channel, count);
-        return;
-      }
-      this.refs.delete(channel);
-      await this.subscriber.unsubscribe(PREFIX + channel);
-    }
-
-    async close() {
-      await this.subscriber.quit();
+  /** The hub for this service's messages. */
+  class RealtimeHub extends Hub<S> {
+    constructor(redis: Redis, onDropped?: (channel: string, raw: string) => void) {
+      super(schema, redis, onDropped);
     }
   }
 

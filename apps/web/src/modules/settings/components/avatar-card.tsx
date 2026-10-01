@@ -29,17 +29,13 @@ import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 
 /**
- * The profile picture. A chosen image is uploaded, checked by the worker (virus scan,
- * re-encoded without metadata), and only then becomes the picture. Hidden when the
- * deployment has uploads off.
+ * Uploading a picture: the upload, the worker's verdict on it, and then setting it (or
+ * removing the current one). `problem` is what went wrong, to show.
  */
-export function AvatarCard() {
+function useAvatarUpload() {
   const t = useTranslations("settings.profile.avatar");
   const tAll = useTranslations();
   const errorMessage = useApiErrorMessage();
-  const input = useRef<HTMLInputElement>(null);
-  const { data: system } = useSystemInfoQuery();
-  const { data: me } = useMeQuery();
   const session = authClient.useSession();
   const upload = useUploadFileMutation();
   const setAvatar = useSetAvatarMutation();
@@ -47,6 +43,19 @@ export function AvatarCard() {
   const [problem, setProblem] = useState<string | null>(null);
   const file = useFileQuery(fileId);
 
+  const save = (id: string | null, done: string) =>
+    setAvatar.mutate(
+      { fileId: id },
+      {
+        onSuccess: () => {
+          toast.success(done);
+          void session.refetch();
+        },
+        onError: (error) => setProblem(errorMessage(error)),
+      },
+    );
+
+  // After every render, but it acts once per verdict: either answer clears `fileId`.
   useEffect(() => {
     if (!fileId || !file.data) return;
     if (file.data.status === "rejected") {
@@ -60,20 +69,9 @@ export function AvatarCard() {
       setFileId(null);
     } else if (file.data.status === "ready") {
       setFileId(null);
-      setAvatar.mutate(
-        { fileId },
-        {
-          onSuccess: () => {
-            toast.success(t("updated"));
-            void session.refetch();
-          },
-          onError: (error) => setProblem(errorMessage(error)),
-        },
-      );
+      save(fileId, t("updated"));
     }
-  }, [fileId, file.data, setAvatar, session, t, tAll, errorMessage]);
-
-  if (!system?.features.files || !me) return null;
+  });
 
   async function choose(picker: HTMLInputElement) {
     const chosen = picker.files?.[0];
@@ -96,7 +94,28 @@ export function AvatarCard() {
     }
   }
 
-  const busy = upload.isPending || fileId !== null || setAvatar.isPending;
+  return {
+    choose,
+    remove: () => save(null, t("removed")),
+    uploading: upload.isPending,
+    busy: upload.isPending || fileId !== null || setAvatar.isPending,
+    problem,
+  };
+}
+
+/**
+ * The profile picture. A chosen image is uploaded, checked by the worker (virus scan,
+ * re-encoded without metadata), and only then becomes the picture. Hidden when the
+ * deployment has uploads off.
+ */
+export function AvatarCard() {
+  const t = useTranslations("settings.profile.avatar");
+  const input = useRef<HTMLInputElement>(null);
+  const { data: system } = useSystemInfoQuery();
+  const { data: me } = useMeQuery();
+  const { choose, remove, uploading, busy, problem } = useAvatarUpload();
+
+  if (!system?.features.files || !me) return null;
   return (
     <Card>
       <CardHeader>
@@ -128,23 +147,7 @@ export function AvatarCard() {
               {me.image ? t("change") : t("upload")}
             </Button>
             {me.image ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  setAvatar.mutate(
-                    { fileId: null },
-                    {
-                      onSuccess: () => {
-                        toast.success(t("removed"));
-                        void session.refetch();
-                      },
-                      onError: (error) => setProblem(errorMessage(error)),
-                    },
-                  )
-                }
-              >
+              <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
                 {t("remove")}
               </Button>
             ) : null}
@@ -153,7 +156,7 @@ export function AvatarCard() {
             <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
               {/* Decorative: the text beside it is what's announced. */}
               <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
-              {upload.isPending ? t("uploading") : t("checking")}
+              {uploading ? t("uploading") : t("checking")}
             </p>
           ) : null}
           {problem ? (

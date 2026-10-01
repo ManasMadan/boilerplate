@@ -149,6 +149,8 @@ function DocumentList() {
   const t = useTranslations("assistant.documents");
   const errorMessage = useApiErrorMessage();
   const documents = useAiDocumentsQuery();
+  // Here, not in each row: the row is gone once its removal lands, and must still say so.
+  const remove = useRemoveDocumentMutation();
 
   if (documents.isPending) return <Skeleton className="h-16" />;
   if (documents.isError) {
@@ -164,16 +166,21 @@ function DocumentList() {
   return (
     <ul className="flex flex-col divide-y">
       {documents.data.map((document) => (
-        <DocumentItem key={document.id} document={document} />
+        <DocumentItem key={document.id} document={document} remove={remove} />
       ))}
     </ul>
   );
 }
 
-function DocumentItem({ document }: { document: AiDocument }) {
+function DocumentItem({
+  document,
+  remove,
+}: {
+  document: AiDocument;
+  remove: ReturnType<typeof useRemoveDocumentMutation>;
+}) {
   const t = useTranslations("assistant.documents");
   const errorMessage = useApiErrorMessage();
-  const remove = useRemoveDocumentMutation();
   const workspace = useActiveWorkspace();
   const { data: session } = authClient.useSession();
   const mayRemove = workspace.isAdmin || document.createdBy === session?.user.id;

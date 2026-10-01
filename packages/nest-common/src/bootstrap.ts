@@ -30,33 +30,11 @@ export interface BootstrapOptions {
   configure?: (app: NestFastifyApplication) => Promise<void> | void;
 }
 
-/** Builds and configures the application without listening (used by tests and bootstrap). */
-export async function createServer(
-  module: Type,
+/** Security headers, load shedding and CORS. */
+async function registerProtections(
+  app: NestFastifyApplication,
   options: Omit<BootstrapOptions, "port">,
-): Promise<NestFastifyApplication> {
-  const adapter = new FastifyAdapter({
-    // Behind a load balancer the client IP arrives in X-Forwarded-For. Only trusted
-    // proxies may set it, otherwise any caller could forge the IP that rate limiting,
-    // lockout and audit logs rely on.
-    trustProxy: options.trustedProxies,
-    // Uploads go straight to object storage via presigned URLs; request bodies stay small.
-    bodyLimit: 1024 * 1024,
-    // Our pino logger (nestjs-pino) logs requests; Fastify's own logger would duplicate it.
-    logger: false,
-    // One id per request, reused by the logger (see createRequestIdGenerator).
-    requestIdHeader: false,
-    genReqId: createRequestIdGenerator(options.trustedProxies),
-  });
-
-  const app = await NestFactory.create<NestFastifyApplication>(module, adapter, {
-    bufferLogs: true,
-  });
-  app.useLogger(app.get(Logger));
-  // Every error Nest handles (its routes, its 404, body parsing and load shedding, which
-  // Fastify hands to Nest) answers in the contract's shape.
-  app.useGlobalFilters(new ContractExceptionFilter());
-
+) {
   await app.register(helmet, {
     // JSON API: no HTML is served, so a locked-down CSP costs nothing.
     contentSecurityPolicy: {
@@ -90,7 +68,13 @@ export async function createServer(
       maxAge: 600,
     });
   }
+}
 
+/**
+ * One line per completed request, with the final status Fastify sent, and the request id
+ * echoed back.
+ */
+function logRequests(app: NestFastifyApplication, options: Omit<BootstrapOptions, "port">) {
   // One line per completed request, with the final status Fastify sent. Health probes
   // run every few seconds and are skipped. Keys are flat on purpose: pino applies its
   // request/response serializers to any `req`/`res` key.
@@ -120,6 +104,37 @@ export async function createServer(
     .addHook("onRequest", async (request, reply) => {
       reply.header(REQUEST_ID_HEADER, request.id);
     });
+}
+
+/** Builds and configures the application without listening (used by tests and bootstrap). */
+export async function createServer(
+  module: Type,
+  options: Omit<BootstrapOptions, "port">,
+): Promise<NestFastifyApplication> {
+  const adapter = new FastifyAdapter({
+    // Behind a load balancer the client IP arrives in X-Forwarded-For. Only trusted
+    // proxies may set it, otherwise any caller could forge the IP that rate limiting,
+    // lockout and audit logs rely on.
+    trustProxy: options.trustedProxies,
+    // Uploads go straight to object storage via presigned URLs; request bodies stay small.
+    bodyLimit: 1024 * 1024,
+    // Our pino logger (nestjs-pino) logs requests; Fastify's own logger would duplicate it.
+    logger: false,
+    // One id per request, reused by the logger (see createRequestIdGenerator).
+    requestIdHeader: false,
+    genReqId: createRequestIdGenerator(options.trustedProxies),
+  });
+
+  const app = await NestFactory.create<NestFastifyApplication>(module, adapter, {
+    bufferLogs: true,
+  });
+  app.useLogger(app.get(Logger));
+  // Every error Nest handles (its routes, its 404, body parsing and load shedding, which
+  // Fastify hands to Nest) answers in the contract's shape.
+  app.useGlobalFilters(new ContractExceptionFilter());
+
+  await registerProtections(app, options);
+  logRequests(app, options);
 
   // SIGTERM (Kubernetes) → stop accepting connections, finish in-flight requests, run
   // every provider's onApplicationShutdown (close DB/Redis/queues), then exit.

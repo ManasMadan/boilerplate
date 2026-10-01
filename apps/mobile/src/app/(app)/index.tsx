@@ -4,7 +4,7 @@ import { useTodoCreateMutation } from "@repo/client/api/todo/create";
 import { useTodoDeleteMutation } from "@repo/client/api/todo/delete";
 import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list";
 import { useTodoSetCompletedMutation } from "@repo/client/api/todo/set-completed";
-import { createTodoInput } from "@repo/contracts/api";
+import { createTodoInput, type Todo } from "@repo/contracts/api";
 import { Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -24,6 +24,7 @@ export default function Todos() {
   const errorMessage = useApiErrorMessage();
   const todos = useTodoListInfiniteQuery();
   const create = useTodoCreateMutation();
+  // Here, not in each row: a row gone from the list (deleted elsewhere) must still say why.
   const setCompleted = useTodoSetCompletedMutation();
   const remove = useTodoDeleteMutation();
   const [failure, setFailure] = useState<string>();
@@ -94,33 +95,49 @@ export default function Todos() {
           todos.isPending ? null : <Text className="text-muted-foreground">{t("empty")}</Text>
         }
         renderItem={({ item: todo }) => (
-          <View className="flex-row items-center gap-3 py-1">
-            <Checkbox
-              accessibilityLabel={todo.title}
-              checked={todo.completed}
-              onCheckedChange={(checked: boolean) =>
-                setCompleted.mutate(
-                  { id: todo.id, completed: checked, version: todo.version },
-                  { onError },
-                )
-              }
-            />
-            <Text
-              className={todo.completed ? "flex-1 text-muted-foreground line-through" : "flex-1"}
-            >
-              {todo.title}
-            </Text>
-            <Button
-              variant="ghost"
-              size="icon"
-              accessibilityLabel={t("delete", { title: todo.title })}
-              onPress={() => remove.mutate({ id: todo.id }, { onError })}
-            >
-              <Icon as={Trash2} />
-            </Button>
-          </View>
+          <TodoRow todo={todo} setCompleted={setCompleted} remove={remove} onError={onError} />
         )}
       />
     </SafeAreaView>
+  );
+}
+
+/** One todo: ticked off, or deleted, in place. */
+function TodoRow({
+  todo,
+  setCompleted,
+  remove,
+  onError,
+}: {
+  todo: Todo;
+  setCompleted: ReturnType<typeof useTodoSetCompletedMutation>;
+  remove: ReturnType<typeof useTodoDeleteMutation>;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations("dashboard.todos");
+  return (
+    <View className="flex-row items-center gap-3 py-1">
+      <Checkbox
+        accessibilityLabel={todo.title}
+        checked={todo.completed}
+        onCheckedChange={(checked: boolean) =>
+          setCompleted.mutate(
+            { id: todo.id, completed: checked, version: todo.version },
+            { onError },
+          )
+        }
+      />
+      <Text className={todo.completed ? "flex-1 text-muted-foreground line-through" : "flex-1"}>
+        {todo.title}
+      </Text>
+      <Button
+        variant="ghost"
+        size="icon"
+        accessibilityLabel={t("delete", { title: todo.title })}
+        onPress={() => remove.mutate({ id: todo.id }, { onError })}
+      >
+        <Icon as={Trash2} />
+      </Button>
+    </View>
   );
 }

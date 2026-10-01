@@ -63,39 +63,25 @@ export function cleanDocker(run = runSync) {
     ok(`image builder ${BUILDER} and its cache`);
   }
 
-  const images = new Set([
-    ...lines(
+  const named = (reference: string) =>
+    lines(
       docker([
         "images",
         "--format",
         "{{.Repository}}:{{.Tag}}",
         "--filter",
-        "reference=boilerplate/*",
+        `reference=${reference}`,
       ]).stdout,
-    ),
+    );
+  const images = new Set([
+    ...named("boilerplate/*"),
     ...lines(docker(["compose", "--profile", "full", "config", "--images"]).stdout),
     ...TOOL_IMAGES,
     ...devcontainerBases,
     // VS Code names the devcontainer's image after the folder: vsc-boilerplate-<hash>.
-    ...lines(
-      docker([
-        "images",
-        "--format",
-        "{{.Repository}}:{{.Tag}}",
-        "--filter",
-        "reference=vsc-boilerplate-*",
-      ]).stdout,
-    ),
+    ...named("vsc-boilerplate-*"),
     // kind's node image, once no cluster uses it.
-    ...lines(
-      docker([
-        "images",
-        "--format",
-        "{{.Repository}}:{{.Tag}}",
-        "--filter",
-        "reference=kindest/node",
-      ]).stdout,
-    ),
+    ...named("kindest/node"),
   ]);
   for (const image of [...images].sort()) {
     if (!docker(["image", "inspect", image]).ok) continue;

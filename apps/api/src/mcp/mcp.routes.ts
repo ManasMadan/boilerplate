@@ -38,6 +38,41 @@ export interface McpRouteOptions {
 /** Tool calls per app and user per minute. */
 const CALLS_PER_MINUTE = 60;
 
+/** Answers one request for a verified caller, with an MCP server of its own (stateless). */
+async function answer(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  caller: Parameters<typeof createMcpServer>[0],
+  options: McpRouteOptions,
+) {
+  const locale = contextFor(request).locale;
+  const server = createMcpServer(caller, {
+    ...options.server,
+    describeError: (error) => options.describeError(error, locale),
+  });
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  await server.connect(transport);
+  try {
+    const response = await transport.handleRequest(
+      toWebRequest(request, new URL(request.url, options.siteUrl)),
+      {
+        authInfo: {
+          token: caller.token,
+          clientId: caller.clientId,
+          scopes: [...caller.scopes],
+          resource: new URL(mcpResource(options.siteUrl, MCP_PATH)),
+        },
+      },
+    );
+    return reply.send(await fromWebResponse(reply, response));
+  } finally {
+    await server.close();
+  }
+}
+
 export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
   const resource = mcpResource(options.siteUrl, MCP_PATH);
   const metadataUrl = `${options.siteUrl.replace(/\/+$/, "")}/.well-known/oauth-protected-resource${MCP_PATH}`;
@@ -79,32 +114,7 @@ export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
           .send({ error: "rate_limited" });
       }
 
-      const locale = contextFor(request).locale;
-      const server = createMcpServer(caller, {
-        ...options.server,
-        describeError: (error) => options.describeError(error, locale),
-      });
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-      });
-      await server.connect(transport);
-      try {
-        const response = await transport.handleRequest(
-          toWebRequest(request, new URL(request.url, options.siteUrl)),
-          {
-            authInfo: {
-              token: caller.token,
-              clientId: caller.clientId,
-              scopes: [...caller.scopes],
-              resource: new URL(resource),
-            },
-          },
-        );
-        return reply.send(await fromWebResponse(reply, response));
-      } finally {
-        await server.close();
-      }
+      return answer(request, reply, caller, options);
     });
 
   fastify.register((scope, _options, done) => {

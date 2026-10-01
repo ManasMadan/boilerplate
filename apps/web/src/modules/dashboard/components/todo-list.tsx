@@ -6,7 +6,7 @@ import { useTodoCreateMutation } from "@repo/client/api/todo/create";
 import { useTodoDeleteMutation } from "@repo/client/api/todo/delete";
 import { useTodoListInfiniteQuery } from "@repo/client/api/todo/list";
 import { useTodoSetCompletedMutation } from "@repo/client/api/todo/set-completed";
-import { createTodoInput } from "@repo/contracts/api";
+import { createTodoInput, type Todo } from "@repo/contracts/api";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -30,6 +30,7 @@ export function TodoList() {
   const errorMessage = useApiErrorMessage();
   const todos = useTodoListInfiniteQuery();
   const create = useTodoCreateMutation();
+  // Here, not in each row: a row gone from the list (deleted elsewhere) must still say why.
   const setCompleted = useTodoSetCompletedMutation();
   const remove = useTodoDeleteMutation();
   // The same schema the API validates with; limits can't drift between client and server.
@@ -86,34 +87,13 @@ export function TodoList() {
         {items.length > 0 ? (
           <ul className="flex flex-col divide-y">
             {items.map((todo) => (
-              <li key={todo.id} className="flex items-center gap-3 py-2">
-                <Checkbox
-                  id={`todo-${todo.id}`}
-                  checked={todo.completed}
-                  onCheckedChange={(checked) =>
-                    setCompleted.mutate(
-                      { id: todo.id, completed: checked === true, version: todo.version },
-                      { onError },
-                    )
-                  }
-                />
-                <label
-                  htmlFor={`todo-${todo.id}`}
-                  className={
-                    todo.completed ? "flex-1 text-muted-foreground line-through" : "flex-1"
-                  }
-                >
-                  {todo.title}
-                </label>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("delete", { title: todo.title })}
-                  onClick={() => remove.mutate({ id: todo.id }, { onError })}
-                >
-                  <Trash2 />
-                </Button>
-              </li>
+              <TodoItem
+                key={todo.id}
+                todo={todo}
+                setCompleted={setCompleted}
+                remove={remove}
+                onError={onError}
+              />
             ))}
           </ul>
         ) : null}
@@ -128,5 +108,48 @@ export function TodoList() {
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+/** One todo: ticked off, or deleted, in place. */
+function TodoItem({
+  todo,
+  setCompleted,
+  remove,
+  onError,
+}: {
+  todo: Todo;
+  setCompleted: ReturnType<typeof useTodoSetCompletedMutation>;
+  remove: ReturnType<typeof useTodoDeleteMutation>;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations("dashboard.todos");
+  return (
+    <li className="flex items-center gap-3 py-2">
+      <Checkbox
+        id={`todo-${todo.id}`}
+        checked={todo.completed}
+        onCheckedChange={(checked) =>
+          setCompleted.mutate(
+            { id: todo.id, completed: checked === true, version: todo.version },
+            { onError },
+          )
+        }
+      />
+      <label
+        htmlFor={`todo-${todo.id}`}
+        className={todo.completed ? "flex-1 text-muted-foreground line-through" : "flex-1"}
+      >
+        {todo.title}
+      </label>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={t("delete", { title: todo.title })}
+        onClick={() => remove.mutate({ id: todo.id }, { onError })}
+      >
+        <Trash2 />
+      </Button>
+    </li>
   );
 }

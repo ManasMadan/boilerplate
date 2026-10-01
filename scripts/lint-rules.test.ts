@@ -49,6 +49,14 @@ export const name = z.string();
 `,
 };
 
+// A function one line over the cap (biome.jsonc's maxLines).
+SAMPLES["lint/complexity/noExcessiveLinesPerFunction"] = `export function f(a: number) {
+  let total = a;
+${Array.from({ length: 59 }, (_, line) => `  total += ${line};`).join("\n")}
+  return total;
+}
+`;
+
 /** A sample every rule accepts. */
 const CLEAN = `import * as z from "zod";
 

@@ -150,6 +150,7 @@ export function WebhookEndpointPage({ id }: { id: string }) {
 function DeliveriesCard({ endpointId }: { endpointId: string }) {
   const t = useTranslations("workspace.webhooks.deliveries");
   const deliveries = useWebhookDeliveriesInfiniteQuery(endpointId);
+  const redeliver = useRedeliverWebhookMutation();
   const items = deliveries.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
@@ -165,7 +166,7 @@ function DeliveriesCard({ endpointId }: { endpointId: string }) {
         {items.length > 0 ? (
           <ul className="flex flex-col divide-y" aria-label={t("title")}>
             {items.map((delivery) => (
-              <DeliveryRow key={delivery.id} delivery={delivery} />
+              <DeliveryRow key={delivery.id} delivery={delivery} redeliver={redeliver} />
             ))}
           </ul>
         ) : null}
@@ -189,11 +190,16 @@ const STATUS_BADGE = {
   pending: "outline",
 } as const satisfies Record<WebhookDelivery["status"], string>;
 
-function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
+function DeliveryRow({
+  delivery,
+  redeliver,
+}: {
+  delivery: WebhookDelivery;
+  redeliver: ReturnType<typeof useRedeliverWebhookMutation>;
+}) {
   const t = useTranslations("workspace.webhooks.deliveries");
   const format = useFormatter();
   const errorMessage = useApiErrorMessage();
-  const redeliver = useRedeliverWebhookMutation();
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
       <div className="flex flex-col">

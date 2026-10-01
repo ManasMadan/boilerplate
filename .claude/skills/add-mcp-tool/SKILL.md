@@ -14,8 +14,8 @@ whole flow.
 1. **Scope.** Reuse one from `MCP_SCOPES` in `packages/contracts/src/mcp.ts`, or add
    one there and to `MCP_SERVER_SCOPES` for the server that serves it. A new scope needs
    its consent text, `oauth.scopes.<scope>`, in every `packages/i18n/messages/*.json`,
-   and the api's resource policy in `apps/api/src/auth/auth.ts` (the `mcp` plugin's
-   `resources`) picks it up from `MCP_SERVER_SCOPES`.
+   and the api's resource policy in `apps/api/src/auth/auth-plugins.ts` (the `mcp`
+   plugin's `resources`) picks it up from `MCP_SERVER_SCOPES`.
 2. **The tool, in the api** (`apps/api/src/mcp/mcp.server.ts`): register it in
    `createMcpServer` behind its scope, as an explicit adapter over a service method, with
    the contract's own input schema (`packages/contracts/src/api`). Errors are `AppError`s,

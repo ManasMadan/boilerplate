@@ -53,6 +53,40 @@ function toServiceError(status: number, body: unknown): AiServiceError {
 
 const TOKEN_LIFETIME_SECONDS = 60;
 
+/** A call's headers: its own token, naming the user and organization, and the request id. */
+async function callHeaders(key: Uint8Array, caller: AiCaller) {
+  const token = await new SignJWT({ org: caller.orgId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer("api")
+    .setAudience("ai")
+    .setSubject(caller.userId)
+    .setIssuedAt()
+    .setExpirationTime(`${TOKEN_LIFETIME_SECONDS}s`)
+    .sign(key);
+  return {
+    authorization: `Bearer ${token}`,
+    ...(caller.requestId && { "x-request-id": caller.requestId }),
+  };
+}
+
+/** The result of a call that succeeded; the service's error (or an outage) otherwise. */
+async function settle<R extends { error?: unknown; response?: Response }>(
+  call: Promise<R>,
+): Promise<R> {
+  // The generated client never rejects: an unreachable service comes back as a result
+  // without a response.
+  const result = await call;
+  if (!result.response?.ok) throw toServiceError(result.response?.status ?? 503, result.error);
+  return result;
+}
+
+async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: Response }>) {
+  const { data } = await settle(call);
+  // The generated client validated the body; one that broke the contract lands here.
+  if (data === undefined) throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+  return data;
+}
+
 export function createAiClient(options: {
   baseUrl: string;
   secret: string;
@@ -63,20 +97,7 @@ export function createAiClient(options: {
   const key = new TextEncoder().encode(options.secret);
   const timeoutMs = options.timeoutMs ?? 30_000;
 
-  async function headers(caller: AiCaller) {
-    const token = await new SignJWT({ org: caller.orgId })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuer("api")
-      .setAudience("ai")
-      .setSubject(caller.userId)
-      .setIssuedAt()
-      .setExpirationTime(`${TOKEN_LIFETIME_SECONDS}s`)
-      .sign(key);
-    return {
-      authorization: `Bearer ${token}`,
-      ...(caller.requestId && { "x-request-id": caller.requestId }),
-    };
-  }
+  const headers = (caller: AiCaller) => callHeaders(key, caller);
 
   /** A client for one call: its token, and a timeout so a hung service can't hang us. */
   async function forCall(caller: AiCaller) {
@@ -89,24 +110,6 @@ export function createAiClient(options: {
       fetch: (input: RequestInfo | URL, init?: RequestInit) =>
         fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) }),
     });
-  }
-
-  /** The result of a call that succeeded; the service's error (or an outage) otherwise. */
-  async function settle<R extends { error?: unknown; response?: Response }>(
-    call: Promise<R>,
-  ): Promise<R> {
-    // The generated client never rejects: an unreachable service comes back as a result
-    // without a response.
-    const result = await call;
-    if (!result.response?.ok) throw toServiceError(result.response?.status ?? 503, result.error);
-    return result;
-  }
-
-  async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: Response }>) {
-    const { data } = await settle(call);
-    // The generated client validated the body; one that broke the contract lands here.
-    if (data === undefined) throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
-    return data;
   }
 
   return {

@@ -160,17 +160,10 @@ export function rateLimitKey(limit: RateLimit, keys: LimitKeys) {
 /** Checks an API key for a procedure that needs `scope` (modules/api-keys). */
 export type AuthenticateApiKey = (key: string, scope: ApiKeyScope) => Promise<OrgCaller>;
 
-export function createProcedures(
-  auth: Auth,
-  memberships: Memberships,
-  authenticateApiKey: AuthenticateApiKey,
-  redis: Redis,
-) {
-  const os = implement(contract).$context<RpcContext>();
-
-  // One limiter per name: procedures that share a name share its allowance.
+/** Spends a call's rate limit; one limiter per name, so procedures sharing a name share it. */
+function limitSpender(redis: Redis) {
   const limiters = new Map<string, RateLimiter>();
-  async function spendLimit(meta: ProcedureMeta, keys: LimitKeys) {
+  return async (meta: ProcedureMeta, keys: LimitKeys) => {
     const limit = meta.rateLimit;
     if (!limit || "exempt" in limit) return;
     let limiter = limiters.get(limit.name);
@@ -179,7 +172,55 @@ export function createProcedures(
       limiters.set(limit.name, limiter);
     }
     await limiter.take(rateLimitKey(limit, keys));
-  }
+  };
+}
+
+/**
+ * Who an organization-scoped call acts as: one organization, one user, their role there.
+ *   - a signed-in person: the session's active organization. Membership is re-checked
+ *     every time, so someone removed from it loses access immediately (see
+ *     auth/memberships.ts).
+ *   - an API key (`x-api-key`): its workspace, as its creator, and only for procedures
+ *     whose contract names a scope the key has (see modules/api-keys).
+ */
+function orgCallerFor(
+  auth: Auth,
+  memberships: Memberships,
+  authenticateApiKey: AuthenticateApiKey,
+) {
+  return async (headers: Headers, scope: ApiKeyScope | undefined): Promise<OrgCaller> => {
+    const apiKey = headers.get(API_KEY_HEADER);
+    if (apiKey !== null) {
+      // Everything without a scope is for signed-in people only.
+      if (!scope) throw new AppError("FORBIDDEN");
+      return authenticateApiKey(apiKey, scope);
+    }
+    const result = await auth.api.getSession({ headers });
+    if (!result) throw new AppError("UNAUTHENTICATED");
+    updateContext({ userId: result.user.id, locale: result.user.locale as string });
+    const orgId = result.session.activeOrganizationId;
+    if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
+    const role = await memberships.role(orgId, result.user.id);
+    if (!role) throw new AppError("NO_ACTIVE_ORGANIZATION");
+    return {
+      orgId,
+      role,
+      userId: result.user.id,
+      apiKeyId: null,
+      signedInAt: new Date(result.session.createdAt),
+    };
+  };
+}
+
+export function createProcedures(
+  auth: Auth,
+  memberships: Memberships,
+  authenticateApiKey: AuthenticateApiKey,
+  redis: Redis,
+) {
+  const os = implement(contract).$context<RpcContext>();
+  const spendLimit = limitSpender(redis);
+  const orgCaller = orgCallerFor(auth, memberships, authenticateApiKey);
 
   const base = os.use(async ({ next }) => {
     const version = currentContext()?.clientVersion;
@@ -206,35 +247,6 @@ export function createProcedures(
       throw new AppError("FRESH_SESSION_REQUIRED");
     return next();
   });
-
-  // Organization-scoped calls act in one organization, as one user, with their role there:
-  //   - a signed-in person: the session's active organization. Membership is re-checked
-  //     every time, so someone removed from it loses access immediately (see
-  //     auth/memberships.ts).
-  //   - an API key (`x-api-key`): its workspace, as its creator, and only for procedures
-  //     whose contract names a scope the key has (see modules/api-keys).
-  async function orgCaller(headers: Headers, scope: ApiKeyScope | undefined): Promise<OrgCaller> {
-    const apiKey = headers.get(API_KEY_HEADER);
-    if (apiKey !== null) {
-      // Everything without a scope is for signed-in people only.
-      if (!scope) throw new AppError("FORBIDDEN");
-      return authenticateApiKey(apiKey, scope);
-    }
-    const result = await auth.api.getSession({ headers });
-    if (!result) throw new AppError("UNAUTHENTICATED");
-    updateContext({ userId: result.user.id, locale: result.user.locale as string });
-    const orgId = result.session.activeOrganizationId;
-    if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
-    const role = await memberships.role(orgId, result.user.id);
-    if (!role) throw new AppError("NO_ACTIVE_ORGANIZATION");
-    return {
-      orgId,
-      role,
-      userId: result.user.id,
-      apiKeyId: null,
-      signedInAt: new Date(result.session.createdAt),
-    };
-  }
 
   const inOrg = base.use(async ({ context, next, procedure }) => {
     const caller = await orgCaller(context.headers, procedure["~orpc"].meta.apiKeyScope);

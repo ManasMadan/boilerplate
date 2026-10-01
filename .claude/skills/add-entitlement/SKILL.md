@@ -16,7 +16,7 @@ docs/files-and-billing.md, "Plans and entitlements", has the model.
 2. **Enforce it** where the feature is used, in the API:
    `await this.billing.require(orgId, "<entitlement>")` (`BillingService`, apps/api),
    which throws `ENTITLEMENT_REQUIRED`. A limit is checked where the count grows, like
-   `members` in `apps/api/src/auth/auth.ts`.
+   `members` in `apps/api/src/auth/auth-plugins.ts`.
 3. **Show it** in the clients from `billing.overview`: hide the feature or show
    `UpgradeHint` (`apps/web/src/modules/billing/components/upgrade-hint.tsx`), with its
    copy in every catalog.

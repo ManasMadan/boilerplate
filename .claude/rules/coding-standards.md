@@ -31,7 +31,10 @@ The principles in `CLAUDE.md` apply everywhere; this is what they mean line by l
   scripts). One implementation per concern.
 - **Small and plain.** Functions do one thing; no speculative options, factories or
   interfaces with one implementation, except the seams the README lists. Names say what
-  a thing is; no abbreviations a reader has to decode.
+  a thing is; no abbreviations a reader has to decode. Biome holds every TypeScript
+  function to a cognitive complexity of 15 and (outside tests) 60 lines, and refuses
+  nested ternaries and reassigned parameters (biome.jsonc): split the function into named
+  steps, an early return or a lookup table; never raise a limit to fit one.
 - **Comments say why**, in plain prose: the constraint, the trade-off, the limit and
   what to do when it's reached. Not what the next line does, not decision IDs, not a
   personal tool's markers (`bun run lint:markers` refuses `ponytail:`).

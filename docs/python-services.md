@@ -146,7 +146,7 @@ answers `INTERNAL` with that id; what went wrong never reaches the client. See
 [auth.md](auth.md) for the OAuth side.
 
 To add a tool: give it a scope in `packages/contracts/src/mcp.ts` (and the API's resource
-policy in `apps/api/src/auth/auth.ts`), register it in `create_mcp_server` behind that
+policy in `apps/api/src/auth/auth-plugins.ts`), register it in `create_mcp_server` behind that
 scope, and cover it in `tests/test_mcp.py`.
 
 ### Why there are two MCP servers

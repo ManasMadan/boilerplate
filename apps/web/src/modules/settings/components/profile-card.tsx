@@ -64,6 +64,34 @@ export function ProfileCard() {
   );
 }
 
+/** The languages, each named in itself. */
+function LanguageSelect({
+  value,
+  onChange,
+}: {
+  value: Locale;
+  onChange: (locale: Locale) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(chosen) => chosen && onChange(chosen)}
+      items={locales.map((locale) => ({ value: locale, label: nativeName(locale) }))}
+    >
+      <SelectTrigger id="locale" className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {locales.map((locale) => (
+          <SelectItem key={locale} value={locale}>
+            {nativeName(locale)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function ProfileForm({ initial }: { initial: { name: string; locale: Locale; timezone: string } }) {
   const t = useTranslations();
   const router = useRouter();
@@ -111,22 +139,7 @@ function ProfileForm({ initial }: { initial: { name: string; locale: Locale; tim
           render={({ field }) => (
             <Field>
               <FieldLabel htmlFor="locale">{t("settings.profile.language")}</FieldLabel>
-              <Select
-                value={field.value}
-                onValueChange={(value) => value && field.onChange(value)}
-                items={locales.map((value) => ({ value, label: nativeName(value) }))}
-              >
-                <SelectTrigger id="locale" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {locales.map((locale) => (
-                    <SelectItem key={locale} value={locale}>
-                      {nativeName(locale)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LanguageSelect value={field.value} onChange={field.onChange} />
             </Field>
           )}
         />

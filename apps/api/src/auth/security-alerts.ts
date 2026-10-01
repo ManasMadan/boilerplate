@@ -1,6 +1,6 @@
 /**
  * Which account changes email the owner a security alert. Kept apart from the auth config
- * so the rules are unit-testable; auth.ts calls this from an after-hook on every request.
+ * so the rules are unit-testable; auth-hooks.ts calls this from an after-hook on every request.
  */
 import type { SecurityEvent } from "@repo/jobs";
 

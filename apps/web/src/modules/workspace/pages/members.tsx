@@ -73,6 +73,74 @@ function RoleSelect({
   );
 }
 
+type Member = NonNullable<ReturnType<typeof useActiveWorkspace>["data"]>["members"][number];
+
+/** A member: name and address, and for an admin looking at someone else, role and removal. */
+function MemberRow({
+  member,
+  organizationId,
+  isYou,
+  canManage,
+  run,
+}: {
+  member: Member;
+  organizationId: string;
+  isYou: boolean;
+  canManage: boolean;
+  run: (call: Promise<{ error: unknown }>, success: string) => Promise<void>;
+}) {
+  const t = useTranslations("workspace.members");
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div className="flex flex-col">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          {member.user.name}
+          {isYou ? <Badge variant="secondary">{t("you")}</Badge> : null}
+        </span>
+        <span className="text-xs text-muted-foreground">{member.user.email}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {canManage ? (
+          <>
+            <RoleSelect
+              id={`role-${member.id}`}
+              label={t("roleLabel", { name: member.user.name })}
+              value={parseOrgRole(member.role)}
+              onChange={(role) =>
+                run(
+                  authClient.organization.updateMemberRole({
+                    memberId: member.id,
+                    role,
+                    organizationId,
+                  }),
+                  t("roleChanged"),
+                )
+              }
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                run(
+                  authClient.organization.removeMember({
+                    memberIdOrEmail: member.id,
+                    organizationId,
+                  }),
+                  t("removed"),
+                )
+              }
+            >
+              {t("remove")}
+            </Button>
+          </>
+        ) : (
+          <Badge variant="outline">{t(`role.${parseOrgRole(member.role) ?? "unknown"}`)}</Badge>
+        )}
+      </div>
+    </li>
+  );
+}
+
 export function WorkspaceMembersPage() {
   const t = useTranslations("workspace.members");
   const errorMessage = useAuthErrorMessage();
@@ -111,64 +179,16 @@ export function WorkspaceMembersPage() {
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col divide-y">
-            {workspace.members.map((member) => {
-              const isYou = member.userId === active.userId;
-              const canManage = active.isAdmin && !isYou;
-              return (
-                <li
-                  key={member.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3"
-                >
-                  <div className="flex flex-col">
-                    <span className="flex items-center gap-2 text-sm font-medium">
-                      {member.user.name}
-                      {isYou ? <Badge variant="secondary">{t("you")}</Badge> : null}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{member.user.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {canManage ? (
-                      <>
-                        <RoleSelect
-                          id={`role-${member.id}`}
-                          label={t("roleLabel", { name: member.user.name })}
-                          value={parseOrgRole(member.role)}
-                          onChange={(role) =>
-                            run(
-                              authClient.organization.updateMemberRole({
-                                memberId: member.id,
-                                role,
-                                organizationId: workspace.id,
-                              }),
-                              t("roleChanged"),
-                            )
-                          }
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            run(
-                              authClient.organization.removeMember({
-                                memberIdOrEmail: member.id,
-                                organizationId: workspace.id,
-                              }),
-                              t("removed"),
-                            )
-                          }
-                        >
-                          {t("remove")}
-                        </Button>
-                      </>
-                    ) : (
-                      <Badge variant="outline">
-                        {t(`role.${parseOrgRole(member.role) ?? "unknown"}`)}
-                      </Badge>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
+            {workspace.members.map((member) => (
+              <MemberRow
+                key={member.id}
+                member={member}
+                organizationId={workspace.id}
+                isYou={member.userId === active.userId}
+                canManage={active.isAdmin && member.userId !== active.userId}
+                run={run}
+              />
+            ))}
           </ul>
           {!isPersonal(workspace) && (active.role !== "owner" || owners > 1) ? (
             <Button variant="outline" className="mt-4" onClick={leave}>

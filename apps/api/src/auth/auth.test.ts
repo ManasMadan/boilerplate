@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newUserFields } from "./auth";
+import { newUserFields } from "./auth-hooks";
 
 const headers = (values: Record<string, string>) => new Headers(values);
 

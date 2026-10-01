@@ -5,7 +5,7 @@
  *
  * It's written through better-auth's internal adapter so every cached session sees the
  * new picture at once. Clients can't set `image` themselves (see the user update hook
- * in auth.ts), so it only ever points at a checked file.
+ * in auth-hooks.ts), so it only ever points at a checked file.
  */
 import { Injectable } from "@nestjs/common";
 import { fileContentPath } from "@repo/contracts/files";
