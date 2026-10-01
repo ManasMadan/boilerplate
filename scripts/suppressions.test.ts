@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
@@ -66,7 +66,7 @@ describe("suppressions", () => {
   });
 });
 
-describe("the check over tracked files", () => {
+describe("the check over the repository's files", () => {
   it("fails on an unlisted suppression, and passes once docs/testing.md lists the file", async () => {
     const root = mkdtempSync(join(tmpdir(), "suppressions-"));
     await $`git init -q`.cwd(root);
@@ -81,5 +81,10 @@ describe("the check over tracked files", () => {
     mkdirSync(join(root, "docs"));
     writeFileSync(join(root, "docs/testing.md"), "## Suppressions\n| `apps/x.ts` | untyped |\n");
     expect(checkSuppressions(root)).toBe(0);
+    // A new file counts before it's added, and a deleted one is skipped.
+    writeFileSync(join(root, "apps/new.ts"), "// @ts-expect-error new\n");
+    rmSync(join(root, "apps/clean.ts"));
+    expect(checkSuppressions(root)).toBe(1);
+    expect(printed()).toContain("apps/new.ts: @ts-expect-error");
   });
 });

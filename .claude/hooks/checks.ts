@@ -60,6 +60,10 @@ export function checksFor(changed: string[]): Check[] {
       command: ["bun", "scripts/unit-coverage.ts"],
     });
   }
+  // The edit hook sees only Edit and Write; this catches a suppression a shell command wrote.
+  if (changed.some((file) => /\.(ts|tsx|js|mjs|cjs|py)$/.test(file))) {
+    checks.push({ label: "suppressions", command: ["bun", "scripts/suppressions.ts"] });
+  }
   // Unused files, exports and dependencies: whenever code or a manifest changed.
   if (changed.some((file) => /\.(ts|tsx)$/.test(file) || file.endsWith("package.json"))) {
     checks.push({ label: "knip", command: ["bunx", "knip", "--no-progress"] });

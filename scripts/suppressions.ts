@@ -3,7 +3,8 @@
  * fixing it, so one is refused unless docs/testing.md lists its file with the reason
  * (the "Coverage exceptions", "Skipped tests" and "Suppressions" tables). The Claude Code
  * hook (.claude/hooks/suppressions.ts) applies this to every edit, and
- * `bun scripts/suppressions.ts` (in `bun run lint`, so in CI) to every tracked file.
+ * `bun scripts/suppressions.ts` (in `bun run lint`, so in CI, and in the Stop hook, which
+ * catches what a shell command wrote) to every file.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -89,10 +90,19 @@ export function unlisted(root: string, files: string[]): { path: string; kinds: 
     .filter(({ kinds }) => kinds.length > 0);
 }
 
-/** Reports every tracked file under `root` with an unlisted suppression; the exit code. */
+/**
+ * Reports every file under `root` git tracks or would (new files too, so a suppression
+ * written by a shell command is caught before `git add`) with an unlisted suppression;
+ * the exit code.
+ */
 export function checkSuppressions(root = join(import.meta.dir, "..")): number {
-  const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: root }).stdout.toString().split("\n");
-  const found = unlisted(root, tracked);
+  const files = Bun.spawnSync(["git", "ls-files", "--cached", "--others", "--exclude-standard"], {
+    cwd: root,
+  })
+    .stdout.toString()
+    .split("\n")
+    .filter((path) => path && existsSync(join(root, path)));
+  const found = unlisted(root, files);
   for (const { path, kinds } of found)
     console.error(`  \x1b[31m✖\x1b[0m ${path}: ${kinds.join(", ")}`);
   if (found.length === 0) return 0;

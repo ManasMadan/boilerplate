@@ -9,7 +9,12 @@ describe("the Stop hook's checks", () => {
       "Biome on the changed files",
       "lint, types and unit tests of the affected packages",
       "unit tests and the coverage of the changed lines",
+      "suppressions",
       "knip",
+    ]);
+    expect(labels(["apps/ai/app/x.py"])).toEqual([
+      "lint, types and unit tests of the affected packages",
+      "suppressions",
     ]);
     expect(labels(["apps/api/test/x.test.ts"])).not.toContain(
       "unit tests and the coverage of the changed lines",
@@ -23,6 +28,7 @@ describe("the Stop hook's checks", () => {
       "Biome on the changed files",
       "types of scripts/",
       "unit tests and the coverage of the changed lines",
+      "suppressions",
       "knip",
     ]);
     const hooks = checksFor([".claude/hooks/lib.ts"]);
