@@ -9,11 +9,12 @@ import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
  */
 const errors = errorsOf(...WORKSPACE_ERRORS);
 
-export const {{camelCase item}}Schema = z.object({
+// Exported (with its z.infer type) once an app needs it: knip refuses an export nothing
+// imports.
+const {{camelCase item}}Schema = z.object({
   id: z.uuid(),
   createdAt: z.date(),
 });
-export type {{pascalCase item}} = z.infer<typeof {{camelCase item}}Schema>;
 
 /**
  * The workspace's allowance for changing {{lowerCase (sentenceCase name)}}: every write

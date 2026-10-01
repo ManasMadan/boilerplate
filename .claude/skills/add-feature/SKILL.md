@@ -41,7 +41,10 @@ The todo feature is the reference for every layer: copy its shape, not just its 
    `inOrg`, `orgAdmin` or `fresh` from `apps/api/src/rpc/procedures.ts`.
 5. **Client.** One hook per procedure under `packages/client/src/api/<name>/`, with
    optimistic updates like `packages/client/src/api/todo/` (pure cache transforms in
-   their own file, unit-tested).
+   their own file, unit-tested). The generated list hook is tagged `@public` so knip
+   lets it wait for its first screen; drop the tag when the page below calls it. The
+   contract exports only what another workspace imports (knip checks the packages'
+   exports), so export the item's schema or type in the change that needs it.
 6. **Web.** A module in `apps/web/src/modules/<name>/` (components, pages, `index.ts`) and
    a route in `apps/web/src/app/(app)/<name>/page.tsx` that re-exports the page with
    `pageTitle(...)`. Data only through `@repo/client` hooks; forms validate with the

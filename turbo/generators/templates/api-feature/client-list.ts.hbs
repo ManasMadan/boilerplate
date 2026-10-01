@@ -8,8 +8,12 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 
-export const {{constantCase name}}_PAGE_SIZE = 20;
+const {{constantCase name}}_PAGE_SIZE = 20;
 
+/**
+ * @public until a screen calls it (knip reports an export nothing imports); take the tag
+ * out in the change that does.
+ */
 export function use{{pascalCase name}}ListInfiniteQuery(limit = {{constantCase name}}_PAGE_SIZE) {
   const { api } = useApi();
   return useInfiniteQuery(
