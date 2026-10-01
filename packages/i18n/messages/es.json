@@ -101,7 +101,8 @@
     "ORGANIZATION_NEEDS_OWNER": "Eres propietario de un espacio compartido. Haz propietario a otra persona antes de eliminar tu cuenta.",
     "generic": "Algo salió mal. Inténtalo de nuevo.",
     "ENTITLEMENT_REQUIRED": "Se alcanzó el límite de miembros de tu plan. Mejóralo en la configuración de facturación para invitar a más personas.",
-    "OAUTH_REQUEST_EXPIRED": "La solicitud de la aplicación caducó. Vuelve a la aplicación y conéctala de nuevo."
+    "OAUTH_REQUEST_EXPIRED": "La solicitud de la aplicación caducó. Vuelve a la aplicación y conéctala de nuevo.",
+    "SIGN_IN_INCOMPLETE": "El inicio de sesión no terminó. Inténtalo de nuevo."
   },
   "nav": {
     "dashboard": "Panel",

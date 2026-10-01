@@ -45,7 +45,11 @@ ships with it.
   storage and travels in a header; its `boilerplate://` scheme is a trusted origin.
   Social sign-in goes through the plugin's `/expo-authorization-proxy` redirect, which
   only sends people to a provider's sign-in page (`PROVIDER_ORIGINS` in `auth.ts`; add a
-  provider's origin there along with the provider).
+  provider's origin there along with the provider). The link back to the app never
+  carries the session (`apps/api/src/auth/mobile-sign-in.ts`): the app gets a hand-off id
+  and secret from `POST /mobile/sign-in/start`, signs in with the id in its callback
+  URL, and trades both for the session cookies at `POST /mobile/sign-in/finish`, once.
+  A hand-off lasts 10 minutes, and one wrong secret burns it (`SIGN_IN_INCOMPLETE`).
 - `trustedOrigins` (CSRF) are `WEB_URL`, `APP_ORIGINS` and the mobile scheme.
 
 ## Organizations and roles

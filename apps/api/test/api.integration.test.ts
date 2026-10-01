@@ -13,7 +13,7 @@ import { eventually } from "@repo/testing/eventually";
 import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PhoneService } from "../src/modules/user/phone.service";
 import { publishRealtime } from "../src/realtime";
 import {
@@ -235,6 +235,132 @@ describe("Google sign-in", () => {
     expect(started.status).toBe(200);
     expect(new URL(started.body.url).origin).toBe("https://accounts.google.com");
     expect(new URL(started.body.url).searchParams.get("client_id")).toBe(GOOGLE_CLIENT_ID);
+  });
+});
+
+describe("Google sign-in on the mobile app", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Google's token endpoint, answering any code with an id token for `email`. */
+  function google(email: string) {
+    const real = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.startsWith("https://oauth2.googleapis.com/token")) return real(input, init);
+      const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+      const claims = {
+        iss: "https://accounts.google.com",
+        aud: GOOGLE_CLIENT_ID,
+        sub: randomUUID(),
+        email,
+        email_verified: true,
+        name: "Ada",
+      };
+      return Promise.resolve(
+        Response.json({
+          access_token: "google-access-token",
+          id_token: `${part({ alg: "RS256" })}.${part(claims)}.signature`,
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+      );
+    });
+  }
+
+  /**
+   * The app starts a sign-in with `callbackURL`; the browser goes through the proxy to
+   * Google, which sends it back with a code (or `error`). Where the callback sends it.
+   */
+  async function signIn(callbackURL: string, back: Record<string, string> = { code: "a" }) {
+    const app = createSession(harness);
+    const started = await app.auth<{ url: string }>("/sign-in/social", {
+      provider: "google",
+      callbackURL,
+      disableRedirect: true,
+    });
+    const authorizationURL = started.body.url;
+    const proxied = await fetch(
+      `${harness.baseUrl}/api/auth/expo-authorization-proxy?${new URLSearchParams({ authorizationURL })}`,
+      { redirect: "manual" },
+    );
+    const state = new URL(authorizationURL).searchParams.get("state") as string;
+    const callback = await fetch(
+      `${harness.baseUrl}/api/auth/callback/google?${new URLSearchParams({ ...back, state })}`,
+      {
+        headers: {
+          cookie: proxied.headers
+            .getSetCookie()
+            .map((c) => c.split(";")[0])
+            .join("; "),
+        },
+        redirect: "manual",
+      },
+    );
+    return new URL(callback.headers.get("location") as string);
+  }
+
+  const start = () =>
+    createSession(harness).auth<{ id: string; secret: string }>("/mobile/sign-in/start");
+  const finish = (body: { id: string; secret: string }) =>
+    fetch(`${harness.baseUrl}/api/auth/mobile/sign-in/finish`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: String(process.env.WEB_URL) },
+      body: JSON.stringify(body),
+    });
+
+  it("hands the session only to the app that started the sign-in, once", async () => {
+    const email = newEmail();
+    google(email);
+    const { body: handoff } = await start();
+    const back = await signIn(`boilerplate:///?handoff=${handoff.id}`);
+    // The link names the hand-off and carries no session: catching it gets nothing.
+    expect(back.protocol).toBe("boilerplate:");
+    expect(back.searchParams.get("handoff")).toBe(handoff.id);
+    expect(back.searchParams.get("cookie")).toBeNull();
+
+    const finished = await finish(handoff);
+    expect(finished.status).toBe(200);
+    const token = /(?:__Secure-)?[\w.-]*session_token=[^;]+/.exec(
+      String(finished.headers.get("set-cookie")),
+    )?.[0];
+    const session = await fetch(`${harness.baseUrl}/api/auth/get-session`, {
+      headers: { cookie: String(token) },
+    }).then((response) => response.json() as Promise<{ user: { email: string } }>);
+    expect(session.user.email).toBe(email);
+    // Once only.
+    expect((await finish(handoff)).status).toBe(401);
+  });
+
+  it("burns the hand-off on a wrong secret, so a caught link can't be tried twice", async () => {
+    google(newEmail());
+    const { body: handoff } = await start();
+    await signIn(`boilerplate:///?handoff=${handoff.id}`);
+    const wrong = await finish({ id: handoff.id, secret: "guess" });
+    expect(wrong.status).toBe(401);
+    expect(await wrong.json()).toMatchObject({ code: "SIGN_IN_INCOMPLETE" });
+    expect((await finish(handoff)).status).toBe(401);
+  });
+
+  it("puts no session in a link to the app without a hand-off it started", async () => {
+    google(newEmail());
+    for (const callbackURL of ["boilerplate:///", `boilerplate:///?handoff=${"x".repeat(43)}`]) {
+      const back = await signIn(callbackURL);
+      expect(back.protocol).toBe("boilerplate:");
+      expect(back.searchParams.get("cookie"), callbackURL).toBeNull();
+    }
+    // Nor to the web app, which gets its cookie from the redirect itself.
+    expect((await signIn(String(process.env.WEB_URL))).origin).toBe(
+      new URL(String(process.env.WEB_URL)).origin,
+    );
+  });
+
+  it("has nothing to hand over before the sign-in, or after it failed", async () => {
+    const early = await start();
+    expect((await finish(early.body)).status).toBe(401);
+    const { body: handoff } = await start();
+    const back = await signIn(`boilerplate:///?handoff=${handoff.id}`, { error: "access_denied" });
+    expect(back.searchParams.get("error")).toBe("access_denied");
+    expect((await finish(handoff)).status).toBe(401);
   });
 });
 

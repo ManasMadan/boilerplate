@@ -101,7 +101,8 @@
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again.",
     "ENTITLEMENT_REQUIRED": "Your plan's member limit is reached. Upgrade in billing settings to invite more people.",
-    "OAUTH_REQUEST_EXPIRED": "The app's request expired. Go back to the app and connect again."
+    "OAUTH_REQUEST_EXPIRED": "The app's request expired. Go back to the app and connect again.",
+    "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again."
   },
   "nav": {
     "dashboard": "Dashboard",

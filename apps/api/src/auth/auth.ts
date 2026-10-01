@@ -19,7 +19,6 @@ import { randomUUID } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
 import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
-import { expo } from "@better-auth/expo";
 import { mcp } from "@better-auth/mcp";
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
@@ -76,6 +75,7 @@ import { type EventOrigin, emitAnyEvent, emitEvent } from "../outbox";
 import { createAccountLimits, createEmailLimits } from "./account-limits";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import type { Memberships } from "./memberships";
+import { mobileSignIn } from "./mobile-sign-in";
 import { orgAccess, orgRoles } from "./org-access";
 import { securityAlertFor } from "./security-alerts";
 
@@ -557,8 +557,9 @@ export function createAuth({
 
     plugins: [
       // The mobile app: it sends its origin in a header of its own (native requests have
-      // none), and Expo Go's exp:// is trusted in development.
-      expo(),
+      // none), Expo Go's exp:// is trusted in development, and social sign-in hands the
+      // session over without putting it in a link (mobile-sign-in.ts).
+      mobileSignIn(redis),
       emailOTP({
         otpLength: OTP_LENGTH,
         expiresIn: OTP_EXPIRES_IN,
