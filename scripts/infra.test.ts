@@ -58,6 +58,15 @@ describe("the facts OpenTofu writes on the cluster", () => {
   });
 });
 
+describe("the DNS provider's modules", () => {
+  // Each is counted on dns.provider; Cloudflare's state from before that had no index.
+  it("keep an existing environment's Cloudflare resources where they are", () => {
+    const main = readFileSync(join(ROOT_DIR, "main.tf"), "utf8");
+    expect(main).toContain("moved {\n  from = module.cloudflare\n  to   = module.cloudflare[0]\n}");
+    expect(main).toMatch(/module "cloudflare" \{\n\s+count\s+= local\.cloudflare \? 1 : 0/);
+  });
+});
+
 describe("the OpenTofu check", () => {
   const TOFU = join(import.meta.dir, "../infra/tofu");
   const pluginCache = () => join(mkdtempSync(join(tmpdir(), "tofu-plugins-")), "cache");

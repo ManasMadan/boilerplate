@@ -90,6 +90,13 @@ module "cloudflare" {
   mail         = local.records.mail
 }
 
+# State written before the provider was a choice has the module without an index: the
+# same resources, so an existing environment plans no change.
+moved {
+  from = module.cloudflare
+  to   = module.cloudflare[0]
+}
+
 module "rfc2136" {
   count        = var.dns.provider == "rfc2136" ? 1 : 0
   source       = "../../modules/rfc2136"
