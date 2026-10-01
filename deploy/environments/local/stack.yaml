@@ -36,8 +36,11 @@ services:
     env:
       # Local stand-ins, as in development.
       MINIMUM_CLIENT_VERSION: "0.0.0"
+  # KEDA scales the worker on its queues, as in the clusters: its operator reaching Valkey
+  # through the data chart's network policy is checked here (scripts/k8s.ts). At most
+  # two, to fit the machine.
   worker:
-    keda: { enabled: false }
+    keda: { enabled: true, maxReplicas: 2 }
     storage: none
     env:
       FILE_SCANNER: none

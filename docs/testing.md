@@ -344,8 +344,8 @@ for those areas.
 | OpenTofu | `bun run infra:check` |
 | Container images | every image builds, Trivy finds no fixable critical or high vulnerability, and each one starts against Postgres and Valkey and answers (`scripts/image-smoke.ts`: the dependencies check, an RPC, a page; the migrate image migrates an empty database) |
 
-Elsewhere: `kind.yml` deploys the stack to a kind cluster and smoke-tests the routes
-(`bun run k8s:up`) when the images, charts or migrations change; `security.yml` runs
+Elsewhere: `kind.yml` deploys the stack to a kind cluster, waits for KEDA to read the
+worker's queues from Valkey, and smoke-tests the routes (`bun run k8s:up`) when the images, charts or migrations change; `security.yml` runs
 CodeQL, a secret scan of the history, dependency review, OSV and a Trivy scan of the
 infrastructure configuration.
 

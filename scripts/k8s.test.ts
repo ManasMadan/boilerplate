@@ -138,6 +138,13 @@ describe("the local cluster", () => {
       "kind create cluster --config deploy/local/kind.yaml",
       helm("eg", ...addon("envoy-gateway"), "--create-namespace"),
       helm("cnpg", ...addon("cloudnative-pg"), "--create-namespace"),
+      helm(
+        "keda",
+        ...addon("keda"),
+        "-f",
+        join(ROOT, "deploy/platform/values/keda.yaml"),
+        "--create-namespace",
+      ),
       `${KUBECTL} create namespace gateway-system`,
       `${KUBECTL} create namespace boilerplate`,
       `${namespace} get secret mailpit-tls`,
@@ -156,6 +163,7 @@ describe("the local cluster", () => {
       `${helm("boilerplate-data", join(ROOT, "deploy/charts/data"), "-f", join(ROOT, "deploy/environments/local/data.yaml"), "--namespace", "boilerplate")} --timeout 10m`,
       `${KUBECTL} -n boilerplate wait cluster/boilerplate-data-postgres --for=condition=Ready --timeout=10m`,
       `${helm("boilerplate", join(ROOT, "deploy/charts/stack"), "-f", join(ROOT, "deploy/environments/local/stack.yaml"), "--namespace", "boilerplate")} --timeout 15m`,
+      `${KUBECTL} -n boilerplate wait scaledobject/boilerplate-worker --for=condition=Ready --timeout=5m`,
       `${namespace} create job ${job} --from=cronjob/boilerplate-reencrypt`,
       `${namespace} get job ${job} -o jsonpath={.status.succeeded},{.status.failed}`,
       `${namespace} get job ${job} -o jsonpath={.status.succeeded},{.status.failed}`,
@@ -165,7 +173,7 @@ describe("the local cluster", () => {
     expect(sleeps).toEqual([2000]);
 
     // Mailpit's certificate and its authority, from openssl's files, which are then deleted.
-    const [ca, tls] = applied(options, 16);
+    const [ca, tls] = applied(options, 17);
     expect(ca).toMatchObject({
       metadata: { name: "local-ca", namespace: "boilerplate" },
       stringData: { "ca.crt": "stand-in ca.crt" },
@@ -175,11 +183,11 @@ describe("the local cluster", () => {
       type: "kubernetes.io/tls",
       stringData: { "tls.crt": "stand-in tls.crt", "tls.key": "stand-in tls.key" },
     });
-    expect(existsSync(String(options[13]?.cwd))).toBe(false);
+    expect(existsSync(String(options[14]?.cwd))).toBe(false);
 
     // The services' Secrets share the values they must agree on.
     const secrets = Object.fromEntries(
-      applied(options, 18).map((item) => [
+      applied(options, 19).map((item) => [
         (item.metadata as { name: string }).name,
         item.stringData as Record<string, string>,
       ]),

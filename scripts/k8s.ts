@@ -10,7 +10,8 @@
  * Then open http://localhost (email: `kubectl -n boilerplate port-forward
  * svc/mailpit 8025`, then http://localhost:8025).
  *
- * What differs from a cluster: no Argo CD, cert-manager, KEDA or mail server. The data
+ * What differs from a cluster: no Argo CD, cert-manager or mail server. KEDA scales the
+ * worker, as in the clusters, and k8s:up waits for it to reach Valkey. The data
  * chart generates its own credentials as everywhere; the services' Secrets, which
  * clusters decrypt from SOPS files, are created here once from generated values, in
  * plain text straight into the cluster (never on disk). Email goes to Mailpit over TLS
@@ -496,7 +497,19 @@ export async function k8s(argv = process.argv.slice(2), given: Partial<Cluster> 
       `kind-${CLUSTER}`,
       "--wait",
     ]);
-    await Promise.all([envoy, cnpg]);
+    const keda = stepAsync("KEDA", "helm", [
+      "upgrade",
+      "--install",
+      "keda",
+      ...addon("keda"),
+      "-f",
+      join(ROOT, "deploy/platform/values/keda.yaml"),
+      "--create-namespace",
+      "--kube-context",
+      `kind-${CLUSTER}`,
+      "--wait",
+    ]);
+    await Promise.all([envoy, cnpg, keda]);
     kubectl(["create", "namespace", "gateway-system"]);
     kubectl(["create", "namespace", NAMESPACE]);
     mailpitCertificate();
@@ -562,6 +575,17 @@ export async function k8s(argv = process.argv.slice(2), given: Partial<Cluster> 
       "--wait",
       "--timeout",
       "15m",
+    ]);
+    // Ready only once KEDA's operator has read the worker's queues from Valkey.
+    step("KEDA scales the worker on its queues", "kubectl", [
+      "--context",
+      `kind-${CLUSTER}`,
+      "-n",
+      NAMESPACE,
+      "wait",
+      `scaledobject/${STACK}-worker`,
+      "--for=condition=Ready",
+      "--timeout=5m",
     ]);
     await smoke();
     console.log(`\n  http://${HOST}`);
