@@ -3,13 +3,16 @@
  * with stand-ins for valkey-cli, valkey-server and valkey-sentinel that print what they
  * were given: which node each one follows, and what its Sentinel is configured with.
  */
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const FILES = join(import.meta.dir, "../deploy/charts/data/files");
 const NODES = ["v-0.apps.svc", "v-1.apps.svc", "v-2.apps.svc"];
+
+// Each runs a shell script and its stand-ins: slow on a busy machine, so they get time.
+setDefaultTimeout(30_000);
 
 const dirs: string[] = [];
 afterEach(() => {

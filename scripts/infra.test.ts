@@ -53,7 +53,7 @@ describe("the facts OpenTofu writes on the cluster", () => {
   it.each(keys)("boilerplate.dev/%s is read by an ApplicationSet or an add-on", (key) => {
     const read =
       readers.includes(`boilerplate.dev/${key}`) ||
-      new RegExp(`:\\s*${key}\\s*$`, "m").test(readers);
+      new RegExp(`:\\s*${key}(\\|\\S*)?\\s*$`, "m").test(readers);
     expect(read).toBe(true);
   });
 });
@@ -67,7 +67,13 @@ describe("the OpenTofu check", () => {
     const { run, calls, options } = fakeRun();
     const cache = pluginCache();
     expect(infraCheck({ run, tofuDir: TOFU, pluginCache: cache, env: { PATH: "/bin" } })).toBe(0);
-    const roots = ["envs/k3s", "modules/bootstrap", "modules/cloudflare", "modules/k3s"];
+    const roots = [
+      "envs/k3s",
+      "modules/bootstrap",
+      "modules/cloudflare",
+      "modules/k3s",
+      "modules/rfc2136",
+    ];
     expect(calls).toEqual([
       "tofu fmt -check -recursive -diff .",
       ...roots.flatMap(() => [

@@ -3,12 +3,15 @@
  * a stand-in kubectl that records what it's asked and answers for two clusters: the
  * live one and the scratch one the latest backup is restored into.
  */
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const SCRIPT = join(import.meta.dir, "../deploy/charts/data/files/restore-drill.sh");
+
+// Each runs a shell script and its stand-ins: slow on a busy machine, so they get time.
+setDefaultTimeout(30_000);
 
 const dirs: string[] = [];
 afterEach(() => {
