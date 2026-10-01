@@ -148,6 +148,11 @@ still written, and skips with the reason when they're missing.
 | A web push notification being clicked | the service worker's `notificationclick` needs a real browser notification | by hand: allow notifications on the web app, trigger one, click it |
 | Email in real mail clients | rendering differs per client | by hand: the previews (`bun run --cwd packages/email dev`), then a real send |
 | Real MCP clients | needs Claude or an IDE on the other end | by hand: connect one to `<site>/api/mcp` and `<site>/ai/mcp` |
+| Valkey failing over (`valkey.replication`) | needs nodes to lose; kind has one | the chart's tests render it and the start-up scripts' tests (`scripts/valkey-replication.test.ts`) cover which node follows which; on a three-node cluster, once: delete the primary's pod, and the site keeps working within seconds |
+| DNS on a name server of your own (`dns.provider = "rfc2136"`) | needs a real name server and zone | OpenTofu's tests (mocked) and the issuer's chart tests; for real, the first certificate after switching (`kubectl get certificate -A`) and `dig` of the site |
+| A preview's address posted by Argo CD | needs the preview cluster and the GitHub App | `scripts/previews.test.ts` reads the trigger and template; for real, label a pull request and wait for the comment |
+| The weekly backup drill (`postgres.drill`) | needs a cluster with backups; kind has none | `scripts/backup-drill.test.ts` (the script, against a stand-in kubectl) and the chart's tests; for real, its first Sunday in staging, or `kubectl create job --from=cronjob/<release>-restore-drill` |
+| CI's own steps: the image smoke test, the caches, the egress allowlists | need GitHub's runners | `scripts/workflows.test.ts` and actionlint; for real, the first pull request after a change to them |
 | The first real deploy: DNS, TLS, mail deliverability, backups to a new cluster, the SOPS plugin in Argo CD, the first EAS build and store submission, Renovate's and the preview's first runs | needs the real environment | once, per [new-project.md](new-project.md), "The first deploy" |
 
 ## Coverage
