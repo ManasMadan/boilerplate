@@ -10,7 +10,7 @@ import type { TodoPage } from "@repo/contracts/api";
 import { type InfiniteData, useInfiniteQuery } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 
-export const TODO_PAGE_SIZE = 20;
+const TODO_PAGE_SIZE = 20;
 
 export type TodoListData = InfiniteData<TodoPage, string | undefined>;
 

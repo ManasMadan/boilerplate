@@ -21,7 +21,7 @@ import {
 
 export type { ErrorCode };
 
-export interface AppErrorOptions<C extends ErrorCode = ErrorCode> {
+interface AppErrorOptions<C extends ErrorCode = ErrorCode> {
   /** Values the client needs to render the message, e.g. { retryAfterSeconds: 30 }. */
   params?: ErrorParams<C>;
   cause?: unknown;

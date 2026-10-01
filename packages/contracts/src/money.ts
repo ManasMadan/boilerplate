@@ -4,7 +4,7 @@
  */
 import * as z from "zod";
 
-export const money = z.object({
+const money = z.object({
   amount: z.number().int(),
   currency: z.string().regex(/^[A-Z]{3}$/),
 });

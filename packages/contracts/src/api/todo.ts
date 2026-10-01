@@ -11,9 +11,9 @@ const errors = errorsOf(
   "TODO_VERSION_CONFLICT",
 );
 
-export const TODO_TITLE_MAX_LENGTH = 200;
+const TODO_TITLE_MAX_LENGTH = 200;
 
-export const todoSchema = z.object({
+const todoSchema = z.object({
   id: z.uuid(),
   title: z.string(),
   completed: z.boolean(),
@@ -26,7 +26,7 @@ export type Todo = z.infer<typeof todoSchema>;
 const todoPageSchema = page(todoSchema);
 export type TodoPage = z.infer<typeof todoPageSchema>;
 
-export const todoTitle = z.string().trim().min(1).max(TODO_TITLE_MAX_LENGTH);
+const todoTitle = z.string().trim().min(1).max(TODO_TITLE_MAX_LENGTH);
 
 export const createTodoInput = z.object({ title: todoTitle });
 export const setTodoCompletedInput = z.object({

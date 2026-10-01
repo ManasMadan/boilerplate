@@ -40,7 +40,7 @@ export type AppNotification = z.infer<typeof notificationSchema>;
 /** Minutes after midnight in the user's time zone. */
 const minuteOfDay = z.number().int().min(0).max(1439);
 
-export const notificationPreferencesSchema = z.object({
+const notificationPreferencesSchema = z.object({
   /** Every category users can change, with each channel's state. */
   categories: z.array(
     z.object({
@@ -55,17 +55,16 @@ export const notificationPreferencesSchema = z.object({
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
 /** A browser's PushSubscription (`subscription.toJSON()`). */
-export const webPushSubscriptionSchema = z.object({
+const webPushSubscriptionSchema = z.object({
   endpoint: z
     .url()
     .max(2048)
     .refine((endpoint) => isWebPushEndpoint(endpoint), "Not a browser push service"),
   keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
 });
-export type WebPushSubscription = z.infer<typeof webPushSubscriptionSchema>;
 
 /** A device to push to: a native app's APNs/FCM token, or a browser's subscription. */
-export const pushDeviceSchema = z.discriminatedUnion("platform", [
+const pushDeviceSchema = z.discriminatedUnion("platform", [
   // APNs device tokens are hex; FCM registration tokens are URL-safe base64 with ":".
   z.object({ platform: z.literal("ios"), token: z.string().regex(/^[0-9a-fA-F]{64,200}$/) }),
   z.object({

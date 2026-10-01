@@ -43,7 +43,7 @@ export type WebhookEndpoint = z.infer<typeof webhookEndpointSchema>;
  * Why an attempt failed without an HTTP status, as a code (the apps translate it), never
  * our own error message. A response with a status records the status instead.
  */
-export const WEBHOOK_DELIVERY_ERRORS = [
+const WEBHOOK_DELIVERY_ERRORS = [
   "timeout",
   "connection_failed",
   "destination_not_allowed",

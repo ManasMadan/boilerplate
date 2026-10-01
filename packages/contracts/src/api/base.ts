@@ -46,7 +46,6 @@ export const errorResponse = z.object({
   message: z.string(),
   data: errorData,
 });
-export type ErrorResponse = z.infer<typeof errorResponse>;
 
 /** The oRPC error map for these codes, with their catalog statuses and the one data shape. */
 export function errorsOf<C extends ErrorCode>(...codes: C[]) {

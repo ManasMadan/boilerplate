@@ -32,7 +32,7 @@ export * from "./locales";
 export type Messages = typeof en;
 
 /** A catalog with English's keys, any text: what every translation is. */
-export type Catalog = CatalogOf<Messages>;
+type Catalog = CatalogOf<Messages>;
 type CatalogOf<T> = { [K in keyof T]: T[K] extends string ? string : CatalogOf<T[K]> };
 
 /** Where translations are loaded from. See the module comment for the database variant. */

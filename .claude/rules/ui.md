@@ -11,7 +11,12 @@ The web component library: shadcn-style components (`components.json`, style
 - A component is `src/components/<name>.tsx`, imported by path
   (`@repo/ui/components/<name>`); there's no barrel. Adding one from the registry:
   `bunx shadcn@latest add <name> --cwd packages/ui`, then make it pass lint and types
-  like the rest (no `any`, no suppressions).
+  like the rest (no `any`, no suppressions). A component that brings a hook gets it in
+  `src/hooks/` (components.json's `hooks` alias); add `"./hooks/*": "./src/hooks/*.ts"`
+  to package.json's exports in that change, so the apps can import it (knip flags the
+  export while there's no hook for it to point at). Keep a component whole, as shadcn
+  ships it: knip leaves this package's unused exports alone so it can be updated with
+  `--overwrite`.
 - Every component has `src/components/<name>.stories.tsx`, with a `play` function for
   anything interactive. `bun run --cwd packages/ui test:stories` renders each story in
   Chromium in the light and dark themes, runs its `play`, and fails on any axe

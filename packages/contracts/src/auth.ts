@@ -3,13 +3,7 @@
  * browser rejects exactly what the server would.
  */
 import * as z from "zod";
-import {
-  NAME_MAX_LENGTH,
-  OTP_LENGTH,
-  PASSWORD_MAX_LENGTH,
-  PASSWORD_MIN_LENGTH,
-  PHONE_CODE_LENGTH,
-} from "./auth-settings";
+import { NAME_MAX_LENGTH, OTP_LENGTH, PHONE_CODE_LENGTH } from "./auth-settings";
 
 export * from "./auth-settings";
 
@@ -22,6 +16,5 @@ export const phoneNumberSchema = z
 export const phoneCodeSchema = z.string().regex(new RegExp(`^\\d{${PHONE_CODE_LENGTH}}$`));
 
 export const emailSchema = z.email().max(254).toLowerCase();
-export const passwordSchema = z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH);
 export const nameSchema = z.string().trim().min(1).max(NAME_MAX_LENGTH);
 export const otpSchema = z.string().regex(new RegExp(`^\\d{${OTP_LENGTH}}$`));

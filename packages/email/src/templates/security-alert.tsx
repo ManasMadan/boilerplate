@@ -1,7 +1,7 @@
 import { Button, Heading, Text } from "@react-email/components";
 import { Layout, type LocalizedProps } from "./layout";
 
-export type SecurityEventName =
+type SecurityEventName =
   | "email-changed"
   | "password-changed"
   | "password-reset"

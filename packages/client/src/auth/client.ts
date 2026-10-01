@@ -55,8 +55,7 @@ export function createAppAuthClient({ baseUrl, onTwoFactorRequired }: AuthClient
   });
 }
 
-export type AuthClient = ReturnType<typeof createAppAuthClient>;
-export type AuthSession = AuthClient["$Infer"]["Session"];
+type AuthClient = ReturnType<typeof createAppAuthClient>;
 
 /**
  * What the auth hooks (`src/auth/*`) call. Web's client and mobile's (which adds Expo's

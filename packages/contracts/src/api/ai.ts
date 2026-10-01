@@ -37,7 +37,7 @@ export const aiDocumentSchema = z.object({
 export type AiDocument = z.infer<typeof aiDocumentSchema>;
 
 /** One step of a streamed answer. */
-export const assistantEventSchema = z.discriminatedUnion("type", [
+const assistantEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({
     type: z.literal("sources"),

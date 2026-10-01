@@ -19,7 +19,6 @@ import { createDocument, deleteDocument, listDocuments, sentiment } from "./gene
 import type { AnswerData, ErrorCode, ErrorIssue } from "./generated/types.gen";
 import { zAssistantEvent, zErrorResponse } from "./generated/zod.gen";
 
-export type { DocumentOut as AiDocument, SentimentResponse } from "./generated/types.gen";
 export type AssistantEvent = z.infer<typeof zAssistantEvent>["event"];
 
 export interface AiCaller {
@@ -174,5 +173,3 @@ async function* events(body: ReadableStream<BufferSource>): AsyncGenerator<Assis
     yield zAssistantEvent.parse(JSON.parse(message.data)).event;
   }
 }
-
-export type AiClient = ReturnType<typeof createAiClient>;

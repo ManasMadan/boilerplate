@@ -24,8 +24,8 @@ export const csv = z.string().transform((value) =>
     .filter(Boolean),
 );
 
-export const nodeEnv = z.enum(["development", "test", "production"]).default("development");
-export const logLevel = z
+const nodeEnv = z.enum(["development", "test", "production"]).default("development");
+const logLevel = z
   .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
   .default("info");
 

@@ -13,7 +13,7 @@ const errors = errorsOf(
   "FILE_NOT_READY",
 );
 
-export const meSchema = z.object({
+const meSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   email: z.email(),

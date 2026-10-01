@@ -45,7 +45,6 @@ export type InAppNotificationType = keyof typeof inAppNotifications;
 
 /** Where a device receives push: APNs (ios), FCM (android) or Web Push (web). */
 export const pushPlatforms = ["ios", "android", "web"] as const;
-export type PushPlatform = (typeof pushPlatforms)[number];
 
 /**
  * The browsers' push services. A Web Push subscription names the URL the notifications

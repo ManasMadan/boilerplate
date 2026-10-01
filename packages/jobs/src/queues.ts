@@ -54,7 +54,7 @@ const phone = z.string().regex(/^\+[1-9]\d{6,14}$/);
  * Account changes the owner is told about (by email, and by text when they have a
  * verified phone), so a takeover can't happen silently.
  */
-export const SECURITY_EVENTS = [
+const SECURITY_EVENTS = [
   "email-changed",
   "password-changed",
   "password-reset",
@@ -152,7 +152,7 @@ export type NotificationPayload = z.infer<typeof notificationPayload>;
  * One channel of a notification, delayed until the recipient's quiet hours end. Keeps
  * the original delivery key, so it still can't be sent twice.
  */
-export const deferredDelivery = z.object({
+const deferredDelivery = z.object({
   payload: notificationPayload,
   // Only push waits for quiet hours today: texts are security messages, which never wait.
   channel: z.enum(["push"]),

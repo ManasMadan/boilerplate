@@ -8,7 +8,7 @@ import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf("APP_NOT_FOUND");
 
-export const connectedAppSchema = z.object({
+const connectedAppSchema = z.object({
   /** The approval (one per app and workspace). */
   id: z.uuid(),
   clientId: z.string(),

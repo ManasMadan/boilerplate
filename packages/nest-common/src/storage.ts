@@ -25,7 +25,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-export interface PresignedUpload {
+interface PresignedUpload {
   url: string;
   /** Headers the client must send with the PUT, exactly as given. */
   headers: Record<string, string>;

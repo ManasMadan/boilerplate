@@ -62,8 +62,6 @@ export const withTenant = (db: Db, orgId: string) =>
     "Use tenantTx() for multi-statement units on tenant data.",
   );
 
-export type TenantDb = ReturnType<typeof withTenant>;
-
 /**
  * Like withTenant, for rows owned by one user rather than an organization (their
  * notifications, preferences, devices): row-level security on `app.user_id` scopes

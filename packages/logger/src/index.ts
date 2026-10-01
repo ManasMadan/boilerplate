@@ -21,7 +21,7 @@ export interface LoggerConfig {
 }
 
 /** Header paths removed from request/response logs. */
-export const REDACT_PATHS = [
+const REDACT_PATHS = [
   "req.headers.authorization",
   "req.headers.cookie",
   'req.headers["x-api-key"]',
@@ -33,7 +33,7 @@ export const REDACT_PATHS = [
  * code as `job.data.data.otp`, which path-based redaction would miss). Compared
  * case-insensitively. Add any field that can carry a credential or one-time secret.
  */
-export const SENSITIVE_KEYS = new Set([
+const SENSITIVE_KEYS = new Set([
   "password",
   "newpassword",
   "currentpassword",
@@ -100,5 +100,3 @@ export function loggerOptions({
 export function createLogger(config: LoggerConfig) {
   return pino(loggerOptions(config));
 }
-
-export type Logger = ReturnType<typeof createLogger>;

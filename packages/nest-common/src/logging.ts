@@ -61,4 +61,4 @@ export const LoggerModule = {
   },
 };
 
-export { InjectPinoLogger, Logger, PinoLogger } from "nestjs-pino";
+export { InjectPinoLogger, PinoLogger } from "nestjs-pino";

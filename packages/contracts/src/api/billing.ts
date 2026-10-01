@@ -12,12 +12,12 @@ const errors = errorsOf(
   "NO_SUBSCRIPTION",
 );
 
-export const entitlementsSchema = z.object({
+const entitlementsSchema = z.object({
   members: z.number().int().nullable(),
   webhooks: z.boolean(),
 });
 
-export const billingOverviewSchema = z.object({
+const billingOverviewSchema = z.object({
   /** False when this deployment has billing off: everything is included. */
   enabled: z.boolean(),
   plan: z.enum(planNames),
@@ -37,7 +37,7 @@ export const billingOverviewSchema = z.object({
 });
 export type BillingOverview = z.infer<typeof billingOverviewSchema>;
 
-export const invoiceSchema = z.object({
+const invoiceSchema = z.object({
   id: z.string(),
   number: z.string().nullable(),
   status: z.string(),

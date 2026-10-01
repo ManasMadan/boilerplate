@@ -28,7 +28,7 @@ export const API_KEY_EXPIRY_DAYS = [30, 90, 365] as const;
 /** The longest a key lives; `expiresInDays: null` (formerly "never") gets this. */
 export const MAX_API_KEY_DAYS = 365;
 
-export const apiKeySchema = z.object({
+const apiKeySchema = z.object({
   id: z.uuid(),
   name: z.string(),
   /** The first characters of the key (with its prefix), to recognise it. */

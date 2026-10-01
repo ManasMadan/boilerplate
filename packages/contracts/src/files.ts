@@ -22,7 +22,6 @@ export const uploadPurposeNames = Object.keys(uploadPurposes) as [
 ];
 
 export const fileStatuses = ["pending", "processing", "ready", "rejected"] as const;
-export type FileStatus = (typeof fileStatuses)[number];
 
 /** Why the worker turned an upload down (error codes, translated by clients). */
 export const fileRejections = [

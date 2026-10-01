@@ -23,7 +23,7 @@ import { fromPrismaError } from "./prisma-errors";
 
 type Params = Record<string, string | number>;
 
-export function errorBody(code: ErrorCode, params: Params = {}, requestId?: string) {
+function errorBody(code: ErrorCode, params: Params = {}, requestId?: string) {
   return {
     defined: true,
     code,
@@ -61,7 +61,7 @@ export function codeForStatus(status: number): ErrorCode {
 }
 
 /** What an error thrown outside a procedure means, as a catalog error. */
-export function toHttpError(error: unknown): { code: ErrorCode; params: Params } {
+function toHttpError(error: unknown): { code: ErrorCode; params: Params } {
   const known = isAppError(error) ? error : fromPrismaError(error);
   if (known) return { code: known.code, params: known.params };
   if (error instanceof HttpException) return { code: codeForStatus(error.getStatus()), params: {} };

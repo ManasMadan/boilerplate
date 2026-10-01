@@ -45,27 +45,40 @@
       "entry": ["api.ts"],
       "ignoreDependencies": ["k6"]
     },
+    // A package's exports are its API to the rest of the repo: one nothing imports is
+    // dead, so knip reports it too (includeEntryExports) instead of trusting the entry.
+    // The glob covers the packages without settings of their own; each package listed
+    // below sets it again, since a workspace's own entry replaces the glob's.
+    "packages/*": { "includeEntryExports": true },
     "packages/ai-client": {
+      "includeEntryExports": true,
       // Orders codegen: the client is generated from apps/ai's openapi.json.
       "ignoreDependencies": ["@repo/ai"]
     },
     "packages/db": {
+      "includeEntryExports": true,
       // Imported by the generated Prisma client (src/generated, not committed).
       "ignoreDependencies": ["@prisma/client"]
     },
     "packages/logger": {
+      "includeEntryExports": true,
       // Loaded by name as pino's development transport.
       "ignoreDependencies": ["pino-pretty"]
     },
     "packages/nest-common": {
+      "includeEntryExports": true,
       // Run as a child `node --import …` process by test/telemetry.integration.test.ts.
       "entry": ["test/fixtures/*.mjs"]
     },
     "packages/typescript-config": {
+      "includeEntryExports": true,
       // The Next.js TypeScript plugin, named in nextjs.json.
       "ignoreUnresolved": ["next"]
     },
     "packages/ui": {
+      // The components are shadcn's, kept whole (overlays, portals, scroll buttons and
+      // variants included) so `shadcn add --overwrite` can update them from upstream.
+      "includeEntryExports": false,
       // The visual regression run (test:visual, in the Playwright image).
       "entry": ["visual/playwright.config.ts", "visual/serve.mjs"]
     }
