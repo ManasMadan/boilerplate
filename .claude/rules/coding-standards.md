@@ -19,7 +19,8 @@ The principles in `CLAUDE.md` apply everywhere; this is what they mean line by l
 - **Parse, don't cast.** Data from outside the process (HTTP, queues, env, files, third
   parties, the database's JSON columns, other services) goes through a schema (zod,
   Pydantic) at the boundary; inside, types come from those schemas. No hand-written
-  duplicate of a schema's type.
+  duplicate of a schema's type. `bun run lint:patterns` refuses `JSON.parse(...) as T`,
+  `(await res.json()) as T`, `$queryRaw<T>` and optional chains three deep in `src/`.
 - **No silent fallbacks.** `??` and `||` only where the default is the intended value,
   never to hide missing data; an unexpected case throws or returns a typed error.
   Every `catch` either handles the error, rethrows it, or logs it with context; never

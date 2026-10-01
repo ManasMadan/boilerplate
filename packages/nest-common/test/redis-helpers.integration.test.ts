@@ -19,16 +19,20 @@ describe("CacheService", () => {
   it("loads once for concurrent misses, then serves from Redis", async () => {
     const cache = new CacheService(redis, `test-${randomUUID()}`);
     let loads = 0;
+    const { promise: released, resolve: release } = Promise.withResolvers<void>();
+    // The load finishes only when the test says, so the other nine ask while it runs.
     const load = async () => {
       loads += 1;
-      // A slow load on purpose, so the other nine ask while it's still running.
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await released;
       return { plan: "pro" };
     };
     const plan = z.object({ plan: z.string() });
-    const results = await Promise.all(
-      Array.from({ length: 10 }, () => cache.wrap("k", 60, plan, load)),
-    );
+    const asked = Promise.all(Array.from({ length: 10 }, () => cache.wrap("k", 60, plan, load)));
+    // Valkey answers a connection's commands in order: once this PING is back, all ten
+    // lookups have missed and are waiting on the one load.
+    await redis.ping();
+    release();
+    const results = await asked;
     expect(results.every((r) => r.plan === "pro")).toBe(true);
     expect(await cache.wrap("k", 60, plan, load)).toEqual({ plan: "pro" });
     expect(loads).toBe(1);

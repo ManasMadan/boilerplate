@@ -27,23 +27,35 @@ import {
 } from "@nestjs/common";
 import { type EventEnvelope, eventEnvelope } from "@repo/contracts/events";
 import { Prisma } from "@repo/db";
-import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import {
+  type Database,
+  InjectDatabase,
+  InjectPinoLogger,
+  PinoLogger,
+  rows,
+} from "@repo/nest-common";
 import pg from "pg";
+import * as z from "zod";
 import { env } from "../env";
 import { EventBus } from "./event-bus";
 import { OUTBOX_SOURCES, type OutboxSource } from "./sources";
 
-interface OutboxRow {
-  id: string;
+/**
+ * An outbox row's columns. Parsed, so a migration that renames or retypes one fails here;
+ * whether the row is a valid event is checked after (eventEnvelope), one row at a time.
+ */
+const outboxRow = z.object({
+  id: z.string(),
   /** Possibly an event this build doesn't know yet (see eventEnvelope). */
-  name: string;
-  key: string;
-  payload: unknown;
-  org_id: string | null;
-  actor_id: string | null;
-  request_id: string | null;
-  occurred_at: Date;
-}
+  name: z.string(),
+  key: z.string(),
+  payload: z.unknown(),
+  org_id: z.string().nullable(),
+  actor_id: z.string().nullable(),
+  request_id: z.string().nullable(),
+  occurred_at: z.date(),
+});
+type OutboxRow = z.infer<typeof outboxRow>;
 
 /** Between 1 and 3 seconds: replicas that lost the database together don't return together. */
 const reconnectDelayMs = () => 1_000 + Math.random() * 2_000;
@@ -122,18 +134,21 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     const table = Prisma.raw(`"${source}"."outbox_event"`);
     return this.database.write.$transaction(
       async (tx) => {
-        const rows = await tx.$queryRaw<OutboxRow[]>`
-          SELECT id, name, key, payload, org_id, actor_id, request_id, occurred_at
-          FROM ${table}
-          WHERE published_at IS NULL
-          ORDER BY occurred_at
-          LIMIT ${env.RELAY_BATCH_SIZE}
-          FOR UPDATE SKIP LOCKED`;
-        if (rows.length === 0) return 0;
+        const claimed = await rows(
+          outboxRow,
+          tx.$queryRaw`
+            SELECT id, name, key, payload, org_id, actor_id, request_id, occurred_at
+            FROM ${table}
+            WHERE published_at IS NULL
+            ORDER BY occurred_at
+            LIMIT ${env.RELAY_BATCH_SIZE}
+            FOR UPDATE SKIP LOCKED`,
+        );
+        if (claimed.length === 0) return 0;
         // A row that isn't a valid event never will be: publishing it would fail this
         // batch, and every batch after it, forever. It's logged and set aside (marked
         // published, so it stays in the table until retention, for someone to look at).
-        const envelopes = rows.map((row) => ({
+        const envelopes = claimed.map((row) => ({
           row,
           parsed: eventEnvelope.safeParse(toEnvelope(row, source)),
         }));
@@ -150,8 +165,8 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
         );
         await tx.$executeRaw`
           UPDATE ${table} SET published_at = now()
-          WHERE id = ANY(${rows.map((row) => row.id)}::uuid[])`;
-        return rows.length;
+          WHERE id = ANY(${claimed.map((row) => row.id)}::uuid[])`;
+        return claimed.length;
       },
       { maxWait: 5_000, timeout: 15_000 },
     );

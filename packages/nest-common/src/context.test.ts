@@ -11,7 +11,8 @@ import {
 describe("request context", () => {
   it("is there for everything the call awaits, and gone outside it", async () => {
     await runWithContext({ requestId: "r-1", orgId: "o-1" }, async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1));
+      // A real hop through the event loop, as an awaited I/O call takes.
+      await new Promise((resolve) => setImmediate(resolve));
       expect(currentContext()).toEqual({ requestId: "r-1", orgId: "o-1" });
     });
     expect(currentContext()).toBeUndefined();

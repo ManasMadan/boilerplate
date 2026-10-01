@@ -316,9 +316,10 @@ The evals run on every change with the local stand-ins; see
 
 | Command | What it checks |
 |---|---|
-| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser, the web render-only check and `scripts/check-layers.ts`), `lint:unused`, `lint:markers`, and each package's `lint` (ruff for Python), all of them even when one fails, with a summary at the end (`scripts/lint.ts`); CI runs the same command |
+| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser, the web render-only check and `scripts/check-layers.ts`), `lint:unused`, `lint:markers`, `lint:patterns`, `lint:suppressions`, and each package's `lint` (ruff for Python), all of them even when one fails, with a summary at the end (`scripts/lint.ts`); CI runs the same command |
 | `bun run lint:unused` | knip (`knip.jsonc`): unused files, exports and dependencies, and dependencies used but not declared |
 | `bun run lint:markers` | no `ponytail:` markers in tracked source (`scripts/check-markers.ts`): a comment says why in plain words |
+| `bun run lint:patterns` | code shapes Biome can't see (`scripts/check-patterns.ts`): in services' and packages' `src/`, parsed JSON cast to a type, a type argument on `$queryRaw`, an optional chain three deep, a role compared with `"member"`, an error sent without `sendError`; in tests, a fixed sleep outside a polling loop |
 | `bun run check-types` | tsc everywhere, basedpyright (strict) for Python |
 | `bun run db:lint` | Squawk on new migrations |
 | `bun run --cwd apps/web budget` | first-load JavaScript per route, after `next build` |

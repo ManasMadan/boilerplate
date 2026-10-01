@@ -1,8 +1,9 @@
 /**
  * Every lint step, `bun run lint`: formatting and lint (Biome), architecture boundaries,
- * unused code (knip), shortcut markers, and each package's own lint (turbo). All of
- * them run even when one fails, so one failure never hides another's results; it exits
- * non-zero at the end if any failed. CI's lint job runs the same command.
+ * unused code (knip), shortcut markers, ruled-out code patterns, suppressions, and each
+ * package's own lint (turbo). All of them run even when one fails, so one failure never
+ * hides another's results; it exits non-zero at the end if any failed. CI's lint job runs
+ * the same command.
  */
 import { fail, ok, ROOT, type Run, runSync } from "./lib";
 
@@ -12,6 +13,7 @@ export const STEPS: string[][] = [
   ["bun", "run", "lint:boundaries"],
   ["bun", "run", "lint:unused"],
   ["bun", "run", "lint:markers"],
+  ["bun", "run", "lint:patterns"],
   ["bun", "run", "lint:suppressions"],
   ["bunx", "turbo", "run", "lint"],
 ];

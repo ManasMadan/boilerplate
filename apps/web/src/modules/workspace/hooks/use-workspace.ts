@@ -11,13 +11,17 @@ import { authKeys } from "@repo/client/auth/query";
 import { useWorkspacesQuery } from "@repo/client/auth/workspaces";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import * as z from "zod";
 import { authClient } from "@/lib/auth-client";
+
+/** What a workspace's metadata says about it; the sign-up hook sets `personal`. */
+const workspaceMetadata = z.object({ personal: z.boolean().optional() });
 
 /** Personal workspaces (one per user, created at sign-up) can't be shared or deleted. */
 export function isPersonal(organization: { metadata?: unknown }) {
   if (typeof organization.metadata !== "string") return false;
   try {
-    return (JSON.parse(organization.metadata) as { personal?: boolean }).personal === true;
+    return workspaceMetadata.safeParse(JSON.parse(organization.metadata)).data?.personal === true;
   } catch {
     return false;
   }
