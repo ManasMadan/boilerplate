@@ -15,6 +15,18 @@ export const {{camelCase item}}Schema = z.object({
 });
 export type {{pascalCase item}} = z.infer<typeof {{camelCase item}}Schema>;
 
+/**
+ * The workspace's allowance for changing {{lowerCase (sentenceCase name)}}: every write
+ * declares a limit (rate-limits.test.ts); everyday changes go on while Redis is down.
+ */
+const writes = {
+  name: "{{kebabCase name}}-writes",
+  points: 120,
+  windowSeconds: 60,
+  per: "org",
+  onRedisError: "allow",
+} as const;
+
 export const {{camelCase name}}Contract = {
   list: base
     .errors(errors)
@@ -28,6 +40,7 @@ export const {{camelCase name}}Contract = {
     .output(page({{camelCase item}}Schema)),
   delete: base
     .errors(errors)
+    .meta({ rateLimit: writes })
     .route({
       method: "DELETE",
       path: "/{{kebabCase name}}/{id}",
