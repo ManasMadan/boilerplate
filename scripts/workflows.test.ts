@@ -9,7 +9,14 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
-type Step = { name?: string; uses?: string; run?: string; with?: Record<string, unknown> };
+type Step = {
+  name?: string;
+  uses?: string;
+  run?: string;
+  if?: string;
+  env?: Record<string, string>;
+  with?: Record<string, unknown>;
+};
 type Job = {
   if?: string;
   environment?: string;
@@ -487,7 +494,9 @@ describe("CI's caches", () => {
   });
 
   it("builds the component library's Storybook through turbo, whose cache CI keeps", () => {
-    const ui = JSON.parse(readFileSync(join(ROOT, "packages/ui/package.json"), "utf8"));
+    const ui = JSON.parse(readFileSync(join(ROOT, "packages/ui/package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
     expect(ui.scripts["test:visual"]).toStartWith("turbo run build-storybook --filter=@repo/ui");
     const turbo = readFileSync(join(ROOT, "turbo.json"), "utf8");
     expect(turbo).toMatch(/"build-storybook": \{\s*"outputs": \["storybook-static\/\*\*"\]/);
