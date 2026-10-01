@@ -5,7 +5,7 @@
  * own tests (apps/ai) and end to end by the web suite.
  */
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
 import { jwtVerify } from "jose";
@@ -39,10 +39,7 @@ let ai: Server;
 const documents: Doc[] = [];
 const calls: { path: string; org: string; user: string; requestId: string | undefined }[] = [];
 /** Per organization: what the next answer does. */
-const behaviour = new Map<
-  string,
-  "answer" | "budget" | "off" | "stream-error" | "down" | "drop" | "hang"
->();
+const behaviour = new Map<string, Mode>();
 /** Organizations whose hanging answer the API stopped reading (the connection closed). */
 const closed = new Set<string>();
 
@@ -55,93 +52,121 @@ async function body(request: IncomingMessage): Promise<{ title?: string } | unde
     : undefined;
 }
 
+type Mode = "answer" | "budget" | "off" | "stream-error" | "down" | "drop" | "hang";
+type Reply = (status: number, payload?: unknown) => void;
+type Fail = (status: number, code: string, params?: Record<string, string>) => void;
+
+/** The caller named by the token the API signed, or undefined when it doesn't verify. */
+async function verifiedCaller(request: IncomingMessage) {
+  try {
+    const token = String(request.headers.authorization ?? "").replace(/^Bearer /, "");
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(SECRET), {
+      issuer: "api",
+      audience: "ai",
+      maxTokenAge: 120,
+    });
+    return { org: String(payload.org), user: String(payload.sub) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** The assistant's answer in the organization's mode: refused, broken, or streamed. */
+function answer(mode: Mode, org: string, response: ServerResponse, fail: Fail) {
+  if (mode === "budget") return fail(429, "AI_BUDGET_EXCEEDED");
+  if (mode === "off") return fail(404, "FEATURE_DISABLED", { feature: "assistant" });
+  if (mode === "down") return fail(500, "INTERNAL");
+  response.writeHead(200, { "content-type": "text/event-stream" });
+  const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
+  // The connection breaks midway (closed without ending the response), or the answer
+  // never ends.
+  if (mode === "drop") {
+    return response.write(
+      `data: ${JSON.stringify({ event: { type: "text", text: "Refunds take " } })}\n\n`,
+      () => response.socket?.end(),
+    );
+  }
+  send({ type: "text", text: "Refunds take " });
+  if (mode === "hang") return response.on("close", () => closed.add(org));
+  send({ type: "text", text: "five days." });
+  if (mode === "stream-error") {
+    send({ type: "error", code: "AI_RUN_LIMIT" });
+    return response.end();
+  }
+  send({ type: "sources", sources: [{ documentId: randomUUID(), title: "Handbook" }] });
+  send({ type: "done", usage: { inputTokens: 10, outputTokens: 5 } });
+  return response.end();
+}
+
+/** The documents endpoints, for the caller's organization; false for another path. */
+function documentsRoute(
+  route: string,
+  caller: { org: string; user: string },
+  input: { title?: string } | undefined,
+  reply: Reply,
+  fail: Fail,
+) {
+  const { org, user } = caller;
+  if (route === "GET /v1/documents") {
+    reply(
+      200,
+      documents.filter((d) => d.org === org),
+    );
+    return true;
+  }
+  if (route === "POST /v1/documents") {
+    const doc: Doc = {
+      id: randomUUID(),
+      org,
+      title: input?.title ?? "",
+      status: "pending",
+      error: null,
+      chunkCount: 0,
+      summary: null,
+      createdBy: user,
+      createdAt: new Date().toISOString(),
+    };
+    documents.push(doc);
+    reply(201, doc);
+    return true;
+  }
+  const remove = /^DELETE \/v1\/documents\/([0-9a-f-]{36})$/.exec(route);
+  if (!remove) return false;
+  const index = documents.findIndex((d) => d.id === remove[1] && d.org === org);
+  if (index === -1) fail(404, "DOCUMENT_NOT_FOUND");
+  else {
+    documents.splice(index, 1);
+    reply(204);
+  }
+  return true;
+}
+
 beforeAll(async () => {
   ai = createServer(async (request, response) => {
-    const reply = (status: number, payload?: unknown) => {
+    const reply: Reply = (status, payload) => {
       response.writeHead(status, { "content-type": "application/json" });
       response.end(payload === undefined ? undefined : JSON.stringify(payload));
     };
     // The service's error body: the contract's shape (packages/contracts errorResponse).
-    const fail = (status: number, code: string, params: Record<string, string> = {}) =>
+    const fail: Fail = (status, code, params = {}) =>
       reply(status, { defined: true, code, status, message: code, data: { params } });
-    let claims: { sub?: string; org?: unknown };
-    try {
-      const token = String(request.headers.authorization ?? "").replace(/^Bearer /, "");
-      ({ payload: claims } = await jwtVerify(token, new TextEncoder().encode(SECRET), {
-        issuer: "api",
-        audience: "ai",
-        maxTokenAge: 120,
-      }));
-    } catch {
-      return fail(401, "UNAUTHENTICATED");
-    }
-    const org = String(claims.org);
-    const user = String(claims.sub);
+    const caller = await verifiedCaller(request);
+    if (!caller) return fail(401, "UNAUTHENTICATED");
     const path = new URL(request.url ?? "/", "http://ai").pathname;
     calls.push({
       path,
-      org,
-      user,
+      ...caller,
       requestId: request.headers["x-request-id"] as string | undefined,
     });
     const input = await body(request);
+    const route = `${request.method} ${path}`;
 
-    if (request.method === "POST" && path === "/v1/sentiment") {
+    if (route === "POST /v1/sentiment") {
       return reply(200, { label: "positive", score: 0.9, model: "fake" });
     }
-    if (request.method === "GET" && path === "/v1/documents") {
-      return reply(
-        200,
-        documents.filter((d) => d.org === org),
-      );
-    }
-    if (request.method === "POST" && path === "/v1/documents") {
-      const doc: Doc = {
-        id: randomUUID(),
-        org,
-        title: input?.title ?? "",
-        status: "pending",
-        error: null,
-        chunkCount: 0,
-        summary: null,
-        createdBy: user,
-        createdAt: new Date().toISOString(),
-      };
-      documents.push(doc);
-      return reply(201, doc);
-    }
-    const remove = /^\/v1\/documents\/([0-9a-f-]{36})$/.exec(path);
-    if (request.method === "DELETE" && remove) {
-      const index = documents.findIndex((d) => d.id === remove[1] && d.org === org);
-      if (index === -1) return fail(404, "DOCUMENT_NOT_FOUND");
-      documents.splice(index, 1);
-      return reply(204);
-    }
-    if (request.method === "POST" && path === "/v1/assistant/answers") {
-      const mode = behaviour.get(org) ?? "answer";
-      if (mode === "budget") return fail(429, "AI_BUDGET_EXCEEDED");
-      if (mode === "off") return fail(404, "FEATURE_DISABLED", { feature: "assistant" });
-      if (mode === "down") return fail(500, "INTERNAL");
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
-      // The connection breaks midway (closed without ending the response), or the answer
-      // never ends.
-      if (mode === "drop") {
-        return response.write(
-          `data: ${JSON.stringify({ event: { type: "text", text: "Refunds take " } })}\n\n`,
-          () => response.socket?.end(),
-        );
-      }
-      send({ type: "text", text: "Refunds take " });
-      if (mode === "hang") return response.on("close", () => closed.add(org));
-      send({ type: "text", text: "five days." });
-      if (mode === "stream-error") {
-        send({ type: "error", code: "AI_RUN_LIMIT" });
-        return response.end();
-      }
-      send({ type: "sources", sources: [{ documentId: randomUUID(), title: "Handbook" }] });
-      send({ type: "done", usage: { inputTokens: 10, outputTokens: 5 } });
-      return response.end();
+    if (documentsRoute(route, caller, input, reply, fail)) return;
+    if (route === "POST /v1/assistant/answers") {
+      return answer(behaviour.get(caller.org) ?? "answer", caller.org, response, fail);
     }
     fail(404, "NOT_FOUND");
   });

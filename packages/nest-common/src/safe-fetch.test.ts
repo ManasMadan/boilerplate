@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppError } from "./errors";
@@ -32,27 +32,28 @@ describe("safeFetch", () => {
   let hitElsewhere = 0;
 
   beforeAll(async () => {
-    server = createServer((req, res) => {
-      if (req.url === "/redirect-internal") {
-        res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data" }).end();
-      } else if (req.url === "/redirect-home") {
-        res.writeHead(307, { location: "/elsewhere" }).end();
-      } else if (req.url === "/elsewhere") {
+    const routes: Record<string, (req: IncomingMessage, res: ServerResponse) => void> = {
+      "/redirect-internal": (_, res) =>
+        res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data" }).end(),
+      "/redirect-home": (_, res) => res.writeHead(307, { location: "/elsewhere" }).end(),
+      "/elsewhere": (_, res) => {
         hitElsewhere++;
         res.end("followed");
-      } else if (req.url === "/echo") {
+      },
+      "/echo": (req, res) => {
         let body = "";
         req.on("data", (chunk) => {
           body += chunk;
         });
         req.on("end", () => res.end(`${req.method} ${req.headers["x-test"]} ${body}`));
-      } else if (req.url === "/loop") {
-        res.writeHead(302, { location: "/loop" }).end();
-      } else if (req.url === "/big") {
-        res.end("x".repeat(2_000));
-      } else {
-        res.end("ok");
-      }
+      },
+      "/loop": (_, res) => res.writeHead(302, { location: "/loop" }).end(),
+      "/big": (_, res) => res.end("x".repeat(2_000)),
+    };
+    server = createServer((req, res) => {
+      const route = routes[req.url ?? ""];
+      if (route) route(req, res);
+      else res.end("ok");
     });
     // Both loopbacks: `localhost` may resolve to either, or both.
     await new Promise<void>((resolve) => server.listen(0, "::", resolve));

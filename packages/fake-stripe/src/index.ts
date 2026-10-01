@@ -138,23 +138,40 @@ function answerFor(result: unknown): { status: number; body: unknown } {
   return { status: 200, body: result };
 }
 
-export async function startFakeStripe(options: FakeStripeOptions) {
-  const customers = new Map<
-    string,
-    { id: string; object: "customer"; metadata: Record<string, string> }
-  >();
-  const sessions = new Map<string, Form & { id: string }>();
-  const portals = new Map<string, { customer: string; return_url: string }>();
-  const subscriptions = new Map<string, Subscription>();
-  const invoices: Invoice[] = [];
-  const paymentMethods = new Map<string, PaymentMethod>();
-  /** Each key's answer, and the request body it answered (a key is for one request). */
-  const idempotent = new Map<string, { request: string; status: number; body: unknown }>();
-  const events: { type: string; object: unknown }[] = [];
-  let baseUrl = "";
+const notFound = (what: string) => ({
+  status: 404,
+  body: { error: { type: "invalid_request_error", message: `No such ${what}` } },
+});
 
-  async function emit(type: string, object: unknown) {
-    events.push({ type, object });
+type Customer = { id: string; object: "customer"; metadata: Record<string, string> };
+type CheckoutSession = Form & { id: string };
+type Line = { price: string; quantity: string };
+
+/** A Stripe API route: the method, the path, and what it answers (undefined is a 404). */
+type Route = [
+  method: string,
+  path: RegExp,
+  handle: (match: RegExpExecArray, form: Form, query: URLSearchParams, method: string) => unknown,
+];
+
+/** Everything the fake remembers between calls, and what it does with it. */
+class Fake {
+  readonly customers = new Map<string, Customer>();
+  readonly sessions = new Map<string, CheckoutSession>();
+  readonly portals = new Map<string, { customer: string; return_url: string }>();
+  readonly subscriptions = new Map<string, Subscription>();
+  readonly invoices: Invoice[] = [];
+  readonly paymentMethods = new Map<string, PaymentMethod>();
+  /** Each key's answer, and the request body it answered (a key is for one request). */
+  readonly idempotent = new Map<string, { request: string; status: number; body: unknown }>();
+  readonly events: { type: string; object: unknown }[] = [];
+  baseUrl = "";
+
+  constructor(private readonly options: FakeStripeOptions) {}
+
+  /** Sends a signed event to the webhook endpoint, as Stripe does. */
+  async emit(type: string, object: unknown) {
+    this.events.push({ type, object });
     const payload = JSON.stringify({
       id: id("evt"),
       object: "event",
@@ -167,9 +184,9 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     // Async: under Bun the SDK signs with SubtleCrypto, which has no synchronous API.
     const signature = await Stripe.webhooks.generateTestHeaderStringAsync({
       payload,
-      secret: options.webhookSecret,
+      secret: this.options.webhookSecret,
     });
-    const response = await fetch(options.webhookUrl, {
+    const response = await fetch(this.options.webhookUrl, {
       method: "POST",
       headers: { "content-type": "application/json", "stripe-signature": signature },
       body: payload,
@@ -177,7 +194,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     if (!response.ok) throw new Error(`webhook ${type} was refused: ${response.status}`);
   }
 
-  function invoiceFor(subscription: Subscription, status: string) {
+  invoiceFor(subscription: Subscription, status: string) {
     const item = subscription.items.data[0] as SubscriptionItem;
     const draft = status === "draft";
     const invoice: Invoice = {
@@ -188,21 +205,21 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         type: "subscription_details",
         subscription_details: { subscription: subscription.id },
       },
-      number: draft ? null : `FAKE-${String(invoices.length + 1).padStart(4, "0")}`,
+      number: draft ? null : `FAKE-${String(this.invoices.length + 1).padStart(4, "0")}`,
       status,
       amount_due: subscription.status === "trialing" ? 0 : item.price.unit_amount * item.quantity,
       currency: "usd",
       created: now(),
-      hosted_invoice_url: draft ? null : `${baseUrl}/invoices/${invoices.length + 1}`,
+      hosted_invoice_url: draft ? null : `${this.baseUrl}/invoices/${this.invoices.length + 1}`,
     };
-    invoices.push(invoice);
+    this.invoices.push(invoice);
     return invoice;
   }
 
-  function subscribe(session: Form & { id: string }, paymentMethod: string | null) {
-    const lines = session.line_items as { price: string; quantity: string }[];
-    const line = lines[0] as { price: string; quantity: string };
-    const price = options.prices[line.price];
+  /** The subscription a completed Checkout session starts. */
+  subscribe(session: CheckoutSession, paymentMethod: string | null) {
+    const line = (session.line_items as Line[])[0] as Line;
+    const price = this.options.prices[line.price];
     if (!price) throw new Error(`unknown price ${line.price}`);
     const data = (session.subscription_data ?? {}) as {
       metadata?: Record<string, string>;
@@ -210,7 +227,19 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     };
     const trialDays = Number(data.trial_period_days ?? 0);
     const start = now();
-    const end = start + (price.interval === "month" ? 30 : 365) * 86_400;
+    const item: SubscriptionItem = {
+      id: id("si"),
+      object: "subscription_item",
+      quantity: Number(line.quantity ?? 1),
+      current_period_start: start,
+      current_period_end: start + (price.interval === "month" ? 30 : 365) * 86_400,
+      price: {
+        id: line.price,
+        object: "price",
+        recurring: { interval: price.interval },
+        unit_amount: price.unitAmount,
+      },
+    };
     const subscription: Subscription = {
       id: id("sub"),
       object: "subscription",
@@ -222,26 +251,9 @@ export async function startFakeStripe(options: FakeStripeOptions) {
       canceled_at: null,
       created: start,
       default_payment_method: paymentMethod,
-      items: {
-        object: "list",
-        data: [
-          {
-            id: id("si"),
-            object: "subscription_item",
-            quantity: Number(line.quantity ?? 1),
-            current_period_start: start,
-            current_period_end: end,
-            price: {
-              id: line.price,
-              object: "price",
-              recurring: { interval: price.interval },
-              unit_amount: price.unitAmount,
-            },
-          },
-        ],
-      },
+      items: { object: "list", data: [item] },
     };
-    subscriptions.set(subscription.id, subscription);
+    this.subscriptions.set(subscription.id, subscription);
     return subscription;
   }
 
@@ -251,7 +263,7 @@ export async function startFakeStripe(options: FakeStripeOptions) {
    * `method=sepa_debit` pays without one. A trial with `payment_method_collection:
    * "if_required"` takes none, as Stripe's does.
    */
-  function takeCard(session: Form, form: Form) {
+  takeCard(session: CheckoutSession, form: Form) {
     const trial = (session.subscription_data as { trial_period_days?: string } | undefined)
       ?.trial_period_days;
     if (session.payment_method_collection === "if_required" && trial) return null;
@@ -265,291 +277,348 @@ export async function startFakeStripe(options: FakeStripeOptions) {
             type: "card",
             card: { fingerprint: `fp_${card}`, last4: card.slice(-4).padStart(4, "0") },
           };
-    paymentMethods.set(paymentMethod.id, paymentMethod);
+    this.paymentMethods.set(paymentMethod.id, paymentMethod);
     return paymentMethod.id;
   }
 
-  async function api(method: string, path: string, form: Form, query: URLSearchParams) {
-    if (method === "POST" && path === "/v1/customers") {
-      const customer = {
-        id: id("cus"),
-        object: "customer" as const,
-        metadata: (form.metadata ?? {}) as Record<string, string>,
-      };
-      customers.set(customer.id, customer);
-      return customer;
-    }
-    if (method === "POST" && path === "/v1/checkout/sessions") {
-      if (!customers.has(form.customer as string)) return notFound("customer");
-      const session = { ...form, id: id("cs"), object: "checkout.session", status: "open" };
-      sessions.set(session.id, session);
-      return { ...session, url: `${baseUrl}/checkout/${session.id}` };
-    }
-    const sessionPath = /^\/v1\/checkout\/sessions\/(cs_\w+)$/.exec(path);
-    if (method === "GET" && sessionPath) {
-      const session = sessions.get(sessionPath[1] as string);
-      if (!session) return notFound("checkout session");
-      return { ...session, url: `${baseUrl}/checkout/${session.id}` };
-    }
-    const paymentMethod = /^\/v1\/payment_methods\/(pm_\w+)$/.exec(path);
-    if (method === "GET" && paymentMethod) {
-      return paymentMethods.get(paymentMethod[1] as string) ?? notFound("payment method");
-    }
-    const expire = /^\/v1\/checkout\/sessions\/(cs_\w+)\/expire$/.exec(path);
-    if (method === "POST" && expire) {
-      const session = sessions.get(expire[1] as string);
-      if (!session) return notFound("checkout session");
-      if (session.status !== "open") {
-        return {
-          status: 400,
-          body: {
-            error: {
-              type: "invalid_request_error",
-              message: "Only Checkout Sessions with a status of open can be expired.",
-            },
-          },
-        };
+  /** The API routes the app calls. */
+  private readonly routes: Route[] = [
+    ["POST", /^\/v1\/customers$/, (_, form) => this.createCustomer(form)],
+    ["POST", /^\/v1\/checkout\/sessions$/, (_, form) => this.createCheckout(form)],
+    ["GET", /^\/v1\/checkout\/sessions\/(cs_\w+)$/, ([, cs]) => this.checkout(cs)],
+    [
+      "GET",
+      /^\/v1\/payment_methods\/(pm_\w+)$/,
+      ([, pm]) => this.paymentMethods.get(pm ?? "") ?? notFound("payment method"),
+    ],
+    ["POST", /^\/v1\/checkout\/sessions\/(cs_\w+)\/expire$/, ([, cs]) => this.expire(cs)],
+    ["POST", /^\/v1\/billing_portal\/sessions$/, (_, form) => this.createPortal(form)],
+    [
+      "*",
+      /^\/v1\/subscriptions\/(sub_\w+)$/,
+      ([, sub], form, _, method) => this.subscription(method, sub, form),
+    ],
+    ["GET", /^\/v1\/subscriptions$/, (_, __, query) => this.listSubscriptions(query)],
+    ["GET", /^\/v1\/invoices$/, (_, __, query) => this.listInvoices(query)],
+  ];
+
+  /** What an API call answers: its route's result, or undefined when there's no route. */
+  api(method: string, path: string, form: Form, query: URLSearchParams) {
+    for (const [routeMethod, pattern, handle] of this.routes) {
+      const match = pattern.exec(path);
+      if (match && (routeMethod === "*" || method === routeMethod)) {
+        return handle(match, form, query, method);
       }
-      session.status = "expired";
-      return session;
-    }
-    if (method === "POST" && path === "/v1/billing_portal/sessions") {
-      if (!customers.has(form.customer as string)) return notFound("customer");
-      const portal = id("bps");
-      portals.set(portal, {
-        customer: form.customer as string,
-        return_url: form.return_url as string,
-      });
-      return { id: portal, object: "billing_portal.session", url: `${baseUrl}/portal/${portal}` };
-    }
-    const subscriptionPath = /^\/v1\/subscriptions\/(sub_\w+)$/.exec(path);
-    if (subscriptionPath) {
-      const subscription = subscriptions.get(subscriptionPath[1] as string);
-      if (!subscription) return notFound("subscription");
-      if (method === "GET") return subscription;
-      if (method === "DELETE") {
-        subscription.status = "canceled";
-        subscription.canceled_at = now();
-        await emit("customer.subscription.deleted", subscription);
-        return subscription;
-      }
-      if (method === "POST") {
-        const items = (form.items ?? []) as { id: string; quantity?: string }[];
-        for (const change of items) {
-          const item = subscription.items.data.find((existing) => existing.id === change.id);
-          if (!item) return notFound("subscription item");
-          if (change.quantity !== undefined) item.quantity = Number(change.quantity);
-        }
-        if (form.cancel_at_period_end !== undefined)
-          subscription.cancel_at_period_end = form.cancel_at_period_end === "true";
-        // Ending a trial now charges the card at once, as Stripe does.
-        if (form.trial_end === "now" && subscription.status === "trialing") {
-          subscription.status = "active";
-          subscription.trial_end = now();
-          invoiceFor(subscription, "paid");
-        }
-        await emit("customer.subscription.updated", subscription);
-        return subscription;
-      }
-    }
-    if (method === "GET" && path === "/v1/subscriptions") {
-      const data = [...subscriptions.values()].filter((s) => s.customer === query.get("customer"));
-      return { object: "list", data, has_more: false };
-    }
-    if (method === "GET" && path === "/v1/invoices") {
-      const data = invoices
-        .filter((invoice) => invoice.customer === query.get("customer"))
-        .reverse()
-        .slice(0, Number(query.get("limit") ?? 10));
-      return { object: "list", data, has_more: false };
     }
     return undefined;
   }
 
-  function notFound(what: string) {
+  private createCustomer(form: Form) {
+    const metadata = (form.metadata ?? {}) as Record<string, string>;
+    const customer: Customer = { id: id("cus"), object: "customer", metadata };
+    this.customers.set(customer.id, customer);
+    return customer;
+  }
+
+  private createCheckout(form: Form) {
+    if (!this.customers.has(form.customer as string)) return notFound("customer");
+    const session = { ...form, id: id("cs"), object: "checkout.session", status: "open" };
+    this.sessions.set(session.id, session);
+    return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
+  }
+
+  private checkout(sessionId = "") {
+    const session = this.sessions.get(sessionId);
+    if (!session) return notFound("checkout session");
+    return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
+  }
+
+  private expire(sessionId = "") {
+    const session = this.sessions.get(sessionId);
+    if (!session) return notFound("checkout session");
+    if (session.status !== "open") {
+      return {
+        status: 400,
+        body: {
+          error: {
+            type: "invalid_request_error",
+            message: "Only Checkout Sessions with a status of open can be expired.",
+          },
+        },
+      };
+    }
+    session.status = "expired";
+    return session;
+  }
+
+  private createPortal(form: Form) {
+    if (!this.customers.has(form.customer as string)) return notFound("customer");
+    const portal = id("bps");
+    this.portals.set(portal, {
+      customer: form.customer as string,
+      return_url: form.return_url as string,
+    });
     return {
-      status: 404,
-      body: { error: { type: "invalid_request_error", message: `No such ${what}` } },
+      id: portal,
+      object: "billing_portal.session",
+      url: `${this.baseUrl}/portal/${portal}`,
     };
   }
 
-  async function hosted(
-    request: IncomingMessage,
-    response: ServerResponse,
-    path: string,
-    form: Form,
-  ) {
-    const html = (status: number, body: string) => {
-      response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
-      response.end(body);
-    };
-    const redirect = (to: string) => {
-      response.writeHead(303, { location: to });
-      response.end();
-    };
+  /** A subscription: read it, cancel it now (DELETE) or change it (POST). */
+  private subscription(method: string, subscriptionId = "", form: Form) {
+    const subscription = this.subscriptions.get(subscriptionId);
+    if (!subscription) return notFound("subscription");
+    if (method === "GET") return subscription;
+    if (method === "DELETE") return this.cancel(subscription);
+    if (method === "POST") return this.update(subscription, form);
+    return undefined;
+  }
 
+  private async cancel(subscription: Subscription) {
+    subscription.status = "canceled";
+    subscription.canceled_at = now();
+    await this.emit("customer.subscription.deleted", subscription);
+    return subscription;
+  }
+
+  private async update(subscription: Subscription, form: Form) {
+    const items = (form.items ?? []) as { id: string; quantity?: string }[];
+    for (const change of items) {
+      const item = subscription.items.data.find((existing) => existing.id === change.id);
+      if (!item) return notFound("subscription item");
+      if (change.quantity !== undefined) item.quantity = Number(change.quantity);
+    }
+    if (form.cancel_at_period_end !== undefined)
+      subscription.cancel_at_period_end = form.cancel_at_period_end === "true";
+    // Ending a trial now charges the card at once, as Stripe does.
+    if (form.trial_end === "now" && subscription.status === "trialing") {
+      subscription.status = "active";
+      subscription.trial_end = now();
+      this.invoiceFor(subscription, "paid");
+    }
+    await this.emit("customer.subscription.updated", subscription);
+    return subscription;
+  }
+
+  private listSubscriptions(query: URLSearchParams) {
+    const data = [...this.subscriptions.values()].filter(
+      (s) => s.customer === query.get("customer"),
+    );
+    return { object: "list", data, has_more: false };
+  }
+
+  private listInvoices(query: URLSearchParams) {
+    const data = this.invoices
+      .filter((invoice) => invoice.customer === query.get("customer"))
+      .reverse()
+      .slice(0, Number(query.get("limit") ?? 10));
+    return { object: "list", data, has_more: false };
+  }
+
+  /** The hosted pages: Checkout and the billing portal. */
+  async hosted(method: string, path: string, form: Form): Promise<Page> {
     const checkout = /^\/checkout\/(cs_\w+)(\/pay)?$/.exec(path);
-    if (checkout) {
-      const session = sessions.get(checkout[1] as string);
-      if (!session) return html(404, page("Not found", ""));
-      if (session.status === "expired") {
-        return html(410, page("Fake Stripe Checkout", "<p>This checkout session has expired.</p>"));
-      }
-      if (request.method === "POST" && checkout[2]) {
-        if (form.card === "declined") {
-          return html(
-            402,
-            page(
-              "Fake Stripe Checkout",
-              `<p role="alert">Your card was declined.</p><a href="${escapeHtml(`/checkout/${session.id}`)}">Try again</a>`,
-            ),
-          );
-        }
-        if (session.status !== "open") return redirect(session.success_url as string);
-        session.status = "complete";
-        const subscription = subscribe(session, takeCard(session, form));
-        invoiceFor(subscription, "paid");
-        await emit("checkout.session.completed", {
-          ...session,
-          subscription: subscription.id,
-        });
-        await emit("customer.subscription.created", subscription);
-        return redirect(
-          (session.success_url as string).replace("{CHECKOUT_SESSION_ID}", session.id),
-        );
-      }
-      const line = (session.line_items as { price: string; quantity: string }[])[0];
-      const price = options.prices[line?.price ?? ""];
-      return html(
-        200,
-        page(
-          "Fake Stripe Checkout",
-          `<p>${line?.quantity ?? 1} × ${((price?.unitAmount ?? 0) / 100).toFixed(2)} USD / ${price?.interval}</p>` +
-            `<form method="post" action="/checkout/${session.id}/pay"><button>Pay</button></form>` +
-            `<form method="post" action="/checkout/${session.id}/pay"><input type="hidden" name="card" value="declined"><button>Pay with a declined card</button></form>` +
-            `<a href="${escapeHtml(session.cancel_url as string)}">Back</a>`,
-        ),
-      );
-    }
-
+    if (checkout) return this.checkoutPage(method, checkout[1] as string, !!checkout[2], form);
     const portal = /^\/portal\/(bps_\w+)(\/cancel|\/resume)?$/.exec(path);
-    if (portal) {
-      const session = portals.get(portal[1] as string);
-      if (!session) return html(404, page("Not found", ""));
-      const subscription = [...subscriptions.values()].find(
-        (s) => s.customer === session.customer && s.status !== "canceled",
-      );
-      if (request.method === "POST" && portal[2] && subscription) {
-        subscription.cancel_at_period_end = portal[2] === "/cancel";
-        await emit("customer.subscription.updated", subscription);
-        return redirect(`/portal/${portal[1]}`);
-      }
-      const state = subscription
-        ? `<p>Plan: ${subscription.status}${subscription.cancel_at_period_end ? ", cancels at the end of the period" : ""}</p>` +
-          (subscription.cancel_at_period_end
-            ? `<form method="post" action="/portal/${portal[1]}/resume"><button>Resume plan</button></form>`
-            : `<form method="post" action="/portal/${portal[1]}/cancel"><button>Cancel plan</button></form>`)
-        : "<p>No subscription.</p>";
-      return html(
-        200,
-        page(
-          "Fake Stripe Billing Portal",
-          `${state}<a href="${escapeHtml(session.return_url)}">Return</a>`,
-        ),
-      );
+    if (portal) return this.portalPage(method, portal[1] as string, portal[2]);
+    return { status: 404, html: page("Not found", "") };
+  }
+
+  private async checkoutPage(method: string, sessionId: string, pay: boolean, form: Form) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { status: 404, html: page("Not found", "") };
+    if (session.status === "expired") {
+      return {
+        status: 410,
+        html: page("Fake Stripe Checkout", "<p>This checkout session has expired.</p>"),
+      };
     }
-    return html(404, page("Not found", ""));
+    if (method === "POST" && pay) return this.pay(session, form);
+    const line = (session.line_items as Line[])[0];
+    const price = this.options.prices[line?.price ?? ""];
+    return {
+      status: 200,
+      html: page(
+        "Fake Stripe Checkout",
+        `<p>${line?.quantity ?? 1} × ${((price?.unitAmount ?? 0) / 100).toFixed(2)} USD / ${price?.interval}</p>` +
+          `<form method="post" action="/checkout/${session.id}/pay"><button>Pay</button></form>` +
+          `<form method="post" action="/checkout/${session.id}/pay"><input type="hidden" name="card" value="declined"><button>Pay with a declined card</button></form>` +
+          `<a href="${escapeHtml(session.cancel_url as string)}">Back</a>`,
+      ),
+    };
+  }
+
+  /** Paying on the Checkout page: declined, or the subscription starts and is invoiced. */
+  private async pay(session: CheckoutSession, form: Form): Promise<Page> {
+    if (form.card === "declined") {
+      return {
+        status: 402,
+        html: page(
+          "Fake Stripe Checkout",
+          `<p role="alert">Your card was declined.</p><a href="${escapeHtml(`/checkout/${session.id}`)}">Try again</a>`,
+        ),
+      };
+    }
+    if (session.status !== "open") return { status: 303, location: session.success_url as string };
+    session.status = "complete";
+    const subscription = this.subscribe(session, this.takeCard(session, form));
+    this.invoiceFor(subscription, "paid");
+    await this.emit("checkout.session.completed", { ...session, subscription: subscription.id });
+    await this.emit("customer.subscription.created", subscription);
+    return {
+      status: 303,
+      location: (session.success_url as string).replace("{CHECKOUT_SESSION_ID}", session.id),
+    };
+  }
+
+  private async portalPage(method: string, portalId: string, action: string | undefined) {
+    const session = this.portals.get(portalId);
+    if (!session) return { status: 404, html: page("Not found", "") };
+    const subscription = [...this.subscriptions.values()].find(
+      (s) => s.customer === session.customer && s.status !== "canceled",
+    );
+    if (method === "POST" && action && subscription) {
+      subscription.cancel_at_period_end = action === "/cancel";
+      await this.emit("customer.subscription.updated", subscription);
+      return { status: 303, location: `/portal/${portalId}` };
+    }
+    return {
+      status: 200,
+      html: page(
+        "Fake Stripe Billing Portal",
+        `${planState(portalId, subscription)}<a href="${escapeHtml(session.return_url)}">Return</a>`,
+      ),
+    };
   }
 
   /**
    * Test hooks: things only time or a bank would do, and invoices in any status
    * (`/invoice?status=draft`), as Stripe's dashboard can leave them.
    */
-  async function hooks(path: string, query: URLSearchParams) {
+  async hooks(path: string, query: URLSearchParams) {
+    if (path === "/__fake/state") {
+      return { subscriptions: [...this.subscriptions.values()], events: this.events };
+    }
     const failed = /^\/__fake\/subscriptions\/(sub_\w+)\/payment-failed$/.exec(path);
     const lapsed = /^\/__fake\/subscriptions\/(sub_\w+)\/lapse$/.exec(path);
     // An invoice in any status (`?status=draft`: the next renewal's, as Stripe drafts it
     // an hour before it's due), without an event, as Stripe's dashboard can leave one.
     const invoice = /^\/__fake\/subscriptions\/(sub_\w+)\/invoice$/.exec(path);
-    const subscription = subscriptions.get((failed ?? lapsed ?? invoice)?.[1] ?? "");
+    const subscription = this.subscriptions.get((failed ?? lapsed ?? invoice)?.[1] ?? "");
     if (!subscription) return undefined;
-    if (invoice) return invoiceFor(subscription, String(query.get("status")));
+    if (invoice) return this.invoiceFor(subscription, String(query.get("status")));
     if (failed) {
       subscription.status = "past_due";
-      const invoice = invoiceFor(subscription, "open");
-      await emit("invoice.payment_failed", { ...invoice, attempt_count: 1 });
-      await emit("customer.subscription.updated", subscription);
+      const open = this.invoiceFor(subscription, "open");
+      await this.emit("invoice.payment_failed", { ...open, attempt_count: 1 });
+      await this.emit("customer.subscription.updated", subscription);
     } else {
       subscription.status = "canceled";
       subscription.canceled_at = now();
-      await emit("customer.subscription.deleted", subscription);
+      await this.emit("customer.subscription.deleted", subscription);
     }
     return subscription;
   }
 
-  const server = createServer(async (request, response) => {
+  /**
+   * An API call: the key checked, and an Idempotency-Key's first answer replayed, or
+   * refused for a different request, as Stripe does.
+   */
+  async answerApi(request: IncomingMessage, url: URL, form: Form, raw: string) {
+    if (request.headers.authorization !== `Bearer ${this.options.secretKey}`) {
+      return {
+        status: 401,
+        body: { error: { type: "invalid_request_error", message: "Invalid API Key" } },
+      };
+    }
+    // A server's requests always have a method.
+    const method = request.method as string;
+    const key = request.headers["idempotency-key"];
+    const cacheKey = typeof key === "string" ? `${method} ${url.pathname} ${key}` : null;
+    const cached = cacheKey ? this.idempotent.get(cacheKey) : undefined;
+    if (cached && cached.request !== raw) {
+      return {
+        status: 400,
+        body: {
+          error: {
+            type: "idempotency_error",
+            message: `Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '${key}' if you meant to execute a different request.`,
+          },
+        },
+      };
+    }
+    if (cached) return cached;
+    const answer = answerFor(await this.api(method, url.pathname, form, url.searchParams));
+    if (cacheKey && method === "POST") this.idempotent.set(cacheKey, { request: raw, ...answer });
+    return answer;
+  }
+
+  /** Every request: the API, the test hooks, or a hosted page. */
+  async handle(request: IncomingMessage, response: ServerResponse) {
     // A server's requests always have a URL and a method.
     const url = new URL(request.url as string, "http://fake");
     const chunks: Buffer[] = [];
     for await (const chunk of request as AsyncIterable<Buffer>) chunks.push(chunk);
     const raw = Buffer.concat(chunks).toString();
     const form = parseForm(raw);
-    const json = (status: number, body: unknown) => {
-      response.writeHead(status, { "content-type": "application/json" });
-      response.end(JSON.stringify(body));
-    };
     try {
       if (url.pathname.startsWith("/v1/")) {
-        if (request.headers.authorization !== `Bearer ${options.secretKey}`) {
-          return json(401, {
-            error: { type: "invalid_request_error", message: "Invalid API Key" },
-          });
-        }
-        const key = request.headers["idempotency-key"];
-        const cacheKey =
-          typeof key === "string" ? `${request.method} ${url.pathname} ${key}` : null;
-        const cached = cacheKey ? idempotent.get(cacheKey) : undefined;
-        // Stripe refuses a key reused for a different request instead of replaying it.
-        if (cached && cached.request !== raw) {
-          return json(400, {
-            error: {
-              type: "idempotency_error",
-              message: `Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '${key}' if you meant to execute a different request.`,
-            },
-          });
-        }
-        if (cached) return json(cached.status, cached.body);
-        const result = await api(request.method as string, url.pathname, form, url.searchParams);
-        const answer = answerFor(result);
-        if (cacheKey && request.method === "POST")
-          idempotent.set(cacheKey, { request: raw, ...answer });
-        return json(answer.status, answer.body);
+        const { status, body } = await this.answerApi(request, url, form, raw);
+        return json(response, status, body);
       }
       if (url.pathname.startsWith("/__fake/")) {
-        const result =
-          url.pathname === "/__fake/state"
-            ? { subscriptions: [...subscriptions.values()], events }
-            : await hooks(url.pathname, url.searchParams);
-        return result ? json(200, result) : json(404, { error: "not found" });
+        const result = await this.hooks(url.pathname, url.searchParams);
+        return result ? json(response, 200, result) : json(response, 404, { error: "not found" });
       }
-      return await hosted(request, response, url.pathname, form);
+      send(response, await this.hosted(request.method as string, url.pathname, form));
     } catch (error) {
-      json(500, { error: { type: "api_error", message: (error as Error).message } });
+      json(response, 500, { error: { type: "api_error", message: (error as Error).message } });
     }
-  });
+  }
+}
+
+/** A hosted page's answer: HTML, or a redirect. */
+type Page = { status: number; html?: string; location?: string };
+
+function send(response: ServerResponse, { status, html, location }: Page) {
+  if (location) response.writeHead(status, { location });
+  else response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  response.end(html);
+}
+
+function json(response: ServerResponse, status: number, body: unknown) {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify(body));
+}
+
+/** The portal's plan line, with the button that cancels or resumes it. */
+function planState(portalId: string, subscription: Subscription | undefined) {
+  if (!subscription) return "<p>No subscription.</p>";
+  const cancels = subscription.cancel_at_period_end;
+  const action = cancels ? "resume" : "cancel";
+  return (
+    `<p>Plan: ${subscription.status}${cancels ? ", cancels at the end of the period" : ""}</p>` +
+    `<form method="post" action="/portal/${portalId}/${action}"><button>${cancels ? "Resume plan" : "Cancel plan"}</button></form>`
+  );
+}
+
+export async function startFakeStripe(options: FakeStripeOptions) {
+  const fake = new Fake(options);
+  const server = createServer((request, response) => void fake.handle(request, response));
   await new Promise<void>((resolve) => server.listen(options.port ?? 0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
-  baseUrl = `http://127.0.0.1:${port}`;
+  fake.baseUrl = `http://127.0.0.1:${port}`;
 
   return {
-    url: baseUrl,
+    url: fake.baseUrl,
     port,
-    events,
-    customers,
-    subscriptions,
+    events: fake.events,
+    customers: fake.customers,
+    subscriptions: fake.subscriptions,
     /** The subscription an organization has (by the orgId the app puts in metadata). */
     subscriptionFor: (orgId: string) =>
-      [...subscriptions.values()].find((s) => s.metadata.orgId === orgId),
+      [...fake.subscriptions.values()].find((s) => s.metadata.orgId === orgId),
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

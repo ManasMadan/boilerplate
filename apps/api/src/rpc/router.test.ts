@@ -118,24 +118,27 @@ describe("declared errors", () => {
     expect(own.sort()).toEqual(Object.keys(BUILDER_CODES).sort());
   });
 
+  /** The codes a module's procedures declare that nothing it runs can throw. */
+  const unthrownIn = (name: string, procedures: (typeof contract)[keyof typeof contract]) => {
+    const dir = name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+    const source = reachable(dir);
+    const thrown = thrownIn(source);
+    const all = Object.values(procedures);
+    // An API key without the procedure's scope (modules/api-keys).
+    if (all.some((procedure) => (procedure["~orpc"].meta as ProcedureMeta).apiKeyScope))
+      thrown.add("API_KEY_SCOPE_MISSING");
+    for (const [code, builders] of Object.entries(BUILDER_CODES))
+      if (builders.test(source)) thrown.add(code);
+    const declared = new Set(all.flatMap((procedure) => Object.keys(procedure["~orpc"].errorMap)));
+    return [...declared]
+      .filter((code) => !common.has(code) && !thrown.has(code))
+      .map((code) => `${name}: ${code}`);
+  };
+
   it("are codes each module can throw, beyond the ones any call can fail with", () => {
-    const unthrown: string[] = [];
-    for (const [name, procedures] of Object.entries(contract)) {
-      const dir = name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-      const source = reachable(dir);
-      const thrown = thrownIn(source);
-      const all = Object.values(procedures);
-      // An API key without the procedure's scope (modules/api-keys).
-      if (all.some((procedure) => (procedure["~orpc"].meta as ProcedureMeta).apiKeyScope))
-        thrown.add("API_KEY_SCOPE_MISSING");
-      for (const [code, builders] of Object.entries(BUILDER_CODES))
-        if (builders.test(source)) thrown.add(code);
-      const declared = new Set(
-        all.flatMap((procedure) => Object.keys(procedure["~orpc"].errorMap)),
-      );
-      for (const code of declared)
-        if (!common.has(code) && !thrown.has(code)) unthrown.push(`${name}: ${code}`);
-    }
+    const unthrown = Object.entries(contract).flatMap(([name, procedures]) =>
+      unthrownIn(name, procedures),
+    );
     expect(unthrown).toEqual([]);
   });
 });

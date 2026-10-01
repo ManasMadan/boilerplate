@@ -16,7 +16,7 @@ import {
   type KeyObject,
   randomBytes,
 } from "node:crypto";
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   createServer as createH2cServer,
   type Http2Server,
@@ -67,6 +67,36 @@ async function readBody(request: AsyncIterable<Buffer | string>) {
   return Buffer.concat(chunks);
 }
 
+/** APNs's answers for the device tokens it always refuses. */
+const APNS_REFUSED: Record<string, { status: number; reason: string }> = {
+  [DEAD_APNS_TOKEN]: { status: 410, reason: "Unregistered" },
+  [BAD_APNS_TOKEN]: { status: 400, reason: "BadDeviceToken" },
+};
+
+/** FCM's answers for tokens it refuses, by the token's prefix. */
+const FCM_FAILURES: Record<string, { status: number; body: unknown }> = {
+  dead: {
+    status: 404,
+    body: { error: { status: "NOT_FOUND", details: [{ errorCode: "UNREGISTERED" }] } },
+  },
+  malformed: {
+    status: 400,
+    body: {
+      error: {
+        status: "INVALID_ARGUMENT",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.BadRequest",
+            fieldViolations: [
+              { field: "message.token", description: "Invalid registration token" },
+            ],
+          },
+        ],
+      },
+    },
+  },
+};
+
 export async function startFakePush() {
   const fcmKeys = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const apnsKeys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
@@ -77,108 +107,133 @@ export async function startFakePush() {
   let healthy = false;
   const hooks: { whileDelivering?: (() => Promise<unknown>) | undefined } = {};
 
+  type Reply = (status: number, body: unknown) => void;
+
+  /** FCM's OAuth token exchange: a signed assertion for the messaging scope. */
+  function fcmToken(raw: Buffer, reply: Reply) {
+    const assertion = new URLSearchParams(raw.toString()).get("assertion") ?? "";
+    const claims = verifyJwt(assertion, fcmKeys.publicKey, "RSA-SHA256");
+    if (claims?.scope !== "https://www.googleapis.com/auth/firebase.messaging")
+      return reply(401, { error: "invalid_grant" });
+    return reply(200, { access_token: accessToken, expires_in: 3600 });
+  }
+
+  /** FCM's send API; the token's prefix picks the outcome. */
+  async function fcmSend(request: IncomingMessage, raw: Buffer, reply: Reply) {
+    if (request.headers.authorization !== `Bearer ${accessToken}`)
+      return reply(401, { error: { status: "UNAUTHENTICATED" } });
+    const { message } = JSON.parse(raw.toString()) as {
+      message: {
+        token: string;
+        notification: { title: string; body: string };
+        data: { link?: string };
+      };
+    };
+    // A provider that drops the connection: the transport's fetch throws.
+    if (message.token.startsWith("crash")) return request.socket.destroy();
+    const failure = Object.entries(FCM_FAILURES).find(([prefix]) =>
+      message.token.startsWith(prefix),
+    )?.[1];
+    if (failure) return reply(failure.status, failure.body);
+    if (message.token.startsWith("flaky") && !healthy)
+      return reply(500, { error: { status: "INTERNAL" } });
+    await hooks.whileDelivering?.();
+    delivered.push({
+      provider: "fcm",
+      token: message.token,
+      ...message.notification,
+      link: message.data.link,
+      headers: request.headers,
+    });
+    return reply(200, {
+      name: `projects/test-project/messages/${randomBytes(4).toString("hex")}`,
+    });
+  }
+
+  /** The Web Push service: a message to a subscriber, signed with VAPID and encrypted. */
+  function webPushDelivery(
+    push: string,
+    request: IncomingMessage,
+    raw: Buffer,
+    response: ServerResponse,
+    reply: Reply,
+  ) {
+    if (push === "gone") return reply(410, {});
+    const subscriber = subscribers.get(push);
+    const authorization = request.headers.authorization ?? "";
+    const signed =
+      authorization.startsWith("vapid t=") && authorization.includes(`k=${vapid.publicKey}`);
+    if (!subscriber || !signed) return reply(401, {});
+    if (request.headers["content-encoding"] !== "aes128gcm" || !request.headers.ttl)
+      return reply(400, {});
+    const payload = JSON.parse(
+      decrypt(raw, {
+        version: "aes128gcm",
+        privateKey: subscriber.ecdh,
+        authSecret: subscriber.auth,
+      }).toString(),
+    ) as { title: string; body: string; link?: string };
+    delivered.push({
+      provider: "web",
+      token: push,
+      ...payload,
+      link: payload.link,
+      headers: request.headers,
+    });
+    // RFC 8030 says to name the message; not every push service does.
+    response.writeHead(
+      201,
+      subscriber.location ? { location: `/messages/${randomBytes(4).toString("hex")}` } : {},
+    );
+    return response.end();
+  }
+
   // FCM (OAuth + send) and Web Push share one HTTP/1.1 server.
   const http: Server = createServer(async (request: IncomingMessage, response) => {
     const url = new URL(request.url ?? "/", "http://fake");
     const raw = await readBody(request);
-    const reply = (status: number, body: unknown) => {
+    const reply: Reply = (status, body) => {
       response.writeHead(status, { "content-type": "application/json" });
       response.end(JSON.stringify(body));
     };
-
-    if (url.pathname === "/token") {
-      const assertion = new URLSearchParams(raw.toString()).get("assertion") ?? "";
-      const claims = verifyJwt(assertion, fcmKeys.publicKey, "RSA-SHA256");
-      if (claims?.scope !== "https://www.googleapis.com/auth/firebase.messaging")
-        return reply(401, { error: "invalid_grant" });
-      return reply(200, { access_token: accessToken, expires_in: 3600 });
-    }
-
+    if (url.pathname === "/token") return fcmToken(raw, reply);
     if (url.pathname === "/v1/projects/test-project/messages:send") {
-      if (request.headers.authorization !== `Bearer ${accessToken}`)
-        return reply(401, { error: { status: "UNAUTHENTICATED" } });
-      const { message } = JSON.parse(raw.toString()) as {
-        message: {
-          token: string;
-          notification: { title: string; body: string };
-          data: { link?: string };
-        };
-      };
-      // A provider that drops the connection: the transport's fetch throws.
-      if (message.token.startsWith("crash")) return request.socket.destroy();
-      if (message.token.startsWith("dead"))
-        return reply(404, {
-          error: { status: "NOT_FOUND", details: [{ errorCode: "UNREGISTERED" }] },
-        });
-      if (message.token.startsWith("malformed"))
-        return reply(400, {
-          error: {
-            status: "INVALID_ARGUMENT",
-            details: [
-              {
-                "@type": "type.googleapis.com/google.rpc.BadRequest",
-                fieldViolations: [
-                  { field: "message.token", description: "Invalid registration token" },
-                ],
-              },
-            ],
-          },
-        });
-      if (message.token.startsWith("flaky") && !healthy)
-        return reply(500, { error: { status: "INTERNAL" } });
-      await hooks.whileDelivering?.();
-      delivered.push({
-        provider: "fcm",
-        token: message.token,
-        ...message.notification,
-        link: message.data.link,
-        headers: request.headers,
-      });
-      return reply(200, {
-        name: `projects/test-project/messages/${randomBytes(4).toString("hex")}`,
-      });
+      return fcmSend(request, raw, reply);
     }
-
     const push = /^\/push\/([\w-]+)$/.exec(url.pathname)?.[1];
-    if (push) {
-      if (push === "gone") return reply(410, {});
-      const subscriber = subscribers.get(push);
-      const authorization = request.headers.authorization ?? "";
-      if (
-        !subscriber ||
-        !authorization.startsWith("vapid t=") ||
-        !authorization.includes(`k=${vapid.publicKey}`)
-      )
-        return reply(401, {});
-      if (request.headers["content-encoding"] !== "aes128gcm" || !request.headers.ttl)
-        return reply(400, {});
-      const payload = JSON.parse(
-        decrypt(raw, {
-          version: "aes128gcm",
-          privateKey: subscriber.ecdh,
-          authSecret: subscriber.auth,
-        }).toString(),
-      ) as { title: string; body: string; link?: string };
-      delivered.push({
-        provider: "web",
-        token: push,
-        ...payload,
-        link: payload.link,
-        headers: request.headers,
-      });
-      // RFC 8030 says to name the message; not every push service does.
-      response.writeHead(
-        201,
-        subscriber.location ? { location: `/messages/${randomBytes(4).toString("hex")}` } : {},
-      );
-      return response.end();
-    }
+    if (push) return webPushDelivery(push, request, raw, response, reply);
     reply(404, {});
   });
 
   // APNs: HTTP/2 only (h2c here; TLS in production).
   const h2c: Http2Server = createH2cServer();
   const expired = new Set<string>();
+
+  /** Why APNs refuses a send to `token` signed with `jwt`, or undefined when it doesn't. */
+  function apnsRefusal(
+    token: string,
+    jwt: string,
+    headers: Record<string, string | string[] | undefined>,
+  ) {
+    const claims = verifyJwt(jwt, apnsKeys.publicKey, "SHA256");
+    if (claims?.iss !== "TEAMID1234") {
+      return { status: 403, reason: "InvalidProviderToken" };
+    }
+    if (headers["apns-topic"] !== "dev.boilerplate.app") {
+      return { status: 400, reason: "TopicDisallowed" };
+    }
+    const always = APNS_REFUSED[token];
+    if (always) return always;
+    // The first provider token that sends to it expires; a newly signed one works.
+    if (token === EXPIRING_APNS_TOKEN && (expired.size === 0 || expired.has(jwt))) {
+      expired.add(jwt);
+      return { status: 403, reason: "ExpiredProviderToken" };
+    }
+    if (token === FLAKY_APNS_TOKEN && !healthy) {
+      return { status: 500, reason: "InternalServerError" };
+    }
+    return undefined;
+  }
   h2c.on("stream", async (stream: ServerHttp2Stream, headers) => {
     const raw = await readBody(stream);
     const reply = (status: number, body?: unknown) => {
@@ -187,20 +242,9 @@ export async function startFakePush() {
     };
     const token = /^\/3\/device\/([0-9a-f]+)$/.exec(String(headers[":path"]))?.[1];
     const jwt = String(headers.authorization ?? "").replace(/^bearer /, "");
-    const claims = verifyJwt(jwt, apnsKeys.publicKey, "SHA256");
-    if (!token || !claims || claims.iss !== "TEAMID1234")
-      return reply(403, { reason: "InvalidProviderToken" });
-    if (headers["apns-topic"] !== "dev.boilerplate.app")
-      return reply(400, { reason: "TopicDisallowed" });
-    if (token === DEAD_APNS_TOKEN) return reply(410, { reason: "Unregistered" });
-    if (token === BAD_APNS_TOKEN) return reply(400, { reason: "BadDeviceToken" });
-    // The first provider token that sends to it expires; a newly signed one works.
-    if (token === EXPIRING_APNS_TOKEN && (expired.size === 0 || expired.has(jwt))) {
-      expired.add(jwt);
-      return reply(403, { reason: "ExpiredProviderToken" });
-    }
-    if (token === FLAKY_APNS_TOKEN && !healthy)
-      return reply(500, { reason: "InternalServerError" });
+    if (!token) return reply(403, { reason: "InvalidProviderToken" });
+    const refused = apnsRefusal(token, jwt, headers);
+    if (refused) return reply(refused.status, { reason: refused.reason });
     const { aps, link } = JSON.parse(raw.toString()) as {
       aps: { alert: { title: string; body: string } };
       link?: string;

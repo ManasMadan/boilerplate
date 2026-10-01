@@ -9,7 +9,7 @@
  * mid-answer.
  */
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
 interface Doc {
@@ -42,6 +42,39 @@ function caller(request: IncomingMessage) {
   return { org: String(claims.org), user: String(claims.sub) };
 }
 
+/** A new document, in the state its title asks for (`[ready]`, `[failed]`, else pending). */
+function newDocument(input: Record<string, unknown>, org: string, user: string): Doc {
+  const title = String(input.title);
+  const status =
+    (["ready", "failed"] as const).find((state) => title.includes(`[${state}]`)) ?? "pending";
+  return {
+    id: randomUUID(),
+    org,
+    title,
+    status,
+    error: status === "failed" ? "DOCUMENT_INDEXING_FAILED" : null,
+    chunkCount: status === "ready" ? 3 : 0,
+    summary: status === "ready" ? `A summary of ${title}` : null,
+    createdBy: user,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/** The assistant's streamed answer; `[broken]` in the question ends it with an error. */
+function streamAnswer(question: string, response: ServerResponse) {
+  response.writeHead(200, { "content-type": "text/event-stream" });
+  const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
+  send({ type: "text", text: "Refunds take " });
+  send({ type: "text", text: "five days." });
+  if (question.includes("[broken]")) {
+    send({ type: "error", code: "AI_RUN_LIMIT" });
+    return response.end();
+  }
+  send({ type: "sources", sources: [{ documentId: randomUUID(), title: "Handbook" }] });
+  send({ type: "done", usage: { inputTokens: 10, outputTokens: 5 } });
+  return response.end();
+}
+
 export async function startFakeAi() {
   const documents: Doc[] = [];
   const server = createServer(async (request, response) => {
@@ -53,57 +86,36 @@ export async function startFakeAi() {
       reply(status, { defined: true, code, status, message: code, data: { params: {} } });
     const { org, user } = caller(request);
     const path = new URL(request.url ?? "/", "http://ai").pathname;
+    const route = `${request.method} ${path}`;
     const input = await body(request);
 
-    if (request.method === "GET" && path === "/health/ready") return reply(200, {});
-    if (request.method === "POST" && path === "/v1/sentiment") {
-      return reply(200, { label: "positive", score: 0.87, model: "stand-in" });
-    }
-    if (request.method === "GET" && path === "/v1/documents") {
-      return reply(
-        200,
-        documents.filter((doc) => doc.org === org),
-      );
-    }
-    if (request.method === "POST" && path === "/v1/documents") {
-      const title = String(input.title);
-      const status =
-        (["ready", "failed"] as const).find((state) => title.includes(`[${state}]`)) ?? "pending";
-      const doc: Doc = {
-        id: randomUUID(),
-        org,
-        title,
-        status,
-        error: status === "failed" ? "DOCUMENT_INDEXING_FAILED" : null,
-        chunkCount: status === "ready" ? 3 : 0,
-        summary: status === "ready" ? `A summary of ${title}` : null,
-        createdBy: user,
-        createdAt: new Date().toISOString(),
-      };
-      documents.push(doc);
-      return reply(201, doc);
-    }
-    const remove = /^\/v1\/documents\/([0-9a-f-]{36})$/.exec(path);
-    if (request.method === "DELETE" && remove) {
+    const routes: Record<string, () => void> = {
+      "GET /health/ready": () => reply(200, {}),
+      "POST /v1/sentiment": () => reply(200, { label: "positive", score: 0.87, model: "stand-in" }),
+      "GET /v1/documents": () =>
+        reply(
+          200,
+          documents.filter((doc) => doc.org === org),
+        ),
+      "POST /v1/documents": () => {
+        const doc = newDocument(input, org, user);
+        documents.push(doc);
+        reply(201, doc);
+      },
+      "POST /v1/assistant/answers": () => {
+        const question = String(input.question);
+        if (question.includes("[budget]")) return fail(429, "AI_BUDGET_EXCEEDED");
+        return streamAnswer(question, response);
+      },
+    };
+    const handle = routes[route];
+    if (handle) return handle();
+    const remove = /^DELETE \/v1\/documents\/([0-9a-f-]{36})$/.exec(route);
+    if (remove) {
       const index = documents.findIndex((doc) => doc.id === remove[1] && doc.org === org);
       if (index === -1) return fail(404, "DOCUMENT_NOT_FOUND");
       documents.splice(index, 1);
       return reply(204);
-    }
-    if (request.method === "POST" && path === "/v1/assistant/answers") {
-      const question = String(input.question);
-      if (question.includes("[budget]")) return fail(429, "AI_BUDGET_EXCEEDED");
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
-      send({ type: "text", text: "Refunds take " });
-      send({ type: "text", text: "five days." });
-      if (question.includes("[broken]")) {
-        send({ type: "error", code: "AI_RUN_LIMIT" });
-        return response.end();
-      }
-      send({ type: "sources", sources: [{ documentId: randomUUID(), title: "Handbook" }] });
-      send({ type: "done", usage: { inputTokens: 10, outputTokens: 5 } });
-      return response.end();
     }
     fail(404, "NOT_FOUND");
   });

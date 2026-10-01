@@ -32,6 +32,19 @@ const json = (status: number, body: unknown) =>
 
 export const server: { session: Session | null } = { session: null };
 
+/** A handler's result as the API's response: oRPC's envelope for /rpc, plain for auth. */
+function answer(result: unknown, rpc: boolean) {
+  if (result instanceof Response) return result;
+  if (result instanceof Failure) {
+    const { status, code, data } = result;
+    return json(
+      status,
+      rpc ? { json: { defined: true, code, status, message: "", data } } : { code },
+    );
+  }
+  return json(200, rpc ? { json: result } : (result ?? null));
+}
+
 export function fakeApi(overrides: Record<string, Handler> = {}): Call[] {
   server.session = null;
   const handlers: Record<string, Handler> = {
@@ -51,16 +64,7 @@ export function fakeApi(overrides: Record<string, Handler> = {}): Call[] {
     calls.push({ path: url.pathname, input, headers: request.headers });
     const handler = handlers[url.pathname];
     if (!handler) throw new Error(`No fake answer for ${request.method} ${url.pathname}`);
-    const result = await handler(input);
-    if (result instanceof Response) return result;
-    if (result instanceof Failure) {
-      const { status, code, data } = result;
-      return json(
-        status,
-        rpc ? { json: { defined: true, code, status, message: "", data } } : { code },
-      );
-    }
-    return json(200, rpc ? { json: result } : (result ?? null));
+    return answer(await handler(input), rpc);
   });
   return calls;
 }

@@ -20,6 +20,18 @@ interface Texted {
   body: string;
 }
 
+/** The numbers Twilio always refuses, with its status, error code and message. */
+const REFUSED: Record<string, readonly [number, number, string]> = {
+  [TWILIO_NUMBERS.optedOut]: [400, 21610, "Attempt to send to unsubscribed recipient"],
+  [TWILIO_NUMBERS.invalid]: [400, 21211, "Invalid 'To' Phone Number"],
+  [TWILIO_NUMBERS.landline]: [400, 21614, "'To' number is not a valid mobile number"],
+  [TWILIO_NUMBERS.regionBlocked]: [
+    400,
+    21408,
+    "Permission to send an SMS has not been enabled for the region",
+  ],
+};
+
 export async function startFakeTwilio() {
   const accountSid = `AC${randomBytes(16).toString("hex")}`;
   const authToken = randomBytes(16).toString("hex");
@@ -27,6 +39,14 @@ export async function startFakeTwilio() {
   const messagingService = `MG${randomBytes(16).toString("hex")}`;
   const texted: Texted[] = [];
   let healthy = false;
+
+  /** Twilio's error for a message to `to`, as [status, code, message], or undefined. */
+  const refusal = (to: string) => {
+    if (to === TWILIO_NUMBERS.flaky && !healthy) {
+      return [500, 20500, "Internal Server Error"] as const;
+    }
+    return REFUSED[to];
+  };
 
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
@@ -47,20 +67,8 @@ export async function startFakeTwilio() {
     const sender = form.get("From") ?? form.get("MessagingServiceSid");
     if ((sender !== from && sender !== messagingService) || !body)
       return reply(400, { code: 21602, message: "bad" });
-    const fail: Record<string, [number, number, string]> = {
-      [TWILIO_NUMBERS.optedOut]: [400, 21610, "Attempt to send to unsubscribed recipient"],
-      [TWILIO_NUMBERS.invalid]: [400, 21211, "Invalid 'To' Phone Number"],
-      [TWILIO_NUMBERS.landline]: [400, 21614, "'To' number is not a valid mobile number"],
-      [TWILIO_NUMBERS.regionBlocked]: [
-        400,
-        21408,
-        "Permission to send an SMS has not been enabled for the region",
-      ],
-    };
-    const failure = fail[to];
+    const failure = refusal(to);
     if (failure) return reply(failure[0], { code: failure[1], message: failure[2] });
-    if (to === TWILIO_NUMBERS.flaky && !healthy)
-      return reply(500, { code: 20500, message: "Internal Server Error" });
     texted.push({ to, from: sender, body });
     reply(201, { sid: `SM${randomBytes(16).toString("hex")}`, status: "queued" });
   });

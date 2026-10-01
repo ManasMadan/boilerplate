@@ -71,20 +71,22 @@ describe("createI18n", () => {
   });
 });
 
+/** The arguments and tags in parsed ICU elements, nested ones included, as `name:kind`. */
+function namesIn(elements: MessageFormatElement[]): string[] {
+  return elements.flatMap((element) => {
+    if (element.type === TYPE.literal || element.type === TYPE.pound) return [];
+    const options =
+      "options" in element
+        ? Object.values(element.options).flatMap((option) => namesIn(option.value))
+        : [];
+    const children = element.type === TYPE.tag ? namesIn(element.children) : [];
+    return [`${element.value}:${TYPE[element.type]}`, ...options, ...children];
+  });
+}
+
 /** Every argument and tag a message names, as `name:kind`, from the ICU parser. */
 function argumentsOf(message: string): string[] {
-  const found = new Set<string>();
-  const walk = (elements: MessageFormatElement[]) => {
-    for (const element of elements) {
-      if (element.type === TYPE.literal || element.type === TYPE.pound) continue;
-      found.add(`${element.value}:${TYPE[element.type]}`);
-      if ("options" in element)
-        for (const option of Object.values(element.options)) walk(option.value);
-      if (element.type === TYPE.tag) walk(element.children);
-    }
-  };
-  walk(parse(message));
-  return [...found].sort();
+  return [...new Set(namesIn(parse(message)))].sort();
 }
 
 /** Every message of a catalog by its dotted key. */
