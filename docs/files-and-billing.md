@@ -164,6 +164,13 @@ tests start it in-process (`startFakeStripe`).
 
 ### Real Stripe test mode
 
+Every call the api makes is also checked against Stripe's test mode weekly
+(`packages/fake-stripe/src/contract.test.ts`, run by `stripe.yml` with the
+`STRIPE_CONTRACT_SECRET_KEY` secret), so the fake can't drift from Stripe unnoticed. To
+run it yourself: `STRIPE_CONTRACT_SECRET_KEY=sk_test_… bunx vitest run src/contract.test.ts`
+in `packages/fake-stripe`. Hosted Checkout, the portal's pages and webhooks still need a
+person, as below.
+
 Use your `sk_test_` key and two recurring prices, leave `STRIPE_API_URL` empty, and
 forward events:
 

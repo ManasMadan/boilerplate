@@ -144,7 +144,7 @@ still written, and skips with the reason when they're missing.
 | Client ID Metadata Documents from a public URL | needs an HTTPS document on the internet | `apps/api/test/oauth.integration.test.ts` (the CIMD case), with `E2E_CIMD_CLIENT_ID` |
 | Mail through Stalwart | needs the `mail` profile | `apps/notifications/test/stalwart.integration.test.ts` and `apps/webhooks/test/stalwart.integration.test.ts`, with `STALWART_SMTP_URL` and `STALWART_URL` (above) |
 | Native mobile: a session surviving a restart, the push permission prompt, links opened by the OS | needs a device or simulator with a development build | `apps/mobile/maestro/*.yaml`, by hand (`apps/mobile/maestro/README.md`) |
-| Real Stripe test mode | the suites use `packages/fake-stripe` | by hand: [files-and-billing.md](files-and-billing.md), "Real Stripe test mode" |
+| Real Stripe test mode | the suites use `packages/fake-stripe` | weekly, the calls the api makes against Stripe's test mode and the fake alike (`packages/fake-stripe/src/contract.test.ts`, `stripe.yml`, with `STRIPE_CONTRACT_SECRET_KEY`); hosted Checkout and webhooks by hand: [files-and-billing.md](files-and-billing.md), "Real Stripe test mode" |
 | A web push notification being clicked | the service worker's `notificationclick` needs a real browser notification | by hand: allow notifications on the web app, trigger one, click it |
 | Email in real mail clients | rendering differs per client | by hand: the previews (`bun run --cwd packages/email dev`), then a real send |
 | Real MCP clients | needs Claude or an IDE on the other end | by hand: connect one to `<site>/api/mcp` and `<site>/ai/mcp` |
@@ -357,3 +357,4 @@ infrastructure configuration.
 | 03:23 daily | `ci.yml` on `master`, with the load test at `PROFILE=load` (`LOAD_TARGET_RPS`, default 50) instead of the smoke, and the evals against `EVAL_MODEL` when that variable is set |
 | 04:30 daily | Renovate |
 | 04:17 Mondays | `security.yml`, for vulnerabilities published against unchanged code |
+| 05:41 Wednesdays | `stripe.yml`: the fake Stripe's contract against Stripe's test mode, when `STRIPE_CONTRACT_SECRET_KEY` is set |

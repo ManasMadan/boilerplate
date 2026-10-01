@@ -524,3 +524,32 @@ describe("ci.yml's images job", () => {
     expect(smoke).toBeGreaterThan(scan);
   });
 });
+
+describe("stripe.yml", () => {
+  const { on, jobs } = workflow("stripe.yml");
+  const steps = jobs.contract?.steps ?? [];
+
+  it("runs the fake's contract against Stripe weekly, with the key on that step alone", () => {
+    expect(Object.keys(on).sort()).toEqual(["schedule", "workflow_dispatch"]);
+    const test = steps.find((step) => step.run === "bunx vitest run src/contract.test.ts");
+    expect(test?.env).toEqual({
+      STRIPE_CONTRACT_SECRET_KEY: `\${{ secrets.STRIPE_CONTRACT_SECRET_KEY }}`,
+    });
+    expect(readFileSync(join(ROOT, "packages/fake-stripe/src/contract.test.ts"), "utf8")).toContain(
+      "process.env.STRIPE_CONTRACT_SECRET_KEY",
+    );
+  });
+
+  it("passes without the key, doing nothing but saying so", () => {
+    const after = steps.slice(2);
+    expect(after.length).toBeGreaterThan(0);
+    for (const step of after) expect(step.if).toBe("steps.key.outputs.present == 'true'");
+    expect(steps[1]?.run).toContain("::notice::STRIPE_CONTRACT_SECRET_KEY isn't set");
+  });
+
+  it("is documented with its secret", () => {
+    expect(readFileSync(join(ROOT, "docs/repository-settings.md"), "utf8")).toContain(
+      "`STRIPE_CONTRACT_SECRET_KEY`",
+    );
+  });
+});
