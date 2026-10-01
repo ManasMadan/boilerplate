@@ -50,6 +50,17 @@ postgres:
   # serverName to the folder the backup is in (the old cluster's serverName) and a new
   # backups.serverName, and optionally a point in time. Only for a new cluster: an
   # existing one ignores its bootstrap. deploy/README.md has the whole procedure.
+  # The backup drill: every week, the latest backup restored into a scratch cluster and
+  # checked against the live database (templates/restore-drill.yaml). Needs backups, and
+  # free disk for a second copy of the database while it runs.
+  drill:
+    enabled: false
+    # Kubernetes' cron format (five fields): 04:30 on Sundays.
+    schedule: "30 4 * * 0"
+    # How old the restored data may be: older means WAL isn't reaching the backups.
+    maxAgeHours: 26
+    timeoutMinutes: 60
+    image: docker.io/alpine/kubectl:1.35.4
   restore:
     enabled: false
     serverName: ""

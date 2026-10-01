@@ -4,6 +4,9 @@ postgres:
   backups:
     enabled: true
     retention: 7d
+  # Every week, the latest backup restored into a scratch cluster and checked.
+  drill:
+    enabled: true
 storage:
   uploads:
     # Your staging hosts: one of the gateway's (<domain> or *.<domain>).

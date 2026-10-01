@@ -303,6 +303,67 @@ tests:
           value: { app.kubernetes.io/name: valkey-proxy, app.kubernetes.io/instance: demo }
         documentSelector: { path: spec.minAvailable, value: 1 }
 
+  - it: drills the backups only when they're on
+    template: restore-drill.yaml
+    set: { postgres.drill.enabled: true }
+    asserts:
+      - failedTemplate: { errorMessage: "postgres.drill needs postgres.backups.enabled: the backups are what it restores" }
+
+  - it: restores the latest backup into a scratch cluster that archives nothing
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: "name: demo-postgres-drill" }
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'serverName: demo-postgres\n' }
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'recovery:\n\s+source: origin' }
+      - notMatchRegex: { path: 'data["cluster.yaml"]', pattern: "isWALArchiver|app.kubernetes.io/instance" }
+      - matchRegex: { path: 'data["fingerprint.sql"]', pattern: "^-- One line per fact" }
+
+  - it: follows the live cluster's archive when it has moved to a new folder
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.backups.serverName: demo-2026, postgres.drill.enabled: true }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'serverName: demo-2026\n' }
+
+  - it: runs the drill weekly, once at a time, never retried, with only what it needs
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    asserts:
+      - equal: { path: spec.schedule, value: "30 4 * * 0" }
+        documentSelector: { path: kind, value: CronJob }
+      - equal: { path: spec.concurrencyPolicy, value: Forbid }
+        documentSelector: { path: kind, value: CronJob }
+      - equal: { path: spec.jobTemplate.spec.backoffLimit, value: 0 }
+        documentSelector: { path: kind, value: CronJob }
+      - matchRegex:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].args[0]"
+          pattern: kubectl wait "cluster/\$DRILL" --for=condition=Ready
+        documentSelector: { path: kind, value: CronJob }
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: DRILL, value: demo-postgres-drill }
+        documentSelector: { path: kind, value: CronJob }
+      - equal:
+          path: rules
+          value:
+            - { apiGroups: [postgresql.cnpg.io], resources: [clusters], verbs: [get, list, watch, create, patch, delete] }
+            - { apiGroups: [""], resources: [pods], verbs: [get, list] }
+            - { apiGroups: [""], resources: [pods/exec], verbs: [create] }
+        documentSelector: { path: kind, value: Role }
+
+  - it: lets the scratch cluster read the backups
+    template: storage.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    documentSelector:
+      path: 'spec.podSelector.matchLabels["app.kubernetes.io/component"]'
+      value: backups
+    asserts:
+      - contains:
+          path: "spec.ingress[0].from"
+          content: { podSelector: { matchLabels: { cnpg.io/cluster: demo-postgres-drill } } }
+
   - it: runs the uploads server with its keys from the storage Secret
     template: storage.yaml
     documentSelector: { path: kind, value: StatefulSet }

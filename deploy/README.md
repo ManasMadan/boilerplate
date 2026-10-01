@@ -292,13 +292,22 @@ cluster when it creates it, so restoring means a new cluster from the backups.
 5. Set `restore.enabled` back to `false` (an existing cluster ignores its bootstrap
    either way) and keep the new `backups.serverName`: it's where backups go now.
 
-`bun run db:restore-drill` (docs/database.md) proves that a `pg_dump` of the database
-restores to the same data, grants and policies. It doesn't test these backups: the
-clusters' are Barman base backups and WAL, which only a CloudNativePG recovery restores,
-and kind has no backups to try (no cert-manager for the plugin). Try them in staging,
-once after setting up and then every few months: the procedure above with
-`restore.enabled` and a new `backups.serverName`, then check the recovered database
-serves the site and has yesterday's rows.
+The backups themselves are drilled every week where `postgres.drill.enabled` is on
+(staging; production once its node has the disk for a second copy of the database): a
+CronJob restores the latest base backup and the archived WAL into a scratch cluster,
+`<release>-postgres-drill`, the way the procedure above would, and checks it against the
+live database (the same tables, row-level security, policies, grants, functions and
+extensions, from the same query `bun run db:restore-drill` uses) and that its last
+transaction is under `maxAgeHours` old (WAL is reaching the backups). Then it deletes
+the scratch cluster. A failed drill is a failed Job:
+`kubectl -n <env> logs job/<the latest <release>-restore-drill job>`; run one now with
+`kubectl -n <env> create job --from=cronjob/<release>-restore-drill drill-now`.
+
+`bun run db:restore-drill` (docs/database.md) is the second check, in CI: a `pg_dump` of
+the test database restores to the same rows, grants and policies. kind has no backups
+(no cert-manager for the plugin), so the CronJob's first real run is in staging. Doing
+the whole procedure above by hand once after setting up is still worth it: the drill
+proves the backups restore, not that you know the steps.
 
 ## What a lost node takes down
 

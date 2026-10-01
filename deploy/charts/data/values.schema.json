@@ -45,6 +45,17 @@
             "serverName": { "type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" }
           }
         },
+        "drill": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schedule": { "type": "string", "pattern": "^\\S+( \\S+){4}$" },
+            "maxAgeHours": { "type": "integer", "minimum": 1 },
+            "timeoutMinutes": { "type": "integer", "minimum": 5 },
+            "image": { "type": "string", "minLength": 1 }
+          }
+        },
         "restore": {
           "type": "object",
           "additionalProperties": false,
