@@ -43,6 +43,52 @@ export function abortableSleep(ms: number, signal: AbortSignal) {
   });
 }
 
+type Client = ReturnType<typeof useApi>["client"];
+type Handlers = {
+  current: { onMessage: (message: RealtimeMessage) => void; onReconnect: () => void };
+};
+
+/**
+ * One connection: its messages until it ends. "stop" when it mustn't be retried (aborted,
+ * or the app's to handle), "connected" when it opened, "failed" when it never did.
+ */
+async function listenOnce(
+  client: Client,
+  handlers: Handlers,
+  signal: AbortSignal,
+  reconnect: boolean,
+) {
+  let connected = false;
+  try {
+    const stream = await client.realtime.subscribe(undefined, { signal });
+    connected = true;
+    if (reconnect) handlers.current.onReconnect();
+    for await (const message of stream) handlers.current.onMessage(message);
+  } catch (error) {
+    if (signal.aborted) return "stop";
+    // Signed out or no workspace: the app handles those; don't hammer the API.
+    const code = errorCode(error);
+    if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") return "stop";
+  }
+  return connected ? "connected" : "failed";
+}
+
+/** Keeps a connection open until `signal` aborts, waiting longer after each failure. */
+async function follow(client: Client, handlers: Handlers, signal: AbortSignal) {
+  let delay = RETRY_MIN_MS;
+  let first = true;
+  while (!signal.aborted) {
+    const outcome = await listenOnce(client, handlers, signal, !first);
+    if (outcome === "stop") return;
+    if (outcome === "connected") {
+      first = false;
+      delay = RETRY_MIN_MS;
+    }
+    await abortableSleep(withJitter(delay), signal);
+    delay = Math.min(delay * 2, RETRY_MAX_MS);
+  }
+}
+
 /** Calls `onMessage` for every realtime message while mounted; `key` changes reopen the stream. */
 export function useRealtime(
   onMessage: (message: RealtimeMessage) => void,
@@ -60,26 +106,7 @@ export function useRealtime(
     if (key === null || key === undefined) return;
     const controller = new AbortController();
 
-    void (async () => {
-      let delay = RETRY_MIN_MS;
-      let first = true;
-      while (!controller.signal.aborted) {
-        try {
-          const stream = await client.realtime.subscribe(undefined, { signal: controller.signal });
-          if (!first) handlers.current.onReconnect();
-          first = false;
-          delay = RETRY_MIN_MS;
-          for await (const message of stream) handlers.current.onMessage(message);
-        } catch (error) {
-          if (controller.signal.aborted) return;
-          // Signed out or no workspace: the app handles those; don't hammer the API.
-          const code = errorCode(error);
-          if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") return;
-        }
-        await abortableSleep(withJitter(delay), controller.signal);
-        delay = Math.min(delay * 2, RETRY_MAX_MS);
-      }
-    })();
+    void follow(client, handlers, controller.signal);
     return () => controller.abort();
   }, [client, key]);
 }

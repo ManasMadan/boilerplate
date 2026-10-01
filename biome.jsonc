@@ -52,7 +52,13 @@
         "noFocusedTests": "error"
       },
       "complexity": {
-        "noUselessCatch": "error"
+        "noUselessCatch": "error",
+        // A function a reader can't hold in their head: split it into named steps (a
+        // lookup table, an early return, a helper per case) rather than raising this.
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 15 }
+        }
       },
       "style": {
         "noNonNullAssertion": "error",

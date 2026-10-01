@@ -95,6 +95,38 @@ export function guardedLookup(
   };
 }
 
+/** Refuses plain HTTP (unless allowed) and a literal IP that isn't public or allowlisted. */
+function checkDestination(url: URL, allowHttp: boolean, allowlist: readonly string[]) {
+  if (url.protocol !== "https:" && !(allowHttp && url.protocol === "http:")) {
+    throw new AppError("DESTINATION_NOT_ALLOWED", { params: { reason: "https-required" } });
+  }
+  // Literal IPs never go through DNS, so check them here.
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  if (ipaddr.isValid(host) && !permitted(host, allowlist)) {
+    throw new AppError("DESTINATION_NOT_ALLOWED", { params: { hostname: host } });
+  }
+}
+
+/** The body as text, cancelled with RESPONSE_TOO_LARGE once it passes `maxResponseBytes`. */
+async function readLimited(
+  reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
+  maxResponseBytes: number,
+) {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (reader) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxResponseBytes) {
+      await reader.cancel();
+      throw new AppError("RESPONSE_TOO_LARGE", { params: { maxResponseBytes } });
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 export async function safeFetch(
   url: string,
   options: SafeFetchOptions = {},
@@ -112,16 +144,7 @@ export async function safeFetch(
   try {
     let current = new URL(url);
     for (let hop = 0; hop <= 3; hop++) {
-      if (current.protocol !== "https:" && !(allowHttp && current.protocol === "http:")) {
-        throw new AppError("DESTINATION_NOT_ALLOWED", {
-          params: { reason: "https-required" },
-        });
-      }
-      // Literal IPs never go through DNS, so check them here.
-      const host = current.hostname.replace(/^\[|\]$/g, "");
-      if (ipaddr.isValid(host) && !permitted(host, allowedPrivateAddresses)) {
-        throw new AppError("DESTINATION_NOT_ALLOWED", { params: { hostname: host } });
-      }
+      checkDestination(current, allowHttp, allowedPrivateAddresses);
 
       const response = await undiciFetch(current, {
         method: options.method ?? "GET",
@@ -143,24 +166,10 @@ export async function safeFetch(
         continue;
       }
 
-      const reader: ReadableStreamDefaultReader<Uint8Array> | undefined =
-        response.body?.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      while (reader) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > maxResponseBytes) {
-          await reader.cancel();
-          throw new AppError("RESPONSE_TOO_LARGE", { params: { maxResponseBytes } });
-        }
-        chunks.push(value);
-      }
       return {
         status: response.status,
         headers: Object.fromEntries(response.headers),
-        body: Buffer.concat(chunks).toString("utf8"),
+        body: await readLimited(response.body?.getReader(), maxResponseBytes),
       };
     }
     throw new AppError("TOO_MANY_REDIRECTS");

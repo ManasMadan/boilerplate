@@ -21,7 +21,8 @@ const named = (pattern: RegExp) =>
 
 describe("the better-auth paths the hooks name", () => {
   it("are all endpoints", () => {
-    const paths = named(/(?:case |path === )"(\/[^"]*)"/g);
+    // `case "/x"`, `path === "/x"`, and a handler table's `"/x": (...) =>` keys.
+    const paths = named(/(?:case |path === |^\s*(?="\/[^"]*": \())"(\/[^"]*)"/gm);
     expect(paths.length).toBeGreaterThan(20);
     expect(paths.filter((entry) => !endpoints.includes(entry.split(": ")[1] as string))).toEqual(
       [],

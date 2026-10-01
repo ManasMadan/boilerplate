@@ -96,7 +96,6 @@ export class Dispatcher implements OnApplicationShutdown {
     template: BoundTemplate,
     idempotencyKey: string,
   ) {
-    const name = payload.template;
     const category = notificationCategories[template.category];
     const policy = recipient.userId ? await this.policy.forUser(recipient.userId) : null;
     const t = await this.i18n.getTranslator(recipient.locale, recipient.timeZone);
@@ -112,36 +111,41 @@ export class Dispatcher implements OnApplicationShutdown {
       // From here on, the template renders to the channel and the recipient is on it.
       if (!renders(template, channel) || !reaches(recipient, channel)) continue;
       const key = `${idempotencyKey}:${channel}:${recipient.userId ?? recipient.email ?? recipient.phone}`;
-      if (channel === "push") {
-        // Caught like every other channel: a push that throws must not skip the rest.
-        try {
-          failures.push(
-            ...(await this.deliverPush(
-              // reaches() has checked it: push goes only to a recipient with an account.
-              recipient.userId as string,
-              recipient,
-              name,
-              template,
-              context,
-              policy,
-              key,
-              false,
-            )),
-          );
-        } catch (error) {
-          failures.push(error);
-        }
-        continue;
-      }
-      if (!(await this.log.claim(key, channel, name, recipient.userId))) continue;
-      try {
-        await this.send(channel, key, recipient, template, context, policy);
-      } catch (error) {
-        await this.log.finish(key, "failed", { error: (error as Error).message });
-        failures.push(error);
-      }
+      const delivery = { recipient, template, context, policy, key };
+      if (channel === "push") failures.push(...(await this.tryPush(delivery)));
+      else failures.push(...(await this.sendClaimed(channel, delivery)));
     }
     return failures;
+  }
+
+  /** Push from a fresh notification; a push that throws must not skip the other channels. */
+  private async tryPush(delivery: Delivery) {
+    try {
+      return await this.deliverPush({
+        ...delivery,
+        // reaches() has checked it: push goes only to a recipient with an account.
+        userId: delivery.recipient.userId as string,
+        deferred: false,
+      });
+    } catch (error) {
+      return [error];
+    }
+  }
+
+  /** One channel other than push, once: claimed in the log first, then sent; the failures. */
+  private async sendClaimed(
+    channel: Exclude<NotificationChannel, "push">,
+    { recipient, template, context, policy, key }: Delivery,
+  ) {
+    const name = context.payload.template;
+    if (!(await this.log.claim(key, channel, name, recipient.userId))) return [];
+    try {
+      await this.send(channel, key, recipient, template, context, policy);
+      return [];
+    } catch (error) {
+      await this.log.finish(key, "failed", { error: (error as Error).message });
+      return [error];
+    }
   }
 
   /** One channel other than push; `renders` and `reaches` have checked it applies. */
@@ -229,16 +233,16 @@ export class Dispatcher implements OnApplicationShutdown {
    * hours, nothing is claimed yet: one deferred job (deduplicated on the delivery key)
    * runs this again when they end.
    */
-  private async deliverPush(
-    userId: string,
-    recipient: Recipient,
-    name: string,
-    template: BoundTemplate,
-    context: RenderContext,
-    policy: UserPolicy | null,
-    key: string,
-    deferred: boolean,
-  ) {
+  private async deliverPush({
+    userId,
+    recipient,
+    template,
+    context,
+    policy,
+    key,
+    deferred,
+  }: PushDelivery) {
+    const name = context.payload.template;
     if (policy && !policy.allows(template.category, "push")) return [];
     const devices = await this.push.devices(userId);
     if (devices.length === 0) return [];
@@ -255,31 +259,42 @@ export class Dispatcher implements OnApplicationShutdown {
     for (const device of devices) {
       const deviceKey = `${key}:${device.id}`;
       if (!(await this.log.claim(deviceKey, "push", name, userId))) continue;
-      let result: Awaited<ReturnType<typeof this.push.send>>;
-      try {
-        result = await this.push.send(userId, device, message);
-      } catch (error) {
-        // A provider that throws (network) fails this device only; the others still go.
-        await this.log.finish(deviceKey, "failed", { error: (error as Error).message });
-        failures.push(error);
-        continue;
-      }
-      if (result.ok) {
-        await this.log.finish(
-          deviceKey,
-          "sent",
-          result.providerMessageId ? { providerMessageId: result.providerMessageId } : {},
-        );
-      } else if (result.gone) {
-        await this.log.finish(deviceKey, "skipped", {
-          error: `token no longer valid: ${result.error}`,
-        });
-      } else {
-        await this.log.finish(deviceKey, "failed", { error: result.error });
-        failures.push(new Error(result.error));
-      }
+      const failure = await this.pushTo(userId, device, message, deviceKey);
+      if (failure) failures.push(failure);
     }
     return failures;
+  }
+
+  /** One device's push, recorded under `deviceKey`; the failure to retry, if any. */
+  private async pushTo(
+    userId: string,
+    device: Parameters<typeof this.push.send>[1],
+    message: Parameters<typeof this.push.send>[2],
+    deviceKey: string,
+  ) {
+    let result: Awaited<ReturnType<typeof this.push.send>>;
+    try {
+      result = await this.push.send(userId, device, message);
+    } catch (error) {
+      // A provider that throws (network) fails this device only; the others still go.
+      await this.log.finish(deviceKey, "failed", { error: (error as Error).message });
+      return error;
+    }
+    if (result.ok) {
+      await this.log.finish(
+        deviceKey,
+        "sent",
+        result.providerMessageId ? { providerMessageId: result.providerMessageId } : {},
+      );
+    } else if (result.gone) {
+      await this.log.finish(deviceKey, "skipped", {
+        error: `token no longer valid: ${result.error}`,
+      });
+    } else {
+      await this.log.finish(deviceKey, "failed", { error: result.error });
+      return new Error(result.error);
+    }
+    return undefined;
   }
 
   private async defer(
@@ -314,16 +329,15 @@ export class Dispatcher implements OnApplicationShutdown {
     const policy = await this.policy.forUser(userId);
     const t = await this.i18n.getTranslator(recipient.locale, recipient.timeZone);
     const context: RenderContext = { recipient, t, payload };
-    const failures = await this.deliverPush(
+    const failures = await this.deliverPush({
       userId,
       recipient,
-      payload.template,
       template,
       context,
       policy,
       key,
-      true,
-    );
+      deferred: true,
+    });
     if (failures.length > 0)
       throw new AggregateError(failures, "deferred delivery failed; retrying");
   }
@@ -347,6 +361,21 @@ export class Dispatcher implements OnApplicationShutdown {
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     };
   }
+}
+
+/** What one channel's delivery to one recipient needs; `key` is its idempotency key. */
+interface Delivery {
+  recipient: Recipient;
+  template: BoundTemplate;
+  context: RenderContext;
+  policy: UserPolicy | null;
+  key: string;
+}
+
+interface PushDelivery extends Delivery {
+  userId: string;
+  /** Already waited out the user's quiet hours: send now. */
+  deferred: boolean;
 }
 
 function renders(template: BoundTemplate, channel: NotificationChannel) {

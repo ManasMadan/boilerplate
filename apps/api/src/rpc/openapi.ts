@@ -4,7 +4,7 @@
  * pull request shows every change to the public API as a diff and CI can refuse the
  * breaking ones (oasdiff, in ci.yml).
  */
-import { isContractProcedure } from "@orpc/contract";
+import { type AnyContractProcedure, isContractProcedure } from "@orpc/contract";
 import { type OpenAPI, OpenAPIGenerator, toOpenAPISchema } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { API_KEY_HEADER, contract, errorData, type ProcedureMeta } from "@repo/contracts/api";
@@ -83,24 +83,25 @@ const metaOf = (procedure: { "~orpc": { meta: unknown } }) =>
  * take a key with that scope too, and say so.
  */
 export function markApiKeyOperations(spec: Spec, router: unknown) {
-  if (isContractProcedure(router)) {
-    const { route } = router["~orpc"];
-    const meta = metaOf(router);
-    const operation =
-      route.path && route.method
-        ? spec.paths?.[route.path]?.[route.method.toLowerCase() as "get"]
-        : undefined;
-    if (!operation) return;
-    const scope = meta.apiKeyScope;
-    operation.security = scope ? [{ session: [] }, { apiKey: [] }] : [{ session: [] }];
-    if (scope) {
-      const note = `API keys need the \`${scope}\` scope.`;
-      operation.description = operation.description ? `${operation.description}\n\n${note}` : note;
-    }
-    return;
-  }
+  if (isContractProcedure(router)) return markOperation(spec, router);
   if (typeof router === "object" && router !== null) {
     const children: unknown[] = Object.values(router);
     for (const child of children) markApiKeyOperations(spec, child);
+  }
+}
+
+/** One procedure's operation: its security, and its scope in the description. */
+function markOperation(spec: Spec, procedure: AnyContractProcedure) {
+  const { route } = procedure["~orpc"];
+  const operation =
+    route.path && route.method
+      ? spec.paths?.[route.path]?.[route.method.toLowerCase() as "get"]
+      : undefined;
+  if (!operation) return;
+  const scope = metaOf(procedure).apiKeyScope;
+  operation.security = scope ? [{ session: [] }, { apiKey: [] }] : [{ session: [] }];
+  if (scope) {
+    const note = `API keys need the \`${scope}\` scope.`;
+    operation.description = operation.description ? `${operation.description}\n\n${note}` : note;
   }
 }

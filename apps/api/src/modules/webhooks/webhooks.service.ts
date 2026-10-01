@@ -38,6 +38,35 @@ const toEndpoint = (row: EndpointRow): WebhookEndpoint => webhookEndpointSchema.
 
 type Changed = EventPayload<"webhook.endpoint_updated.v1">["changed"];
 
+interface EndpointUpdate {
+  id: string;
+  url?: string | undefined;
+  description?: string | undefined;
+  events?: WebhookEventName[] | undefined;
+  enabled?: boolean | undefined;
+}
+
+/** What an update really changes on the endpoint (`events` counts whenever it's given). */
+function changesOf(
+  input: EndpointUpdate,
+  current: { url: string; description: string | null; disabledAt: Date | null },
+): Changed {
+  const changed: Changed = [];
+  if (input.url !== undefined && input.url !== current.url) changed.push("url");
+  if (input.description !== undefined && input.description !== current.description)
+    changed.push("description");
+  if (input.events !== undefined) changed.push("events");
+  if (input.enabled !== undefined && input.enabled !== (current.disabledAt === null))
+    changed.push("enabled");
+  return changed;
+}
+
+/** The columns that turn an endpoint on, or off by hand. */
+const enabling = (enabled: boolean) =>
+  enabled
+    ? { disabledAt: null, disabledReason: null }
+    : { disabledAt: new Date(), disabledReason: "manual" };
+
 @Injectable()
 export class WebhooksService implements OnApplicationShutdown {
   private readonly box = new SecretBox(keysFromEnv(env.ENCRYPTION_KEYS));
@@ -89,36 +118,17 @@ export class WebhooksService implements OnApplicationShutdown {
     });
   }
 
-  async updateEndpoint(
-    orgId: string,
-    input: {
-      id: string;
-      url?: string | undefined;
-      description?: string | undefined;
-      events?: WebhookEventName[] | undefined;
-      enabled?: boolean | undefined;
-    },
-  ) {
+  async updateEndpoint(orgId: string, input: EndpointUpdate) {
     if (input.url !== undefined) await assertDeliverableUrl(input.url);
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findEndpoint(tx, input.id);
       if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: input.id } });
-      const changed: Changed = [];
-      if (input.url !== undefined && input.url !== current.url) changed.push("url");
-      if (input.description !== undefined && input.description !== current.description)
-        changed.push("description");
-      if (input.events !== undefined) changed.push("events");
-      if (input.enabled !== undefined && input.enabled !== (current.disabledAt === null))
-        changed.push("enabled");
-
+      const changed = changesOf(input, current);
       const endpoint = await this.repository.updateEndpoint(tx, input.id, {
         ...(input.url !== undefined && { url: input.url }),
         ...(input.description !== undefined && { description: input.description }),
         ...(input.events !== undefined && { events: input.events }),
-        ...(changed.includes("enabled") &&
-          (input.enabled
-            ? { disabledAt: null, disabledReason: null }
-            : { disabledAt: new Date(), disabledReason: "manual" })),
+        ...(changed.includes("enabled") && enabling(input.enabled === true)),
       });
       if (changed.length > 0) {
         await emitEvent(tx, "webhook.endpoint_updated.v1", endpoint.id, {

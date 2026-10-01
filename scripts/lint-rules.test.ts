@@ -24,6 +24,23 @@ const SAMPLES: Record<string, string> = {
   }
 }
 `,
+  "lint/complexity/noExcessiveCognitiveComplexity": `export function f(a: number[], b: boolean, c: boolean) {
+  for (const x of a) {
+    if (b) {
+      for (const y of a) {
+        if (c && x > y) {
+          if (x > 2 || y > 3) {
+            while (x > y) {
+              if (b && c) return 1;
+            }
+          }
+        }
+      }
+    }
+  }
+  return 0;
+}
+`,
   "lint/style/noNestedTernary": `export const size = (n: number) => (n > 10 ? "big" : n > 5 ? "medium" : "small");
 `,
   "lint/style/noRestrictedImports": `import { z } from "zod";

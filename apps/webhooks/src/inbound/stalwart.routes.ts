@@ -29,9 +29,66 @@ import {
   bouncedAddress,
   eventKey,
   isFresh,
+  type StalwartEvent,
   stalwartBatch,
   verifySignature,
 } from "./stalwart-events";
+
+/**
+ * The batch a request carries, once its signature and freshness check out; otherwise the
+ * error code to answer with.
+ */
+function verifiedBatch(
+  headers: Record<string, string | string[] | undefined>,
+  rawBody: unknown,
+  secrets: readonly string[],
+  now: number,
+): StalwartEvent[] | "BAD_REQUEST" | "INVALID_SIGNATURE" {
+  const signature = headers["x-signature"];
+  if (typeof signature !== "string" || !Buffer.isBuffer(rawBody)) return "BAD_REQUEST";
+  const body = rawBody.toString("utf8");
+  if (!verifySignature(secrets, body, signature)) return "INVALID_SIGNATURE";
+  let json: unknown;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    return "BAD_REQUEST";
+  }
+  const parsed = stalwartBatch.safeParse(json);
+  if (!parsed.success) return "BAD_REQUEST";
+  return isFresh(parsed.data.events, now) ? parsed.data.events : "INVALID_SIGNATURE";
+}
+
+/** Stores each event once and emits a feedback event for each new hard bounce. */
+async function record(database: Database, events: StalwartEvent[]) {
+  const keyed = events.map((event) => ({ event, key: eventKey(event) }));
+  await transaction(database.write, async (tx) => {
+    const inserted = await tx.webhookInboundEvent.createManyAndReturn({
+      data: keyed.map(({ event, key }) => ({
+        provider: "stalwart",
+        providerEventId: key,
+        type: event.type,
+        payload: event as Prisma.InputJsonObject,
+      })),
+      skipDuplicates: true,
+      select: { providerEventId: true },
+    });
+    const fresh = new Set(inserted.map((row) => row.providerEventId));
+    for (const { event, key } of keyed) {
+      const address = bouncedAddress(event);
+      // Nothing to act on, or already received (in an earlier request or twice in
+      // this batch: deleting the key makes the first copy the only one acted on).
+      if (!address || !fresh.delete(key)) continue;
+      await emitEvent(
+        tx,
+        "email.feedback_received.v1",
+        key,
+        { provider: "stalwart", kind: "bounce", address },
+        { actorId: null, orgId: null },
+      );
+    }
+  });
+}
 
 export function mountStalwart(
   fastify: FastifyInstance,
@@ -45,53 +102,9 @@ export function mountStalwart(
 
     scope.post("/webhooks/stalwart", async (request, reply) => {
       if (!secrets) return sendError(reply, "NOT_FOUND");
-      const signature = request.headers["x-signature"];
-      if (typeof signature !== "string" || !Buffer.isBuffer(request.body)) {
-        return sendError(reply, "BAD_REQUEST");
-      }
-      const body = request.body.toString("utf8");
-      if (!verifySignature(secrets, body, signature)) {
-        return sendError(reply, "INVALID_SIGNATURE");
-      }
-
-      let json: unknown;
-      try {
-        json = JSON.parse(body);
-      } catch {
-        return sendError(reply, "BAD_REQUEST");
-      }
-      const parsed = stalwartBatch.safeParse(json);
-      if (!parsed.success) return sendError(reply, "BAD_REQUEST");
-      const { events } = parsed.data;
-      if (!isFresh(events, now())) return sendError(reply, "INVALID_SIGNATURE");
-
-      const keyed = events.map((event) => ({ event, key: eventKey(event) }));
-      await transaction(database.write, async (tx) => {
-        const inserted = await tx.webhookInboundEvent.createManyAndReturn({
-          data: keyed.map(({ event, key }) => ({
-            provider: "stalwart",
-            providerEventId: key,
-            type: event.type,
-            payload: event as Prisma.InputJsonObject,
-          })),
-          skipDuplicates: true,
-          select: { providerEventId: true },
-        });
-        const fresh = new Set(inserted.map((row) => row.providerEventId));
-        for (const { event, key } of keyed) {
-          const address = bouncedAddress(event);
-          // Nothing to act on, or already received (in an earlier request or twice in
-          // this batch: deleting the key makes the first copy the only one acted on).
-          if (!address || !fresh.delete(key)) continue;
-          await emitEvent(
-            tx,
-            "email.feedback_received.v1",
-            key,
-            { provider: "stalwart", kind: "bounce", address },
-            { actorId: null, orgId: null },
-          );
-        }
-      });
+      const events = verifiedBatch(request.headers, request.body, secrets, now());
+      if (typeof events === "string") return sendError(reply, events);
+      await record(database, events);
       return reply.status(200).send({ received: true });
     });
     done();

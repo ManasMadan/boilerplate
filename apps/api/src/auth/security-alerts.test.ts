@@ -78,5 +78,8 @@ describe("securityAlertFor", () => {
       securityAlertFor({ path: "/sign-in/email", context: { session: session() } }),
     ).toBeUndefined();
     expect(securityAlertFor({ path: "/change-password", context: {} })).toBeUndefined();
+    // A request without a path, and one that names an object's own property.
+    expect(securityAlertFor({ context: { session: session() } })).toBeUndefined();
+    expect(securityAlertFor({ path: "toString", context: { session: session() } })).toBeUndefined();
   });
 });
