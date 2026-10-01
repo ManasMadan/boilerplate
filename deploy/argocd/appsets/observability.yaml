@@ -98,7 +98,9 @@ spec:
             releaseName: {{ .addon }}
             {{- if hasKey . "clusterParameters" }}
             parameters:
-              {{- range $key, $field := .clusterParameters }}
+              {{- range $key, $given := .clusterParameters }}
+              {{- $field := splitList "|" $given | first }}
+              {{- $fallback := splitList "|" $given | rest | join "|" }}
               {{- $value := "" }}
               {{- if eq $field "name" }}
               {{- $value = $cluster.name }}
@@ -107,6 +109,7 @@ spec:
               {{- else }}
               {{- $value = index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" }}
               {{- end }}
+              {{- $value = $value | default $fallback }}
               - name: {{ $key | quote }}
                 value: {{ $value | quote }}
               {{- end }}

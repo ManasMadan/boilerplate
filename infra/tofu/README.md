@@ -2,8 +2,8 @@
 
 Everything runs on k3s on machines you rent or own, anywhere: one root, `envs/k3s`,
 used once per environment (staging, production) with its own variables and state. It
-installs k3s on the machines, puts Cloudflare in front, and hands the cluster to Argo
-CD, which deploys the rest from this repository (see `deploy/README.md`): Postgres
+installs k3s on the machines, publishes its DNS (Cloudflare in front by default, or a
+name server of your own), and hands the cluster to Argo CD, which deploys the rest from this repository (see `deploy/README.md`): Postgres
 (CloudNativePG), Valkey, object storage (RustFS), the mail server (Stalwart) and the
 services all run in the cluster.
 
@@ -13,6 +13,8 @@ modules/
   cloudflare   zone TLS settings, optional WAF, the site's and the mail server's DNS
                records, an API token for the zone's DNS (cert-manager) and the
                Turnstile widget
+  rfc2136      the same records on a name server of your own, through TSIG-signed
+               dynamic updates (dns.provider = "rfc2136"): no Cloudflare at all
   bootstrap    Argo CD with the SOPS age key, the cluster's registration (labels and
                annotations the ApplicationSets read) and the root Application
 envs/k3s
@@ -141,6 +143,16 @@ OpenTofu's admin certificate lasts a year and renews on any apply in its last 60
 If it has expired, renew it first: `tofu apply -target=module.k3s.tls_locally_signed_cert.admin`.
 
 ## DNS
+
+`dns.provider` chooses where the records live: `cloudflare` (the default) or `rfc2136`
+(a name server of your own that accepts dynamic updates signed with a TSIG key: BIND,
+Knot, PowerDNS; `dns.rfc2136` names it and the key, `TF_VAR_dns_tsig_secret` is the
+key's secret). Either way the same records are published, and OpenTofu tells the cluster
+(its `dns-*`, `trusted-hops` and `origin-pulls` annotations), so cert-manager validates
+certificates on the same DNS, external-dns writes there, and the gateway trusts
+Cloudflare's hop and certificate only when Cloudflare is in front. Moving an environment
+is the `swap-dns` skill. With RFC 2136 nothing is proxied: the site's records point at
+the nodes, there's no WAF or CDN in front, and the captcha (Turnstile) isn't created.
 
 The cloudflare module sets up, in the environment's zone:
 

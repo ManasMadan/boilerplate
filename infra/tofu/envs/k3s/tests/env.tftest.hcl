@@ -18,6 +18,7 @@ mock_provider "cloudflare" {
     defaults = { sitekey = "site-key", secret = "secret-key" }
   }
 }
+mock_provider "dns" {}
 mock_provider "helm" {}
 mock_provider "kubernetes" {}
 mock_provider "random" {}
@@ -73,6 +74,74 @@ run "one_node_staging" {
     condition     = output.api_url == "https://203.0.113.10:6443"
     error_message = "the API on the only server"
   }
+  assert {
+    condition = { for key in ["dns-provider", "trusted-hops", "origin-pulls"] : key => module.bootstrap.cluster_annotations["boilerplate.dev/${key}"] } == {
+      "dns-provider" = "cloudflare", "trusted-hops" = "1", "origin-pulls" = "true"
+    }
+    error_message = "behind Cloudflare: its DNS-01 solver, and the gateway trusts its one hop and only its certificate"
+  }
+  assert {
+    condition     = length(module.rfc2136) == 0
+    error_message = "no records anywhere else"
+  }
+}
+
+run "dns_of_its_own_without_cloudflare" {
+  command = apply
+  variables {
+    cloudflare_account_id = null
+    dns = {
+      provider = "rfc2136"
+      rfc2136  = { server = "192.0.2.53", key_name = "staging" }
+    }
+    dns_tsig_secret = "c2VjcmV0"
+  }
+  assert {
+    condition     = length(module.cloudflare) == 0 && output.cloudflare_dns_api_token == null && output.turnstile == null
+    error_message = "nothing on Cloudflare"
+  }
+  assert {
+    condition = toset([for record in output.dns_records : "${record.name} ${record.type} ${record.content} ${record.proxied}"]) == toset([
+      "staging.example.com A 203.0.113.10 false",
+      "*.preview.example.com A 203.0.113.10 false",
+    ])
+    error_message = "the same records, on the name server, unproxied"
+  }
+  assert {
+    condition = { for key in ["dns-provider", "trusted-hops", "origin-pulls", "dns-nameserver", "dns-tsig-key-name", "dns-tsig-algorithm"] : key => module.bootstrap.cluster_annotations["boilerplate.dev/${key}"] } == {
+      "dns-provider"   = "rfc2136", "trusted-hops" = "0", "origin-pulls" = "false",
+      "dns-nameserver" = "192.0.2.53:53", "dns-tsig-key-name" = "staging", "dns-tsig-algorithm" = "hmac-sha256"
+    }
+    error_message = "the platform validates certificates on the name server, and the gateway trusts no proxy"
+  }
+}
+
+run "rfc2136_needs_its_name_server" {
+  command = plan
+  variables {
+    dns = { provider = "rfc2136" }
+  }
+  expect_failures = [var.dns]
+}
+
+run "cloudflare_needs_its_account" {
+  command = plan
+  variables {
+    cloudflare_account_id = null
+  }
+  expect_failures = [var.cloudflare_account_id]
+}
+
+run "the_managed_waf_is_cloudflare_s" {
+  command = plan
+  variables {
+    managed_waf = true
+    dns = {
+      provider = "rfc2136"
+      rfc2136  = { server = "192.0.2.53", key_name = "staging" }
+    }
+  }
+  expect_failures = [var.managed_waf]
 }
 
 run "production_with_ha_and_mail" {

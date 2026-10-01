@@ -112,3 +112,41 @@ describe("the add-ons' order", () => {
     expect(steps(appset)).toEqual(expected);
   });
 });
+
+describe("the cluster facts the add-ons read", () => {
+  const files = [
+    ...new Bun.Glob("deploy/platform/addons/**/*.yaml").scanSync({ cwd: ROOT }),
+  ].sort();
+  const fields = files.flatMap((file) =>
+    Object.values(
+      (
+        Bun.YAML.parse(readFileSync(join(ROOT, file), "utf8")) as {
+          clusterParameters?: Record<string, string>;
+        }
+      ).clusterParameters ?? {},
+    ).map((given) => given.split("|")[0] ?? ""),
+  );
+  // What OpenTofu writes on the cluster's Argo CD Secret (envs/k3s, cluster_annotations).
+  const main = readFileSync(join(ROOT, "infra/tofu/envs/k3s/main.tf"), "utf8");
+  const block = main.slice(main.indexOf("cluster_annotations = merge("));
+  const written = new Set(
+    [...block.slice(0, block.indexOf("\n  )\n")).matchAll(/"?([a-z][a-z-]*)"?\s+=/g)].map(
+      (match) => match[1],
+    ),
+  );
+
+  it("are each a name, a label or an annotation OpenTofu writes", () => {
+    expect(fields.length).toBeGreaterThan(10);
+    const unknown = fields.filter(
+      (field) => field !== "name" && !field.startsWith("label:") && !written.has(field),
+    );
+    expect(unknown).toEqual([]);
+  });
+
+  it("fall back the same way in both ApplicationSets that read them", () => {
+    for (const file of ["platform.yaml", "observability.yaml"])
+      expect(readFileSync(join(APPSETS, file), "utf8")).toContain(
+        "{{- $value = $value | default $fallback }}",
+      );
+  });
+});

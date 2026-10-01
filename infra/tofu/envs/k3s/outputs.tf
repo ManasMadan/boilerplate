@@ -15,17 +15,17 @@ output "cloud_init" {
 }
 
 output "dns_records" {
-  value = module.cloudflare.records
+  value = flatten(concat(module.cloudflare[*].records, module.rfc2136[*].records))
 }
 
 output "cloudflare_dns_api_token" {
-  description = "For cert-manager's DNS-01 challenges: encrypt it into the platform's SOPS secrets."
+  description = "For cert-manager's DNS-01 challenges: encrypt it into the platform's SOPS secrets (Cloudflare DNS only)."
   sensitive   = true
-  value       = module.cloudflare.dns_api_token
+  value       = one(module.cloudflare[*].dns_api_token)
 }
 
 output "turnstile" {
-  description = "The captcha's site key and secret, for the api's SOPS secrets."
+  description = "The captcha's site key and secret, for the api's SOPS secrets (Cloudflare only)."
   sensitive   = true
-  value       = module.cloudflare.turnstile
+  value       = one(module.cloudflare[*].turnstile)
 }

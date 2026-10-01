@@ -121,6 +121,7 @@ has a `swap-*` skill in `.claude/skills`.
 | LLM access | providers called directly, with a fallback model | a gateway (LiteLLM, a router) | `apps/ai/app/assistant.py` | `swap-llm` |
 | Embeddings | provider models, or hashing locally | any embedding model | `apps/ai/app/embeddings.py` | `swap-embeddings` |
 | Vector search | pgvector | Qdrant or another vector store | `PassageSearch` in `apps/ai/app/assistant.py` | `swap-document-search` |
+| DNS and certificates' DNS-01 | Cloudflare, with its proxy in front | a name server of our own (RFC 2136, built in), or another provider | `dns` in `infra/tofu/envs/k3s`, and the cluster's `dns-*` annotations the platform add-ons read | `swap-dns` |
 
 Some growth steps don't need an interface, because they're configuration or a move:
 Valkey moves to a bigger instance of its own through `REDIS_URL`; auth (better-auth in

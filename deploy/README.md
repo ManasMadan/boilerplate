@@ -99,7 +99,9 @@ There are two kinds of secret, and each has one home:
 | `<release>-backups-storage` | `accessKeyId`, `secretAccessKey` (the backups server's) | generated (data chart) |
 | `<release>-<service>` for `api`, `notifications`, `webhooks`, `ai` (the AI worker shares `ai`'s; `web` and `worker` have none) | any of the service's variables (each app's `src/env.ts`, `app/settings.py` for ai) | `environments/<env>/secrets/<service>.sops.yaml` |
 | `offsite-storage`, where there's an offsite copy (production) | `accessKeyId`, `secretAccessKey` of the storage outside the cluster | `environments/<env>/secrets/offsite-storage.sops.yaml` |
-| `cloudflare-api-token` in `cert-manager` and in `external-dns` | `token` (Zone:DNS:Edit on the zone) | `platform/secrets/<env>/` |
+| `cloudflare-api-token` in `cert-manager` and in `external-dns`, with Cloudflare DNS | `token` (Zone:DNS:Edit on the zone) | `platform/secrets/<env>/` |
+| `rfc2136-tsig` in `cert-manager`, with DNS of your own (RFC 2136) | `secret` (the TSIG key, base64) | `platform/secrets/<env>/` |
+| `external-dns-rfc2136` in `external-dns`, likewise | `host`, `zone`, `tsig-keyname`, `tsig-secret`, `tsig-secret-alg` | `platform/secrets/<env>/` |
 | `github-token` in `argocd`, on the cluster hosting previews | `token` (reads pull requests) | `platform/secrets/<env>/` |
 | `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
 | `grafana-admin` in `observability`, only on clusters with observability (its namespace exists nowhere else) | `admin-user`, `admin-password` | `platform/secrets/<env>/` |

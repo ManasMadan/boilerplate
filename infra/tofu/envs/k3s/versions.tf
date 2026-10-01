@@ -30,6 +30,10 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.26"
     }
+    dns = {
+      source  = "hashicorp/dns"
+      version = "~> 3.4"
+    }
     helm = {
       source  = "hashicorp/helm"
       version = "~> 3.3"

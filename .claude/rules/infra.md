@@ -23,13 +23,14 @@ a real cluster or cloud account. The checks below are offline.
 - Image tags in `deploy/environments/` are written by CI: staging's in its `stack.yaml`
   on every merge to master, production's with its revision in `release.yaml` through a
   promotion PR. Do not edit them by hand.
-- OpenTofu: modules in `infra/tofu/modules/<name>` (k3s, cloudflare, bootstrap), one root
+- OpenTofu: modules in `infra/tofu/modules/<name>` (k3s, cloudflare or rfc2136 for DNS, bootstrap), one root
   in `infra/tofu/envs/k3s` used per environment through tfvars. Every module has
   `tests/*.tftest.hcl` with `mock_provider`, so tests need no credentials.
   `bun run infra:check` runs fmt, validate and every test.
 - Everything runs in the cluster: no managed databases, caches, storage, secret
   managers or mail services. Third-party APIs (AI providers, Twilio, push, Stripe,
-  Google, Turnstile) and Cloudflare in front are the exceptions; ask before adding a
+  Google, Turnstile) and Cloudflare in front (optional: `dns.provider = "rfc2136"` runs
+  without it) are the exceptions; ask before adding a
   managed dependency.
 - Pin every version: images by tag (the Dockerfiles' base images by tag and digest,
   `scripts/dockerfiles.test.ts`), charts and providers by exact version. Anything

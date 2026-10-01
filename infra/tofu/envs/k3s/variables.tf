@@ -4,8 +4,46 @@ variable "environment" {
 }
 
 variable "domain" {
-  description = "The Cloudflare zone the environment's hosts are in, e.g. example.com."
+  description = "The DNS zone the environment's hosts are in, e.g. example.com."
   type        = string
+}
+
+variable "dns" {
+  description = <<-EOT
+    Where the zone's records live, and how certificates are validated:
+      provider   cloudflare (the default: Cloudflare's DNS, with its proxy in front of
+                 the site) or rfc2136 (a name server of your own that takes TSIG-signed
+                 dynamic updates: BIND, Knot, PowerDNS; nothing in front of the cluster)
+      rfc2136    with rfc2136: server (its address, reachable from here and from the
+                 cluster), port, key_name and key_algorithm of the TSIG key; the key's
+                 secret is dns_tsig_secret
+  EOT
+  type = object({
+    provider = optional(string, "cloudflare")
+    rfc2136 = optional(object({
+      server        = string
+      port          = optional(number, 53)
+      key_name      = string
+      key_algorithm = optional(string, "hmac-sha256")
+    }))
+  })
+  default = {}
+  validation {
+    condition     = contains(["cloudflare", "rfc2136"], var.dns.provider)
+    error_message = "dns.provider is cloudflare or rfc2136."
+  }
+  validation {
+    condition     = (var.dns.provider == "rfc2136") == (var.dns.rfc2136 != null)
+    error_message = "dns.rfc2136 (the name server and TSIG key) goes with dns.provider = \"rfc2136\", and only with it."
+  }
+}
+
+variable "dns_tsig_secret" {
+  description = "With RFC 2136 DNS: the TSIG key's secret, base64 (TF_VAR_dns_tsig_secret). Needed to apply, not to plan."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  default     = null
 }
 
 variable "site_host" {
@@ -14,7 +52,13 @@ variable "site_host" {
 }
 
 variable "cloudflare_account_id" {
-  type = string
+  description = "The Cloudflare account (Cloudflare DNS only)."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.dns.provider != "cloudflare" || var.cloudflare_account_id != null
+    error_message = "Cloudflare DNS needs cloudflare_account_id."
+  }
 }
 
 variable "tls_email" {
@@ -45,9 +89,13 @@ variable "alert_email" {
 }
 
 variable "managed_waf" {
-  description = "Cloudflare's managed WAF rules on the zone (needs a Pro plan or higher)."
+  description = "Cloudflare's managed WAF rules on the zone (needs a Pro plan or higher; Cloudflare DNS only)."
   type        = bool
   default     = false
+  validation {
+    condition     = !var.managed_waf || var.dns.provider == "cloudflare"
+    error_message = "managed_waf is Cloudflare's: it needs dns.provider = \"cloudflare\"."
+  }
 }
 
 # ---------------------------------------------------------------------------- nodes

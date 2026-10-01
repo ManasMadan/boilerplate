@@ -10,7 +10,7 @@
 #                               decrypted by Argo CD's sops plugin (argo-cd-values.yaml).
 # `clusterParameters` sets chart values from the cluster: "name" is the cluster's name,
 # "label:<key>" its boilerplate.dev/<key> label, anything else its boilerplate.dev/<key>
-# annotation.
+# annotation; "<field>|<value>" gives the value for a cluster without one (else "").
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -127,7 +127,9 @@ spec:
         {{- end }}
             {{- if hasKey . "clusterParameters" }}
             parameters:
-              {{- range $key, $field := .clusterParameters }}
+              {{- range $key, $given := .clusterParameters }}
+              {{- $field := splitList "|" $given | first }}
+              {{- $fallback := splitList "|" $given | rest | join "|" }}
               {{- $value := "" }}
               {{- if eq $field "name" }}
               {{- $value = $cluster.name }}
@@ -136,6 +138,7 @@ spec:
               {{- else }}
               {{- $value = index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" }}
               {{- end }}
+              {{- $value = $value | default $fallback }}
               - name: {{ $key | quote }}
                 value: {{ $value | quote }}
               {{- end }}

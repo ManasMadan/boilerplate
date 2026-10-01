@@ -9,15 +9,17 @@ gateway:
   # publishes the ports on every node.
   serviceAnnotations: {}
   # Proxies in front of the gateway that add to X-Forwarded-For: 1 behind Cloudflare,
-  # 0 when clients connect directly.
+  # 0 when clients connect directly (the cluster's trusted-hops annotation).
   trustedHops: 1
   # Refuse the site's hosts to connections without Cloudflare's origin-pull client
   # certificate, so nothing reaches them except through Cloudflare. Off only for a
-  # cluster with no Cloudflare in front (and then trustedHops: 0).
+  # cluster with no Cloudflare in front (and then trustedHops: 0); the cluster's
+  # origin-pulls annotation.
   originPulls: true
 
-# Let's Encrypt certificates, validated through DNS on Cloudflare (works for wildcards
-# and before the gateway is reachable).
+# Let's Encrypt certificates, validated through DNS (works for wildcards and before the
+# gateway is reachable): Cloudflare's, or a name server of your own (RFC 2136). The
+# cluster's dns-* annotations (OpenTofu's `dns`) choose.
 tls:
   email: ""
   # Let's Encrypt's staging endpoint for trying things out (untrusted certificates).
@@ -25,6 +27,17 @@ tls:
   # Secret in cert-manager's namespace with key `token` (Zone:DNS:Edit on the zone),
   # from deploy/platform/secrets/<environment>/.
   cloudflareTokenSecret: cloudflare-api-token
+  dns01:
+    # cloudflare or rfc2136.
+    provider: cloudflare
+    rfc2136:
+      # The name server's host:port, the TSIG key's name and algorithm (hmac-sha256, ...).
+      nameserver: ""
+      tsigKeyName: ""
+      tsigAlgorithm: ""
+      # Secret in cert-manager's namespace with key `secret` (the TSIG key, base64), from
+      # deploy/platform/secrets/<environment>/.
+      tsigSecretName: rfc2136-tsig
 
 # Only images built and signed by this repo's CI (keyless, GitHub OIDC) may run in the
 # application namespaces. On for production.

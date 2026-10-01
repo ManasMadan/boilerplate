@@ -82,6 +82,37 @@ tests:
           value: { name: cloudflare-api-token, key: token }
       - equal: { path: spec.acme.server, value: https://acme-v02.api.letsencrypt.org/directory }
 
+  - it: issues certificates through a name server of our own, signed with its TSIG key
+    template: issuer.yaml
+    set:
+      tls.dns01.provider: rfc2136
+      tls.dns01.rfc2136.nameserver: 192.0.2.53:53
+      tls.dns01.rfc2136.tsigKeyName: cluster
+      tls.dns01.rfc2136.tsigAlgorithm: hmac-sha512
+    asserts:
+      - equal:
+          path: "spec.acme.solvers[0].dns01"
+          value:
+            rfc2136:
+              nameserver: 192.0.2.53:53
+              tsigKeyName: cluster
+              tsigAlgorithm: HMACSHA512
+              tsigSecretSecretRef: { name: rfc2136-tsig, key: secret }
+
+  - it: needs the name server for RFC 2136
+    template: issuer.yaml
+    set:
+      tls.dns01.provider: rfc2136
+    asserts:
+      - failedTemplate: { errorMessage: "tls.dns01.rfc2136.nameserver is required (host:port)" }
+
+  - it: refuses a DNS provider it doesn't know
+    template: issuer.yaml
+    set:
+      tls.dns01.provider: route53
+    asserts:
+      - failedTemplate: { errorMessage: 'tls.dns01.provider is cloudflare or rfc2136, not "route53"' }
+
   - it: needs an email for Let's Encrypt
     template: issuer.yaml
     set:
