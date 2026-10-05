@@ -41,13 +41,41 @@ describe("a stack of local services", () => {
     expect(stackValues({}, ports, 1)).toEqual({ POSTGRES_PORT: "55532" });
   });
 
+  it("moves the apps' own ports with the services', and every local URL that names one", () => {
+    expect(stackValues(example, example, 1)).toMatchObject({
+      WEB_PORT: "3100",
+      API_PORT: "3101",
+      WORKER_PORT: "3102",
+      NOTIFICATIONS_PORT: "3103",
+      WEBHOOKS_PORT: "3104",
+      MOBILE_WEB_PORT: "3105",
+      AI_PORT: "8100",
+      EMAIL_PREVIEW_PORT: "3130",
+      EXPO_PORT: "8181",
+      STORYBOOK_PORT: "6106",
+      STRIPE_FAKE_PORT: "12211",
+      // The site, its auth origin and the mobile app's API, the web server's upstreams,
+      // and the mobile web build's sign-in origin.
+      WEB_URL: "http://localhost:3100",
+      BETTER_AUTH_URL: "http://localhost:3100",
+      EXPO_PUBLIC_API_URL: "http://localhost:3100",
+      API_URL: "http://localhost:3101",
+      AI_URL: "http://localhost:8100",
+      APP_ORIGINS: "http://localhost:3105",
+    });
+    // The fake Stripe's URL, set by hand in .env, follows it too.
+    expect(stackValues({ STRIPE_API_URL: "http://127.0.0.1:12111" }, example, 1)).toMatchObject({
+      STRIPE_API_URL: "http://127.0.0.1:12211",
+    });
+  });
+
   it("refuses a stack that isn't 0 to 9", () => {
     for (const stack of [-1, 10, 1.5, Number.NaN]) {
       expect(() => stackValues({}, {}, stack)).toThrow("from 0 to 9");
     }
   });
 
-  it("keeps every port of every stack distinct, for the ports .env.example publishes", () => {
+  it("keeps every port of every stack distinct, for every port .env.example names", () => {
     const ports = Object.keys(defaultPorts(example));
     expect(ports).toContain("POSTGRES_PORT");
     const all = Array.from({ length: STACKS }, (_, stack) =>

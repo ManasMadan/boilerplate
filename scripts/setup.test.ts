@@ -81,7 +81,7 @@ describe("setup", () => {
       const paths = files("");
       writeFileSync(
         paths.examplePath,
-        "POSTGRES_PORT=55432\nDATABASE_URL=postgresql://localhost:55432/app\nAUTH_SECRET=change-me\n",
+        "POSTGRES_PORT=55432\nDATABASE_URL=postgresql://localhost:55432/app\nWEB_PORT=3000\nWEB_URL=http://localhost:3000\nAUTH_SECRET=change-me\n",
       );
       return { ...paths, forTests: join(dirname(paths.envPath), ".env.stack") };
     };
@@ -94,13 +94,17 @@ describe("setup", () => {
       const env = parseEnv(readFileSync(paths.envPath, "utf8"));
       expect(env.get("POSTGRES_PORT")).toBe("55532");
       expect(env.get("DATABASE_URL")).toBe("postgresql://localhost:55532/app");
+      // The apps' ports too, and the URLs that name them.
+      expect(env.get("WEB_PORT")).toBe("3100");
+      expect(env.get("WEB_URL")).toBe("http://localhost:3100");
       expect(env.get("COMPOSE_PROJECT_NAME")).toBe("app-stack1");
       expect(env.get("AUTH_SECRET")).not.toBe("change-me");
       // The tests get the ports and URLs, and no secret.
       expect(readFileSync(forTests, "utf8")).toBe(
-        "POSTGRES_PORT=55532\nDATABASE_URL=postgresql://localhost:55532/app\n",
+        "POSTGRES_PORT=55532\nWEB_PORT=3100\nDATABASE_URL=postgresql://localhost:55532/app\nWEB_URL=http://localhost:3100\n",
       );
       expect(printed()).toContain("Stack 1: compose project app-stack1, Postgres on 55532");
+      expect(printed()).toContain("the site on http://localhost:3100");
       expect(calls).toContain("bun scripts/services.ts up");
     });
 

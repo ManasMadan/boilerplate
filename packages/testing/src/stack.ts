@@ -1,7 +1,9 @@
 /**
- * A second (third, ...) copy of the local services for another checkout of this repo on
- * the same machine, such as a worktree an agent works in: its own compose project, so
- * its own containers and volumes, and every published port moved by 100 per stack.
+ * A second (third, ...) copy of the local services and apps for another checkout of this
+ * repo on the same machine, such as a worktree an agent works in: its own compose
+ * project, so its own containers and volumes, and every port moved by 100 per stack, the
+ * services' and the apps' (`WEB_PORT`, `API_PORT`, ...), so both checkouts can run
+ * `bun dev` and the e2e run at once.
  * `bun run setup --stack <n>` writes the stack's values into that checkout's .env, and
  * the same moves applied to .env.example into `.env.stack` (ports and local URLs, no
  * secrets), which the tests' environment lays over .env.example (environment.ts here,
@@ -15,7 +17,7 @@ export const STACK_FILE = ".env.stack";
 export const STACKS = 10;
 const STEP = 100;
 
-/** The published ports .env.example names (every `*_PORT`), with their defaults. */
+/** The ports .env.example names (every `*_PORT`, services' and apps'), with their defaults. */
 export function defaultPorts(example: Record<string, string>): Record<string, number> {
   return Object.fromEntries(
     Object.entries(example)

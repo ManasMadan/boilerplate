@@ -41,9 +41,9 @@ describe("the proxy", () => {
     const csp = first.headers.get("content-security-policy") ?? "";
     expect(getRedirectUrl(first)).toBeNull();
     expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'(;|$)/);
-    // Uploads go to object storage (STORAGE_ORIGIN in .env.example).
+    // Uploads go to object storage (STORAGE_ORIGIN in .env.example, moved by a stack).
     expect(csp).toContain(
-      "connect-src 'self' https://challenges.cloudflare.com http://localhost:59000",
+      `connect-src 'self' https://challenges.cloudflare.com ${process.env.STORAGE_ORIGIN}`,
     );
     // A fresh nonce per request, handed to the page render.
     expect(second.headers.get("content-security-policy")).not.toBe(csp);
@@ -53,12 +53,13 @@ describe("the proxy", () => {
   });
 
   it("lets development's hot reloading eval, and leaves storage out when files are off", async () => {
+    const storage = String(process.env.STORAGE_ORIGIN);
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("STORAGE_ORIGIN", "");
     const { proxy: fresh } = await import("./proxy");
     const csp = fresh(request("/")).headers.get("content-security-policy") ?? "";
     expect(csp).toContain("'strict-dynamic' 'unsafe-eval'");
-    expect(csp).not.toContain("59000");
+    expect(csp).not.toContain(storage);
   });
 
   it.each([

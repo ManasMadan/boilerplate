@@ -4,10 +4,10 @@
  *
  *   bun run setup
  *   bun scripts/setup.ts --env   only .env (what `bun dev` runs first, after a pull)
- *   bun run setup --stack <n>    this checkout gets its own services (a worktree next to
- *                                another that runs them): compose project
- *                                `<name>-stack<n>`, every port 100 × n up (1 to 9;
- *                                0 goes back to the defaults). packages/testing/src/stack.ts
+ *   bun run setup --stack <n>    this checkout gets its own services and app ports (a
+ *                                worktree next to another that runs them): compose
+ *                                project `<name>-stack<n>`, every port 100 × n up (1 to
+ *                                9; 0 goes back to the defaults). packages/testing/src/stack.ts
  *
  * Safe to run again: existing .env values are kept; only missing variables are added
  * and placeholders are replaced.
@@ -81,7 +81,7 @@ export function useStack(stack: number, envPath: string, examplePath: string, pr
   }
   const env = readEnv(envPath);
   ok(
-    `Stack ${stack}: compose project ${env.get("COMPOSE_PROJECT_NAME")}, Postgres on ${env.get("POSTGRES_PORT")}, Valkey on ${env.get("VALKEY_PORT")}`,
+    `Stack ${stack}: compose project ${env.get("COMPOSE_PROJECT_NAME")}, Postgres on ${env.get("POSTGRES_PORT")}, Valkey on ${env.get("VALKEY_PORT")}, the site on ${env.get("WEB_URL")}`,
   );
 }
 
