@@ -148,6 +148,11 @@
       groupName: "python",
     },
     {
+      description: "Kubernetes: k3s on the clusters, kind's node image and the dev container's kubectl stay on one minor version (scripts/charts.test.ts)",
+      matchPackageNames: ["k3s-io/k3s", "kindest/node", "kubernetes/kubernetes"],
+      groupName: "kubernetes",
+    },
+    {
       description: "Trivy: the image scan and the configuration scan",
       matchPackageNames: ["aquasec/trivy", "aquasecurity/trivy"],
       groupName: "trivy",

@@ -248,6 +248,12 @@ describe("the Kubernetes version", () => {
     expect(kubectl).toBe(kubernetesVersion().split(".").slice(0, 2).join("."));
   });
 
+  it("is kind's node image, to the minor version", () => {
+    const kind = readFileSync(join(REPO, "deploy/local/kind.yaml"), "utf8");
+    const node = /image: kindest\/node:v(\d+\.\d+)\.\d+@sha256:[0-9a-f]{64}\n/.exec(kind)?.[1];
+    expect(node).toBe(kubernetesVersion().split(".").slice(0, 2).join("."));
+  });
+
   it("can't be read without a k3s release", () => {
     const root = mkdtempSync(join(tmpdir(), "charts-"));
     roots.push(root);
