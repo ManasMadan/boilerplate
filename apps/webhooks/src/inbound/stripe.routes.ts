@@ -8,12 +8,13 @@
  * billing (apps/api, via the relay) gets every event exactly once. Stripe expects an
  * answer within seconds, so nothing is processed here.
  */
-import { type Prisma, transaction } from "@repo/db";
+import { transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";
 import { rawBodies, sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import Stripe from "stripe";
 import { emitEvent } from "../outbox";
+import { jsonObject } from "./json";
 
 export function mountStripe(
   fastify: FastifyInstance,
@@ -46,9 +47,7 @@ export function mountStripe(
               provider: "stripe",
               providerEventId: event.id,
               type: event.type,
-              // Stripe events are plain JSON (they were parsed from it); Prisma's JSON input
-              // type just can't see that through the SDK's interfaces.
-              payload: event as unknown as Prisma.InputJsonObject,
+              payload: jsonObject.parse(event),
             },
           ],
           skipDuplicates: true,
@@ -64,7 +63,7 @@ export function mountStripe(
             inboundEventId: row.id,
             stripeEventId: event.id,
             type: event.type,
-            object: event.data.object as unknown as Record<string, unknown>,
+            object: jsonObject.parse(event.data.object),
           },
           { actorId: null, orgId: null },
         );

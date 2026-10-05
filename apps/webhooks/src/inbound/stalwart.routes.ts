@@ -20,11 +20,12 @@
  * Stalwart retries is harmless. Like Stripe's route: raw body, events and outbox rows in
  * one transaction, nothing processed here.
  */
-import { type Prisma, transaction } from "@repo/db";
+import { transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";
 import { rawBodies, sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import { emitEvent } from "../outbox";
+import { jsonObject } from "./json";
 import {
   bouncedAddress,
   eventKey,
@@ -68,7 +69,7 @@ async function record(database: Database, events: StalwartEvent[]) {
         provider: "stalwart",
         providerEventId: key,
         type: event.type,
-        payload: event as Prisma.InputJsonObject,
+        payload: jsonObject.parse(event),
       })),
       skipDuplicates: true,
       select: { providerEventId: true },
