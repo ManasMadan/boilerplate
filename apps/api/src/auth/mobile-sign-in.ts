@@ -35,6 +35,43 @@ const key = (id: string) => `auth:mobile-handoff:${id}`;
 const stored = z.object({ secret: z.string(), cookie: z.string().optional() });
 const handoffId = z.string().regex(/^[\w-]{43}$/);
 
+type AfterHook = NonNullable<NonNullable<BetterAuthPlugin["hooks"]>["after"]>[number];
+
+/** After a social sign-in's callback: keeps its session under the hand-off its link names. */
+function keepForHandoff(redis: Redis): AfterHook {
+  return {
+    matcher: (context) => context.path?.startsWith("/callback") === true,
+    handler: createAuthMiddleware(async (ctx) => {
+      // Only a sign-in that made a session has one to hand over (a refused or failed
+      // one redirects too, with an error).
+      const headers = ctx.context.responseHeaders;
+      const target = URL.parse(String(headers?.get("location")));
+      const cookie = headers?.get("set-cookie");
+      if (!ctx.context.newSession || !target) {
+        return;
+      }
+      if (target.protocol === "http:" || target.protocol === "https:") {
+        return;
+      }
+      const id = handoffId.safeParse(target.searchParams.get("handoff"));
+      if (!id.success) {
+        return;
+      }
+      const record = stored.safeParse(JSON.parse((await redis.get(key(id.data))) ?? "null"));
+      if (!record.success) {
+        return;
+      }
+      await redis.set(
+        key(id.data),
+        JSON.stringify({ ...record.data, cookie }),
+        "EX",
+        HANDOFF_SECONDS,
+        "XX",
+      );
+    }),
+  };
+}
+
 export function mobileSignIn(redis: Redis) {
   const base = expo();
   const failed = () =>
@@ -46,31 +83,7 @@ export function mobileSignIn(redis: Redis) {
   return {
     ...base,
     hooks: {
-      after: [
-        {
-          matcher: (context) => context.path?.startsWith("/callback") === true,
-          handler: createAuthMiddleware(async (ctx) => {
-            // Only a sign-in that made a session has one to hand over (a refused or failed
-            // one redirects too, with an error).
-            const headers = ctx.context.responseHeaders;
-            const target = URL.parse(String(headers?.get("location")));
-            const cookie = headers?.get("set-cookie");
-            if (!ctx.context.newSession || !target) return;
-            if (target.protocol === "http:" || target.protocol === "https:") return;
-            const id = handoffId.safeParse(target.searchParams.get("handoff"));
-            if (!id.success) return;
-            const record = stored.safeParse(JSON.parse((await redis.get(key(id.data))) ?? "null"));
-            if (!record.success) return;
-            await redis.set(
-              key(id.data),
-              JSON.stringify({ ...record.data, cookie }),
-              "EX",
-              HANDOFF_SECONDS,
-              "XX",
-            );
-          }),
-        },
-      ],
+      after: [keepForHandoff(redis)],
     },
     endpoints: {
       ...base.endpoints,
@@ -97,9 +110,13 @@ export function mobileSignIn(redis: Redis) {
           const record = stored.safeParse(
             JSON.parse((await redis.getdel(key(ctx.body.id))) ?? "null"),
           );
-          if (!record.success || !record.data.cookie) throw failed();
+          if (!record.success || !record.data.cookie) {
+            throw failed();
+          }
           const expected = Buffer.from(record.data.secret, "base64url");
-          if (!timingSafeEqual(expected, digest(ctx.body.secret))) throw failed();
+          if (!timingSafeEqual(expected, digest(ctx.body.secret))) {
+            throw failed();
+          }
           // The callback's cookies, as one header: the app's client reads them from it.
           ctx.setHeader("set-cookie", record.data.cookie);
           return ctx.json({ status: true });
