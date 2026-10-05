@@ -240,6 +240,68 @@ describe("deploy.yml", () => {
   it("signs keylessly otherwise", () => {
     expect(merge?.run).toContain('cosign sign --yes "$REGISTRY/$image@$digest"');
   });
+
+  describe("every image docker-bake.hcl builds", () => {
+    const bake = readFileSync(join(ROOT, "docker-bake.hcl"), "utf8");
+    const targets = JSON.parse(
+      /group "default" \{\s*targets = (\[[^\]]*\])/.exec(bake)?.[1] ?? "[]",
+    ) as string[];
+    const { env } = workflow("deploy.yml") as Workflow & { env: Record<string, string> };
+    type Matrix = Job & { strategy: { matrix: Record<string, string[]> } };
+    const build = jobs.build as Matrix;
+    const attest = jobs.attest as Matrix | undefined;
+    const steps = attest?.steps ?? [];
+    const using = (action: string) => steps.filter((s) => s.uses?.startsWith(`${action}@`));
+
+    it("is built, merged and signed", () => {
+      expect(targets.length).toBe(7);
+      expect(build.strategy.matrix.image).toEqual(targets);
+      // The merge-and-sign loop runs over $IMAGES, and hands each digest on to attest.
+      expect(env.IMAGES?.split(" ")).toEqual(targets);
+      expect(merge?.run).toContain("for image in $IMAGES; do");
+      const outputs = (jobs.publish as Job & { outputs: Record<string, string> }).outputs;
+      for (const image of targets) {
+        expect(outputs[image]).toBe(`\${{ steps.merge.outputs.${image} }}`);
+      }
+    });
+
+    it("gets build provenance on its multi-arch digest", () => {
+      expect(attest?.strategy.matrix.image).toEqual(targets);
+      expect(attest?.needs).toBe("publish");
+      expect(using("actions/attest-build-provenance").map((s) => s.with)).toEqual([
+        {
+          "subject-name": `\${{ env.REGISTRY }}/\${{ matrix.image }}`,
+          "subject-digest": `\${{ needs.publish.outputs[matrix.image] }}`,
+          "push-to-registry": true,
+        },
+      ]);
+    });
+
+    it("gets an SBOM for each platform it's built for, attested to that platform's digest", () => {
+      const arches = build.strategy.matrix.arch ?? [];
+      expect(arches).toEqual(["amd64", "arm64"]);
+      const find = steps.find((s) => s.name === "Find each platform's digest");
+      expect(find?.run).toContain(`for arch in ${arches.join(" ")}; do`);
+      const sboms = using("anchore/sbom-action");
+      const attested = using("actions/attest-sbom");
+      expect(sboms.length).toBe(arches.length);
+      expect(attested.length).toBe(arches.length);
+      for (const [i, arch] of arches.entries()) {
+        const digest = `\${{ steps.digests.outputs.${arch} }}`;
+        expect(sboms[i]?.with?.image).toBe(`\${{ env.REGISTRY }}/\${{ matrix.image }}@${digest}`);
+        expect(attested[i]?.with).toEqual({
+          "subject-name": `\${{ env.REGISTRY }}/\${{ matrix.image }}`,
+          "subject-digest": digest,
+          "sbom-path": sboms[i]?.with?.["output-file"],
+          "push-to-registry": true,
+        });
+      }
+    });
+
+    it("reaches staging only once it's attested", () => {
+      expect(jobs.staging?.needs).toEqual(["publish", "attest"]);
+    });
+  });
 });
 
 describe("the GitHub-only parts", () => {

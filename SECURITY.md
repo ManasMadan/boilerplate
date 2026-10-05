@@ -19,6 +19,6 @@ Only the latest release and master get security fixes.
 
 Every change is scanned for leaked secrets (gitleaks), vulnerable or disallowed-license
 dependencies (dependency review, OSV) and code issues (CodeQL); images are scanned by
-Trivy, signed with cosign and shipped with SBOM and provenance attestations. Tenant data
-is isolated by forced row-level security, and each service connects as its own
-least-privileged database role.
+Trivy, signed with cosign and shipped with provenance attestations and an SBOM per
+platform. Tenant data is isolated by forced row-level security, and each service
+connects as its own least-privileged database role.

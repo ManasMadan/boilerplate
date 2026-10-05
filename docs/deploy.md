@@ -61,8 +61,10 @@ rollback.
 1. builds every image for amd64 and arm64 and pushes them to
    `ghcr.io/manasmadan/boilerplate/<image>:sha-<commit>`;
 2. merges them into multi-arch tags, signs each with cosign and attaches build
-   provenance and an SBOM; production's image policy admits only images this workflow
-   signed on `master`. Signing is keyless by default: production's admission then checks
+   provenance to it, and an SBOM to each of its platform images (one per architecture,
+   since an SBOM describes one platform's files); staging deploys only once every image
+   has them. Production's image policy admits only images this workflow signed on
+   `master`. Signing is keyless by default: production's admission then checks
    signatures against Sigstore's public transparency log (`rekor.sigstore.dev`), so an
    outage there stops new pods from starting. To depend on nothing public, sign with a
    key pair instead: `cosign generate-key-pair`, the private key and its password as the
