@@ -108,7 +108,7 @@ export function suitesFor(files: string[], root = ROOT): Suite[] {
     suites.push({
       cwd: root,
       // Paths, not names: `bun test` treats a bare word as a filter and skips dot folders.
-      command: ["bun", "test", "--coverage", "./scripts/", "./.claude/hooks/"],
+      command: ["bun", "--no-env-file", "test", "--coverage", "./scripts/", "./.claude/hooks/"],
       lcov: "coverage/bun/lcov.info",
       owns: BUN_SUITE,
     });

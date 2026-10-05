@@ -57,7 +57,8 @@ export function checksFor(changed: string[]): Check[] {
   if (scripts || hooks || changed.some((file) => UNIT_TESTED.test(file))) {
     checks.push({
       label: "unit tests and the coverage of the changed lines",
-      command: ["bun", "scripts/unit-coverage.ts"],
+      // Without the checkout's .env, which Bun would load and every suite inherit.
+      command: ["bun", "--no-env-file", "scripts/unit-coverage.ts"],
     });
   }
   // The edit hook sees only Edit and Write; this catches a suppression a shell command wrote.
