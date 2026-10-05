@@ -59,6 +59,7 @@ function context(
     areas: { ...none, app: true },
     breaking: undefined,
     suites: 3,
+    skipped: new Set(),
     clamd: async () => ({
       url: "tcp://127.0.0.1:9",
       close: async () => {
@@ -109,6 +110,140 @@ describe("every CI job that can block a pull request", () => {
   });
 });
 
+/**
+ * Every step of every job the hook mirrors, by its name (or its command, or its action), and
+ * what stands for it here: a pre-push step, or "setup: …" for what only prepares a CI
+ * runner. A step added to one of these jobs fails the test below until it's mirrored too.
+ */
+const COUNTERPARTS: Record<string, Record<string, string>> = {
+  "ci.yml:lint": { "bun run lint": "lint" },
+  "ci.yml:types": { "bun run check-types": "types", "bun run type-coverage": "type coverage" },
+  "ci.yml:unit": {
+    "bun run test": "coverage",
+    "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts scripts .claude/hooks":
+      "coverage",
+  },
+  "ci.yml:components": {
+    "Install the browser": "setup: Playwright's Chromium, already on a developer's machine",
+    "Every story renders, passes its play function and axe, in both themes": "coverage",
+    "Screenshots match the baselines": "screenshots",
+  },
+  "ci.yml:integration": {
+    "The day, for the signatures' cache key": "setup: a cache key",
+    "Start object storage and virus scanning": "services",
+    "Start Valkey": "services",
+    "Bootstrap database roles": "setup: infra/postgres/init, when compose creates the database",
+    "Apply migrations": "migrations match the schema",
+    "Migrations match the Prisma schema": "migrations match the schema",
+    "Wait for storage and clamd, and create the bucket": "services",
+    "Start the mail server": "mail server",
+    "Install Chromium": "setup: Playwright's Chromium, already on a developer's machine",
+    "Tests with coverage": "coverage",
+    "The repo's scripts and Claude Code hooks, with coverage": "coverage",
+  },
+  "ci.yml:e2e": {
+    "The day, for the signatures' cache key": "setup: a cache key",
+    "Start object storage and virus scanning": "services",
+    "Bootstrap database roles": "setup: infra/postgres/init, when compose creates the database",
+    "bun run db:deploy": "e2e",
+    "Generate throwaway secrets": "e2e",
+    "Install the browser": "setup: Playwright's Chromium, already on a developer's machine",
+    "Wait for storage and clamd, and create the bucket": "services",
+    "Run the end-to-end suite": "e2e",
+    "Bundle budget": "e2e",
+    "Restore drill": "e2e",
+  },
+  "ci.yml:python": {
+    "uv run ruff check .": "lint",
+    "uv run ruff format --check .": "lint",
+    "uv run basedpyright": "types",
+    "uv run pytest": "coverage",
+    Evals: "evals",
+    "Bootstrap database roles and migrate":
+      "setup: infra/postgres/init and the suites' own migration",
+    "All tests with coverage": "coverage",
+  },
+  "ci.yml:codegen": {
+    "bun run gen": "generated code",
+    "Fail if generation changed or added files": "generated code",
+  },
+  "ci.yml:api-compat": {
+    "Breaking changes": "API compatibility",
+    "Event compatibility": "API compatibility",
+  },
+  "ci.yml:migrations": { "bun run db:lint": "migration safety" },
+  "ci.yml:charts": {
+    "Install helm-unittest": "setup: the developer's helm plugin (charts:check says how to add it)",
+    "bun run charts:check": "charts",
+  },
+  "ci.yml:infra": { "bun run infra:check": "infra" },
+  "ci.yml:generators": {
+    "Bootstrap database roles": "setup: infra/postgres/init, when compose creates the database",
+    "bun run db:deploy": "setup: the feature's integration test migrates its own template",
+    "bun scripts/generators.ts --in-place": "generators",
+  },
+  "ci.yml:coverage": {
+    "Every file at 100%": "coverage",
+    "Every changed line covered": "coverage",
+  },
+  "security.yml:codeql": {
+    "github/codeql-action/init": "codeql",
+    "github/codeql-action/analyze": "codeql",
+  },
+  "security.yml:secrets": { "gitleaks/gitleaks-action": "secrets" },
+  "security.yml:dependencies": { "actions/dependency-review-action": "dependency licenses" },
+  "security.yml:osv": {
+    "google/osv-scanner-action/osv-scanner-action": "known vulnerabilities",
+    "github/codeql-action/upload-sarif": "setup: sends the findings to the Security tab",
+  },
+};
+
+/** What only sets a runner up: the toolchain, caches, artifacts. */
+const RUNNER_SETUP =
+  /^(step-security\/harden-runner|actions\/(checkout|cache|upload-artifact|download-artifact)|\.\/\.github\/actions\/(setup|free-disk)|azure\/setup-helm|opentofu\/setup-opentofu)@?/;
+
+describe("every step of a job the hook mirrors", () => {
+  type CiStep = { name?: string; run?: string; uses?: string };
+  const steps = (file: string, job: string) => {
+    const parsed = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as {
+      jobs: Record<string, { steps?: CiStep[] }>;
+    };
+    return (parsed.jobs[job]?.steps ?? [])
+      .filter((s) => !s.uses || !RUNNER_SETUP.test(s.uses))
+      .map((s) => s.name ?? s.run?.trim().split("\n")[0] ?? s.uses?.split("@")[0] ?? "");
+  };
+  const mirrored = [...new Set(STEPS.flatMap((s) => s.jobs))];
+
+  it("has a counterpart here, named in COUNTERPARTS", () => {
+    const missing = mirrored.flatMap((id) => {
+      const [file = "", job = ""] = id.split(":");
+      return steps(file, job)
+        .filter((name) => !COUNTERPARTS[id]?.[name])
+        .map((name) => `${id}: ${name}`);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it("is listed only as it exists, against a step that exists", () => {
+    const names = new Set(STEPS.map((s) => s.name));
+    for (const [id, counterparts] of Object.entries(COUNTERPARTS)) {
+      const [file = "", job = ""] = id.split(":");
+      expect({ id, steps: Object.keys(counterparts).sort() }).toEqual({
+        id,
+        steps: [...new Set(steps(file, job))].sort(),
+      });
+      for (const local of Object.values(counterparts)) {
+        expect({ id, local, known: local.startsWith("setup: ") || names.has(local) }).toEqual({
+          id,
+          local,
+          known: true,
+        });
+      }
+    }
+    expect(Object.keys(COUNTERPARTS).sort()).toEqual(mirrored.sort());
+  });
+});
+
 describe("the steps", () => {
   it("have distinct names, and need only steps listed before them", () => {
     const names = STEPS.map((s) => s.name);
@@ -127,6 +262,10 @@ describe("the steps", () => {
         "bun scripts/services.ts up",
         "docker compose --profile files up -d --wait rustfs",
       ],
+      "mail server": [
+        "bun scripts/services.ts up --mail",
+        "docker compose --profile mail run --rm stalwart-init",
+      ],
       secrets: ["bun scripts/secret-scan.ts --range=abc..HEAD"],
       "migration safety": ["bun run db:lint"],
       charts: ["bun run charts:check"],
@@ -144,6 +283,17 @@ describe("the steps", () => {
       expect(await step(name).run(ctx)).toBe(true);
       expect({ name, calls }).toEqual({ name, calls: commands });
     }
+  });
+
+  it("point the coverage suites at the mail server, as CI's integration job does, when it runs", async () => {
+    const withMail = context();
+    await step("coverage").run(withMail.ctx);
+    expect(withMail.options[0]?.env?.STALWART_URL).toBe(
+      jobEnv("ci.yml", "integration").STALWART_URL,
+    );
+    const without = context(undefined, { skipped: new Set(["mail server"]) });
+    await step("coverage").run(without.ctx);
+    expect(without.options[0]?.env).toEqual({});
   });
 
   it("fail when their command does", async () => {

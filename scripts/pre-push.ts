@@ -51,6 +51,8 @@ export interface Context {
   breaking: string | undefined;
   /** How many coverage suites run at once (turbo's --concurrency). */
   suites: number;
+  /** The steps this run skips. */
+  skipped: Set<string>;
   clamd: (url: string) => Promise<Clamd>;
   exec: Exec;
   log: (text: string) => void;
@@ -345,6 +347,22 @@ async function licenses(ctx: Context) {
 }
 
 /**
+ * CI's unit, components, integration, python and coverage jobs: every suite of what the
+ * push affects. With the mail server up, the real mail path's suites run too, pointed at it
+ * the way CI's integration job points them (they're skipped without it).
+ */
+function coverage(ctx: Context) {
+  const mail = ctx.skipped.has("mail server")
+    ? {}
+    : Object.fromEntries(
+        Object.entries(jobEnv("ci.yml", "integration", ctx.root)).filter(([key]) =>
+          key.startsWith("STALWART_"),
+        ),
+      );
+  return passes(ctx, "bun", ["scripts/push-coverage.ts", `--concurrency=${ctx.suites}`], mail);
+}
+
+/**
  * Every step, in the order they start when they can: what the others need, the quick
  * checks (seconds: a failure stops the push early), the coverage suites (the longest lane,
  * so it starts early), the few-minute checks, then the rest. `memory` and `docker` are
@@ -379,6 +397,17 @@ export const STEPS: Step[] = [
     run: async (ctx) =>
       (await passes(ctx, "bun", ["scripts/services.ts", "up"])) &&
       passes(ctx, "docker", ["compose", "--profile", "files", "up", "-d", "--wait", "rustfs"]),
+  },
+  {
+    name: "mail server",
+    jobs: [],
+    areas: ["app"],
+    keep: true,
+    memory: 0.2,
+    docker: 0.3,
+    run: async (ctx) =>
+      (await passes(ctx, "bun", ["scripts/services.ts", "up", "--mail"])) &&
+      passes(ctx, "docker", ["compose", "--profile", "mail", "run", "--rm", "stalwart-init"]),
   },
   {
     name: "secrets",
@@ -439,11 +468,11 @@ export const STEPS: Step[] = [
       "ci.yml:coverage",
     ],
     areas: ["app", "scripts"],
-    needs: ["generated code", "services"],
+    needs: ["generated code", "services", "mail server"],
     lane: "valkey",
     cores: 4,
     memory: 6,
-    run: (ctx) => passes(ctx, "bun", ["scripts/push-coverage.ts", `--concurrency=${ctx.suites}`]),
+    run: coverage,
   },
   {
     name: "lint",
@@ -499,7 +528,7 @@ export const STEPS: Step[] = [
     areas: ["app"],
     needs: ["generated code", "services"],
     lane: "valkey",
-    cores: 4,
+    cores: 3,
     memory: 4,
     run: (ctx) => passes(ctx, "bun", ["scripts/generators.ts"]),
   },
@@ -820,7 +849,8 @@ export async function prePush(given: Partial<typeof MACHINE> = {}): Promise<numb
   // two at a time is what a 2 GB Docker holds without timing-sensitive tests turning flaky.
   const suites = Math.max(1, Math.min(room.cores, Math.floor((docker.total || 0) / GB)));
   const touched = areas(push.files);
-  const shared = { root, ...push, areas: touched, suites, clamd };
+  const skipped = skips(touched, push.files, env.PRE_PUSH_SKIP);
+  const shared = { root, ...push, areas: touched, suites, clamd, skipped: new Set(skipped.keys()) };
   const interrupted = new AbortController();
   onInterrupt(() => interrupted.abort());
   const stoppable: typeof spawnExec = (signal, log) =>
@@ -828,7 +858,6 @@ export async function prePush(given: Partial<typeof MACHINE> = {}): Promise<numb
   console.log(
     `Pre-push: ${push.files.length} files changed since ${push.base.slice(0, 12)}, ${room.cores} cores and ${room.memory.toFixed(0)} GB for the steps`,
   );
-  const skipped = skips(touched, push.files, env.PRE_PUSH_SKIP);
   const results = await schedule(STEPS, skipped, room, launcher(shared, room, stoppable));
   summary(results);
   const failed = results.find((result) => result.status === "failed");

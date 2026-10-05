@@ -60,7 +60,7 @@ with the job's own commands:
 | `uv sync --locked`, then `bun run gen` and nothing changed or added | setup, codegen | every push; codegen for the app |
 | `bun run lint` | lint | every push |
 | `bun run check-types`, `bun run type-coverage` | types | the app |
-| `bun scripts/push-coverage.ts`: every suite of the affected packages (unit, integration, browser, mobile, Python), the scripts' and hooks', every file under them at 100%, then diff-cover on the changed lines | unit, components, integration, python, coverage | the app or the scripts |
+| `bun scripts/push-coverage.ts`: every suite of the affected packages (unit, integration, browser, mobile, Python), the scripts' and hooks', every file under them at 100%, then diff-cover on the changed lines; with Stalwart up (`services.ts up --mail`), the real mail path's suites too | unit, components, integration, python, coverage | the app or the scripts |
 | `bun run --cwd packages/ui test:visual` (the screenshots) | components | the app |
 | the migrations applied to an empty database, then `bun run --cwd packages/db drift` | integration | the app |
 | `uv run python -m evals` in `apps/ai`, with the local stand-ins | python | the app |
@@ -89,7 +89,7 @@ fails; the first failure stops the other steps, and the summary names it, with e
 step's time. A step can be left out with `PRE_PUSH_SKIP=<step>,<step>` (the summary says
 so; CI still runs it).
 
-What needs Docker: the core services and RustFS, which it starts itself (ClamAV comes from
+What needs Docker: the core services, RustFS and Stalwart, which it starts itself (ClamAV comes from
 the stand-in in `@repo/testing/fake-clamd` when it isn't running; CI runs the real one), and
 the screenshots, whose browser container needs 1.5 GB of Docker's memory free. The
 end-to-end step builds and starts the whole stack on its usual ports, so it fails while
@@ -107,7 +107,8 @@ accounts' secrets), the pull request title (the commit-msg hook checks every com
 header), the nightly evals against a real model, the misconfiguration scan (it only
 reports), the Claude review and the preview environments. `scripts/pre-push.test.ts`
 fails when a workflow that can block a pull request gains a job that is neither run by a
-step nor listed there.
+step nor listed there, and when a job the hook mirrors gains a step that its
+`COUNTERPARTS` table doesn't map to a pre-push step (or to runner setup).
 
 ## Unit
 
