@@ -65,7 +65,10 @@ class Hub<S extends z.ZodType> {
   }
 
   /** Messages on these channels until `signal` aborts. */
-  async *stream(channels: string[], signal: AbortSignal): AsyncGenerator<z.infer<S>> {
+  async *stream(
+    channels: string[],
+    signal: AbortSignal,
+  ): AsyncGenerator<z.infer<S>, void, unknown> {
     const buffer: z.infer<S>[] = [];
     let wake: (() => void) | undefined;
     const onMessage = (message: z.infer<S>) => {
