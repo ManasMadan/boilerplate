@@ -4,7 +4,6 @@
  * prefix leaves, a breached password is refused, and while the service is down
  * sign-ups fail rather than let a password through unchecked.
  */
-import { createHash } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createSession, type Harness, newEmail, newPassword, startApi } from "./harness";
 
@@ -32,7 +31,16 @@ function pwnedPasswords(answer: (prefix: string) => Response) {
   return asked;
 }
 
-const sha1 = (text: string) => createHash("sha1").update(text).digest("hex").toUpperCase();
+/**
+ * A fixed password and its SHA-1, worked out once (`printf %s ... | shasum`): HIBP's range
+ * API is SHA-1 by design. A known pair, not a hash computed here, so the test states the
+ * exact prefix that leaves and suffix that matches.
+ */
+const KNOWN = {
+  password: "Pw-breach-check-test-vector",
+  prefix: "609F9",
+  suffix: "DBD5D99C18CDF4FDCEA96F2F05570BECA2C",
+};
 const signUp = (password: string) =>
   createSession(harness).auth<{ code?: string }>("/sign-up/email", {
     email: newEmail(),
@@ -42,16 +50,14 @@ const signUp = (password: string) =>
 
 describe("the breached-password check", () => {
   it("sends only the hash's first five characters, and lets a clean password through", async () => {
-    const password = newPassword();
     const asked = pwnedPasswords(() => new Response("0000000000000000000000000000000000A:3\n"));
-    expect((await signUp(password)).status).toBe(200);
-    expect(asked).toEqual([sha1(password).slice(0, 5)]);
+    expect((await signUp(KNOWN.password)).status).toBe(200);
+    expect(asked).toEqual([KNOWN.prefix]);
   });
 
   it("refuses a password found in a breach", async () => {
-    const password = newPassword();
-    pwnedPasswords(() => new Response(`${sha1(password).slice(5)}:12\n`));
-    const refused = await signUp(password);
+    pwnedPasswords(() => new Response(`${KNOWN.suffix}:12\n`));
+    const refused = await signUp(KNOWN.password);
     expect(refused.status).toBe(400);
     expect(refused.body?.code).toBe("PASSWORD_COMPROMISED");
   });
