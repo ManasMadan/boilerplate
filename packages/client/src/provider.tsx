@@ -4,15 +4,21 @@
  *   <ApiProvider options={{ appVersion }} onUnauthenticated={() => router.replace("/sign-in")}>
  *
  * Global behaviour lives here, once:
- * - any UNAUTHENTICATED error (session expired, signed out elsewhere, revoked) clears
- *   every cached query, so no previous user's data stays on screen, and calls
- *   `onUnauthenticated`;
+ * - any UNAUTHENTICATED error (session expired, signed out elsewhere, revoked) empties
+ *   every cached query, so no previous user's data stays on screen, without refetching
+ *   the ones still mounted, and calls `onUnauthenticated`;
  * - CLIENT_OUTDATED calls `onOutdated` (show "please update");
  * - NO_ACTIVE_ORGANIZATION (the active workspace was deleted, or the user was removed
  *   from it) calls `onNoOrganization`, where the app switches to another workspace;
  * - retries only errors that can succeed on retry (network, 5xx), never 4xx.
  */
-import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  type Query,
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { createContext, type ReactNode, use, useState } from "react";
 import { type ApiClient, type ApiClientOptions, type ApiUtils, createApiClient } from "./client";
 import { errorCode } from "./errors";
@@ -42,10 +48,10 @@ export function ApiProvider({
   children,
 }: ApiProviderProps) {
   const [value] = useState<ApiContextValue & { queryClient: QueryClient }>(() => {
-    const handle = (error: unknown) => {
+    const handle = (error: unknown, failed?: Query<unknown, unknown, unknown>) => {
       const code = errorCode(error);
       if (code === "UNAUTHENTICATED") {
-        queryClient.clear();
+        forgetSession(queryClient, failed);
         void onUnauthenticated?.();
       } else if (code === "CLIENT_OUTDATED") {
         onOutdated?.();
@@ -54,8 +60,8 @@ export function ApiProvider({
       }
     };
     const queryClient: QueryClient = new QueryClient({
-      queryCache: new QueryCache({ onError: handle }),
-      mutationCache: new MutationCache({ onError: handle }),
+      queryCache: new QueryCache({ onError: (error, query) => handle(error, query) }),
+      mutationCache: new MutationCache({ onError: (error) => handle(error) }),
       defaultOptions: {
         queries: {
           staleTime: 30_000,
@@ -72,6 +78,20 @@ export function ApiProvider({
       <ApiContext value={value}>{children}</ApiContext>
     </QueryClientProvider>
   );
+}
+
+/**
+ * Empties every cached answer. Not with `queryClient.clear()`: a query still on screen
+ * would build a fresh entry and refetch at once, fail the same way and clear again, over
+ * and over until the app had navigated away. Emptied in place, a query waits for its
+ * next mount or focus to ask again; the one that failed keeps its error.
+ */
+function forgetSession(queryClient: QueryClient, failed?: Query<unknown, unknown, unknown>) {
+  for (const query of queryClient.getQueryCache().getAll()) {
+    if (query === failed) query.setState({ ...query.state, data: undefined });
+    else query.reset();
+  }
+  queryClient.getMutationCache().clear();
 }
 
 /** The typed client and query utilities. Hooks in `api/*` use this; apps rarely need it. */

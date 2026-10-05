@@ -23,6 +23,14 @@ describe("the app's providers", () => {
     await expect.poll(() => commands.answeredRequests("/api/auth/sign-out")).toBeGreaterThan(1);
     expect(currentUrl()).toBe("/sign-in");
     expect(await commands.hardNavigations()).toEqual([]);
+    // Nothing navigates the page's queries away, and they stop asking anyway: no API
+    // call is answered while a request of the test's own goes out and back.
+    const callsDuringARoundTrip = async () => {
+      const before = await commands.answeredRequests("/rpc/");
+      await currentSession();
+      return (await commands.answeredRequests("/rpc/")) - before;
+    };
+    await expect.poll(callsDuringARoundTrip).toBe(0);
   });
 
   it("reload the page when the API asks for a newer app", async () => {

@@ -4,8 +4,17 @@ import { Component, type ReactNode } from "react";
 import { create } from "react-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../test/stand-in";
+import { useSystemInfoQuery } from "./api/system/info";
 import { useMeQuery } from "./api/user/me";
 import { useApi } from "./provider";
+
+const info = {
+  release: "1.4.0",
+  features: { ai: true, billing: false, captcha: false, files: true, google: false },
+  minimumClientVersion: "1.0.0",
+  captchaSiteKey: null,
+  webPushPublicKey: null,
+};
 
 const me = {
   id: id(1),
@@ -57,10 +66,42 @@ describe("ApiProvider", () => {
     signedIn = false;
     void result.current.me.refetch();
     await vi.waitFor(() => expect(onUnauthenticated).toHaveBeenCalled());
-    // Cleared, then refetched by the still-mounted query: the app navigates away here.
     unmount();
     const cached = result.current.queryClient.getQueriesData({ queryKey: [] });
     expect(cached.map(([, data]) => data)).not.toContainEqual(me);
+  });
+
+  it("stops asking once signed out, while the app is still on the page", async () => {
+    let signedIn = true;
+    const api = standIn((os) => ({
+      user: {
+        me: os.user.me.handler(() => {
+          if (!signedIn) throw new ORPCError("UNAUTHENTICATED");
+          return me;
+        }),
+      },
+      system: { info: os.system.info.handler(() => info) },
+    }));
+    // A navigation that never finishes: the queries on this page stay mounted.
+    const onUnauthenticated = vi.fn();
+    const { result } = renderHook(
+      () => ({ me: useMeQuery(), info: useSystemInfoQuery(), api: useApi() }),
+      api,
+      { onUnauthenticated },
+    );
+    await vi.waitFor(() => expect(result.current.info.data).toEqual(info));
+    await vi.waitFor(() => expect(result.current.me.data).toEqual(me));
+
+    signedIn = false;
+    void result.current.me.refetch();
+    await vi.waitFor(() => expect(result.current.me.error).toBeInstanceOf(ORPCError));
+    // A round trip after the failure, by which time a refetch would have gone out.
+    await result.current.api.client.system.info();
+    expect(api.calls).toEqual(["user/me", "system/info", "user/me", "system/info"]);
+    expect(onUnauthenticated).toHaveBeenCalledOnce();
+    // Nothing from the session is left on screen, the query that failed still says why.
+    expect(result.current.me.data).toBeUndefined();
+    expect(result.current.info.data).toBeUndefined();
   });
 
   it("asks for an update when the API no longer supports this version", async () => {
@@ -84,14 +125,15 @@ describe("ApiProvider", () => {
   });
 
   it("handles these errors without callbacks, and ignores other errors", async () => {
-    for (const code of ["CLIENT_OUTDATED", "NO_ACTIVE_ORGANIZATION", "FORBIDDEN"]) {
+    for (const code of [
+      "CLIENT_OUTDATED",
+      "NO_ACTIVE_ORGANIZATION",
+      "FORBIDDEN",
+      "UNAUTHENTICATED",
+    ]) {
       const { result } = renderHook(() => useMeQuery(), failing(code));
       await vi.waitFor(() => expect(result.current.error).toBeInstanceOf(ORPCError));
     }
-    const signedOut = failing("UNAUTHENTICATED");
-    const { unmount } = renderHook(() => useMeQuery(), signedOut);
-    await vi.waitFor(() => expect(signedOut.calls.length).toBeGreaterThan(1));
-    unmount();
   });
 
   it("retries a failure that can pass on retry, twice, and never a refusal", async () => {
