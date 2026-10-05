@@ -33,7 +33,8 @@ UI 56686); the Stalwart mail server (`bun run db:up:mail`, and in `full`): submi
 webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and Expo's bundler
 8081. On demand: fake Stripe 12111 (`bun run stripe:fake`), the mobile web build 3005
 (`serve:web`, used by e2e), Storybook 6006. Those are the defaults: each is a `*_PORT` in
-`.env` (`WEB_PORT`, `API_PORT`, ...). Uploads stay off until `S3_BUCKET` is set,
+`.env` (`WEB_PORT`, `API_PORT`, ...), and nothing else may fix a local port
+(`scripts/ports.test.ts`). Uploads stay off until `S3_BUCKET` is set,
 and billing until the Stripe variables are (docs/files-and-billing.md), even with
 `dev:full`.
 
