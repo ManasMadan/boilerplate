@@ -244,15 +244,22 @@ async function endToEnd(ctx: Context) {
         [...readEnv(join(ctx.root, ".env.example")).keys()].map((key) => [key, ""]),
       );
       const ci = jobEnv("ci.yml", "e2e", ctx.root);
+      // A Valkey database of its own, emptied first like CI's fresh one: the dev stack's
+      // keeps rate limits and queues from earlier runs (docs/testing.md has the numbers).
+      const redis = new URL(local.REDIS_URL ?? "");
+      redis.pathname = "/21";
       const env = {
         ...unset,
         ...ci,
         ...local,
         ...database,
+        REDIS_URL: redis.toString(),
         CLAMAV_URL: clamd.url,
         NODE_ENV: "test",
       };
+      const valkey = ["compose", "exec", "-T", "valkey", "valkey-cli", "-n", "21", "flushdb"];
       return (
+        (await passes(ctx, "docker", valkey)) &&
         // Two Playwright workers, as on each CI runner: the local default of four, next to
         // the other steps, measures the machine rather than the app.
         (await passes(ctx, "bun", ["scripts/e2e.ts", "--workers=2"], env)) &&

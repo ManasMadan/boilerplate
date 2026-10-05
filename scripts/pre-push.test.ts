@@ -411,16 +411,17 @@ describe("the database steps", () => {
   it("run the e2e suite as CI's job does: its environment, this machine's ports", async () => {
     const { ctx, calls, options, closed } = context();
     expect(await step("e2e").run(ctx)).toBe(true);
-    expect(calls.slice(3, 6)).toEqual([
+    expect(calls.slice(3, 7)).toEqual([
+      "docker compose exec -T valkey valkey-cli -n 21 flushdb",
       "bun scripts/e2e.ts --workers=2",
       "bun run --cwd apps/web budget",
       `bun run db:restore-drill ${database}_e2e`,
     ]);
-    const env = options[3]?.env ?? {};
+    const env = options[4]?.env ?? {};
     expect(env.API_DATABASE_URL).toBe(
       `postgresql://app_api:app_api@localhost:55432/${database}_e2e`,
     );
-    expect(env.REDIS_URL).toBe("redis://localhost:56379");
+    expect(env.REDIS_URL).toBe("redis://localhost:56379/21");
     expect(env.S3_BUCKET).toBe("uploads");
     expect(env.STRIPE_SECRET_KEY).toBe("sk_test_ci");
     expect(env.GOOGLE_CLIENT_ID).toBe("");

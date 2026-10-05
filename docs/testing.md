@@ -155,8 +155,9 @@ shell, for one).
   Taken: the api's files 1 to 5, 7 to 10 and 13 (one per file, `startApi(<n>)`),
   webhooks 11, nest-common 12, notifications 14, worker 15, webhooks' Stalwart suite 16,
   the api's breached-password suite 17, the web's browser tests 18, jobs 19, the jobs
-  CLI's suite 20 (its worker fails every job on a real queue, so it shares with nothing)
-  and Python 6. A new suite takes the next free number, 21 onwards;
+  CLI's suite 20 (its worker fails every job on a real queue, so it shares with nothing),
+  Python 6 and the pre-push hook's end-to-end run 21 (emptied before each run). A new
+  suite takes the next free number, 22 onwards;
   `scripts/redis-databases.test.ts` fails when two suites that flush share one. A change
   to the flag needs the local container recreated (`docker compose up -d valkey`).
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker

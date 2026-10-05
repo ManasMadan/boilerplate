@@ -2,16 +2,20 @@
  * Every integration suite has a Valkey logical database of its own, because they run at
  * the same time and flush theirs when they start: two suites sharing a number delete
  * each other's queues and sessions mid-run. A package's files may share its number only
- * when none of them flushes (the api's harness does, so each api file has its own).
+ * when none of them flushes (the api's harness does, so each api file has its own). The
+ * pre-push hook's end-to-end run (scripts/pre-push.ts) takes one too, and empties it first.
  */
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
-const files = Bun.spawnSync(["git", "ls-files", "apps/*/test/*", "packages/*/test/*"], {
-  cwd: ROOT,
-})
+const files = Bun.spawnSync(
+  ["git", "ls-files", "apps/*/test/*", "packages/*/test/*", "scripts/pre-push.ts"],
+  {
+    cwd: ROOT,
+  },
+)
   .stdout.toString()
   .split("\n")
   .filter((path) => /\.(ts|py)$/.test(path));
@@ -30,7 +34,7 @@ const claims = files.flatMap((path) => {
     path,
     pkg: path.split("/").slice(0, 2).join("/"),
     db: Number(match[1] ?? match[2] ?? match[3]),
-    flushes: /flushdb\(\)|flushTestDatabase\(|startApi\(/.test(text),
+    flushes: /flushdb\(\)|"flushdb"|flushTestDatabase\(|startApi\(/.test(text),
   }));
 });
 
