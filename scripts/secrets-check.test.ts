@@ -32,6 +32,14 @@ describe("the secrets check", () => {
     expect(unsafeSecret("api.yaml", encrypted, false)).toBe("only *.sops.yaml files belong here");
     expect(unsafeSecret("api.sops.yaml", "kind: ConfigMap\n", false)).toBe("not a Secret");
     expect(unsafeSecret("api.sops.yaml", "a: [", false)).toContain("not YAML");
+    expect(unsafeSecret("api.sops.yaml", "- a\n- b\n", false)).toBe("not one YAML document");
+    expect(
+      unsafeSecret(
+        "api.sops.yaml",
+        `apiVersion: v1\nkind: Secret\nmetadata:\n  name: boilerplate-api\nstringData: {}\n${sops}`,
+        false,
+      ),
+    ).toBe("has no values");
     expect(unsafeSecret(".gitkeep", "", false)).toBeNull();
     expect(unsafeSecret(".gitkeep", "x", false)).toBe(".gitkeep must be empty");
   });

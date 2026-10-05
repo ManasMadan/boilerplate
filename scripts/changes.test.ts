@@ -31,6 +31,13 @@ describe("which CI jobs a pull request needs", () => {
     expect(areasOf("scripts/image-smoke.ts")).toEqual(["images", "scripts"]);
   });
 
+  it("runs the check a script is for, besides the scripts' own tests", () => {
+    expect(areasOf("scripts/charts.ts")).toEqual(["charts", "scripts"]);
+    expect(areasOf("scripts/secrets-check.ts")).toEqual(["charts", "scripts"]);
+    expect(areasOf("scripts/infra.ts")).toEqual(["infra", "scripts"]);
+    expect(areasOf("scripts/doctor.ts")).toEqual(["scripts"]);
+  });
+
   it("checks both for what the bootstrap and charts:check share", () => {
     expect(areasOf("deploy/argocd/argo-cd-values.yaml")).toEqual(["charts", "infra", "scripts"]);
   });
