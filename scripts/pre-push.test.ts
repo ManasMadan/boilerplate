@@ -404,18 +404,18 @@ describe("what decides which steps run", () => {
   });
 
   it("sizes the run to the machine, unless told", () => {
-    expect(limits({}, 10, 16 * GB)).toEqual({ slots: 9, memory: 14 });
-    expect(limits({}, 1, 2 * GB)).toEqual({ slots: 1, memory: 2 });
+    expect(limits({}, 10, 16 * GB)).toEqual({ cores: 9, memory: 14 });
+    expect(limits({}, 1, 2 * GB)).toEqual({ cores: 1, memory: 2 });
     expect(limits({ PRE_PUSH_CONCURRENCY: "1", PRE_PUSH_MEMORY_GB: "6" }, 10, 16 * GB)).toEqual({
-      slots: 1,
+      cores: 1,
       memory: 6,
     });
-    expect(limits({ PRE_PUSH_CONCURRENCY: "none" }, 4, 16 * GB).slots).toBe(3);
+    expect(limits({ PRE_PUSH_CONCURRENCY: "none" }, 4, 16 * GB).cores).toBe(3);
   });
 });
 
 describe("the scheduler", () => {
-  const room = { slots: 8, memory: 10, docker: 2 };
+  const room = { cores: 8, memory: 10, docker: 2 };
   const make = (name: string, more: Partial<Step> = {}): Step => ({
     name,
     jobs: [],
@@ -457,7 +457,7 @@ describe("the scheduler", () => {
     expect(results).toEqual({ a: "passed", b: "passed", c: "passed" });
   });
 
-  it("runs one lane's steps one at a time, and no more than the slots", async () => {
+  it("runs one lane's steps one at a time, and no more than the cores hold", async () => {
     const lane = await run([
       make("a", { lane: "valkey" }),
       make("b", { lane: "valkey" }),
@@ -475,8 +475,15 @@ describe("the scheduler", () => {
     expect(order.together.findIndex((t) => t.includes("big"))).toBeLessThan(
       order.together.findIndex((t) => t.includes("small")),
     );
-    const serial = await run([make("a"), make("b"), make("c")], { ...room, slots: 1 });
+    const serial = await run([make("a"), make("b"), make("c")], { ...room, cores: 1 });
     expect(serial.together.every((t) => t.length === 1)).toBe(true);
+    const cores = await run([
+      make("wide", { cores: 6 }),
+      make("also wide", { cores: 6 }),
+      make("thin"),
+    ]);
+    expect(cores.together.some((t) => t.includes("wide") && t.includes("also wide"))).toBe(false);
+    expect(cores.together.some((t) => t.includes("wide") && t.includes("thin"))).toBe(true);
   });
 
   it("keeps to the memory, and Docker's, but always runs a step on its own", async () => {
@@ -607,7 +614,9 @@ describe("the hook", () => {
     expect(calls).toContain("bun scripts/push-coverage.ts --concurrency=3");
     expect(calls).toContain("bun run codeql --languages javascript-typescript");
     expect(calls.some((c) => c.startsWith("bun run charts:check"))).toBe(false);
-    expect(output()).toContain("Pre-push: 1 files changed since abc, up to 3 steps at once");
+    expect(output()).toContain(
+      "Pre-push: 1 files changed since abc, 3 cores and 14 GB for the steps",
+    );
     expect(output()).toMatch(/charts {2,}skipped {2,}area untouched \(charts\)/);
     expect(output()).toContain(`ci.yml:images`);
     expect(output()).toContain("every check CI runs that can run here passed");

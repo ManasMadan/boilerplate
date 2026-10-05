@@ -78,10 +78,12 @@ with the job's own commands:
 CI accepts a breaking API change when the pull request's title declares it (`feat(api)!:`);
 here a commit in the push whose header declares one does the same, and the step says so.
 
-Steps that don't depend on each other run side by side: as many as the machine has cores,
-less one, and as much as its memory holds, less 2 GB (`PRE_PUSH_CONCURRENCY` and
-`PRE_PUSH_MEMORY_GB` override both); Docker's free memory decides which steps that start
-containers run together. The coverage suites and the generators' check share Valkey's
+Steps that don't depend on each other run side by side, as many as the machine's cores,
+less one, and its memory, less 2 GB, hold by each step's rough needs (a build or a test
+run takes several cores, a scan one); `PRE_PUSH_CONCURRENCY` (cores, 1 for one step at a
+time) and `PRE_PUSH_MEMORY_GB` override them. Docker's free memory decides which steps
+that start containers run together. Timing-sensitive browser tests fail on a machine run
+far past its cores, which is why the heaviest steps wait for each other. The coverage suites and the generators' check share Valkey's
 database numbers, so they take turns. Each step's output is kept and printed when it
 fails; the first failure stops the other steps, and the summary names it, with every
 step's time. A step can be left out with `PRE_PUSH_SKIP=<step>,<step>` (the summary says

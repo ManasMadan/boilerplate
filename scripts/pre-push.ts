@@ -6,12 +6,13 @@
  * runs each step exactly when CI would run its job, with the same commands.
  *
  *   bun scripts/pre-push.ts
- *   PRE_PUSH_CONCURRENCY=1 bun scripts/pre-push.ts      one step at a time
+ *   PRE_PUSH_CONCURRENCY=1 bun scripts/pre-push.ts      the cores the steps may share (1: one at a time)
  *   PRE_PUSH_MEMORY_GB=8 bun scripts/pre-push.ts        the memory the steps may share
  *   PRE_PUSH_SKIP=screenshots,e2e bun scripts/pre-push.ts   leave steps out (CI still runs them)
  *
- * Independent steps run side by side, as many as the machine has cores (less one) and
- * memory (less 2 GB) for; Docker's free memory limits the steps that start containers.
+ * Independent steps run side by side, as many as the machine's cores (less one) and memory
+ * (less 2 GB) hold, by each step's rough needs; Docker's free memory limits the steps that
+ * start containers.
  * The integration suites and the generators' check share Valkey's database numbers, so
  * they take turns. Each step's output is kept and shown when it fails; the first failure
  * stops every other step, and the summary names it. What CI checks that can't run here is
@@ -79,7 +80,8 @@ export interface Step {
    * leaves the checkout broken for the next run.
    */
   keep?: boolean;
-  /** Roughly what it takes, in GB of the machine's memory and of Docker's. */
+  /** Roughly what it takes: cores (1 unless said), GB of the machine's memory and of Docker's. */
+  cores?: number;
   memory: number;
   docker?: number;
   run: (ctx: Context) => Promise<boolean>;
@@ -363,6 +365,7 @@ export const STEPS: Step[] = [
     areas: ["app"],
     needs: ["python dependencies"],
     keep: true,
+    cores: 2,
     memory: 2,
     run: generatedCode,
   },
@@ -420,10 +423,11 @@ export const STEPS: Step[] = [
     name: "charts",
     jobs: ["ci.yml:charts"],
     areas: ["charts"],
+    cores: 2,
     memory: 1,
     run: (ctx) => passes(ctx, "bun", ["run", "charts:check"]),
   },
-  { name: "infra", jobs: ["ci.yml:infra"], areas: ["infra"], memory: 1, run: infra },
+  { name: "infra", jobs: ["ci.yml:infra"], areas: ["infra"], cores: 2, memory: 1, run: infra },
   {
     name: "coverage",
     jobs: [
@@ -436,6 +440,7 @@ export const STEPS: Step[] = [
     areas: ["app", "scripts"],
     needs: ["generated code", "services"],
     lane: "valkey",
+    cores: 4,
     memory: 6,
     run: (ctx) => passes(ctx, "bun", ["scripts/push-coverage.ts", `--concurrency=${ctx.suites}`]),
   },
@@ -444,6 +449,7 @@ export const STEPS: Step[] = [
     jobs: ["ci.yml:lint"],
     areas: [],
     needs: ["python dependencies", "generated code"],
+    cores: 4,
     memory: 3,
     run: (ctx) => passes(ctx, "bun", ["run", "lint"]),
   },
@@ -452,6 +458,7 @@ export const STEPS: Step[] = [
     jobs: ["ci.yml:types"],
     areas: ["app"],
     needs: ["generated code"],
+    cores: 4,
     memory: 4,
     run: (ctx) => passes(ctx, "bun", ["run", "check-types"]),
   },
@@ -460,6 +467,7 @@ export const STEPS: Step[] = [
     jobs: ["ci.yml:types"],
     areas: ["app"],
     needs: ["generated code"],
+    cores: 2,
     memory: 3,
     run: (ctx) => passes(ctx, "bun", ["run", "type-coverage"]),
   },
@@ -468,6 +476,7 @@ export const STEPS: Step[] = [
     jobs: ["ci.yml:e2e"],
     areas: ["app"],
     needs: ["generated code", "services"],
+    cores: 6,
     memory: 6,
     docker: 0.5,
     run: endToEnd,
@@ -478,6 +487,7 @@ export const STEPS: Step[] = [
     areas: [],
     skip: (files) =>
       codeqlLanguages(files).length > 0 ? undefined : "no code CodeQL reads changed",
+    cores: 4,
     memory: 4,
     run: (ctx) =>
       passes(ctx, "bun", ["run", "codeql", "--languages", codeqlLanguages(ctx.files).join(",")]),
@@ -488,6 +498,7 @@ export const STEPS: Step[] = [
     areas: ["app"],
     needs: ["generated code", "services"],
     lane: "valkey",
+    cores: 4,
     memory: 4,
     run: (ctx) => passes(ctx, "bun", ["scripts/generators.ts"]),
   },
@@ -514,6 +525,7 @@ export const STEPS: Step[] = [
     jobs: ["ci.yml:components"],
     areas: ["app"],
     needs: ["generated code"],
+    cores: 2,
     memory: 2,
     docker: 1.5,
     run: (ctx) => passes(ctx, "bun", ["run", "--cwd", "packages/ui", "test:visual"]),
@@ -549,11 +561,11 @@ export const BOOKKEEPING = new Set([
   "kind.yml:kind-ok",
 ]);
 
-/** How much may run at once: steps, memory and Docker memory (GB), coverage suites. */
+/** How much the steps may use at once: cores and memory (GB). */
 export function limits(env: Record<string, string | undefined>, cpus: number, memory: number) {
   const number = (value: string | undefined) => (Number(value) > 0 ? Number(value) : undefined);
-  const slots = number(env.PRE_PUSH_CONCURRENCY) ?? Math.max(1, cpus - 1);
-  return { slots, memory: number(env.PRE_PUSH_MEMORY_GB) ?? Math.max(2, memory / GB - 2) };
+  const cores = number(env.PRE_PUSH_CONCURRENCY) ?? Math.max(1, cpus - 1);
+  return { cores, memory: number(env.PRE_PUSH_MEMORY_GB) ?? Math.max(2, memory / GB - 2) };
 }
 
 export interface Result {
@@ -563,22 +575,23 @@ export interface Result {
   seconds?: number;
 }
 
-type Room = { slots: number; memory: number; docker: number };
+type Room = { cores: number; memory: number; docker: number };
 type Launch = (step: Step, signal: AbortSignal) => Promise<boolean>;
 type Finished = { step: Step; passed: boolean; seconds: number };
 type Started = { step: Step; controller: AbortController; done: Promise<Finished> };
 
 /** Whether `step` can start now, next to `running`. */
 function startable(step: Step, results: Map<string, Result>, running: Started[], room: Room) {
-  const used = (key: "memory" | "docker") =>
-    running.reduce((sum, r) => sum + (r.step[key] ?? 0), 0);
+  const used = (key: "cores" | "memory" | "docker") =>
+    running.reduce((sum, r) => sum + (r.step[key] ?? (key === "cores" ? 1 : 0)), 0);
   return (
     (step.needs ?? []).every((need) =>
       ["passed", "skipped"].includes(results.get(need)?.status ?? ""),
     ) &&
     !running.some((r) => step.lane && r.step.lane === step.lane) &&
-    running.length < room.slots &&
-    (running.length === 0 || used("memory") + step.memory <= room.memory) &&
+    (running.length === 0 ||
+      (used("cores") + (step.cores ?? 1) <= room.cores &&
+        used("memory") + step.memory <= room.memory)) &&
     (!step.docker ||
       running.every((r) => !r.step.docker) ||
       used("docker") + step.docker <= room.docker)
@@ -804,7 +817,7 @@ export async function prePush(given: Partial<typeof MACHINE> = {}): Promise<numb
   const room = { ...limits(env, cpus, memory), docker: free };
   // About one coverage suite per GB of Docker memory: they share its Postgres and Valkey, and
   // two at a time is what a 2 GB Docker holds without timing-sensitive tests turning flaky.
-  const suites = Math.max(1, Math.min(room.slots, Math.floor((docker.total || 0) / GB)));
+  const suites = Math.max(1, Math.min(room.cores, Math.floor((docker.total || 0) / GB)));
   const touched = areas(push.files);
   const shared = { root, ...push, areas: touched, suites, clamd };
   const interrupted = new AbortController();
@@ -812,7 +825,7 @@ export async function prePush(given: Partial<typeof MACHINE> = {}): Promise<numb
   const stoppable: typeof spawnExec = (signal, log) =>
     exec(AbortSignal.any([signal, interrupted.signal]), log);
   console.log(
-    `Pre-push: ${push.files.length} files changed since ${push.base.slice(0, 12)}, up to ${room.slots} steps at once`,
+    `Pre-push: ${push.files.length} files changed since ${push.base.slice(0, 12)}, ${room.cores} cores and ${room.memory.toFixed(0)} GB for the steps`,
   );
   const skipped = skips(touched, push.files, env.PRE_PUSH_SKIP);
   const results = await schedule(STEPS, skipped, room, launcher(shared, room, stoppable));
