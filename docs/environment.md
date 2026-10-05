@@ -285,6 +285,8 @@ Server-only: nothing environment-specific is built into the browser bundle.
 |---|---|---|
 | `WEB_URL` | required | This site's origin (canonical URLs, sitemap). |
 | `API_URL`, `AI_URL`, `STORAGE_ORIGIN` | see above | |
+| `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | unset | The iOS app (`ABCDE12345`, `com.boilerplate.app`): `/.well-known/apple-app-site-association` names it for links and passkeys. |
+| `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` | unset | The Android app and the SHA-256 fingerprints of its signing certificates, comma-separated (`AB:CD:…`): `/.well-known/assetlinks.json` names them. With any of the four unset both files answer 404, and a site on an https `WEB_URL` (every deployment) refuses to start. |
 | `RELEASE` | `dev` | Sent to the API as `x-app-version`. |
 | `SKIP_ENV_VALIDATION` | unset | `1` only for `next typegen` inside `check-types`. |
 

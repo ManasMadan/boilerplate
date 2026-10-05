@@ -5,7 +5,8 @@ paths:
 
 # apps/web
 
-- Render-only. No route handlers (`app/**/route.ts`, except `app/healthz/route.ts`), no
+- Render-only. No route handlers (`app/**/route.ts`, except `app/healthz/route.ts` and
+  the mobile app's association files under `app/.well-known/`), no
   `"use server"`, no `pages/api`. The root `scripts/check-web-render-only.ts` fails the
   lint.
   Anything that reads or writes data is an API procedure in `packages/contracts` +

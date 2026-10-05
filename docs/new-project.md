@@ -338,9 +338,10 @@ Each is optional; turn on the ones you use, per environment.
         gives `APNS_KEY_ID`, `APNS_TEAM_ID` and `APNS_PRIVATE_KEY`; a Firebase project
         with the Android app, and a service account's JSON key, gives `FCM_PROJECT_ID`,
         `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY`. Both go in notifications' Secret.
-      - Links that open the app: the team id and signing fingerprints in
-        `apps/web/public/.well-known/` ([web-and-mobile.md](web-and-mobile.md),
-        "Universal links and App Links"). Mobile passkeys aren't implemented.
+      - Links that open the app: the team id, bundle id, package and signing
+        fingerprints in each environment's web `env` ([web-and-mobile.md](web-and-mobile.md),
+        "Universal links and App Links"); a deployed site won't start without them.
+        Mobile passkeys aren't implemented.
       - The bundle id, package and scheme in `apps/mobile/app.config.ts` can't change
         after the first store release: rename them before it.
 

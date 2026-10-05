@@ -17,6 +17,14 @@ services:
   web:
     autoscaling: { enabled: false }
     storage: none
+    env:
+      # The mobile app build that talks to this site (the preview variant): its https
+      # links open the app and its passkeys work there. The web app refuses to start
+      # until all four are set (docs/web-and-mobile.md, "Universal links and App Links").
+      APPLE_TEAM_ID: ""
+      IOS_BUNDLE_ID: com.boilerplate.app.preview
+      ANDROID_PACKAGE: com.boilerplate.app.preview
+      ANDROID_CERT_FINGERPRINTS: ""
   api:
     autoscaling: { enabled: false }
     # No file uploads (no ClamAV, no uploads bucket: see data.yaml).

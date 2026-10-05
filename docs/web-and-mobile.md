@@ -8,7 +8,9 @@ with the same copy (`packages/i18n`) and design tokens (`packages/ui/src/styles/
 ### Render-only
 
 The web app renders UI and nothing else: no route handlers (except the health probe,
-`app/healthz/route.ts`), no server actions, no database, queues or auth-server code.
+`app/healthz/route.ts`, and the mobile app's association files under
+`app/.well-known/`, which answer from configuration alone), no server actions, no
+database, queues or auth-server code.
 `bun run lint:boundaries` enforces it (`scripts/check-web-render-only.ts` and the
 `web-has-no-backend-code` rule in `.dependency-cruiser.cjs`).
 
@@ -118,8 +120,9 @@ screenshots are identical on every machine and in CI.
   token through its scheme (`useCaptcha()` in `src/lib/captcha.ts`; see
   [auth.md](auth.md#captcha)). A new form whose request the API guards with captcha calls
   it too.
-- **Not there yet**: passkeys (web only for now), and https links that open the app (see
-  "Universal links and App Links" below; today only `boilerplate://` links do).
+- **Links**: `boilerplate://` links, and the site's https invitation links once the
+  site serves the association files ("Universal links and App Links" below).
+- **Not there yet**: passkeys (web only for now).
 - Native projects (`ios/`, `android/`) come from `expo prebuild` and aren't committed.
 
 | Command (`bun run --cwd apps/mobile …`) | What it does |
@@ -159,10 +162,11 @@ credentials`). See [repository-settings.md](repository-settings.md).
 
 ### Universal links and App Links
 
-Today the app opens only for `boilerplate://` links (the `scheme` in `app.config.ts`):
-sign-in callbacks and invitations. A custom scheme isn't verified, so any other app can
-register the same one, and a link sent by email opens the browser rather than the app.
-Verified https links fix both; each platform checks a file on the site's own host.
+Besides its `boilerplate://` scheme (sign-in callbacks, the captcha's answer), the app
+opens the site's own https links: an invitation link sent by email opens the invitation
+in the app when it's installed, and in the browser when it isn't. A custom scheme isn't
+verified, so any other app can register the same one; an https link is, because each
+platform checks a file on the site's own host before it lets the app handle the link.
 Opening an invitation link only shows the invitation, whoever opened it: joining takes a
 tap on Accept.
 
@@ -175,27 +179,41 @@ URL, and trades the id and a secret it kept for the session afterwards, once
 A caught link holds only the id. This is the protection RFC 8252 gives native apps with
 PKCE, so the callback doesn't need a verified link.
 
+The app side is in `apps/mobile/app.config.ts`. When `EXPO_PUBLIC_API_URL` is https, the
+build claims that host: `ios.associatedDomains` with `applinks:` (links) and
+`webcredentials:` (passkeys), and on Android an `intentFilters` entry with
+`autoVerify: true` for `https://<host>/invitations/`. A development build on a LAN
+address claims nothing, since neither platform can verify plain http. Associated domains
+are native settings, so they reach users only through a store build. Expo Router opens
+an https link at its path, so `https://<host>/invitations/<id>` lands on
+`invitations/[id]` like `boilerplate://invitations/<id>` does.
 
-| Platform | File | What goes in it |
+The site side is two route handlers in the web app, built from its environment
+(`apps/web/src/lib/app-links.ts`), the only ones besides the health probe; they answer
+from configuration alone, so the app stays render-only:
+
+| Path | What it says | From |
 |---|---|---|
-| iOS | `apps/web/public/.well-known/apple-app-site-association` (no extension) | your Apple Developer team id in place of `APPLE_TEAM_ID`, before each bundle id (`com.boilerplate.app` and its `.preview` and `.development` variants) |
-| Android | `apps/web/public/.well-known/assetlinks.json` | the package name, and the SHA-256 fingerprints of the Play app signing key (Play Console, Test and release, App integrity) and of the EAS upload key (`bunx eas-cli credentials`, Android, Keystore). Add a statement per variant you install (`com.boilerplate.app.preview`, ...), with that build's key |
+| `/.well-known/apple-app-site-association` | the app id `<team id>.<bundle id>` for links (`/invitations/*`) and passkeys, as `application/json` | `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` |
+| `/.well-known/assetlinks.json` | the package and its signing certificates' SHA-256 fingerprints, for links (`handle_all_urls`) and passkeys (`get_login_creds`) | `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` |
 
-The web app serves both as static files (render-only still holds: nothing runs), and the
-proxy and the gateway leave `/.well-known/` paths other than the OAuth ones to it. To
-turn them on:
+Until all four variables are set both answer 404, never a file with made-up ids, and a
+site on an https `WEB_URL` (any deployment) refuses to start
+(`apps/web/src/instrumentation.ts`). Local development and the end-to-end runs use
+http and start without them. Each deployed environment names the build that talks to
+it, in its web service's `env` (`deploy/environments/<env>/stack.yaml`): production the
+production variant, staging and previews the preview variant. The proxy and the gateway
+leave `/.well-known/` paths other than the OAuth ones to the web app.
 
-1. Fill in the placeholders (the files are JSON, so there is no comment in them: the
-   placeholder names say what goes there). Use the bundle ids and package names your
-   rename gave the app.
-2. Apple requires `Content-Type: application/json` for the extensionless file, and Next
-   serves unknown extensions as `application/octet-stream`, so `apps/web/next.config.ts`
-   sets that header for `/.well-known/apple-app-site-association`.
-3. In `apps/mobile/app.config.ts`: `ios.associatedDomains` with `applinks:<site host>`
-   (and `webcredentials:<site host>` for passkeys), and `android.intentFilters` with
-   `autoVerify: true`, scheme `https`, your host and the paths the app handles
-   (`/invitations`). Then a new store build: associated domains are native settings.
-4. Check them: `curl -i https://<site host>/.well-known/apple-app-site-association`
+To turn them on:
+
+1. Find the values: your Apple Developer team id (Membership details); the fingerprints
+   of the Play app signing key (Play Console, Test and release, App integrity) and of
+   the EAS upload key (`bunx eas-cli credentials`, Android, Keystore). Use the bundle id
+   and package your rename gave the app.
+2. Set them for each environment's web service, and build the app with
+   `EXPO_PUBLIC_API_URL` on that environment's https site (the EAS environment).
+3. Check them: `curl -i https://<site host>/.well-known/apple-app-site-association`
    (200, `application/json`, no redirect), Google's
    [Statement List tester](https://developers.google.com/digital-asset-links/tools/generator)
    for `assetlinks.json`, and on a device, a link to `/invitations/<id>` opening the app.

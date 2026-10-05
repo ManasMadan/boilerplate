@@ -22,6 +22,14 @@ services:
       EMAIL_FROM: Boilerplate <no-reply@example.com>
   web:
     autoscaling: { minReplicas: 3, maxReplicas: 20 }
+    env:
+      # The mobile app build that talks to this site (the production variant): its https
+      # links open the app and its passkeys work there. The web app refuses to start
+      # until all four are set (docs/web-and-mobile.md, "Universal links and App Links").
+      APPLE_TEAM_ID: ""
+      IOS_BUNDLE_ID: com.boilerplate.app
+      ANDROID_PACKAGE: com.boilerplate.app
+      ANDROID_CERT_FINGERPRINTS: ""
   api:
     autoscaling: { minReplicas: 3, maxReplicas: 30 }
   clamav:

@@ -41,6 +41,13 @@ describe("an invitation link", () => {
     });
   });
 
+  it("opens from the site's https link too (a universal link or App Link)", async () => {
+    invited();
+    const app = await openApp("https://app.example.com/invitations/inv-1");
+    expect(await screen.findByText("Join Acme to start collaborating.")).toBeOnTheScreen();
+    expect(app.pathname()).toBe(link);
+  });
+
   it("can be declined", async () => {
     const calls = invited({ "/api/auth/organization/reject-invitation": () => ({}) });
     const app = await openApp(link);
