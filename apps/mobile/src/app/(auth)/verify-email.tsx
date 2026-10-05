@@ -33,9 +33,10 @@ export default function VerifyEmail() {
     router.replace("/");
   });
 
-  async function resend() {
+  // An arrow function keeps the check above narrowing `email` (a declaration is hoisted).
+  const resend = async () => {
     const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email: email as string,
+      email,
       type: "email-verification",
     });
     setNotice(
@@ -43,7 +44,7 @@ export default function VerifyEmail() {
         ? { text: errorMessage(error), error: true }
         : { text: t("auth.codeSent"), error: false },
     );
-  }
+  };
 
   return (
     <Screen title={t("auth.verifyTitle")} description={t("auth.verifyDescription", { email })}>

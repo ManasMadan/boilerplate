@@ -243,6 +243,7 @@ better-typed call can say it instead.
 | `packages/i18n/src/index.ts` | `loosely`'s `t as LooseTranslate` | a key known only at run time can't be paired with its arguments at compile time; the ICU test checks them instead |
 | `packages/db/src/tenancy.ts` | `asTx`'s `tx as Tx` | `Tx` is a brand only the transaction helpers may give a client, so there is nothing to check at run time |
 | `packages/nest-common/src/env.ts` | `forService`'s `Object.fromEntries(...) as {...}` | TypeScript can't type an object whose keys are built from a generic string (`${service}_DATABASE_URL`), and each service's env schema needs its own names typed |
+| `apps/mobile/src/components/ui/text.tsx` | `webRole`'s `role as Role` | react-native's `Role` leaves out the roles only react-native-web renders (`blockquote`, `code`), which the web build needs |
 | `packages/contracts/src/api/base.ts` | `errorsOf`'s `Object.fromEntries(...) as {...}` | TypeScript can't type an object built from a list of keys, and oRPC clients need each code's own entry to type its error |
 
 ## End to end
