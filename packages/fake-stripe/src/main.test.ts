@@ -6,6 +6,8 @@ const REQUIRED = {
   STRIPE_WEBHOOK_SECRET: "whsec_main",
   STRIPE_PRICE_PRO_MONTHLY: "price_main_monthly",
   STRIPE_PRICE_PRO_YEARLY: "price_main_yearly",
+  STRIPE_FAKE_PORT: "0",
+  WEBHOOKS_PORT: "4104",
 };
 
 afterEach(() => {
@@ -20,17 +22,13 @@ function configure(env: Record<string, string | undefined>) {
 }
 
 describe("starting the fake", () => {
-  it.each([
-    [
-      "on the port given",
-      { STRIPE_FAKE_PORT: "0", STRIPE_FAKE_WEBHOOK_URL: "http://127.0.0.1:1/" },
-    ],
-    ["on 12111 by default", { STRIPE_FAKE_PORT: undefined, STRIPE_FAKE_WEBHOOK_URL: undefined }],
-  ])("listens %s with the key and says where", async (_, env) => {
-    const write = configure(env);
+  it("listens on the port given with the key and says where", async () => {
+    const write = configure({
+      STRIPE_FAKE_PORT: "0",
+      STRIPE_FAKE_WEBHOOK_URL: "http://127.0.0.1:1/",
+    });
     const { fake } = await import("./main");
     try {
-      if (env.STRIPE_FAKE_PORT === undefined) expect(fake.port).toBe(12111);
       expect(write).toHaveBeenCalledWith(`fake Stripe on ${fake.url}\n`);
       const customers = (key: string) =>
         fetch(`${fake.url}/v1/customers`, {
@@ -41,6 +39,27 @@ describe("starting the fake", () => {
       expect((await customers("sk_test_other")).status).toBe(401);
     } finally {
       await fake.close();
+    }
+  });
+
+  it("sends its events to this checkout's webhooks service unless told where", async () => {
+    configure({
+      STRIPE_FAKE_PORT: "4111",
+      STRIPE_FAKE_WEBHOOK_URL: undefined,
+      WEBHOOKS_PORT: "4104",
+    });
+    const startFakeStripe = vi.fn(async () => ({ url: "http://127.0.0.1:4111" }));
+    vi.doMock("./index", () => ({ startFakeStripe }));
+    try {
+      await import("./main");
+      expect(startFakeStripe).toHaveBeenCalledWith(
+        expect.objectContaining({
+          port: 4111,
+          webhookUrl: "http://localhost:4104/webhooks/stripe",
+        }),
+      );
+    } finally {
+      vi.doUnmock("./index");
     }
   });
 

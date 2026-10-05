@@ -25,7 +25,10 @@ won't start while it reports one.
 `S3_CONSOLE_PORT`, …). Find who holds it with `lsof -nP -iTCP:<port> -sTCP:LISTEN`
 (without `-sTCP:LISTEN`, `lsof` also lists processes that are only connected to it).
 Either stop that process, or move ours: `bun run env:set POSTGRES_PORT=55433`, update the
-URLs in `.env` that use the port, and `bun run db:up`.
+URLs in `.env` that use the port, and `bun run db:up`. The apps' ports are variables too
+(`WEB_PORT`, `API_PORT`, …). When the holder is another checkout's `bun dev` or e2e run,
+give this checkout its own stack instead: `bun run setup --stack <n>` moves every port
+and URL at once ([environment.md](environment.md#local-service-ports)).
 
 **"Not starting …: they may use up to … GB".** `bun run db:up` adds up the memory limits
 of what it's about to start and refuses when Docker hasn't that much free, because a

@@ -30,9 +30,10 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
 51025); with `full`, RustFS 59000 (console 59001), ClamAV 53310 and Jaeger (OTLP 54318,
 UI 56686); the Stalwart mail server (`bun run db:up:mail`, and in `full`): submission
 51465, management 58080. Web is on 3000, api 3001, worker 3002, notifications 3003,
-webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and Expo's bundler.
-On demand: fake Stripe 12111 (`bun run stripe:fake`), the mobile web build 3100
-(`serve:web`, used by e2e), Storybook 6006. Uploads stay off until `S3_BUCKET` is set,
+webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and Expo's bundler
+8081. On demand: fake Stripe 12111 (`bun run stripe:fake`), the mobile web build 3005
+(`serve:web`, used by e2e), Storybook 6006. Those are the defaults: each is a `*_PORT` in
+`.env` (`WEB_PORT`, `API_PORT`, ...). Uploads stay off until `S3_BUCKET` is set,
 and billing until the Stripe variables are (docs/files-and-billing.md), even with
 `dev:full`.
 
@@ -131,10 +132,10 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),
   dependencies installed and code generated. Never `git stash` (every worktree shares
   one stash stack) and never `git worktree add` by hand. The worktrees share the
-  Docker services unless one runs `bun run setup --stack <n>` (its own compose project and
-  ports; `docs/environment.md`), and only one `bun dev` runs at a time (the app ports are
-  fixed); `wt merge` and `wt remove` ask
-  first.
+  Docker services and the app ports unless one runs `bun run setup --stack <n>` (its own
+  compose project, and every service and app port moved; `docs/environment.md`): then
+  each runs its own `bun dev` and e2e suite at the same time. `wt merge` and `wt remove`
+  ask first.
 - `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
   database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
   only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and

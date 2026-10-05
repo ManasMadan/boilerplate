@@ -3,7 +3,14 @@
  * @repo/nest-common's fragments; add new ones here, to .env.example and to
  * docs/environment.md.
  */
-import { coreEnv, databaseEnv, port, redisEnv, requiredInProduction } from "@repo/nest-common";
+import {
+  coreEnv,
+  databaseEnv,
+  port,
+  redisEnv,
+  requiredInProduction,
+  withServicePort,
+} from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import * as z from "zod";
 import { productionSmtpProblem } from "./channels/email/smtp-url";
@@ -82,7 +89,7 @@ export const envSchema = {
 
 export const env = createEnv({
   server: envSchema,
-  runtimeEnv: process.env,
+  runtimeEnv: withServicePort("NOTIFICATIONS"),
   emptyStringAsUndefined: true,
 });
 

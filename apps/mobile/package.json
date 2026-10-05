@@ -6,7 +6,7 @@
   "description": "The Expo app (iOS, Android and web): the same API, auth and translations as apps/web, through packages/client.",
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "bun --env-file=../../.env run expo start",
+    "dev": "bun --env-file=../../.env run sh -c 'exec expo start --port \"$EXPO_PORT\"'",
     "ios": "bun --env-file=../../.env run expo run:ios",
     "android": "bun --env-file=../../.env run expo run:android",
     "gen": "uniwind generate-artifacts --css ./global.css --dts ./uniwind-types.d.ts",
@@ -15,7 +15,7 @@
     "check-types": "tsc",
     "test": "jest",
     "doctor": "expo-doctor",
-    "test:e2e": "playwright test",
+    "test:e2e": "bun --env-file=../../.env run playwright test",
     "coverage": "jest --coverage"
   },
   "dependencies": {

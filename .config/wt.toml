@@ -7,10 +7,10 @@
 # names the project), so each gets the main checkout's .env, ports and databases. Tests
 # and type-checks run in parallel fine (each test file clones its own database). A
 # worktree that needs services of its own (a migration, a flushed Valkey, a stopped
-# container) runs `bun run setup --stack <n>` (1 to 9): its own compose project and
-# volumes, every service port 100 × n up, in its .env and for its tests (.env.stack).
-# The apps' own ports (3000 to 3004, 8000) stay the same, so only one `bun dev` or
-# end-to-end run holds them at a time.
+# container), or runs `bun dev` or the end-to-end suite while another checkout does,
+# runs `bun run setup --stack <n>` (1 to 9): its own compose project and volumes, and
+# every port 100 × n up, the services' and the apps' (web 3000 becomes 3000 + 100 × n),
+# in its .env and for its tests (.env.stack).
 
 # Blocking: the worktree isn't handed over until it can run commands.
 [[pre-start]]

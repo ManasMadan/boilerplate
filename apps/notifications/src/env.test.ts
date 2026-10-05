@@ -25,6 +25,16 @@ const twilio = {
 };
 
 describe("notifications environment", () => {
+  it("listens on NOTIFICATIONS_PORT from the local .env, on PORT over it, else on 3003", async () => {
+    const listensOn = async (variables: Record<string, string>) => {
+      vi.resetModules();
+      return (await load(variables)).env.PORT;
+    };
+    expect(await listensOn({ PORT: "", NOTIFICATIONS_PORT: "4103" })).toBe(4103);
+    expect(await listensOn({ PORT: "4200", NOTIFICATIONS_PORT: "4103" })).toBe(4200);
+    expect(await listensOn({ PORT: "", NOTIFICATIONS_PORT: "" })).toBe(3003);
+  });
+
   it("texts through the email sink by default outside production", async () => {
     const { env } = await load({ SMS_PROVIDER: "" });
     expect(env.SMS_PROVIDER).toBe("email");

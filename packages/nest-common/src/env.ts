@@ -5,7 +5,7 @@
  *
  *   export const env = createEnv({
  *     server: { ...coreEnv, ...databaseEnv, ...redisEnv, PORT: port(3001), MY_VAR: z.string() },
- *     runtimeEnv: process.env,
+ *     runtimeEnv: withServicePort("MY"),
  *     emptyStringAsUndefined: true,
  *   });
  *
@@ -31,6 +31,16 @@ const logLevel = z
 
 export const port = (fallback: number) =>
   z.coerce.number().int().min(1).max(65_535).default(fallback);
+
+/**
+ * The environment a service's schema reads, with PORT where this service listens: PORT
+ * when it's set (the stack chart sets it), else the service's own variable from the
+ * shared local .env (`API_PORT` for "API"), which `bun run setup --stack <n>` moves with
+ * the checkout's other ports. With neither, the schema's `port(...)` default applies.
+ */
+export function withServicePort(service: string, env: NodeJS.ProcessEnv = process.env) {
+  return { ...env, PORT: env.PORT || env[`${service}_PORT`] };
+}
 
 export const coreEnv = {
   NODE_ENV: nodeEnv,

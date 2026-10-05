@@ -26,6 +26,8 @@ those lines (you can't edit `.env`).
 
 If a port is taken, find the holder with `lsof -nP -iTCP:<port> -sTCP:LISTEN`, then
 either the user stops it, or set the matching `*_PORT` variable (see `.env.example`)
-with `bun run env:set`, update the URL that uses it, and `bun run db:up`.
+with `bun run env:set`, update the URL that uses it, and `bun run db:up`. When another
+checkout of this repo holds it (its `bun dev` or e2e run), `bun run setup --stack <n>`
+moves all of this checkout's ports and URLs instead.
 
 `docs/troubleshooting.md` explains every doctor message.

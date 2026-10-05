@@ -15,7 +15,7 @@
   "scripts": {
     "check-types": "tsc",
     "test:stories": "vitest run",
-    "storybook": "storybook dev -p 6006 --no-open",
+    "storybook": "bun --env-file=../../.env run sh -c 'exec storybook dev -p \"$STORYBOOK_PORT\" --no-open'",
     "build-storybook": "storybook build -o storybook-static",
     "test:visual": "turbo run build-storybook --filter=@repo/ui --output-logs=new-only && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts",
     "test:visual:update": "turbo run build-storybook --filter=@repo/ui --output-logs=new-only && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts --update-snapshots",

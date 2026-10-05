@@ -66,10 +66,11 @@ Read by api, worker, notifications and webhooks (`coreEnv`).
 | `TRUSTED_PROXIES` | `loopback` | Comma-separated CIDRs or `loopback`, `linklocal`, `uniquelocal`: who may set `X-Forwarded-For` and `x-request-id`. The client IP drives rate limits, lockout and audit logs. The stack chart sets `uniquelocal`. |
 | `LOAD_SHEDDING` | `on` | `off` stops answering 503 under pressure. Only for many instances on one machine (the integration tests). |
 | `RELEASE` | `dev` | Build id (image tag), stamped by CI. |
-| `PORT` | per service | api 3001, worker 3002, notifications 3003, webhooks 3004. |
+| `PORT` | the service's own port | Where the service listens. Unset, it's the service's variable from [Local app ports](#local-app-ports) (`API_PORT`, `WORKER_PORT`, `NOTIFICATIONS_PORT`, `WEBHOOKS_PORT`), else its default there. The stack chart sets it. |
 
 The AI service reads `NODE_ENV`, `LOG_LEVEL` (`debug`, `info`, `warning` or `error`
-there) and `RELEASE` too; it listens on 8000 (its package scripts pass `--port 8000`).
+there) and `RELEASE` too; its package scripts pass `--port "$AI_PORT"`, and its image
+listens on 8000.
 
 ### Telemetry (every service, off by default)
 
@@ -113,9 +114,15 @@ that uses it.
 A second checkout on the same machine (a worktree) shares these services unless it runs
 `bun run setup --stack <n>` (1 to 9; 0 goes back): that writes `COMPOSE_PROJECT_NAME`
 (`<name>-stack<n>`, its own containers and volumes; not in `.env.example`, which leaves
-the name to `docker-compose.yml`), moves every port below by 100 × n, points the local
-URLs at them, and writes the same ports for its tests to `.env.stack`. Each stack takes
-its own share of Docker's memory, which `bun run db:up` checks before starting it.
+the name to `docker-compose.yml`), moves every port below and every app port in the next
+table by 100 × n, points the local URLs that name them at the new ones (`WEB_URL`,
+`BETTER_AUTH_URL`, `API_URL`, `AI_URL`, `APP_ORIGINS`, `EXPO_PUBLIC_API_URL`, the
+database, Valkey and Mailpit URLs, and `STRIPE_API_URL` when you set it), and writes the
+same values for its tests to `.env.stack`. Two checkouts on different stacks then run
+`bun dev` (or `dev:full`) and `bun run test:e2e` at the same time. Each stack takes its
+own share of Docker's memory, which `bun run db:up` checks before starting it. A Google
+sign-in redirect is registered per origin, so a stack's (`http://localhost:3100/...` for
+stack 1) needs registering too.
 
 | Variable | Default | Service |
 |---|---|---|
@@ -129,6 +136,22 @@ its own share of Docker's memory, which `bun run db:up` checks before starting i
 | `STALWART_SMTPS_PORT`, `STALWART_HTTP_PORT` | 51465, 58080 | Stalwart (`mail` profile): submission over implicit TLS, management API |
 | `JAEGER_OTLP_PORT`, `JAEGER_UI_PORT` | 54318, 56686 | Jaeger (`telemetry` profile, and part of `full`): OTLP/HTTP in, traces at http://localhost:56686 |
 
+## Local app ports
+
+Where each app listens on this machine: `bun dev` and the dev tools read them. Deployed, nothing reads them: the stack
+chart sets `PORT` and each image has its own.
+
+| Variable | Default | Read by |
+|---|---|---|
+| `WEB_PORT` | 3000 | apps/web `dev` (`next dev --port`) and `start` (`PORT` for Next's server) |
+| `API_PORT`, `WORKER_PORT`, `NOTIFICATIONS_PORT`, `WEBHOOKS_PORT` | 3001, 3002, 3003, 3004 | each Nest service's `src/env.ts` when `PORT` is unset (`withServicePort`, packages/nest-common); `API_PORT` also the k6 smoke (`load/api.ts`), `WEBHOOKS_PORT` the fake Stripe's and the local Stalwart's webhook URLs |
+| `MOBILE_WEB_PORT` | 3005 | apps/mobile `serve:web`, the mobile Playwright suite. Not 3100, which is stack 1's web port. |
+| `AI_PORT` | 8000 | apps/ai `dev` and `start` (`fastapi --port`) |
+| `EMAIL_PREVIEW_PORT` | 3030 | packages/email `dev` |
+| `EXPO_PORT` | 8081 | apps/mobile `dev` (Expo's bundler) |
+| `STORYBOOK_PORT` | 6006 | packages/ui `storybook` |
+| `STRIPE_FAKE_PORT` | 12111 | the fake Stripe (`bun run stripe:fake`, the e2e run) |
+
 ## Auth and the API (apps/api)
 
 | Variable | Read by | Default / example | What it does |
@@ -137,7 +160,7 @@ its own share of Docker's memory, which `bun run db:up` checks before starting i
 | `BETTER_AUTH_SECRETS` | api | unset | Rotating the one above: `2:<secret>,1:<secret>`, newest first (each at least 32 characters). The newest signs and encrypts; the rest, and `BETTER_AUTH_SECRET`, still decrypt. Then `bun run secrets:reencrypt`. See the rotate-secrets runbook (`.claude/skills/rotate-secrets/SKILL.md`). |
 | `BETTER_AUTH_URL` | api (req.), ai | `http://localhost:3000` | The site's public origin. The API is served on it (`/rpc`, `/api`), so cookies are first-party; OAuth callbacks, the OAuth issuer and MCP resource URLs are built from it. The AI service needs it (with `API_URL`) for its MCP server. |
 | `WEB_URL` | api (req.), web (req.), notifications | `http://localhost:3000` | The web app's origin: the API's CORS and trusted origin, links in messages, canonical URLs. Notifications: required in production. |
-| `APP_ORIGINS` | api | `http://localhost:3100` | Other origins allowed to sign users in, comma-separated (the mobile app's web build). Native apps need nothing here. |
+| `APP_ORIGINS` | api | `http://localhost:3005` | Other origins allowed to sign users in, comma-separated (the mobile app's web build). Native apps need nothing here. |
 | `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | major.minor.patch. The mobile app sends its version as `x-app-version`; one below this (a pre-release comes before its release) or one that isn't a version at all gets `CLIENT_OUTDATED`, and the app shows its update screen. The web app sends none. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | api | empty | Both set: "Sign in with Google" (`google` feature). Redirect URI: `${BETTER_AUTH_URL}/api/auth/callback/google`. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | api | empty | Both set: Cloudflare Turnstile on sign-up, emailed codes and password reset (`captcha` feature). The site key reaches browsers through `system.info`. Cloudflare's always-pass test keys are in `.env.example`. |
@@ -203,10 +226,9 @@ combination fails at boot. See [files-and-billing.md](files-and-billing.md).
 | `STRIPE_SECRET_KEY` | api, fake Stripe | empty | `sk_test_…`, `sk_live_…` or a restricted `rk_…` key. |
 | `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY` | api, fake Stripe | empty | Recurring price ids (`price_…`) for the Pro plan. |
 | `STRIPE_TRIAL_DAYS` | api | 14 | Trial on an organization's first subscription; 0 turns trials off. |
-| `STRIPE_API_URL` | api | empty | Points the Stripe client at the fake Stripe (`http://127.0.0.1:12111`). Refused in production. |
+| `STRIPE_API_URL` | api | empty | Points the Stripe client at the fake Stripe (`http://127.0.0.1:<STRIPE_FAKE_PORT>`). Refused in production. |
 | `STRIPE_WEBHOOK_SECRET` | webhooks, fake Stripe | empty | `whsec_…`. Without it `/webhooks/stripe` answers 404. |
-| `STRIPE_FAKE_PORT` | fake Stripe | 12111 | |
-| `STRIPE_FAKE_WEBHOOK_URL` | fake Stripe | `http://localhost:3004/webhooks/stripe` | Where the fake sends its events. |
+| `STRIPE_FAKE_WEBHOOK_URL` | fake Stripe | `http://localhost:<WEBHOOKS_PORT>/webhooks/stripe` | Where the fake sends its events. Its own port is `STRIPE_FAKE_PORT` ([Local app ports](#local-app-ports)). |
 
 ## Webhooks (apps/webhooks, and apps/api for endpoint settings)
 
@@ -276,15 +298,14 @@ Not read by any service.
 
 | Variable | Read by | What it does |
 |---|---|---|
-| `E2E_BASE_URL` | web Playwright | Default `http://localhost:3000`. |
-| `E2E_MOBILE_URL` | mobile Playwright | Default `http://localhost:3100`. |
-| `MOBILE_WEB_PORT` | `apps/mobile/scripts/serve-web.ts` | Default 3100. |
+| `E2E_BASE_URL` | web Playwright | Default `WEB_URL`. |
+| `E2E_MOBILE_URL` | mobile Playwright | Default `http://localhost:<MOBILE_WEB_PORT>`. |
 | `E2E_GOOGLE_EMAIL`, `E2E_GOOGLE_PASSWORD` | `apps/web/e2e/google.spec.ts` | A real Google account; the spec is skipped without them. |
 | `E2E_CIMD_CLIENT_ID`, `E2E_CIMD_REDIRECT_URI` | `apps/api/test/oauth.integration.test.ts` | A real Client ID Metadata Document; the test is skipped without them. |
 | `STALWART_URL` | `apps/webhooks/test/stalwart.integration.test.ts` | The local Stalwart's management API (`http://localhost:58080`, `bun run db:up:mail`); the test sends real mail through it and is skipped without it. |
 | `STALWART_SMTP_URL` | `apps/notifications/test/stalwart.integration.test.ts`, and the webhooks one | Submission to the local Stalwart, `smtps://no-reply:no-reply-password@localhost:51465?tls.rejectUnauthorized=false`; the notifications test is skipped without it. |
 | `STALWART_ADMIN_PASSWORD`, `STALWART_SMTP_PASSWORD` | `docker-compose.yml`, the webhooks test | The local Stalwart's admin and `no-reply@boilerplate.test` passwords (default `stalwart-admin`, `no-reply-password`). |
 | `LOAD_USERS` | `apps/api/src/load-users.ts` | Signed-in users for k6 (default 50, at most 1000). |
-| `BASE_URL`, `PROFILE`, `TARGET_RPS`, `DURATION` | `load/api.ts` | k6 target (default `http://host.docker.internal:3001`), `smoke` or `load`, rate (default 200), hold time (default `5m`). |
+| `BASE_URL`, `PROFILE`, `TARGET_RPS`, `DURATION` | `load/api.ts` | k6 target (default `http://host.docker.internal:<API_PORT>`), `smoke` or `load`, rate (default 200), hold time (default `5m`). |
 | `PG_CONTAINER` | `scripts/restore-drill.ts` | Run the drill against another Postgres container (CI). |
 | `EVAL_JUDGE_MODEL`, `EVAL_MIN_PASS_RATE` | `apps/ai/evals` | LLM-judged rubrics, and the pass rate below which the run fails (default 1.0). |

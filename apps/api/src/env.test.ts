@@ -14,6 +14,16 @@ async function load(variables: Record<string, string>) {
 }
 
 describe("the environment", () => {
+  it("listens on API_PORT from the local .env, on PORT over it, else on 3001", async () => {
+    const listensOn = async (variables: Record<string, string>) => {
+      vi.resetModules();
+      return (await load(variables)).env.PORT;
+    };
+    expect(await listensOn({ PORT: "", API_PORT: "4101" })).toBe(4101);
+    expect(await listensOn({ PORT: "4200", API_PORT: "4101" })).toBe(4200);
+    expect(await listensOn({ PORT: "", API_PORT: "" })).toBe(3001);
+  });
+
   it("parses versioned auth secrets, and refuses malformed ones", async () => {
     const { env } = await load({ BETTER_AUTH_SECRETS: `2:${"n".repeat(40)}` });
     expect(env.BETTER_AUTH_SECRETS).toEqual([{ version: 2, value: "n".repeat(40) }]);

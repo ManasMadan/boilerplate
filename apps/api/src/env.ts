@@ -7,7 +7,15 @@
  * variables; see src/features.ts. Add new variables here, to .env.example and to
  * docs/environment.md in the same change.
  */
-import { coreEnv, csv, databaseEnv, port, redisEnv, storageEnv } from "@repo/nest-common";
+import {
+  coreEnv,
+  csv,
+  databaseEnv,
+  port,
+  redisEnv,
+  storageEnv,
+  withServicePort,
+} from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import * as z from "zod";
 import { parseAuthSecrets } from "./auth/secrets";
@@ -93,7 +101,7 @@ export const envSchema = {
 
 export const env = createEnv({
   server: envSchema,
-  runtimeEnv: process.env,
+  runtimeEnv: withServicePort("API"),
   emptyStringAsUndefined: true,
 });
 

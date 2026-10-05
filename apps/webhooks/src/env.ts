@@ -5,7 +5,7 @@
  */
 
 import { MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
-import { coreEnv, csv, databaseEnv, port, redisEnv } from "@repo/nest-common";
+import { coreEnv, csv, databaseEnv, port, redisEnv, withServicePort } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import * as z from "zod";
 
@@ -40,7 +40,7 @@ export const envSchema = {
 
 export const env = createEnv({
   server: envSchema,
-  runtimeEnv: process.env,
+  runtimeEnv: withServicePort("WEBHOOKS"),
   emptyStringAsUndefined: true,
 });
 

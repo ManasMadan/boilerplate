@@ -7,6 +7,7 @@ import {
   port,
   requiredInProduction,
   storageEnv,
+  withServicePort,
 } from "./env";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -46,6 +47,16 @@ describe("environment fragments", () => {
     expect(port(3001).parse(undefined)).toBe(3001);
     expect(port(3001).parse("8080")).toBe(8080);
     expect(port(3001).safeParse("70000").success).toBe(false);
+  });
+
+  it("listens on PORT when it's set, else on the service's own port from the local .env", () => {
+    expect(withServicePort("API", { PORT: "8080", API_PORT: "3101" }).PORT).toBe("8080");
+    expect(withServicePort("API", { PORT: "", API_PORT: "3101", OTHER: "x" })).toEqual({
+      PORT: "3101",
+      API_PORT: "3101",
+      OTHER: "x",
+    });
+    expect(withServicePort("API", {}).PORT).toBeUndefined();
   });
 
   it("reads the storage switches as booleans", () => {

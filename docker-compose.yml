@@ -114,7 +114,7 @@ services:
         set -e
         S3="aws --endpoint-url http://rustfs:9000"
         $$S3 s3api head-bucket --bucket uploads 2>/dev/null || $$S3 s3 mb s3://uploads
-        $$S3 s3api put-bucket-cors --bucket uploads --cors-configuration '{"CORSRules":[{"AllowedOrigins":["http://localhost:3000"],"AllowedMethods":["PUT","GET"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}'
+        $$S3 s3api put-bucket-cors --bucket uploads --cors-configuration '{"CORSRules":[{"AllowedOrigins":["${WEB_URL:-http://localhost:3000}"],"AllowedMethods":["PUT","GET"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}'
     restart: "no"
 
   # clamd scans every upload before it's accepted. The Debian image has arm64 builds.
@@ -247,6 +247,6 @@ configs:
       {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"mailpit": {"@type": "Relay", "name": "mailpit", "description": "Everything else, to Mailpit", "address": "mailpit", "port": 1025, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}
       {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"refuse": {"@type": "Relay", "name": "refuse", "description": "bounce.test, refused by our own port 25", "address": "127.0.0.1", "port": 25, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}
       {"@type": "update", "object": "MtaOutboundStrategy", "value": {"route": {"match": {"0": {"if": "is_local_domain(rcpt_domain)", "then": "'local'"}, "1": {"if": "rcpt_domain == 'bounce.test'", "then": "'refuse'"}}, "else": "'mailpit'"}}}
-      {"@type": "upsert", "object": "WebHook", "matchOn": ["url"], "value": {"feedback": {"url": "http://host.docker.internal:3004/webhooks/stalwart", "events": {"delivery.dsn-perm-fail": true, "delivery.dsn-temp-fail": true}, "eventsPolicy": "include", "signatureKey": {"@type": "EnvironmentVariable", "variableName": "STALWART_WEBHOOK_SECRET"}, "httpAuth": {"@type": "Unauthenticated"}, "httpHeaders": {}}}}
+      {"@type": "upsert", "object": "WebHook", "matchOn": ["url"], "value": {"feedback": {"url": "http://host.docker.internal:${WEBHOOKS_PORT:-3004}/webhooks/stalwart", "events": {"delivery.dsn-perm-fail": true, "delivery.dsn-temp-fail": true}, "eventsPolicy": "include", "signatureKey": {"@type": "EnvironmentVariable", "variableName": "STALWART_WEBHOOK_SECRET"}, "httpAuth": {"@type": "Unauthenticated"}, "httpHeaders": {}}}}
       {"@type": "update", "object": "SpamPyzor", "value": {"enable": false}}
       {"@type": "create", "object": "Action", "value": {"reload": {"@type": "ReloadSettings"}}}

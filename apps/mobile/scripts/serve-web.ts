@@ -4,16 +4,26 @@
  * else is the single-page app. Used by the end-to-end tests, and to try the app in a
  * browser: `bun run serve:web`.
  *
- *   MOBILE_WEB_PORT  where to listen (3100)
- *   API_URL          where apps/api is (http://localhost:3001)
+ *   MOBILE_WEB_PORT  where to listen
+ *   API_URL          where apps/api is
+ *
+ * both from the root .env (or the e2e run, which sets them for this checkout's stack).
  *
  * That origin must be one of the API's APP_ORIGINS, or sign-in is refused (CSRF check).
  */
 import { existsSync, statSync } from "node:fs";
 import { join, normalize } from "node:path";
 
-const port = Number(process.env.MOBILE_WEB_PORT ?? 3100);
-const api = process.env.API_URL ?? "http://localhost:3001";
+const required = (name: string) => {
+  const value = process.env[name];
+  if (!value) {
+    console.error(`${name} isn't set: run \`bun run setup --env\` to add it to .env.`);
+    process.exit(1);
+  }
+  return value;
+};
+const port = Number(required("MOBILE_WEB_PORT"));
+const api = required("API_URL");
 const dist = join(import.meta.dirname, "..", "dist");
 const index = join(dist, "index.html");
 if (!existsSync(index)) {
