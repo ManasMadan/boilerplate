@@ -40,7 +40,7 @@ export type UncheckedJob = Job<unknown, unknown>;
 export type UncheckedQueue = Queue<unknown, unknown>;
 
 /** What one of a queue's jobs is stored as (`createProducer` writes it). */
-export type JobData<Q extends QueueName, J extends JobName<Q> = JobName<Q>> = {
+type JobData<Q extends QueueName, J extends JobName<Q> = JobName<Q>> = {
   meta: JobMeta;
   payload: JobPayload<Q, J>;
 };
