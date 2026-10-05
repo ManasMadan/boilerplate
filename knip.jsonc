@@ -15,8 +15,9 @@
       // Claude Code hooks (.claude/settings.json), the image build's peer check
       // (deploy/docker/*.Dockerfile) and the repo scripts.
       "entry": [".claude/hooks/*.ts", "deploy/docker/check-peers.mjs", "scripts/*.ts"],
-      // Run through bunx by scripts/type-coverage.ts, which knip doesn't read as a command.
-      "ignoreDependencies": ["type-coverage"]
+      // Run through bunx by scripts/type-coverage.ts and scripts/pre-commit.ts, which knip
+      // doesn't read as commands.
+      "ignoreDependencies": ["type-coverage", "lint-staged"]
     },
     "apps/api": {
       // The better-auth CLI's config (the auth:schema script).
