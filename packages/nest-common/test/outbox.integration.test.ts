@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createDb, type Db, tenantTx, transaction } from "@repo/db";
-import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
+import { createTestDatabase, factories, type TestDatabase } from "@repo/db/testing";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as z from "zod";
@@ -59,7 +59,9 @@ describe("outbox", () => {
   });
 
   it("prefers the tenant the transaction runs as, with no request around", async () => {
-    const [orgId, key] = [randomUUID(), randomUUID()];
+    // A real workspace: tenantTx takes only a workspace's id (@repo/db/testing's are).
+    const { org } = await factories(db).userWithWorkspace();
+    const [orgId, key] = [org.id, randomUUID()];
     await tenantTx(db, orgId, (tx) => emitEvent(tx, "todo.created.v1", key, todo()));
     expect(await row(key)).toMatchObject({ org_id: orgId, actor_id: null, request_id: null });
   });

@@ -4,7 +4,7 @@
  *   @Injectable()
  *   class TodoRepository {
  *     constructor(@InjectDatabase() private readonly database: Database) {}
- *     list(orgId: string) { return withTenant(this.database.read, orgId).todo.findMany(); }
+ *     list(orgId: OrgId) { return withTenant(this.database.read, orgId).todo.findMany(); }
  *   }
  *
  * One pool per process, created at boot from the service's validated env and closed on
