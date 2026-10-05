@@ -21,8 +21,8 @@ export const newUser = (): User => ({
   password: `pw-${randomUUID()}`,
 });
 
-/** The 6-digit code in the newest email to `to`. */
-async function nextCode(to: string, after = new Date(0)) {
+/** The 6-digit code in the newest email to `to` sent after `after`. */
+export async function nextCode(to: string, after = new Date(0)) {
   let code: string | undefined;
   await expect
     .poll(

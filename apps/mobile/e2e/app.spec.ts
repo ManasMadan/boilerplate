@@ -1,6 +1,6 @@
 /** The app's screens (rendered for the web) against the real stack. */
 import { totp } from "@repo/testing/totp";
-import { expect, newUser, signUp, test } from "./support";
+import { expect, newUser, nextCode, signUp, test } from "./support";
 
 test("sign up, verify the email and land on the todos", async ({ page }) => {
   await signUp(page);
@@ -40,6 +40,33 @@ test("sign out, then sign in again", async ({ page }) => {
   await expect(page.getByRole("alert")).toHaveText("That email and password don't match.");
 
   await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
+});
+
+test("reset a forgotten password and sign in with the new one", async ({ page }) => {
+  const user = await signUp(page);
+  await page.getByRole("tab", { name: /Settings/ }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page.getByText("Reset your password")).toBeVisible();
+
+  const sent = new Date();
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByRole("button", { name: "Send code" }).click();
+  await expect(page.getByText("Choose a new password")).toBeVisible();
+  const password = newUser().password;
+  await page.getByLabel("Verification code").fill(await nextCode(user.email, sent));
+  await page.getByLabel("New password").fill(password);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Password updated. Sign in with your new password.")).toBeVisible();
+
+  // The old password no longer works; the new one does.
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("alert")).toHaveText("That email and password don't match.");
+  await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
 });

@@ -113,8 +113,8 @@ screenshots are identical on every machine and in CI.
 - **i18n**: use-intl with the same catalogs.
 - **Push**: `expo-notifications` gets the native FCM or APNs token and registers the device
   with the API (`src/lib/push.ts`).
-- **Captcha**: when the API has Turnstile on, sign-up and resending the email code first
-  open the web app's `/captcha` page in the system's browser sheet, which hands the app a
+- **Captcha**: when the API has Turnstile on, sign-up, resending the email code and
+  asking for a password reset code first open the web app's `/captcha` page in the system's browser sheet, which hands the app a
   token through its scheme (`useCaptcha()` in `src/lib/captcha.ts`; see
   [auth.md](auth.md#captcha)). A new form whose request the API guards with captcha calls
   it too.

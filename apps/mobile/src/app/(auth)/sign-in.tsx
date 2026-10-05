@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
-import { Link, router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
@@ -18,6 +18,8 @@ export default function SignIn() {
   const errorMessage = useAuthErrorMessage();
   const schemas = useAuthSchemas();
   const { data: system } = useSystemInfoQuery();
+  // Set by a finished password reset (reset-password.tsx).
+  const { reset } = useLocalSearchParams<{ reset?: string }>();
   const [failure, setFailure] = useState<string>();
   const schema = z.object({ email: schemas.email, password: schemas.password });
   const form = useForm({
@@ -74,6 +76,10 @@ export default function SignIn() {
         textContentType="password"
         onSubmitEditing={submit}
       />
+      <Link href="/forgot-password" className="self-end">
+        <Text className="text-sm underline">{t("auth.forgotPassword")}</Text>
+      </Link>
+      {reset === "done" ? <Text role="status">{t("auth.passwordUpdated")}</Text> : null}
       {failure ? (
         <Text role="alert" className="text-destructive">
           {failure}
