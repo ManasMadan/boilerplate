@@ -723,7 +723,9 @@ describe("the commands a step runs", () => {
     const started = Date.now();
     const ran = exec("sh", ["-c", "sleep 20 & sleep 20"]);
     setTimeout(() => controller.abort(), 50);
-    expect((await ran).status).toBeNull();
+    // Killed by the signal (no status) or exiting on it, depending on how the shell
+    // handles SIGTERM: never a success, and long before the sleeps' 20 seconds.
+    expect((await ran).status).not.toBe(0);
     expect(Date.now() - started).toBeLessThan(5000);
     controller.abort();
   });
