@@ -1,5 +1,6 @@
 /** The example feature. Copy this file's shape for new features. */
 import * as z from "zod";
+import { todoIdSchema } from "../ids";
 import { page, pageInput } from "../pagination";
 import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
 
@@ -14,7 +15,7 @@ const errors = errorsOf(
 const TODO_TITLE_MAX_LENGTH = 200;
 
 const todoSchema = z.object({
-  id: z.uuid(),
+  id: todoIdSchema,
   title: z.string(),
   completed: z.boolean(),
   /** Send back on updates; a stale version is rejected with TODO_VERSION_CONFLICT. */
@@ -30,11 +31,11 @@ const todoTitle = z.string().trim().min(1).max(TODO_TITLE_MAX_LENGTH);
 
 export const createTodoInput = z.object({ title: todoTitle });
 export const setTodoCompletedInput = z.object({
-  id: z.uuid(),
+  id: todoIdSchema,
   completed: z.boolean(),
   version: z.number().int(),
 });
-export const deleteTodoInput = z.object({ id: z.uuid() });
+export const deleteTodoInput = z.object({ id: todoIdSchema });
 
 /**
  * Todo changes are limited in TodoService, not here: the MCP server's tools change todos

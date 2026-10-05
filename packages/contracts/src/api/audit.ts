@@ -1,5 +1,6 @@
 /** The organization's audit log (owners and admins only). */
 import * as z from "zod";
+import { userIdSchema } from "../ids";
 import { page, pageInput } from "../pagination";
 import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
 
@@ -15,7 +16,7 @@ export const auditEntrySchema = z.object({
   name: z.string(),
   occurredAt: z.date(),
   /** Who did it; null for system actions or deleted accounts. */
-  actor: z.object({ id: z.uuid(), name: z.string(), email: z.email() }).nullable(),
+  actor: z.object({ id: userIdSchema, name: z.string(), email: z.email() }).nullable(),
   payload: z.record(z.string(), z.unknown()),
 });
 export type AuditEntry = z.infer<typeof auditEntrySchema>;

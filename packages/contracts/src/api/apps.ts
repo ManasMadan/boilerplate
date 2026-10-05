@@ -3,6 +3,7 @@
  * IDE), and disconnecting them. One entry per app and workspace the user approved.
  */
 import * as z from "zod";
+import { orgIdSchema } from "../ids";
 import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
@@ -15,7 +16,7 @@ const connectedAppSchema = z.object({
   /** As the app registered itself: shown, but not verified. */
   name: z.string().nullable(),
   uri: z.string().nullable(),
-  workspace: z.object({ id: z.uuid(), name: z.string() }),
+  workspace: z.object({ id: orgIdSchema, name: z.string() }),
   scopes: z.array(z.string()),
   connectedAt: z.date(),
   /** When the app last renewed its access (a refresh token); null if it never has. */

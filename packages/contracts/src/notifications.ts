@@ -9,6 +9,7 @@
  * templates at it.
  */
 import * as z from "zod";
+import { todoIdSchema, webhookEndpointIdSchema } from "./ids";
 import { entriesOf } from "./objects";
 
 export const notificationChannels = ["in_app", "email", "push", "sms"] as const;
@@ -33,8 +34,8 @@ export const mutableCategories = entriesOf(notificationCategories)
  * packages/i18n (`notification.<type>.title` / `.body`, with the data as arguments).
  */
 export const inAppNotifications = {
-  "webhooks.endpoint-disabled": z.object({ endpointId: z.uuid(), url: z.string() }),
-  "todo.reminder": z.object({ todoId: z.uuid(), title: z.string() }),
+  "webhooks.endpoint-disabled": z.object({ endpointId: webhookEndpointIdSchema, url: z.string() }),
+  "todo.reminder": z.object({ todoId: todoIdSchema, title: z.string() }),
   "billing.payment-failed": z.object({ amount: z.string() }),
 } as const;
 export type InAppNotificationType = keyof typeof inAppNotifications;

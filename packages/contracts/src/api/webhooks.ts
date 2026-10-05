@@ -4,6 +4,7 @@
  */
 import * as z from "zod";
 import { webhookEvents } from "../events";
+import { webhookDeliveryIdSchema, webhookEndpointIdSchema } from "../ids";
 import { page, pageInput } from "../pagination";
 import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 
@@ -27,7 +28,7 @@ export const WEBHOOK_ENDPOINT_LIMIT = 20;
 export const WEBHOOK_SECRET_OVERLAP_HOURS = 24;
 
 export const webhookEndpointSchema = z.object({
-  id: z.uuid(),
+  id: webhookEndpointIdSchema,
   url: z.url(),
   description: z.string(),
   /** Subscribed events; empty means all of them. */
@@ -53,7 +54,7 @@ const WEBHOOK_DELIVERY_ERRORS = [
 export type WebhookDeliveryError = (typeof WEBHOOK_DELIVERY_ERRORS)[number];
 
 export const webhookDeliverySchema = z.object({
-  id: z.uuid(),
+  id: webhookDeliveryIdSchema,
   eventName: z.string(),
   status: z.enum(["pending", "succeeded", "failed"]),
   attempts: z.number().int(),
@@ -69,7 +70,7 @@ const endpointFields = {
   description: z.string().trim().max(200).optional(),
   events: z.array(z.enum(webhookEvents)).max(webhookEvents.length).optional(),
 };
-const endpointId = z.object({ id: z.uuid() });
+const endpointId = z.object({ id: webhookEndpointIdSchema });
 /** The signing secret, shown once: store it to verify our signatures. */
 const withSecret = z.object({ secret: z.string().startsWith("whsec_") });
 
@@ -123,6 +124,6 @@ export const webhooksContract = {
     .meta({
       rateLimit: { name: "webhook-redeliveries", points: 60, windowSeconds: 60, per: "org" },
     })
-    .input(endpointId)
+    .input(z.object({ id: webhookDeliveryIdSchema }))
     .output(z.void()),
 };

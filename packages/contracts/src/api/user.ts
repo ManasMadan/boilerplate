@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { phoneCodeSchema, phoneNumberSchema } from "../auth";
+import { fileIdSchema, orgIdSchema, userIdSchema } from "../ids";
 import { HOUR_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
@@ -15,13 +16,13 @@ const errors = errorsOf(
 );
 
 const meSchema = z.object({
-  id: z.uuid(),
+  id: userIdSchema,
   name: z.string(),
   email: z.email(),
   image: z.string().nullable(),
   locale: z.string(),
   timezone: z.string(),
-  activeOrganizationId: z.uuid().nullable(),
+  activeOrganizationId: orgIdSchema.nullable(),
   /** Verified, E.164; null until the user adds one. */
   phoneNumber: z.string().nullable(),
 });
@@ -56,6 +57,6 @@ export const userContract = {
   /** A ready avatar upload of the user's (FILE_NOT_READY otherwise), or null to remove it. */
   setAvatar: route("POST", "/me/avatar", "Set or remove the profile picture")
     .meta({ rateLimit: EVERYDAY_WRITES })
-    .input(z.object({ fileId: z.uuid().nullable() }))
+    .input(z.object({ fileId: fileIdSchema.nullable() }))
     .output(meSchema),
 };

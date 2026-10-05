@@ -7,6 +7,7 @@
  * files migration's row-level security), and what processing it gets (apps/worker
  * files processor).
  */
+import type { FileId } from "@repo/contracts/ids";
 import { keysOf } from "./objects";
 export const uploadPurposes = {
   /** A profile picture: re-encoded to a square WebP, metadata (EXIF, GPS) stripped. */
@@ -32,4 +33,4 @@ export const fileRejections = [
 export type FileRejection = (typeof fileRejections)[number];
 
 /** The path a stored file is served from (the API redirects to a short-lived URL). */
-export const fileContentPath = (fileId: string) => `/api/v1/files/${fileId}/content`;
+export const fileContentPath = (fileId: FileId) => `/api/v1/files/${fileId}/content`;

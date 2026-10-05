@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { isErrorCode } from "./errors";
 import { fileContentPath } from "./files";
+import { fileIdSchema } from "./ids";
 import { AI_MCP_PATH, MCP_PATH, mcpResource } from "./mcp";
 import { formatMoney } from "./money";
 import { entriesOf, fieldOf, hasKey, keysOf, required } from "./objects";
@@ -55,7 +56,8 @@ describe("resource paths", () => {
   });
 
   it("serves a file's content under the REST API", () => {
-    expect(fileContentPath("f1")).toBe("/api/v1/files/f1/content");
+    const fileId = fileIdSchema.parse("0199a3c4-0000-7000-8000-0000000000f1");
+    expect(fileContentPath(fileId)).toBe(`/api/v1/files/${fileId}/content`);
   });
 });
 

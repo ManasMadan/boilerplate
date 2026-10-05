@@ -6,6 +6,7 @@
  */
 import * as z from "zod";
 import { fileRejections, fileStatuses, uploadPurposeNames } from "../files";
+import { fileIdSchema } from "../ids";
 import { HOUR_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
@@ -20,7 +21,7 @@ const errors = errorsOf(
 );
 
 export const fileSchema = z.object({
-  id: z.uuid(),
+  id: fileIdSchema,
   purpose: z.enum(uploadPurposeNames),
   status: z.enum(fileStatuses),
   filename: z.string(),
@@ -60,9 +61,9 @@ export const filesContract = {
   /** After the PUT succeeded: the file is checked and becomes ready (or rejected). */
   completeUpload: route("POST", "/files/{fileId}/complete", "Finish an upload")
     .meta({ rateLimit: EVERYDAY_WRITES })
-    .input(z.object({ fileId: z.uuid() }))
+    .input(z.object({ fileId: fileIdSchema }))
     .output(fileSchema),
   get: route("GET", "/files/{fileId}", "A file's status")
-    .input(z.object({ fileId: z.uuid() }))
+    .input(z.object({ fileId: fileIdSchema }))
     .output(fileSchema),
 };

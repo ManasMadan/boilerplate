@@ -8,6 +8,7 @@
  * hash is stored.
  */
 import * as z from "zod";
+import { apiKeyIdSchema, userIdSchema } from "../ids";
 import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 import { API_KEY_PREFIX, API_KEY_SCOPES } from "./scopes";
 
@@ -29,13 +30,13 @@ export const API_KEY_EXPIRY_DAYS = [30, 90, 365] as const;
 export const MAX_API_KEY_DAYS = 365;
 
 const apiKeySchema = z.object({
-  id: z.uuid(),
+  id: apiKeyIdSchema,
   name: z.string(),
   /** The first characters of the key (with its prefix), to recognise it. */
   start: z.string(),
   scopes: z.array(z.enum(API_KEY_SCOPES)),
   /** Who created it (and so who it acts as); null once they've deleted their account. */
-  createdBy: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+  createdBy: z.object({ id: userIdSchema, name: z.string() }).nullable(),
   createdAt: z.date(),
   expiresAt: z.date().nullable(),
   lastUsedAt: z.date().nullable(),
@@ -92,6 +93,6 @@ export const apiKeysContract = {
       summary: "Revoke an API key",
       successStatus: 204,
     })
-    .input(z.object({ id: z.uuid() }))
+    .input(z.object({ id: apiKeyIdSchema }))
     .output(z.void()),
 };

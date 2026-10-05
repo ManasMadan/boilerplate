@@ -8,6 +8,7 @@
  * channel and their active organization's.
  */
 import * as z from "zod";
+import type { OrgId, UserId } from "./ids";
 
 export const realtimeMessage = z.discriminatedUnion("type", [
   /** Todos in the organization changed (created, completed, deleted). */
@@ -22,8 +23,10 @@ export const realtimeMessage = z.discriminatedUnion("type", [
 export type RealtimeMessage = z.infer<typeof realtimeMessage>;
 
 export const realtimeChannel = {
-  user: (userId: string) => `user:${userId}`,
-  org: (orgId: string) => `org:${orgId}`,
+  user: (userId: UserId) => `user:${userId}`,
+  org: (orgId: OrgId) => `org:${orgId}`,
+  /** The organization channel with `{id}` where its id goes, for the Python side's generated code. */
+  orgTemplate: "org:{id}",
 };
 
 /**

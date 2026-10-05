@@ -1,5 +1,6 @@
 /** The signed-in user's in-app notifications and what they choose to receive. */
 import * as z from "zod";
+import { notificationIdSchema } from "../ids";
 import {
   inAppNotifications,
   isWebPushEndpoint,
@@ -17,7 +18,7 @@ const inAppType = z.enum(keysOf(inAppNotifications));
 export const notificationCategorySchema = z.enum(keysOf(notificationCategories));
 
 export const notificationSchema = z.object({
-  id: z.uuid(),
+  id: notificationIdSchema,
   type: inAppType,
   /** Arguments for the type's copy (`notification.<type>.title` / `.body`). */
   data: z.record(z.string(), z.string()),
@@ -78,7 +79,7 @@ export const notificationsContract = {
   ),
   markRead: route("POST", "/notifications/read", "Mark notifications as read")
     .meta({ rateLimit: EVERYDAY_WRITES })
-    .input(z.object({ ids: z.array(z.uuid()).min(1).max(100) }))
+    .input(z.object({ ids: z.array(notificationIdSchema).min(1).max(100) }))
     .output(z.void()),
   markAllRead: route("POST", "/notifications/read-all", "Mark every notification as read")
     .meta({ rateLimit: EVERYDAY_WRITES })

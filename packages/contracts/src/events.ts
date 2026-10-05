@@ -12,16 +12,27 @@
  * subscribe to it. The audit log records every event automatically.
  */
 import * as z from "zod";
+import {
+  apiKeyIdSchema,
+  orgIdSchema,
+  todoIdSchema,
+  userIdSchema,
+  webhookEndpointIdSchema,
+} from "./ids";
 import { keysOf } from "./objects";
 
-const todoEvent = z.object({ todoId: z.uuid(), title: z.string() });
-const userEvent = z.object({ userId: z.uuid() });
-const memberEvent = z.object({ organizationId: z.uuid(), userId: z.uuid(), role: z.string() });
+const todoEvent = z.object({ todoId: todoIdSchema, title: z.string() });
+const userEvent = z.object({ userId: userIdSchema });
+const memberEvent = z.object({
+  organizationId: orgIdSchema,
+  userId: userIdSchema,
+  role: z.string(),
+});
 
 export const events = {
   "todo.created.v1": todoEvent,
   "todo.completed.v1": todoEvent,
-  "todo.deleted.v1": z.object({ todoId: z.uuid() }),
+  "todo.deleted.v1": z.object({ todoId: todoIdSchema }),
 
   // Account security. Written after better-auth has committed its own change (it owns
   // those writes), so, unlike product events, these are recorded just after the fact.
@@ -57,20 +68,23 @@ export const events = {
   "auth.phone_changed.v1": userEvent.extend({ change: z.enum(["added", "removed"]) }),
   /** An OAuth (MCP) client was approved for, or disconnected from, one of the user's workspaces. */
   "auth.app_connected.v1": userEvent.extend({ clientId: z.string() }),
-  "auth.app_disconnected.v1": userEvent.extend({ clientId: z.string(), organizationId: z.uuid() }),
+  "auth.app_disconnected.v1": userEvent.extend({
+    clientId: z.string(),
+    organizationId: orgIdSchema,
+  }),
   "auth.account_deleted.v1": userEvent,
 
-  "org.created.v1": z.object({ organizationId: z.uuid(), name: z.string() }),
-  "org.deleted.v1": z.object({ organizationId: z.uuid() }),
+  "org.created.v1": z.object({ organizationId: orgIdSchema, name: z.string() }),
+  "org.deleted.v1": z.object({ organizationId: orgIdSchema }),
   "org.member_added.v1": memberEvent,
   "org.member_removed.v1": memberEvent,
   "org.member_role_changed.v1": memberEvent.extend({ previousRole: z.string() }),
   "org.api_key_created.v1": z.object({
-    apiKeyId: z.uuid(),
+    apiKeyId: apiKeyIdSchema,
     name: z.string(),
     scopes: z.array(z.string()),
   }),
-  "org.api_key_revoked.v1": z.object({ apiKeyId: z.uuid(), name: z.string() }),
+  "org.api_key_revoked.v1": z.object({ apiKeyId: apiKeyIdSchema, name: z.string() }),
   // Emitted by apps/webhooks.
   /**
    * Our mail server says an address hard-bounced (or, from a feedback loop, that its
@@ -97,21 +111,21 @@ export const events = {
     /** The Stripe event's `data.object`, as Stripe sent it. */
     object: z.record(z.string(), z.unknown()),
   }),
-  "webhook.endpoint_created.v1": z.object({ endpointId: z.uuid(), url: z.url() }),
+  "webhook.endpoint_created.v1": z.object({ endpointId: webhookEndpointIdSchema, url: z.url() }),
   "webhook.endpoint_updated.v1": z.object({
-    endpointId: z.uuid(),
+    endpointId: webhookEndpointIdSchema,
     changed: z.array(z.enum(["url", "description", "events", "enabled"])),
   }),
-  "webhook.endpoint_deleted.v1": z.object({ endpointId: z.uuid(), url: z.url() }),
-  "webhook.secret_rotated.v1": z.object({ endpointId: z.uuid() }),
+  "webhook.endpoint_deleted.v1": z.object({ endpointId: webhookEndpointIdSchema, url: z.url() }),
+  "webhook.secret_rotated.v1": z.object({ endpointId: webhookEndpointIdSchema }),
   "webhook.endpoint_disabled.v1": z.object({
-    endpointId: z.uuid(),
+    endpointId: webhookEndpointIdSchema,
     url: z.url(),
     reason: z.enum(["failing"]),
   }),
 
   "org.invitation_sent.v1": z.object({
-    organizationId: z.uuid(),
+    organizationId: orgIdSchema,
     invitationId: z.uuid(),
     email: z.email(),
     role: z.string(),
@@ -156,8 +170,8 @@ export const eventEnvelope = z.object({
   /** Ordering/partition key, usually the aggregate id. */
   key: z.string(),
   payload: z.unknown(),
-  orgId: z.uuid().nullable(),
-  actorId: z.uuid().nullable(),
+  orgId: orgIdSchema.nullable(),
+  actorId: userIdSchema.nullable(),
   requestId: z.string().nullable(),
   occurredAt: z.iso.datetime({ offset: true }),
   /** The owning schema whose outbox the event came from. */

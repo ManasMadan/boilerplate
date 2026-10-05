@@ -5,6 +5,7 @@
  */
 import { eventIterator } from "@orpc/contract";
 import * as z from "zod";
+import { documentIdSchema, userIdSchema } from "../ids";
 import { HOUR_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 
@@ -24,7 +25,7 @@ export const DOCUMENT_CONTENT_MAX_LENGTH = 200_000;
 export const QUESTION_MAX_LENGTH = 2_000;
 
 export const aiDocumentSchema = z.object({
-  id: z.uuid(),
+  id: documentIdSchema,
   title: z.string(),
   /** pending → indexing → ready (or failed, with an error code). */
   status: z.enum(["pending", "indexing", "ready", "failed"]),
@@ -32,7 +33,7 @@ export const aiDocumentSchema = z.object({
   chunkCount: z.number().int(),
   /** A few sentences, written after indexing when a model is configured. */
   summary: z.string().nullable(),
-  createdBy: z.uuid().nullable(),
+  createdBy: userIdSchema.nullable(),
   createdAt: z.date(),
 });
 export type AiDocument = z.infer<typeof aiDocumentSchema>;
@@ -87,7 +88,7 @@ export const aiContract = {
   /** Its creator or a workspace admin (FORBIDDEN otherwise). */
   removeDocument: route("POST", "/ai/documents/{documentId}/remove", "Remove a document")
     .meta({ apiKeyScope: "documents:write", rateLimit: EVERYDAY_WRITES })
-    .input(z.object({ documentId: z.uuid() }))
+    .input(z.object({ documentId: documentIdSchema }))
     .output(z.void()),
   /** Streams an answer from the workspace's documents (AI_BUDGET_EXCEEDED when used up). */
   ask: route("POST", "/ai/answers", "Ask the assistant")
