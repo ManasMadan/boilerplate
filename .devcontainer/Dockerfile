@@ -10,3 +10,5 @@ COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
+# The base image's own non-root user, which VS Code and Codespaces connect as anyway.
+USER node

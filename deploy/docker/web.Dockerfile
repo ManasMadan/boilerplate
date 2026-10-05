@@ -53,6 +53,9 @@ COPY --from=build /repo/apps/web/.next/standalone /app
 WORKDIR /app/apps/web
 USER 10001:10001
 EXPOSE 3000
+# For plain Docker: Kubernetes ignores it and probes the same path (the stack chart).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+  CMD ["/nodejs/bin/node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT}/healthz`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 # Next writes its render cache under .next/cache: mount a writable volume there when
 # the root filesystem is read-only (the Helm chart does).
 CMD ["server.js"]

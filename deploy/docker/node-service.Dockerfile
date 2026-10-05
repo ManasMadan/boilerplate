@@ -50,11 +50,18 @@ RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules \
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
 ARG SERVICE
+# The service's default port (docker-bake.hcl sets it from the service's env.ts), for the
+# health check when nothing sets PORT; a deployment that does still wins.
+ARG PORT
 ARG RELEASE=dev
 ENV NODE_ENV=production \
+    PORT=${PORT} \
     RELEASE=${RELEASE}
 # Files stay owned by root and read-only to the process; it writes nowhere but /tmp.
 COPY --from=build /out /app
 WORKDIR /app/apps/${SERVICE}
 USER 10001:10001
+# For plain Docker: Kubernetes ignores it and probes the same path (the stack chart).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+  CMD ["/nodejs/bin/node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT}/health/live`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["--enable-source-maps", "--import", "./dist/telemetry.mjs", "dist/main.mjs"]

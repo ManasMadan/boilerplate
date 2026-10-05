@@ -35,6 +35,29 @@ describe("the Dockerfiles", () => {
   });
 });
 
+describe("the Node service images' health check", () => {
+  // The image's PORT is the one the health check calls when nothing else sets it, so it
+  // must be the port the service listens on by default.
+  it("calls each service on the port its env.ts defaults to", () => {
+    const bake = readFileSync(join(ROOT, "docker-bake.hcl"), "utf8");
+    const map = /PORT\s*=\s*\{([^}]*)\}\[service\]/.exec(bake)?.[1] ?? "";
+    const baked = Object.fromEntries(
+      [...map.matchAll(/(\w+)\s*=\s*"(\d+)"/g)].map((m) => [m[1], m[2]]),
+    );
+    const services = /service\s*=\s*\[([^\]]*)\]/.exec(bake)?.[1]?.match(/\w+/g) ?? [];
+    const defaults = Object.fromEntries(
+      services.map((service) => [
+        service,
+        /PORT: port\((\d+)\)/.exec(
+          readFileSync(join(ROOT, `apps/${service}/src/env.ts`), "utf8"),
+        )?.[1],
+      ]),
+    );
+    expect(services.length).toBeGreaterThan(0);
+    expect(baked).toEqual(defaults);
+  });
+});
+
 describe("the web image's build", () => {
   // `next build` type-checks the project next.config.ts's tsconfigPath names, in a tree
   // pruned to the web app and its workspace dependencies, where no code generator has run

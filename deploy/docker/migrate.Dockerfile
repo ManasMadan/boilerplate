@@ -31,9 +31,9 @@ COPY --from=prune /pruned/full/ .
 # bundled Studio UI declares React peers, and `migrate deploy` never loads it.)
 # Migrations run on Prisma's schema engine, a native binary its postinstall downloads
 # for this platform (the install above skips lifecycle scripts, so it runs here).
-RUN rm -rf node_modules/@repo \
- && cd node_modules/@prisma/engines && bun scripts/postinstall.js \
- && ls schema-engine-*
+RUN rm -rf node_modules/@repo
+WORKDIR /repo/node_modules/@prisma/engines
+RUN bun scripts/postinstall.js && ls schema-engine-*
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
 COPY --from=build /repo/node_modules /app/node_modules
