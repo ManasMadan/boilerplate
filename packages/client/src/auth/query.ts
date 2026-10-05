@@ -17,9 +17,11 @@ export const authKeys = {
 };
 
 /** The data of a better-auth answer; its error is thrown, so the query shows it. */
-export async function authData<T>(call: Promise<{ data: T | null; error: unknown }>): Promise<T> {
-  const { data, error } = await call;
-  if (error) throw error;
+export async function authData<T>(
   // better-auth answers either data or an error.
-  return data as T;
+  call: Promise<{ data: T; error: null } | { data: null; error: object }>,
+): Promise<T> {
+  const answer = await call;
+  if (answer.error) throw answer.error;
+  return answer.data;
 }

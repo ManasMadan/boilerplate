@@ -24,12 +24,14 @@ export interface ApiClientOptions {
   fetch?: typeof fetch;
 }
 
+const localeHeader = (locale: string | undefined) => (locale ? { "x-locale": locale } : {});
+
 export function createApiClient(options: ApiClientOptions = {}) {
   const link = new RPCLink({
     url: `${options.baseUrl ?? (typeof window === "undefined" ? "" : window.location.origin)}/rpc`,
     headers: async () => ({
       ...(options.appVersion && { "x-app-version": options.appVersion }),
-      ...(options.getLocale?.() && { "x-locale": options.getLocale() as string }),
+      ...localeHeader(options.getLocale?.()),
       ...(await options.getHeaders?.()),
     }),
     fetch: (request, init) =>

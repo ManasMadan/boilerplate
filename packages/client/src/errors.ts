@@ -6,6 +6,7 @@
 import { ORPCError } from "@orpc/client";
 import { errorData } from "@repo/contracts/api/base";
 import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import { fieldOf } from "@repo/contracts/objects";
 
 /** `instanceof ORPCError`, typed: the bare check narrows to ORPCError<any, any>. */
 const isOrpcError = (error: unknown): error is ORPCError<string, unknown> =>
@@ -14,7 +15,7 @@ const isOrpcError = (error: unknown): error is ORPCError<string, unknown> =>
 export function errorCode(error: unknown): ErrorCode {
   // A thrown ORPCError, or a code the API reported inside a response, as `{ code }` (an
   // answer that stopped, a document that couldn't be prepared).
-  const code = (error as { code?: unknown } | null | undefined)?.code;
+  const code = fieldOf(error, "code");
   if (isErrorCode(code)) return code;
   // Network failures, CORS, aborted requests: the API was not reached.
   if (error instanceof TypeError) return "SERVICE_UNAVAILABLE";
