@@ -14,6 +14,7 @@ import {
   expect,
   type Page,
 } from "@playwright/test";
+import { todoIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { totp } from "@repo/testing/totp";
 import { Redis } from "ioredis";
 
@@ -312,7 +313,11 @@ export async function sendReminder(page: Page, title: string) {
   const producer = createProducer("notifications-bulk", authStore());
   await producer.add(
     "send",
-    { template: "todo.reminder", to: { userId: me.id }, data: { todoId: randomUUID(), title } },
+    {
+      template: "todo.reminder",
+      to: { userId: userIdSchema.parse(me.id) },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title },
+    },
     { jobId: randomUUID() },
   );
   await producer.close();
