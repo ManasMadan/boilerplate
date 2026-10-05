@@ -42,6 +42,11 @@ describe("renaming the project", () => {
     }
   });
 
+  it("writes the product as given, `$` and all", () => {
+    const pricey = identityFrom(["shop", "--owner", "me", "--product", "Shop $& $$ $1"]);
+    expect(rewrite('appName: "Boilerplate"', pricey)).toBe('appName: "Shop $& $$ $1"');
+  });
+
   it("derives the product and bundle id from the name", () => {
     expect(identityFrom(["my-app", "--owner", "me"])).toEqual({
       name: "my-app",

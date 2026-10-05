@@ -31,24 +31,28 @@ const SELF = new Set(["scripts/rename.ts", "scripts/rename.test.ts"]);
 /** What the template is called, as `rename` finds it. */
 const OLD = { name: "boilerplate", owner: "ManasMadan", product: "Boilerplate" };
 
-/** The replacements, most specific first: each later one would mangle an earlier match. */
-export function replacements({ name, owner, product, bundleId }: Identity): [RegExp, string][] {
+/**
+ * The replacements, most specific first: each later one would mangle an earlier match.
+ * Plain text, not patterns: nothing here is a URL check, only a rewrite of what's written.
+ */
+export function replacements({ name, owner, product, bundleId }: Identity): [string, string][] {
   return [
-    [/ManasMadan\/boilerplate/g, `${owner}/${name}`],
-    [/ghcr\.io\/manasmadan\/boilerplate/g, `ghcr.io/${owner.toLowerCase()}/${name}`],
-    [/ManasMadan/g, owner],
-    [/manasmadan/g, owner.toLowerCase()],
+    ["ManasMadan/boilerplate", `${owner}/${name}`],
+    ["ghcr.io/manasmadan/boilerplate", `ghcr.io/${owner.toLowerCase()}/${name}`],
+    ["ManasMadan", owner],
+    ["manasmadan", owner.toLowerCase()],
     // The app store identifiers (with their .development / .preview variants), and the
     // push tests' APNs topic.
-    [/com\.boilerplate\.app/g, bundleId],
-    [/dev\.boilerplate\.app/g, bundleId],
-    [/Boilerplate/g, product],
-    [/boilerplate/g, name],
+    ["com.boilerplate.app", bundleId],
+    ["dev.boilerplate.app", bundleId],
+    ["Boilerplate", product],
+    ["boilerplate", name],
   ];
 }
 
 export function rewrite(text: string, identity: Identity) {
-  return replacements(identity).reduce((out, [pattern, to]) => out.replace(pattern, to), text);
+  // A function replacement: a string one would read `$&` or `$$` in the product as patterns.
+  return replacements(identity).reduce((out, [from, to]) => out.replaceAll(from, () => to), text);
 }
 
 /** The identity from the command line, with its defaults; throws on a bad value. */
