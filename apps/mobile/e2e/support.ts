@@ -31,7 +31,9 @@ async function nextCode(to: string, after = new Date(0)) {
           `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`,
         ).then((r) => r.json() as Promise<{ messages?: { ID: string; Created: string }[] }>);
         const latest = search.messages?.find((m) => new Date(m.Created) > after);
-        if (!latest) return false;
+        if (!latest) {
+          return false;
+        }
         const message = await fetch(`${MAILPIT}/api/v1/message/${latest.ID}`).then(
           (r) => r.json() as Promise<{ Text: string }>,
         );

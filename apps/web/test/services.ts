@@ -85,6 +85,8 @@ export interface Services {
  */
 export async function services(): Promise<Services> {
   const started = (globalThis as { webTestServices?: Promise<Services> }).webTestServices;
-  if (!started) throw new Error("the browser tests' services aren't running");
+  if (!started) {
+    throw new Error("the browser tests' services aren't running");
+  }
   return started;
 }

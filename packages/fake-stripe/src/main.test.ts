@@ -17,7 +17,9 @@ afterEach(() => {
 });
 
 function configure(env: Record<string, string | undefined>) {
-  for (const [name, value] of Object.entries({ ...REQUIRED, ...env })) vi.stubEnv(name, value);
+  for (const [name, value] of Object.entries({ ...REQUIRED, ...env })) {
+    vi.stubEnv(name, value);
+  }
   return vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 }
 

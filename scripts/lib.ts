@@ -37,8 +37,12 @@ export function envLine(key: string, value: string): string {
       `${key}: a value with "$" can't be written so both Node and Bun read it the same (Bun expands it). Choose one without.`,
     );
   }
-  if (/^[\w@%+=:,./-]*$/.test(value)) return `${key}=${value}`;
-  if (!value.includes("'") && !value.includes("\n")) return `${key}='${value}'`;
+  if (/^[\w@%+=:,./-]*$/.test(value)) {
+    return `${key}=${value}`;
+  }
+  if (!value.includes("'") && !value.includes("\n")) {
+    return `${key}='${value}'`;
+  }
   if (!value.includes('"') && !value.includes("\\")) {
     return `${key}="${value.replaceAll("\n", "\\n")}"`;
   }
@@ -63,10 +67,14 @@ export function writeEnvValue(path: string, key: string, value: string) {
 
 /** Removes KEY's line; returns whether there was one. */
 export function removeEnvValue(path: string, key: string): boolean {
-  if (!existsSync(path)) return false;
+  if (!existsSync(path)) {
+    return false;
+  }
   const text = readFileSync(path, "utf8");
   const pattern = keyLine(key);
-  if (!pattern.test(text)) return false;
+  if (!pattern.test(text)) {
+    return false;
+  }
   writeFileSync(path, text.replace(pattern, ""));
   return true;
 }

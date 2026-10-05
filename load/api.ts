@@ -20,7 +20,9 @@ import http, { type RefinedResponse } from "k6/http";
 import type { Options, Scenario } from "k6/options";
 
 // The API on this checkout's port (API_PORT, from the root .env or the e2e run).
-if (!__ENV.BASE_URL && !__ENV.API_PORT) throw new Error("Set BASE_URL, or API_PORT (.env has it)");
+if (!__ENV.BASE_URL && !__ENV.API_PORT) {
+  throw new Error("Set BASE_URL, or API_PORT (.env has it)");
+}
 const BASE_URL = (__ENV.BASE_URL ?? `http://host.docker.internal:${__ENV.API_PORT}`).replace(
   /\/$/,
   "",
@@ -77,7 +79,9 @@ function ramp(exec: string, rate: number): Scenario {
 }
 
 const scenarios = profiles[PROFILE];
-if (!scenarios) throw new Error(`Unknown PROFILE "${PROFILE}" (smoke or load)`);
+if (!scenarios) {
+  throw new Error(`Unknown PROFILE "${PROFILE}" (smoke or load)`);
+}
 
 export const options: Options = {
   scenarios,
@@ -114,7 +118,9 @@ function json<T>(response: RefinedResponse<"text">): T {
 }
 
 export function setup() {
-  if (sessions.length === 0) fail("load/.sessions.json has no sessions");
+  if (sessions.length === 0) {
+    fail("load/.sessions.json has no sessions");
+  }
   const response = http.get(`${BASE_URL}/api/v1/todos`, { headers: user(0).headers });
   if (response.status !== 200) {
     fail(
@@ -145,7 +151,9 @@ export function write() {
     JSON.stringify({ title: `${prefix}${exec.scenario.iterationInTest}` }),
     { headers: { ...headers, ...JSON_BODY }, tags: { name: "create" } },
   );
-  if (!check(created, { "create: 201": (r) => r.status === 201 })) return;
+  if (!check(created, { "create: 201": (r) => r.status === 201 })) {
+    return;
+  }
   const todo = json<Todo>(created);
 
   const done = http.patch(

@@ -39,9 +39,13 @@ export function checkWebRenderOnly(web = join(ROOT, "apps/web/src")): number {
     fail(`apps/web/src/${file}: Pages Router API routes are not allowed.`);
   }
 
-  if (violations) return 1;
+  if (violations) {
+    return 1;
+  }
   ok("web app is render-only");
   return 0;
 }
 
-if (import.meta.main) process.exit(checkWebRenderOnly());
+if (import.meta.main) {
+  process.exit(checkWebRenderOnly());
+}

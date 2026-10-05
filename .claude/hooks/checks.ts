@@ -47,8 +47,9 @@ export function checksFor(changed: string[]): Check[] {
   }
   const scripts = changed.some((file) => /^scripts\/.*\.ts$/.test(file));
   const hooks = changed.some((file) => /^\.claude\/hooks\/.*\.ts$/.test(file));
-  if (scripts)
+  if (scripts) {
     checks.push({ label: "types of scripts/", command: ["bunx", "tsc", "-p", "scripts"] });
+  }
   if (hooks) {
     checks.push({ label: "types of the hooks", command: ["bunx", "tsc", "-p", ".claude/hooks"] });
   }

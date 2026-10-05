@@ -6,7 +6,9 @@ describe("waiting between reconnects", () => {
     const { signal } = new AbortController();
     const added = vi.spyOn(signal, "addEventListener");
     const removed = vi.spyOn(signal, "removeEventListener");
-    for (let i = 0; i < 20; i++) await abortableSleep(1, signal);
+    for (let i = 0; i < 20; i++) {
+      await abortableSleep(1, signal);
+    }
     expect(added).toHaveBeenCalledTimes(20);
     expect(removed).toHaveBeenCalledTimes(20);
   });

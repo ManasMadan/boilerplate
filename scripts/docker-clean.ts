@@ -50,7 +50,9 @@ export function cleanDocker(run = runSync) {
     ["compose", "--profile", "full", "down", "--volumes", "--remove-orphans"],
     { cwd: ROOT, stdio: "inherit" },
   );
-  if (down.status === 0) ok("local services, their networks and volumes");
+  if (down.status === 0) {
+    ok("local services, their networks and volumes");
+  }
 
   const kind = run("kind", ["get", "clusters"]);
   if (kind.status === 0 && lines(kind.stdout).includes(CLUSTER)) {
@@ -84,7 +86,9 @@ export function cleanDocker(run = runSync) {
     ...named("kindest/node"),
   ]);
   for (const image of [...images].sort()) {
-    if (!docker(["image", "inspect", image]).ok) continue;
+    if (!docker(["image", "inspect", image]).ok) {
+      continue;
+    }
     const users = lines(
       docker(["ps", "-a", "--filter", `ancestor=${image}`, "--format", "{{.Names}}"]).stdout,
     );
@@ -92,9 +96,14 @@ export function cleanDocker(run = runSync) {
       warn(`kept ${image}: used by ${users.join(", ")}`);
       continue;
     }
-    if (docker(["image", "rm", image]).ok) ok(`image ${image}`);
-    else warn(`couldn't remove ${image}`);
+    if (docker(["image", "rm", image]).ok) {
+      ok(`image ${image}`);
+    } else {
+      warn(`couldn't remove ${image}`);
+    }
   }
 }
 
-if (import.meta.main) cleanDocker();
+if (import.meta.main) {
+  cleanDocker();
+}

@@ -73,8 +73,9 @@ export class TodoService {
   async delete(orgId: OrgId, id: TodoId) {
     await this.writes.take(orgId);
     return tenantTx(this.database.write, orgId, async (tx) => {
-      if (!(await this.todos.delete(tx, id)))
+      if (!(await this.todos.delete(tx, id))) {
         throw new AppError("TODO_NOT_FOUND", { params: { id } });
+      }
       await emitEvent(tx, "todo.deleted.v1", id, { todoId: id });
     });
   }

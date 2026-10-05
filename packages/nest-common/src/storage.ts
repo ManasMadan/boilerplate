@@ -146,7 +146,9 @@ export class S3Storage implements Storage {
         contentType: result.ContentType,
       };
     } catch (error) {
-      if (fieldOf(error, "name") === "NotFound") return null;
+      if (fieldOf(error, "name") === "NotFound") {
+        return null;
+      }
       throw error;
     }
   }
@@ -155,8 +157,9 @@ export class S3Storage implements Storage {
     const result = await this.client.send(
       new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
     );
-    if (required(result.ContentLength, "Content-Length") > maxBytes)
+    if (required(result.ContentLength, "Content-Length") > maxBytes) {
       throw new Error(`${key} is larger than ${maxBytes} bytes`);
+    }
     // A GetObject that succeeded always has a body (possibly empty).
     const body = required(result.Body, `${key}'s body`);
     return Buffer.from(await body.transformToByteArray());
@@ -198,7 +201,9 @@ export function createStorage(env: {
   S3_SECRET_ACCESS_KEY?: string | undefined;
   S3_FORCE_PATH_STYLE: boolean;
 }): Storage | null {
-  if (!env.S3_BUCKET) return null;
+  if (!env.S3_BUCKET) {
+    return null;
+  }
   return new S3Storage({
     bucket: env.S3_BUCKET,
     region: env.S3_REGION,

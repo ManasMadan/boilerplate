@@ -60,12 +60,16 @@ export async function runHook(
   try {
     input = JSON.parse(await stdin.text()) as HookInput;
   } catch (error) {
-    if (!failClosed) throw error;
+    if (!failClosed) {
+      throw error;
+    }
     stderr.write(`The hook couldn't read its event, so the call is blocked: ${String(error)}`);
     return 2;
   }
   const output = await handler(input);
-  if (output) stdout.write(JSON.stringify(output));
+  if (output) {
+    stdout.write(JSON.stringify(output));
+  }
   return 0;
 }
 

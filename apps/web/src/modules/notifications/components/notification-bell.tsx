@@ -65,8 +65,12 @@ export function NotificationBell() {
               <DropdownMenuItem
                 key={notification.id}
                 onClick={() => {
-                  if (!notification.readAt) markRead.mutate({ ids: [notification.id] });
-                  if (notification.link) router.push(notification.link as Route);
+                  if (!notification.readAt) {
+                    markRead.mutate({ ids: [notification.id] });
+                  }
+                  if (notification.link) {
+                    router.push(notification.link as Route);
+                  }
                 }}
               >
                 <NotificationText notification={notification} />

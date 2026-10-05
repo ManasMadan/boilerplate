@@ -78,7 +78,9 @@ function serve(handler: RPCHandler<object> | OpenAPIHandler<object>, prefix: `/$
         prefix,
         context: { headers: toHeaders(request) },
       });
-      if (!matched) await sendError(reply, "NOT_FOUND");
+      if (!matched) {
+        await sendError(reply, "NOT_FOUND");
+      }
     });
   };
 }
@@ -147,5 +149,7 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
   });
   fastify.get("/api/v1/openapi.json", async () => spec);
 
-  if (options.exposeDocs) mountDocs(fastify);
+  if (options.exposeDocs) {
+    mountDocs(fastify);
+  }
 }

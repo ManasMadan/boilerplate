@@ -46,7 +46,9 @@ const closed = new Set<string>();
 /** A request's JSON body, as far as the stand-in reads it. */
 async function body(request: IncomingMessage): Promise<{ title?: string } | undefined> {
   const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(chunk as Buffer);
+  for await (const chunk of request) {
+    chunks.push(chunk as Buffer);
+  }
   return chunks.length
     ? (JSON.parse(Buffer.concat(chunks).toString()) as { title?: string })
     : undefined;
@@ -73,9 +75,15 @@ async function verifiedCaller(request: IncomingMessage) {
 
 /** The assistant's answer in the organization's mode: refused, broken, or streamed. */
 function answer(mode: Mode, org: string, response: ServerResponse, fail: Fail) {
-  if (mode === "budget") return fail(429, "AI_BUDGET_EXCEEDED");
-  if (mode === "off") return fail(404, "FEATURE_DISABLED", { feature: "assistant" });
-  if (mode === "down") return fail(500, "INTERNAL");
+  if (mode === "budget") {
+    return fail(429, "AI_BUDGET_EXCEEDED");
+  }
+  if (mode === "off") {
+    return fail(404, "FEATURE_DISABLED", { feature: "assistant" });
+  }
+  if (mode === "down") {
+    return fail(500, "INTERNAL");
+  }
   response.writeHead(200, { "content-type": "text/event-stream" });
   const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
   // The connection breaks midway (closed without ending the response), or the answer
@@ -87,7 +95,9 @@ function answer(mode: Mode, org: string, response: ServerResponse, fail: Fail) {
     );
   }
   send({ type: "text", text: "Refunds take " });
-  if (mode === "hang") return response.on("close", () => closed.add(org));
+  if (mode === "hang") {
+    return response.on("close", () => closed.add(org));
+  }
   send({ type: "text", text: "five days." });
   if (mode === "stream-error") {
     send({ type: "error", code: "AI_RUN_LIMIT" });
@@ -131,10 +141,13 @@ function documentsRoute(
     return true;
   }
   const remove = /^DELETE \/v1\/documents\/([0-9a-f-]{36})$/.exec(route);
-  if (!remove) return false;
+  if (!remove) {
+    return false;
+  }
   const index = documents.findIndex((d) => d.id === remove[1] && d.org === org);
-  if (index === -1) fail(404, "DOCUMENT_NOT_FOUND");
-  else {
+  if (index === -1) {
+    fail(404, "DOCUMENT_NOT_FOUND");
+  } else {
     documents.splice(index, 1);
     reply(204);
   }
@@ -151,7 +164,9 @@ beforeAll(async () => {
     const fail: Fail = (status, code, params = {}) =>
       reply(status, { defined: true, code, status, message: code, data: { params } });
     const caller = await verifiedCaller(request);
-    if (!caller) return fail(401, "UNAUTHENTICATED");
+    if (!caller) {
+      return fail(401, "UNAUTHENTICATED");
+    }
     const path = new URL(request.url ?? "/", "http://ai").pathname;
     calls.push({
       path,
@@ -164,7 +179,9 @@ beforeAll(async () => {
     if (route === "POST /v1/sentiment") {
       return reply(200, { label: "positive", score: 0.9, model: "fake" });
     }
-    if (documentsRoute(route, caller, input, reply, fail)) return;
+    if (documentsRoute(route, caller, input, reply, fail)) {
+      return;
+    }
     if (route === "POST /v1/assistant/answers") {
       return answer(behaviour.get(caller.org) ?? "answer", caller.org, response, fail);
     }
@@ -203,7 +220,9 @@ async function expectError(promise: Promise<unknown>, code: string) {
 /** Every event of a stream, from the promise that starts it. */
 async function collect(start: Promise<AsyncIterable<unknown>>) {
   const events: unknown[] = [];
-  for await (const event of await start) events.push(event);
+  for await (const event of await start) {
+    events.push(event);
+  }
   return events;
 }
 
@@ -393,13 +412,17 @@ describe("AI features", () => {
 
   it("limits sentiment checks per user", async () => {
     const { session } = await signedIn();
-    for (let i = 0; i < 60; i++) await session.rpc.ai.sentiment({ text: "great" });
+    for (let i = 0; i < 60; i++) {
+      await session.rpc.ai.sentiment({ text: "great" });
+    }
     await expectError(session.rpc.ai.sentiment({ text: "great" }), "RATE_LIMITED");
   });
 
   it("limits questions per user", async () => {
     const { session } = await signedIn();
-    for (let i = 0; i < 20; i++) await collect(session.rpc.ai.ask({ question: `Q${i}?` }));
+    for (let i = 0; i < 20; i++) {
+      await collect(session.rpc.ai.ask({ question: `Q${i}?` }));
+    }
     await expectError(collect(session.rpc.ai.ask({ question: "One more?" })), "RATE_LIMITED");
   });
 

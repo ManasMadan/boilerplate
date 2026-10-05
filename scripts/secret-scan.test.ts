@@ -21,8 +21,12 @@ describe("the secret scan", () => {
   it("falls back to the container, mounting a worktree's main git directory too", () => {
     spyOn(process.stderr, "write").mockImplementation(() => true);
     const { run, calls } = fakeRun((line) => {
-      if (line === "gitleaks version") return { status: null };
-      if (line.startsWith("git rev-parse")) return { stdout: "/elsewhere/repo/.git\n" };
+      if (line === "gitleaks version") {
+        return { status: null };
+      }
+      if (line.startsWith("git rev-parse")) {
+        return { stdout: "/elsewhere/repo/.git\n" };
+      }
       return {};
     });
     expect(secretScan(run)).toBe(0);
@@ -34,9 +38,15 @@ describe("the secret scan", () => {
   it("mounts only the checkout when its git directory is inside it", () => {
     spyOn(process.stderr, "write").mockImplementation(() => true);
     const { run, calls } = fakeRun((line) => {
-      if (line === "gitleaks version") return { status: 1 };
-      if (line.startsWith("git rev-parse")) return { stdout: `${ROOT}/.git\n` };
-      if (line.startsWith("docker run")) return { status: null };
+      if (line === "gitleaks version") {
+        return { status: 1 };
+      }
+      if (line.startsWith("git rev-parse")) {
+        return { stdout: `${ROOT}/.git\n` };
+      }
+      if (line.startsWith("docker run")) {
+        return { status: null };
+      }
       return {};
     });
     expect(secretScan(run)).toBe(1);

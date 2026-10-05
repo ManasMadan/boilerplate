@@ -25,7 +25,9 @@ export function affected(base: string, run: Run, root = ROOT): string[] {
   const listed = run("bunx", ["turbo", "ls", `--filter=...[${base}]`, "--output=json"], {
     cwd: root,
   });
-  if (listed.status !== 0) throw new Error(`turbo ls failed: ${listed.stderr.trim()}`);
+  if (listed.status !== 0) {
+    throw new Error(`turbo ls failed: ${listed.stderr.trim()}`);
+  }
   return turboList.parse(JSON.parse(listed.stdout)).packages.items.map((item) => item.path);
 }
 
@@ -49,7 +51,9 @@ export function pushCoverage({ run = runSync, root = ROOT } = {}): number {
   const packages = affected(base, run, root);
   const inherit = { cwd: root, stdio: "inherit" } as const;
   if (packages.length > 0) {
-    if (!services(run, root)) return 1;
+    if (!services(run, root)) {
+      return 1;
+    }
     // Two at a time: the integration suites share the services, and a busy machine makes
     // timing-sensitive tests flaky.
     const suites = run(
@@ -72,9 +76,13 @@ export function pushCoverage({ run = runSync, root = ROOT } = {}): number {
     ["scripts/coverage.ts", ...packages, "scripts", ".claude/hooks"],
     inherit,
   );
-  if (checked.status !== 0) return 1;
+  if (checked.status !== 0) {
+    return 1;
+  }
   ok(`every file in ${packages.length} package(s), the scripts and the hooks at 100%`);
   return 0;
 }
 
-if (import.meta.main) process.exit(pushCoverage());
+if (import.meta.main) {
+  process.exit(pushCoverage());
+}

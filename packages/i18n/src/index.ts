@@ -93,8 +93,11 @@ export function createI18n(source: MessageSource) {
     messages: messagesFor,
     /** Drop cached messages, e.g. after copy is edited in a database-backed source. */
     invalidate(locale?: Locale) {
-      if (locale) cache.delete(locale);
-      else cache.clear();
+      if (locale) {
+        cache.delete(locale);
+      } else {
+        cache.clear();
+      }
     },
   };
 }

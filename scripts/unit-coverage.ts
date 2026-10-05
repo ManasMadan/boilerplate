@@ -24,7 +24,9 @@ import { listedFiles } from "./suppressions";
 /** The line numbers a `@@ -a,b +c,d @@` hunk header adds, or none for another line. */
 function hunkLines(line: string): number[] {
   const hunk = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/.exec(line);
-  if (!hunk) return [];
+  if (!hunk) {
+    return [];
+  }
   const start = Number(hunk[1]);
   const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
   return Array.from({ length: count }, (_, index) => start + index);
@@ -39,10 +41,14 @@ export function parseDiff(diff: string): Map<string, Set<number>> {
     if (file) {
       // A deleted file (`+++ /dev/null`) has no lines left to cover.
       lines = file[1] ? new Set() : undefined;
-      if (file[1] && lines) changed.set(file[1], lines);
+      if (file[1] && lines) {
+        changed.set(file[1], lines);
+      }
       continue;
     }
-    for (const number of lines ? hunkLines(line) : []) lines?.add(number);
+    for (const number of lines ? hunkLines(line) : []) {
+      lines?.add(number);
+    }
   }
   return changed;
 }
@@ -96,20 +102,30 @@ export interface Suite {
  */
 function vitestPackage(dir: string, root: string) {
   const manifest = join(root, dir, "package.json");
-  if (!existsSync(manifest)) return null;
+  if (!existsSync(manifest)) {
+    return null;
+  }
   const { scripts } = JSON.parse(readFileSync(manifest, "utf8")) as {
     scripts?: Record<string, string>;
   };
-  if (scripts?.["test:integration"]) return null;
+  if (scripts?.["test:integration"]) {
+    return null;
+  }
   return scripts?.test?.startsWith("vitest run") ? dir : null;
 }
 
 /** Whether unit tests are meant to cover `path` (see the header). */
 export function unitCovered(path: string, root = ROOT) {
-  if (!isSource(path)) return false;
-  if (BUN_SUITE.test(path)) return true;
+  if (!isSource(path)) {
+    return false;
+  }
+  if (BUN_SUITE.test(path)) {
+    return true;
+  }
   const inPackage = PACKAGE_FILE.exec(path);
-  if (!inPackage || !vitestPackage(inPackage[1] as string, root)) return false;
+  if (!inPackage || !vitestPackage(inPackage[1] as string, root)) {
+    return false;
+  }
   const sibling = path.replace(/\.tsx?$/, "");
   return [".test.ts", ".test.tsx"].some((ext) => existsSync(join(root, `${sibling}${ext}`)));
 }
@@ -147,10 +163,20 @@ export function suitesFor(files: string[], root = ROOT): Suite[] {
 /** The lines `file` misses (a line, a branch on it, or a function starting there). */
 export function missedLines(file: FileCoverage): Set<number> {
   const missed = new Set<number>();
-  for (const [number, hits] of file.lines) if (hits === 0) missed.add(number);
-  for (const [id, taken] of file.branches) if (taken === 0) missed.add(Number(id.split(",")[0]));
+  for (const [number, hits] of file.lines) {
+    if (hits === 0) {
+      missed.add(number);
+    }
+  }
+  for (const [id, taken] of file.branches) {
+    if (taken === 0) {
+      missed.add(Number(id.split(",")[0]));
+    }
+  }
   for (const [name, calls] of file.functions) {
-    if (calls === 0) missed.add(file.functionLines.get(name) ?? 0);
+    if (calls === 0) {
+      missed.add(file.functionLines.get(name) ?? 0);
+    }
   }
   return missed;
 }
@@ -160,9 +186,13 @@ export function missedLines(file: FileCoverage): Set<number> {
  * loaded it, none when it leans on integration tests (they miss unchanged lines too).
  */
 export function uncovered(path: string, file: FileCoverage | undefined, lines: Set<number>) {
-  if (!file) return [...lines].sort((a, b) => a - b);
+  if (!file) {
+    return [...lines].sort((a, b) => a - b);
+  }
   const missed = [...missedLines(file)].sort((a, b) => a - b);
-  if (!BUN_SUITE.test(path) && missed.some((number) => !lines.has(number))) return [];
+  if (!BUN_SUITE.test(path) && missed.some((number) => !lines.has(number))) {
+    return [];
+  }
   return missed.filter((number) => lines.has(number));
 }
 
@@ -194,8 +224,9 @@ export async function unitCoverage(
   const coverage = new Map<string, FileCoverage>();
   for (const suite of suites) {
     const lcov = join(root, suite.lcov);
-    if (existsSync(lcov))
+    if (existsSync(lcov)) {
       mergeLcov(coverage, readFileSync(lcov, "utf8"), suite.cwd, root, suite.owns);
+    }
   }
   const short = inScope
     .map((path) => ({
@@ -216,4 +247,6 @@ export async function unitCoverage(
   return 0;
 }
 
-if (import.meta.main) process.exit(await unitCoverage());
+if (import.meta.main) {
+  process.exit(await unitCoverage());
+}

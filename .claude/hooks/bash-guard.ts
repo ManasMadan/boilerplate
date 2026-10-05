@@ -20,21 +20,31 @@ const decide = (decision: "deny" | "ask", reason: string): HookOutput => ({
 /** The decision on a Bash call, or nothing when it's allowed. */
 export async function bashGuard(input: HookInput, shipped = isShipped): Promise<HookOutput> {
   const command = typeof input.tool_input?.command === "string" ? input.tool_input.command : "";
-  if (!command) return;
+  if (!command) {
+    return;
+  }
 
   const policy = commandPolicy(command);
-  if (policy?.decision === "deny") return decide("deny", policy.reason);
+  if (policy?.decision === "deny") {
+    return decide("deny", policy.reason);
+  }
 
   const branch = await defaultBranch();
   const cwd = input.cwd || ROOT;
   for (const target of writeTargets(command)) {
     const path = relative(ROOT, isAbsolute(target) ? target : join(cwd, target));
-    if (path.startsWith("..")) continue;
+    if (path.startsWith("..")) {
+      continue;
+    }
     // A shell write replaces content the hook can't see, so image tags count as touched.
     const verdict = verdictFor({ path, shipped: shipped(branch, path), after: "tag:" });
-    if (verdict) return decide(verdict.decision, `${path}: ${verdict.reason}`);
+    if (verdict) {
+      return decide(verdict.decision, `${path}: ${verdict.reason}`);
+    }
   }
   return policy ? decide(policy.decision, policy.reason) : undefined;
 }
 
-if (import.meta.main) process.exit(await runHook(bashGuard, { failClosed: true }));
+if (import.meta.main) {
+  process.exit(await runHook(bashGuard, { failClosed: true }));
+}

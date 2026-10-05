@@ -124,8 +124,12 @@ function apiFeaturePrompts(plop: PlopTypes.NodePlopAPI, root: string): PlopTypes
       name: "name",
       message: "Feature name, kebab-case plural (the route and module), e.g. projects:",
       validate: (value: string) => {
-        if (!KEBAB.test(value)) return "Use kebab-case, e.g. projects or time-entries";
-        if (existsSync(join(root, "apps/api/src/modules", value))) return `${value} exists`;
+        if (!KEBAB.test(value)) {
+          return "Use kebab-case, e.g. projects or time-entries";
+        }
+        if (existsSync(join(root, "apps/api/src/modules", value))) {
+          return `${value} exists`;
+        }
         return true;
       },
     },
@@ -226,8 +230,12 @@ function packageGenerator(
         name: "name",
         message: "Package name, kebab-case (becomes @repo/<name> and a commit scope):",
         validate: (value: string) => {
-          if (!KEBAB.test(value)) return "Use kebab-case, e.g. money";
-          if (existsSync(join(root, "packages", value))) return `packages/${value} exists`;
+          if (!KEBAB.test(value)) {
+            return "Use kebab-case, e.g. money";
+          }
+          if (existsSync(join(root, "packages", value))) {
+            return `packages/${value} exists`;
+          }
           return true;
         },
       },

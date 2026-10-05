@@ -19,7 +19,9 @@ export function ApiProvider({ locale, children }: { locale: string; children: Re
         appVersion,
         getLocale: () => locale,
         getHeaders: async (): Promise<Record<string, string>> => {
-          if (Platform.OS === "web") return {};
+          if (Platform.OS === "web") {
+            return {};
+          }
           const cookie = await authClient.getCookie();
           return cookie ? { cookie } : {};
         },
@@ -32,12 +34,16 @@ export function ApiProvider({ locale, children }: { locale: string; children: Re
       onOutdated={() => router.replace("/update-required")}
       // Removed from the active workspace (or it was deleted): move to another one.
       onNoOrganization={async () => {
-        if (switchingWorkspace) return;
+        if (switchingWorkspace) {
+          return;
+        }
         switchingWorkspace = true;
         try {
           const { data } = await authClient.organization.list();
           const next = data?.[0];
-          if (next) await authClient.organization.setActive({ organizationId: next.id });
+          if (next) {
+            await authClient.organization.setActive({ organizationId: next.id });
+          }
         } finally {
           switchingWorkspace = false;
         }

@@ -14,4 +14,6 @@ export function sessionEnd(input: HookInput) {
   return undefined;
 }
 
-if (import.meta.main) process.exit(await runHook(sessionEnd));
+if (import.meta.main) {
+  process.exit(await runHook(sessionEnd));
+}

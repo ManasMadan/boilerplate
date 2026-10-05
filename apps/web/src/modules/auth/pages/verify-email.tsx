@@ -29,9 +29,13 @@ export function VerifyEmailPage() {
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { otp: "" } });
 
   useEffect(() => {
-    if (!email) router.replace("/sign-in");
+    if (!email) {
+      router.replace("/sign-in");
+    }
   }, [email, router]);
-  if (!email) return null;
+  if (!email) {
+    return null;
+  }
   // The handlers below only exist once an address is known.
   const address = email;
 
@@ -55,8 +59,9 @@ export function VerifyEmailPage() {
       fetchOptions: { headers: captcha.headers() },
     });
     captcha.reset();
-    if (error) toast.error(errorMessage(error));
-    else {
+    if (error) {
+      toast.error(errorMessage(error));
+    } else {
       form.reset({ otp: "" });
       toast.success(t("auth.codeSent"));
     }

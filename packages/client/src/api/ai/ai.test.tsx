@@ -118,10 +118,14 @@ describe("useAssistant", () => {
           // A refusal comes before the stream opens, as the API's checks run first.
           ask: os.ai.ask.handler(({ input }) => {
             const holds = held && ++answering === 1;
-            if (input.question === "refuse") throw new ORPCError("AI_BUDGET_EXCEEDED");
+            if (input.question === "refuse") {
+              throw new ORPCError("AI_BUDGET_EXCEEDED");
+            }
             return (async function* () {
               for (const event of events) {
-                if (holds) await next().promise;
+                if (holds) {
+                  await next().promise;
+                }
                 yield event;
               }
             })();

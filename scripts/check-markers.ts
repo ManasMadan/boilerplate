@@ -17,7 +17,9 @@ const DEFINES_IT = new Set(["scripts/check-markers.ts", "scripts/check-markers.t
 
 /** `path:line: text` for every line of a source file that has the marker. */
 export function findMarkers(path: string, text: string): string[] {
-  if (!CODE.test(path) || DEFINES_IT.has(path)) return [];
+  if (!CODE.test(path) || DEFINES_IT.has(path)) {
+    return [];
+  }
   return text
     .split("\n")
     .flatMap((line, index) => (MARKER.test(line) ? [`${path}:${index + 1}: ${line.trim()}`] : []));
@@ -39,9 +41,13 @@ export function checkMarkers(root = ROOT): number {
     ok("no ponytail: markers in tracked source");
     return 0;
   }
-  for (const line of found) fail(line);
+  for (const line of found) {
+    fail(line);
+  }
   console.log("\nRewrite each as a plain comment that says why (and the limit, if there is one).");
   return 1;
 }
 
-if (import.meta.main) process.exit(checkMarkers());
+if (import.meta.main) {
+  process.exit(checkMarkers());
+}

@@ -45,18 +45,24 @@ export function Providers({ locale, timeZone, messages, nonce, children }: Provi
           onUnauthenticated={async () => {
             await authClient.signOut();
             const { pathname, search } = window.location;
-            if (matchesPath(pathname, GUEST_PATHS)) return;
+            if (matchesPath(pathname, GUEST_PATHS)) {
+              return;
+            }
             router.replace(`/sign-in?next=${encodeURIComponent(pathname + search)}`);
           }}
           onOutdated={() => window.location.reload()}
           // Removed from the active workspace (or it was deleted): move to another one.
           onNoOrganization={async () => {
             // Several requests can fail together; switch once.
-            if (switchingWorkspace) return;
+            if (switchingWorkspace) {
+              return;
+            }
             switchingWorkspace = true;
             const { data: workspaces } = await authClient.organization.list();
             const next = workspaces?.[0];
-            if (!next) return;
+            if (!next) {
+              return;
+            }
             await authClient.organization.setActive({ organizationId: next.id });
             window.location.assign("/dashboard");
           }}

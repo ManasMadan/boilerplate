@@ -44,8 +44,9 @@ export class FilesService {
   ) {}
 
   private get storage() {
-    if (!this.optionalStorage)
+    if (!this.optionalStorage) {
       throw new AppError("FEATURE_DISABLED", { params: { feature: "files" } });
+    }
     return this.optionalStorage;
   }
 
@@ -82,8 +83,12 @@ export class FilesService {
   async complete(userId: UserId, fileId: FileId) {
     const storage = this.storage;
     const row = await this.find(userId, fileId);
-    if (row.status !== "pending") return toInfo(row);
-    if (!(await storage.head(quarantineKey(fileId)))) throw new AppError("FILE_NOT_UPLOADED");
+    if (row.status !== "pending") {
+      return toInfo(row);
+    }
+    if (!(await storage.head(quarantineKey(fileId)))) {
+      throw new AppError("FILE_NOT_UPLOADED");
+    }
     await this.queue.add("process", { fileId }, { jobId: fileId });
     return toInfo(row);
   }
@@ -95,8 +100,12 @@ export class FilesService {
   /** A ready file of the user's, for `purpose` (FILE_NOT_READY / FILE_NOT_FOUND). */
   async ready(userId: UserId, fileId: FileId, purpose: UploadPurpose) {
     const row = await this.find(userId, fileId);
-    if (row.purpose !== purpose) throw new AppError("FILE_NOT_FOUND");
-    if (row.status !== "ready") throw new AppError("FILE_NOT_READY");
+    if (row.purpose !== purpose) {
+      throw new AppError("FILE_NOT_FOUND");
+    }
+    if (row.status !== "ready") {
+      throw new AppError("FILE_NOT_READY");
+    }
     return toInfo(row);
   }
 
@@ -111,7 +120,9 @@ export class FilesService {
    */
   async downloadUrl(viewerId: UserId, fileId: FileId) {
     const row = await this.files.findReadable(viewerId, fileId);
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
     return this.storage.presignDownload(storedKey(fileId), {
       expiresInSeconds: DOWNLOAD_EXPIRES_IN,
       // Images are shown inline; anything else downloads rather than opening.
@@ -121,7 +132,9 @@ export class FilesService {
 
   private async find(userId: UserId, fileId: FileId) {
     const row = await this.files.find(userId, fileId);
-    if (!row) throw new AppError("FILE_NOT_FOUND");
+    if (!row) {
+      throw new AppError("FILE_NOT_FOUND");
+    }
     return row;
   }
 }

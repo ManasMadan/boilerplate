@@ -10,9 +10,13 @@ describe("queue processors", () => {
     for await (const path of new Bun.Glob("{apps,packages}/*/src/**/*.ts").scan(
       `${import.meta.dir}/..`,
     )) {
-      if (path.endsWith("packages/nest-common/src/job-processor.ts")) continue;
+      if (path.endsWith("packages/nest-common/src/job-processor.ts")) {
+        continue;
+      }
       const text = await Bun.file(`${import.meta.dir}/../${path}`).text();
-      if (/extends\s+WorkerHost\b/.test(text)) offenders.push(path);
+      if (/extends\s+WorkerHost\b/.test(text)) {
+        offenders.push(path);
+      }
     }
     expect(offenders).toEqual([]);
   });

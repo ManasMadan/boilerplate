@@ -88,8 +88,11 @@ export function ApiProvider({
  */
 function forgetSession(queryClient: QueryClient, failed?: Query<unknown, unknown, unknown>) {
   for (const query of queryClient.getQueryCache().getAll()) {
-    if (query === failed) query.setState({ ...query.state, data: undefined });
-    else query.reset();
+    if (query === failed) {
+      query.setState({ ...query.state, data: undefined });
+    } else {
+      query.reset();
+    }
   }
   queryClient.getMutationCache().clear();
 }
@@ -97,6 +100,8 @@ function forgetSession(queryClient: QueryClient, failed?: Query<unknown, unknown
 /** The typed client and query utilities. Hooks in `api/*` use this; apps rarely need it. */
 export function useApi(): ApiContextValue {
   const value = use(ApiContext);
-  if (!value) throw new Error("useApi must be used inside <ApiProvider>");
+  if (!value) {
+    throw new Error("useApi must be used inside <ApiProvider>");
+  }
   return value;
 }

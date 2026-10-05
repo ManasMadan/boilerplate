@@ -19,8 +19,11 @@ import { useFormatter, useTranslations } from "next-intl";
 function paramsOf(payload: Record<string, unknown>) {
   const params: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(payload)) {
-    if (typeof value === "number") params[key] = value;
-    else params[key] = Array.isArray(value) ? value.join(", ") : String(value);
+    if (typeof value === "number") {
+      params[key] = value;
+    } else {
+      params[key] = Array.isArray(value) ? value.join(", ") : String(value);
+    }
   }
   return params;
 }

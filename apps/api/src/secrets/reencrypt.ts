@@ -44,7 +44,9 @@ class AuthValues {
   }
 
   private async refresh(value: string) {
-    if (this.onCurrent(value)) return value;
+    if (this.onCurrent(value)) {
+      return value;
+    }
     const data = await symmetricDecrypt({ key: this.authKey, data: value });
     return symmetricEncrypt({ key: this.authKey, data });
   }
@@ -61,9 +63,13 @@ class AuthValues {
       const data: Record<string, string> = {};
       for (const field of ["accessToken", "refreshToken", "idToken"] as const) {
         const value = account[field];
-        if (value && !this.onCurrent(value)) data[field] = await this.refresh(value);
+        if (value && !this.onCurrent(value)) {
+          data[field] = await this.refresh(value);
+        }
       }
-      if (Object.keys(data).length === 0) continue;
+      if (Object.keys(data).length === 0) {
+        continue;
+      }
       const { count } = await this.db.account.updateMany({
         where: {
           id: account.id,
@@ -92,7 +98,9 @@ class AuthValues {
         ? await symmetricEncrypt({ key: this.authKey, data: row.backupCodes })
         : await this.refresh(row.backupCodes);
       const secret = await this.refresh(row.secret);
-      if (secret === row.secret && backupCodes === row.backupCodes) continue;
+      if (secret === row.secret && backupCodes === row.backupCodes) {
+        continue;
+      }
       const { count } = await this.db.twoFactor.updateMany({
         where: { id: row.id, secret: row.secret, backupCodes: row.backupCodes },
         data: { secret, backupCodes },
@@ -109,7 +117,9 @@ class AuthValues {
       this.db.jwks.findMany({ select: { id: true, privateKey: true }, ...cursor }),
     )) {
       const encrypted = z.string().parse(JSON.parse(key.privateKey));
-      if (this.onCurrent(encrypted)) continue;
+      if (this.onCurrent(encrypted)) {
+        continue;
+      }
       const { count } = await this.db.jwks.updateMany({
         where: { id: key.id, privateKey: key.privateKey },
         data: { privateKey: JSON.stringify(await this.refresh(encrypted)) },
@@ -138,7 +148,9 @@ async function reencryptWebhookEndpoints(db: Db, orgId: OrgId, box: SecretBox) {
         secret: refresh(secret),
         previousSecret: previousSecret && refresh(previousSecret),
       };
-      if (data.secret === secret && data.previousSecret === previousSecret) continue;
+      if (data.secret === secret && data.previousSecret === previousSecret) {
+        continue;
+      }
       const updated = await tx.webhookEndpoint.updateMany({
         where: { id, secret, previousSecret },
         data,
@@ -194,7 +206,9 @@ async function* pages<T extends { id: string }>(
       ...(after && { cursor: { id: after }, skip: 1 }),
     });
     yield* rows;
-    if (rows.length < PAGE) return;
+    if (rows.length < PAGE) {
+      return;
+    }
     after = rows.at(-1)?.id;
   }
 }

@@ -44,7 +44,9 @@ const failure = (code: string, status: number, data: object) => ({
 beforeAll(async () => {
   server = createServer(async (request, response) => {
     let body = "";
-    for await (const chunk of request) body += String(chunk);
+    for await (const chunk of request) {
+      body += String(chunk);
+    }
     seen.push({
       method: request.method ?? "",
       path: request.url ?? "",
@@ -101,9 +103,13 @@ describe("documents and sentiment", () => {
     handler = (request, response, body) => {
       if (request.url === "/v1/sentiment") {
         json(response, 200, { label: "positive", model: "local", score: 0.9, echo: body });
-      } else if (request.method === "POST") json(response, 201, doc);
-      else if (request.method === "DELETE") response.writeHead(204).end();
-      else json(response, 200, [doc]);
+      } else if (request.method === "POST") {
+        json(response, 201, doc);
+      } else if (request.method === "DELETE") {
+        response.writeHead(204).end();
+      } else {
+        json(response, 200, [doc]);
+      }
     };
     const ai = client();
     await expect(ai.sentiment(caller, "Great!")).resolves.toMatchObject({ label: "positive" });
@@ -193,12 +199,16 @@ describe("an answer", () => {
     (frames: string[]): Handler =>
     (_request, response) => {
       response.writeHead(200, { "content-type": "text/event-stream" });
-      for (const frame of frames) response.write(frame);
+      for (const frame of frames) {
+        response.write(frame);
+      }
       response.end();
     };
   const collect = async (events: AsyncGenerator<unknown>) => {
     const out: unknown[] = [];
-    for await (const event of events) out.push(event);
+    for await (const event of events) {
+      out.push(event);
+    }
     return out;
   };
 

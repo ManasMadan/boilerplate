@@ -34,7 +34,9 @@ export class CacheService {
 
   async get<T>(key: string, schema: z.ZodType<T>): Promise<T | undefined> {
     const raw = await this.redis.get(this.key(key));
-    if (raw === null) return undefined;
+    if (raw === null) {
+      return undefined;
+    }
     const parsed = schema.safeParse(JSON.parse(raw));
     return parsed.success ? parsed.data : undefined;
   }
@@ -51,11 +53,15 @@ export class CacheService {
     load: () => Promise<T>,
   ): Promise<T> {
     const cached = await this.get(key, schema);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      return cached;
+    }
 
     // Another call is loading this key: the same value it will cache, so the same parse.
     const pending = this.inflight.get(key);
-    if (pending !== undefined) return schema.parse(await pending);
+    if (pending !== undefined) {
+      return schema.parse(await pending);
+    }
 
     const loading = load()
       .then(async (value) => {

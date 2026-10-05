@@ -40,7 +40,9 @@ export function BrowserPushCard() {
   }, []);
 
   const publicKey = system?.webPushPublicKey;
-  if (!publicKey || state === null) return null;
+  if (!publicKey || state === null) {
+    return null;
+  }
 
   async function toggle(on: boolean) {
     setBusy(true);

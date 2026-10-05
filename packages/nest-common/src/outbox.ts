@@ -42,7 +42,9 @@ export function createOutbox<C extends Record<string, z.ZodType>>(schema: string
   ) {
     const context = currentContext();
     const schemaFor = catalog[name];
-    if (!schemaFor) throw new Error(`Unknown event "${name}"`);
+    if (!schemaFor) {
+      throw new Error(`Unknown event "${name}"`);
+    }
     const data = JSON.stringify(schemaFor.parse(payload));
     // The organization: the one given (null included, for events that belong to none),
     // else the tenant this transaction runs as (tenantTx sets it, so a job, script or

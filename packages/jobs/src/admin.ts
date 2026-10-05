@@ -43,7 +43,9 @@ export async function retryFailed(queue: UncheckedQueue, ids?: readonly string[]
   let moved = 0;
   for (const id of targets) {
     const job = await queue.getJob(id);
-    if (!job || !(await job.isFailed())) continue;
+    if (!job || !(await job.isFailed())) {
+      continue;
+    }
     await job.retry("failed", { resetAttemptsMade: true, resetAttemptsStarted: true });
     moved += 1;
   }
@@ -58,7 +60,9 @@ export async function discardFailed(
   let removed = 0;
   for (const id of ids) {
     const job = await queue.getJob(id);
-    if (!job || !(await job.isFailed())) continue;
+    if (!job || !(await job.isFailed())) {
+      continue;
+    }
     await job.remove();
     removed += 1;
   }
@@ -71,6 +75,8 @@ async function allFailedIds(queue: UncheckedQueue) {
   for (let start = 0; ; start += page) {
     const jobs = await queue.getFailed(start, start + page - 1);
     ids.push(...jobs.map(idOf));
-    if (jobs.length < page) return ids;
+    if (jobs.length < page) {
+      return ids;
+    }
   }
 }

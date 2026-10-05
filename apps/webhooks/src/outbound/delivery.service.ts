@@ -57,8 +57,9 @@ export class DeliveryService {
   }) {
     const context = webhookSecretContext(endpoint.id);
     const secrets = [this.box.decrypt(endpoint.secret, context)];
-    if (endpoint.previousSecret && (endpoint.previousSecretExpiresAt ?? new Date(0)) > new Date())
+    if (endpoint.previousSecret && (endpoint.previousSecretExpiresAt ?? new Date(0)) > new Date()) {
       secrets.push(this.box.decrypt(endpoint.previousSecret, context));
+    }
     return secrets;
   }
 
@@ -117,7 +118,9 @@ export class DeliveryService {
       this.log.warn({ orgId, deliveryId }, "webhook delivery not found; skipped");
       return "skipped";
     }
-    if (delivery.status !== "pending") return "skipped";
+    if (delivery.status !== "pending") {
+      return "skipped";
+    }
     if (delivery.endpoint.disabledAt) {
       await tenant.webhookDelivery.update({
         where: { id: deliveryId },
@@ -141,8 +144,11 @@ export class DeliveryService {
     });
     const succeeded = status !== undefined && status >= 200 && status < 300;
     let outcome: AttemptResult = "retry";
-    if (succeeded) outcome = "succeeded";
-    else if (isLastAttempt) outcome = "failed";
+    if (succeeded) {
+      outcome = "succeeded";
+    } else if (isLastAttempt) {
+      outcome = "failed";
+    }
 
     await tenant.webhookDelivery.update({
       where: { id: deliveryId },
@@ -156,12 +162,13 @@ export class DeliveryService {
         ...(outcome === "failed" && { status: "failed" }),
       },
     });
-    if (outcome === "failed")
+    if (outcome === "failed") {
       await this.disableIfFailing(
         orgId,
         webhookEndpointIdSchema.parse(delivery.endpoint.id),
         delivery.endpoint.url,
       );
+    }
     return outcome;
   }
 
@@ -207,13 +214,17 @@ export class DeliveryService {
         select: { createdAt: true },
       });
       const failingFor = firstFailureSince ? Date.now() - firstFailureSince.createdAt.getTime() : 0;
-      if (failingFor < env.WEBHOOK_AUTO_DISABLE_HOURS * HOUR_MS) return;
+      if (failingFor < env.WEBHOOK_AUTO_DISABLE_HOURS * HOUR_MS) {
+        return;
+      }
 
       const { count } = await tx.webhookEndpoint.updateMany({
         where: { id: endpointId, disabledAt: null },
         data: { disabledAt: new Date(), disabledReason: "failing" },
       });
-      if (count === 0) return;
+      if (count === 0) {
+        return;
+      }
       await emitEvent(
         tx,
         "webhook.endpoint_disabled.v1",
@@ -232,14 +243,20 @@ export class DeliveryService {
  */
 export function deliveryError(cause: unknown): WebhookDeliveryError {
   if (isAppError(cause)) {
-    if (cause.code === "DESTINATION_NOT_ALLOWED") return "destination_not_allowed";
-    if (cause.code === "RESPONSE_TOO_LARGE") return "response_too_large";
+    if (cause.code === "DESTINATION_NOT_ALLOWED") {
+      return "destination_not_allowed";
+    }
+    if (cause.code === "RESPONSE_TOO_LARGE") {
+      return "response_too_large";
+    }
     throw cause;
   }
   if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
     return "timeout";
   }
   // undici: "fetch failed", with the socket's reason (refused, reset, DNS, TLS) as cause.
-  if (cause instanceof TypeError && cause.message === "fetch failed") return "connection_failed";
+  if (cause instanceof TypeError && cause.message === "fetch failed") {
+    return "connection_failed";
+  }
   throw cause;
 }

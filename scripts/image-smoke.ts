@@ -94,8 +94,11 @@ export const request = (url: string): Promise<{ status: number }> =>
 /** An image with no port (migrate): runs to the end; the exit code. */
 function runToExit(image: string, args: string[], tag: string, run: typeof runSync) {
   const status = run("docker", [...args, "--rm", tag], { stdio: "inherit" }).status;
-  if (status === 0) ok(`${image}: exited 0`);
-  else fail(`${image}: exited ${status}`);
+  if (status === 0) {
+    ok(`${image}: exited 0`);
+  } else {
+    fail(`${image}: exited ${status}`);
+  }
   return status === 0 ? 0 : 1;
 }
 
@@ -108,7 +111,9 @@ async function statusOf(url: string, get: typeof request, timeoutMs: number, pol
       (response) => response.status,
       () => 0,
     );
-    if (status !== 200) await sleep(pollMs);
+    if (status !== 200) {
+      await sleep(pollMs);
+    }
   }
   return status;
 }
@@ -127,7 +132,9 @@ export async function smoke(
   const env = Object.entries(spec.env()).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
   const args = ["run", "--name", name, "--network", "host", ...env];
   const tag = `boilerplate/${image}:dev`;
-  if (!spec.port) return runToExit(image, args, tag, run);
+  if (!spec.port) {
+    return runToExit(image, args, tag, run);
+  }
 
   const started = run("docker", [...args, "--detach", tag]);
   if (started.status !== 0) {
@@ -137,15 +144,20 @@ export async function smoke(
   let passed = true;
   for (const path of spec.paths) {
     const status = await statusOf(`http://127.0.0.1:${spec.port}${path}`, get, timeoutMs, pollMs);
-    if (status === 200) ok(`${image}: ${path} → 200`);
-    else {
+    if (status === 200) {
+      ok(`${image}: ${path} → 200`);
+    } else {
       fail(`${image}: ${path} → ${status}`);
       passed = false;
     }
   }
-  if (!passed) run("docker", ["logs", name], { stdio: "inherit" });
+  if (!passed) {
+    run("docker", ["logs", name], { stdio: "inherit" });
+  }
   run("docker", ["rm", "--force", name]);
   return passed ? 0 : 1;
 }
 
-if (import.meta.main) process.exit(await smoke(process.argv[2]));
+if (import.meta.main) {
+  process.exit(await smoke(process.argv[2]));
+}

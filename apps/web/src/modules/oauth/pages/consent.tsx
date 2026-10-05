@@ -94,7 +94,9 @@ export function OAuthConsentPage() {
               value={activeId}
               disabled={busy}
               onValueChange={(id) => {
-                if (id && id !== activeId) void switchWorkspace(id);
+                if (id && id !== activeId) {
+                  void switchWorkspace(id);
+                }
               }}
               items={workspaces.data.map((workspace: Workspace) => ({
                 value: workspace.id,
@@ -170,7 +172,9 @@ function Shell({
 
 /** Where the app will receive the answer, shown so a look-alike app stands out. */
 function hostOf(uri: string | null) {
-  if (!uri) return null;
+  if (!uri) {
+    return null;
+  }
   try {
     return new URL(uri).host;
   } catch {

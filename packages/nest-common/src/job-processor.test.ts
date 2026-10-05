@@ -26,7 +26,9 @@ describe("describeError", () => {
   it("describes anything thrown, and at most three causes deep", () => {
     expect(describeError("plain string")).toEqual({ message: "plain string" });
     let error = new Error("0");
-    for (let depth = 1; depth <= 5; depth++) error = new Error(String(depth), { cause: error });
+    for (let depth = 1; depth <= 5; depth++) {
+      error = new Error(String(depth), { cause: error });
+    }
     const described = describeError(error);
     expect(described).toMatchObject({
       type: "Error",

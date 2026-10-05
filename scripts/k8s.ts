@@ -175,7 +175,9 @@ class KindCluster {
     const result = this.run(command, args, { input });
     if (!result.ok) {
       fail(label);
-      if (result.stderr) console.error(result.stderr.trim());
+      if (result.stderr) {
+        console.error(result.stderr.trim());
+      }
       this.tools.exit(1);
     }
     ok(label);
@@ -256,7 +258,9 @@ class KindCluster {
   private signMailpitCertificate(dir: string) {
     const openssl = (command: string) => {
       const result = this.tools.run("openssl", command.split(" "), { cwd: dir });
-      if (result.status !== 0) throw new Error(result.stderr);
+      if (result.status !== 0) {
+        throw new Error(result.stderr);
+      }
     };
     writeFileSync(join(dir, "ext"), "subjectAltName=DNS:mailpit\nextendedKeyUsage=serverAuth\n");
     openssl(
@@ -299,7 +303,9 @@ class KindCluster {
         ["apply", "-f", "-"],
         JSON.stringify({ apiVersion: "v1", kind: "List", items }),
       );
-      if (!result.ok) problem = result.stderr;
+      if (!result.ok) {
+        problem = result.stderr;
+      }
     } catch (error) {
       problem = (error as Error).message;
     } finally {
@@ -373,7 +379,9 @@ class KindCluster {
         fail(`${label}: ${path} → ${result.status}`);
       }
     }
-    if (!passed) this.tools.exit(1);
+    if (!passed) {
+      this.tools.exit(1);
+    }
     await this.reencrypt();
   }
 
@@ -391,7 +399,9 @@ class KindCluster {
         "-o",
         "jsonpath={.status.succeeded},{.status.failed}",
       ]).stdout;
-      if (status.startsWith("1") || status.endsWith(",1")) break;
+      if (status.startsWith("1") || status.endsWith(",1")) {
+        break;
+      }
       await this.tools.sleep(2000);
     }
     return status;
@@ -492,8 +502,9 @@ class KindCluster {
       );
       return;
     }
-    for (const image of IMAGES)
+    for (const image of IMAGES) {
       await this.stepAsync(`image ${image}`, "docker", this.bake([image]));
+    }
     await cluster;
     await this.load(IMAGES);
   }
@@ -621,15 +632,19 @@ class KindCluster {
 export async function k8s(argv = process.argv.slice(2), given: Partial<Cluster> = {}) {
   const cluster = new KindCluster({ ...REAL, ...given });
   const command = argv[0];
-  if (command === "up") await cluster.up();
-  else if (command === "smoke") await cluster.smoke();
-  else if (command === "down")
+  if (command === "up") {
+    await cluster.up();
+  } else if (command === "smoke") {
+    await cluster.smoke();
+  } else if (command === "down") {
     cluster.step("cluster deleted", "kind", ["delete", "cluster", "--name", CLUSTER]);
-  else {
+  } else {
     console.error("usage: bun scripts/k8s.ts up | smoke | down");
     return 1;
   }
   return 0;
 }
 
-if (import.meta.main) process.exit(await k8s());
+if (import.meta.main) {
+  process.exit(await k8s());
+}

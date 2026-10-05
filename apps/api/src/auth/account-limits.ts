@@ -79,9 +79,13 @@ export function createAccountLimits(redis: Redis) {
   );
   return async function check(request: LimitedRequest) {
     const entry = limiters.get(request.path);
-    if (!entry) return;
+    if (!entry) {
+      return;
+    }
     const key = accountKey(entry.limit, request);
-    if (!key) return;
+    if (!key) {
+      return;
+    }
     const result = await entry.limiter.consume(key);
     if (!result.allowed) {
       throw new APIError("TOO_MANY_REQUESTS", {
@@ -126,11 +130,17 @@ export function createEmailLimits(redis: Redis) {
   const address = (email: string) => email.trim().toLowerCase();
   return {
     async code(email: string) {
-      if (!(await limiters.codesPerRecipient.consume(address(email))).allowed) refuse();
+      if (!(await limiters.codesPerRecipient.consume(address(email))).allowed) {
+        refuse();
+      }
     },
     async invitation(inviterId: string, email: string) {
-      if (!(await limiters.invitationsPerInviter.consume(inviterId)).allowed) refuse();
-      if (!(await limiters.invitationsPerRecipient.consume(address(email))).allowed) refuse();
+      if (!(await limiters.invitationsPerInviter.consume(inviterId)).allowed) {
+        refuse();
+      }
+      if (!(await limiters.invitationsPerRecipient.consume(address(email))).allowed) {
+        refuse();
+      }
     },
   };
 }

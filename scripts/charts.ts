@@ -121,7 +121,9 @@ function kubeconformWith(exec: Checks["exec"], root: string) {
     "-",
   ];
   return (manifests: string) => {
-    if (hasKubeconform) return exec("kubeconform", args(SCHEMA_CACHE), manifests);
+    if (hasKubeconform) {
+      return exec("kubeconform", args(SCHEMA_CACHE), manifests);
+    }
     const user = `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`;
     return exec(
       "docker",
@@ -184,7 +186,9 @@ function checkEnvironments({ root, exec, kubeconform, check, refuse }: Checks) {
         ...extra[chart],
       ]);
       check(`${env}: ${chart} renders`, result);
-      if (result.ok) rendered.push(result.output);
+      if (result.ok) {
+        rendered.push(result.output);
+      }
     }
     if (rendered.length === 2) {
       check(`${env}: manifests are valid Kubernetes`, kubeconform(rendered.join("\n---\n")));
@@ -205,7 +209,9 @@ function checkOptional({ root, exec, kubeconform, check }: Checks) {
       ...values,
     ]);
     check(`${label} renders`, result);
-    if (result.ok) check(`${label} is valid Kubernetes`, kubeconform(result.output));
+    if (result.ok) {
+      check(`${label} is valid Kubernetes`, kubeconform(result.output));
+    }
   }
 }
 
@@ -220,7 +226,9 @@ function checkPlatform({ root, exec, kubeconform, check }: Checks) {
       ...(OWN_CHARTS[`deploy/platform/${chart}`] ?? []),
     ]);
     check(`platform ${chart} renders`, result);
-    if (result.ok) check(`platform ${chart} is valid Kubernetes`, kubeconform(result.output));
+    if (result.ok) {
+      check(`platform ${chart} is valid Kubernetes`, kubeconform(result.output));
+    }
   }
 
   // The alert rules, as Prometheus itself reads them (promtool, in Docker).
@@ -242,7 +250,9 @@ function checkAddons({ root, exec, check }: Checks) {
     const files = readdirSync(dir).filter((name) => name.endsWith(".yaml"));
     for (const file of files.sort()) {
       const addon = fields(join(dir, file));
-      if (!addon.chart || !addon.repoURL || !addon.version || !addon.addon) continue;
+      if (!addon.chart || !addon.repoURL || !addon.version || !addon.addon) {
+        continue;
+      }
       const chart = addon.repoURL.startsWith("https://")
         ? [addon.chart, "--repo", addon.repoURL]
         : [`oci://${addon.repoURL}/${addon.chart}`];
@@ -346,7 +356,9 @@ function checkSecrets({ root, check }: Checks) {
             recipientsFor(path, sopsConfig),
           )
         : "not a file";
-      if (problem) problems.push(`${path}: ${problem}`);
+      if (problem) {
+        problems.push(`${path}: ${problem}`);
+      }
     }
   }
   check(`every committed secret is SOPS-encrypted (${secretDirs.length} directories)`, {
@@ -371,7 +383,9 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
     exec,
     kubeconform: kubeconformWith(exec, root),
     check: (label, result) => {
-      if (result.ok) return ok(label);
+      if (result.ok) {
+        return ok(label);
+      }
       refuse(label);
       console.error(result.output.trim());
     },
@@ -391,4 +405,6 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
   return failed ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(charts());
+if (import.meta.main) {
+  process.exit(charts());
+}

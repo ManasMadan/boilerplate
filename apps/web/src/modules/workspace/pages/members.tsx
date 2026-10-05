@@ -149,13 +149,17 @@ export function WorkspaceMembersPage() {
   const workspaces = useWorkspaces();
   const switchTo = useSwitchWorkspace();
   const router = useRouter();
-  if (!active.data) return <Skeleton className="h-40" />;
+  if (!active.data) {
+    return <Skeleton className="h-40" />;
+  }
   const workspace = active.data;
   const owners = workspace.members.filter((member) => parseOrgRole(member.role) === "owner").length;
 
   async function run(call: Promise<{ error: unknown }>, success: string) {
     const { error } = await call;
-    if (error) return void toast.error(errorMessage(error));
+    if (error) {
+      return void toast.error(errorMessage(error));
+    }
     await refresh();
     toast.success(success);
   }
@@ -163,9 +167,13 @@ export function WorkspaceMembersPage() {
   async function leave() {
     // Move to another workspace first, so no request ever runs in one you've left.
     const next = (await workspaces.refetch()).data?.find((other) => other.id !== workspace.id);
-    if (next) await switchTo(next.id);
+    if (next) {
+      await switchTo(next.id);
+    }
     const { error } = await authClient.organization.leave({ organizationId: workspace.id });
-    if (error) return void toast.error(errorMessage(error));
+    if (error) {
+      return void toast.error(errorMessage(error));
+    }
     toast.success(t("left"));
     router.replace("/dashboard");
   }
@@ -241,7 +249,9 @@ function InviteCard({ organizationId }: { organizationId: string }) {
               role,
               organizationId,
             });
-            if (error) return void toast.error(errorMessage(error));
+            if (error) {
+              return void toast.error(errorMessage(error));
+            }
             await refresh();
             toast.success(t("sent", { email }));
             form.reset({ email: "", role });
@@ -321,7 +331,9 @@ function PendingInvitations({
                     const { error } = await authClient.organization.cancelInvitation({
                       invitationId: invitation.id,
                     });
-                    if (error) return void toast.error(errorMessage(error));
+                    if (error) {
+                      return void toast.error(errorMessage(error));
+                    }
                     await refresh();
                     toast.success(t("pending.cancelled"));
                   }}

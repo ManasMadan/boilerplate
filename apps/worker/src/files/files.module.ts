@@ -9,7 +9,9 @@ import { FilesProcessor } from "./files.processor";
 
 /** The scanner env.ts asks for (exported for its test). */
 export function createScanner() {
-  if (env.FILE_SCANNER === "none") return new NoScanner();
+  if (env.FILE_SCANNER === "none") {
+    return new NoScanner();
+  }
   const url = new URL(env.CLAMAV_URL);
   return new ClamdScanner(url.hostname, Number(url.port || 3310));
 }

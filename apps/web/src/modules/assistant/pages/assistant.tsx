@@ -152,7 +152,9 @@ function DocumentList() {
   // Here, not in each row: the row is gone once its removal lands, and must still say so.
   const remove = useRemoveDocumentMutation();
 
-  if (documents.isPending) return <Skeleton className="h-16" />;
+  if (documents.isPending) {
+    return <Skeleton className="h-16" />;
+  }
   if (documents.isError) {
     return (
       <p role="alert" className="text-sm text-destructive">
@@ -186,8 +188,9 @@ function DocumentItem({
   const mayRemove = workspace.isAdmin || document.createdBy === session?.user.id;
 
   let detail: string | null = null;
-  if (document.status === "ready") detail = t("passages", { count: document.chunkCount });
-  else if (document.status === "failed" && document.error) {
+  if (document.status === "ready") {
+    detail = t("passages", { count: document.chunkCount });
+  } else if (document.status === "failed" && document.error) {
     detail = errorMessage({ code: document.error });
   }
 

@@ -43,7 +43,9 @@ export function countSuppressions(text: string): Map<string, number> {
   const counts = new Map<string, number>();
   for (const [name, pattern] of Object.entries(SUPPRESSIONS)) {
     const found = text.match(pattern)?.length ?? 0;
-    if (found) counts.set(name, found);
+    if (found) {
+      counts.set(name, found);
+    }
   }
   return counts;
 }
@@ -70,12 +72,16 @@ export const EXCEPTION_SECTIONS = [
  */
 export function listedFiles(root: string): Set<string> {
   const doc = join(root, "docs/testing.md");
-  if (!existsSync(doc)) return new Set();
+  if (!existsSync(doc)) {
+    return new Set();
+  }
   let inExceptions = false;
   const rows = readFileSync(doc, "utf8")
     .split("\n")
     .filter((line) => {
-      if (line.startsWith("## ")) inExceptions = EXCEPTION_SECTIONS.includes(line.trim());
+      if (line.startsWith("## ")) {
+        inExceptions = EXCEPTION_SECTIONS.includes(line.trim());
+      }
       return inExceptions && line.startsWith("|");
     });
   const paths = rows.flatMap((row) =>
@@ -110,13 +116,18 @@ export function checkSuppressions(root = join(import.meta.dir, "..")): number {
     .split("\n")
     .filter((path) => path && existsSync(join(root, path)));
   const found = unlisted(root, files);
-  for (const { path, kinds } of found)
+  for (const { path, kinds } of found) {
     console.error(`  \x1b[31m✖\x1b[0m ${path}: ${kinds.join(", ")}`);
-  if (found.length === 0) return 0;
+  }
+  if (found.length === 0) {
+    return 0;
+  }
   console.error(
     "\nFix the cause, or list the file with the reason in docs/testing.md (Coverage exceptions, Skipped tests, Suppressions or Type-coverage exceptions).",
   );
   return 1;
 }
 
-if (import.meta.main) process.exit(checkSuppressions());
+if (import.meta.main) {
+  process.exit(checkSuppressions());
+}

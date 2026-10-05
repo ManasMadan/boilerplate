@@ -51,13 +51,16 @@ export function WebhookEndpointPage({ id }: { id: string }) {
   const endpoint = endpoints.data?.find((candidate) => candidate.id === id);
   const onError = (error: unknown) => toast.error(errorMessage(error));
 
-  if (endpoints.isPending) return <Skeleton className="h-40" />;
-  if (!endpoint)
+  if (endpoints.isPending) {
+    return <Skeleton className="h-40" />;
+  }
+  if (!endpoint) {
     return (
       <p className="text-sm text-muted-foreground">
         {errorMessage({ code: "WEBHOOK_ENDPOINT_NOT_FOUND" })}
       </p>
     );
+  }
 
   return (
     <>

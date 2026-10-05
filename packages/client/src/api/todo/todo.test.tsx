@@ -28,7 +28,9 @@ function todoApi(count: number) {
   let refusal: string | undefined;
   const change = async () => {
     await held.shift()?.promise;
-    if (refusal) throw new ORPCError(refusal);
+    if (refusal) {
+      throw new ORPCError(refusal);
+    }
   };
   const api = standIn((os) => ({
     todo: {

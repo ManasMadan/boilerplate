@@ -105,9 +105,13 @@ export function generators(argv = process.argv.slice(2), run = runSync): number 
   } finally {
     copy?.remove();
   }
-  if (!passed) return 1;
+  if (!passed) {
+    return 1;
+  }
   ok("both generators write code that passes lint, types and its tests");
   return 0;
 }
 
-if (import.meta.main) process.exit(generators());
+if (import.meta.main) {
+  process.exit(generators());
+}

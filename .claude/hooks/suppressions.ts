@@ -10,7 +10,9 @@ import { editedText, type HookInput, type HookOutput, ROOT, runHook, targetPath 
 /** Blocks an edit that adds an unlisted suppression; nothing otherwise. */
 export function suppressions(input: HookInput): HookOutput {
   const path = targetPath(input);
-  if (!path || !CODE.test(path) || DEFINES_THEM.has(path)) return;
+  if (!path || !CODE.test(path) || DEFINES_THEM.has(path)) {
+    return;
+  }
 
   const edit = editedText(input);
   // A whole-file write replaces what the last commit had.
@@ -19,11 +21,15 @@ export function suppressions(input: HookInput): HookOutput {
       ? spawnSync("git", ["show", `HEAD:${path}`], { cwd: ROOT, encoding: "utf8" }).stdout
       : (edit.before ?? "");
   const added = addedSuppressions(before, edit.after ?? "");
-  if (added.length === 0 || listedFiles(ROOT).has(path)) return;
+  if (added.length === 0 || listedFiles(ROOT).has(path)) {
+    return;
+  }
   return {
     decision: "block",
     reason: `${path} now has ${added.join(", ")}. Fix the cause instead and remove it. If it truly can't be fixed, the user decides: it's allowed only with a row in docs/testing.md's exceptions tables (the reason, and the test that covers the behaviour another way).`,
   };
 }
 
-if (import.meta.main) process.exit(await runHook(suppressions));
+if (import.meta.main) {
+  process.exit(await runHook(suppressions));
+}

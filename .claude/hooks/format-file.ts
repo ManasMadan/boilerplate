@@ -9,15 +9,21 @@ import { type HookInput, type HookOutput, ROOT, runHook, shell, targetPath } fro
 /** Formats the edited file; what lint still reports, or nothing. */
 export async function formatFile(input: HookInput, run = shell): Promise<HookOutput> {
   const file = targetPath(input);
-  if (!file) return;
+  if (!file) {
+    return;
+  }
 
   /**
    * Runs the fixers quietly, then the check whose output (if it fails) Claude should see.
    * Commands run from the repository root unless they give their own directory.
    */
   async function fixThenCheck(fix: string[][], check?: string[], cwd = ROOT) {
-    for (const command of fix) await run(command, cwd);
-    if (!check) return "";
+    for (const command of fix) {
+      await run(command, cwd);
+    }
+    if (!check) {
+      return "";
+    }
     const result = await run(check, cwd);
     return result.exitCode === 0 ? "" : `${result.stdout}${result.stderr}`.trim();
   }
@@ -45,7 +51,9 @@ export async function formatFile(input: HookInput, run = shell): Promise<HookOut
     await fixThenCheck([["tofu", "fmt", file]]);
   }
 
-  if (!remaining) return;
+  if (!remaining) {
+    return;
+  }
   return {
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
@@ -54,4 +62,6 @@ export async function formatFile(input: HookInput, run = shell): Promise<HookOut
   };
 }
 
-if (import.meta.main) process.exit(await runHook(formatFile));
+if (import.meta.main) {
+  process.exit(await runHook(formatFile));
+}

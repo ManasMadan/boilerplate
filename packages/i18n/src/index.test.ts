@@ -74,7 +74,9 @@ describe("createI18n", () => {
 /** The arguments and tags in parsed ICU elements, nested ones included, as `name:kind`. */
 function namesIn(elements: MessageFormatElement[]): string[] {
   return elements.flatMap((element) => {
-    if (element.type === TYPE.literal || element.type === TYPE.pound) return [];
+    if (element.type === TYPE.literal || element.type === TYPE.pound) {
+      return [];
+    }
     const options =
       "options" in element
         ? Object.values(element.options).flatMap((option) => namesIn(option.value))

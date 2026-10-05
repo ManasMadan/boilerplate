@@ -9,8 +9,12 @@ const facts = ["table public.todo rows=2 hash=9 rls=true forced=true", "extensio
 /** Postgres as the drill sees it: `restored` is what the scratch database's fingerprint says. */
 function postgres(restored: string[], fails: (line: string) => boolean = () => false) {
   return fakeRun((line) => {
-    if (fails(line)) return { status: 1, stderr: "server closed the connection" };
-    if (!line.includes("psql")) return {};
+    if (fails(line)) {
+      return { status: 1, stderr: "server closed the connection" };
+    }
+    if (!line.includes("psql")) {
+      return {};
+    }
     return { stdout: `${(line.includes("-d app_restore_drill") ? restored : facts).join("\n")}\n` };
   });
 }

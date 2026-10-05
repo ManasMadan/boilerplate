@@ -61,13 +61,17 @@ export function jobMetaFromContext() {
 /** Adds what is learned mid-request (e.g. the user, once the session is resolved). */
 export function updateContext(patch: Partial<Omit<RequestContext, "requestId">>) {
   const context = storage.getStore();
-  if (context) Object.assign(context, patch);
+  if (context) {
+    Object.assign(context, patch);
+  }
 }
 
 /** Fields safe to attach to every log line (ids only, never personal data). */
 export function contextLogFields() {
   const context = storage.getStore();
-  if (!context) return {};
+  if (!context) {
+    return {};
+  }
   const { requestId, userId, orgId } = context;
   return { requestId, ...(userId && { userId }), ...(orgId && { orgId }) };
 }

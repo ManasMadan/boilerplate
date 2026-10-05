@@ -56,8 +56,9 @@ export class DeliveryProcessor extends JobProcessor {
       case "deliver": {
         const { deliveryId, orgId } = parseJob("webhook-deliveries", "deliver", job.data).payload;
         const outcome = await this.deliveries.attempt(orgId, deliveryId, isLastAttempt(job));
-        if (outcome === "retry")
+        if (outcome === "retry") {
           throw new DeliveryFailed(`delivery ${deliveryId} failed; retrying`);
+        }
         return;
       }
       case "redeliver": {

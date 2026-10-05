@@ -28,9 +28,13 @@ export function authErrorBody(body: Buffer, status: number, requestId: string) {
   } catch {
     return null;
   }
-  if (typeof parsed !== "object" || parsed === null || "error" in parsed) return null;
+  if (typeof parsed !== "object" || parsed === null || "error" in parsed) {
+    return null;
+  }
   const { code, message } = parsed as { code?: unknown; message?: unknown };
-  if (typeof code !== "string") return null;
+  if (typeof code !== "string") {
+    return null;
+  }
   return {
     defined: false,
     code,
@@ -60,7 +64,9 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
       headers.set("x-forwarded-for", request.ip);
       if (request.headers.cookie?.includes("session_token")) {
         const session = await auth.api.getSession({ headers });
-        if (session) updateContext({ userId: session.user.id });
+        if (session) {
+          updateContext({ userId: session.user.id });
+        }
       }
       const response = await auth.handler(toWebRequest(request, url, headers));
       const answer = await fromWebResponse(reply, response);
@@ -78,8 +84,9 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
   fastify.register((scope, _options, done) => {
     rawBodies(scope);
     scope.route({ method: ["GET", "POST"], url: "/api/auth/*", handler: handle });
-    for (const url of DISCOVERY_PATHS)
+    for (const url of DISCOVERY_PATHS) {
       scope.route({ method: ["GET", "HEAD"], url, handler: handle });
+    }
     done();
   });
 }

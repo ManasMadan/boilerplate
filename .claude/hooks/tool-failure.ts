@@ -14,7 +14,9 @@ const REPO_COMMAND =
 export async function toolFailure(input: HookInput): Promise<HookOutput> {
   const command = typeof input.tool_input?.command === "string" ? input.tool_input.command : "";
   const hinted = hintedFile(input.session_id);
-  if (!REPO_COMMAND.test(command) || existsSync(hinted)) return;
+  if (!REPO_COMMAND.test(command) || existsSync(hinted)) {
+    return;
+  }
   await Bun.write(hinted, "");
   return {
     hookSpecificOutput: {
@@ -25,4 +27,6 @@ export async function toolFailure(input: HookInput): Promise<HookOutput> {
   };
 }
 
-if (import.meta.main) process.exit(await runHook(toolFailure));
+if (import.meta.main) {
+  process.exit(await runHook(toolFailure));
+}

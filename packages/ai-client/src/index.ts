@@ -45,7 +45,9 @@ export class AiServiceError extends Error {
 /** The error a failed response carries, parsed against the service's error model. */
 function toServiceError(status: number, body: unknown): AiServiceError {
   const parsed = zErrorResponse.safeParse(body);
-  if (!parsed.success) return new AiServiceError(status, "UPSTREAM_UNAVAILABLE");
+  if (!parsed.success) {
+    return new AiServiceError(status, "UPSTREAM_UNAVAILABLE");
+  }
   const { code, data } = parsed.data;
   return new AiServiceError(status, code, data.params, data.issues ?? []);
 }
@@ -75,14 +77,18 @@ async function settle<R extends { error?: unknown; response?: Response }>(
   // The generated client never rejects: an unreachable service comes back as a result
   // without a response.
   const result = await call;
-  if (!result.response?.ok) throw toServiceError(result.response?.status ?? 503, result.error);
+  if (!result.response?.ok) {
+    throw toServiceError(result.response?.status ?? 503, result.error);
+  }
   return result;
 }
 
 async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: Response }>) {
   const { data } = await settle(call);
   // The generated client validated the body; one that broke the contract lands here.
-  if (data === undefined) throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+  if (data === undefined) {
+    throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+  }
   return data;
 }
 

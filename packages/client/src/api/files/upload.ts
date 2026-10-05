@@ -53,7 +53,9 @@ export function useUploadFileMutation() {
         Object.entries(upload.headers).filter(([name]) => name.toLowerCase() !== "content-length"),
       );
       const response = await fetch(upload.url, { method: "PUT", headers, body: file });
-      if (!response.ok) throw new UploadFailedError(response.status);
+      if (!response.ok) {
+        throw new UploadFailedError(response.status);
+      }
       return client.files.completeUpload({ fileId: created.id });
     },
   });

@@ -11,8 +11,12 @@ const listing = (...paths: string[]) =>
 /** A machine where git says the push starts at `abc`, with these answers for the rest. */
 function machine(answers: (line: string) => Partial<Ran> | undefined = () => undefined) {
   return fakeRun((line) => {
-    if (line.startsWith("git merge-base")) return { stdout: "abc\n" };
-    if (line.startsWith("git ")) return { stdout: "" };
+    if (line.startsWith("git merge-base")) {
+      return { stdout: "abc\n" };
+    }
+    if (line.startsWith("git ")) {
+      return { stdout: "" };
+    }
     return answers(line);
   });
 }

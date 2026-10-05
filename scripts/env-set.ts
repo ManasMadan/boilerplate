@@ -38,4 +38,6 @@ export async function envSet(
   return 0;
 }
 
-if (import.meta.main) process.exit(await envSet());
+if (import.meta.main) {
+  process.exit(await envSet());
+}

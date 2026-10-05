@@ -19,8 +19,9 @@ export async function assertDeliverableUrl(raw: string) {
     // A private address, or no such host, is the admin's to fix; DNS failing is ours,
     // and worth a retry.
     const code = fieldOf(error, "code");
-    if (isAppError(error) || code === "ENOTFOUND" || code === "ENODATA")
+    if (isAppError(error) || code === "ENOTFOUND" || code === "ENODATA") {
       throw new AppError("WEBHOOK_URL_NOT_ALLOWED");
+    }
     throw new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "dns" }, cause: error });
   });
 }

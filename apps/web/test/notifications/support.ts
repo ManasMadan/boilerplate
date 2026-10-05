@@ -55,7 +55,9 @@ export function fakePushService() {
       endpoint,
       toJSON: () => json,
       unsubscribe: async () => {
-        if (current === created) current = null;
+        if (current === created) {
+          current = null;
+        }
         return true;
       },
     } as unknown as PushSubscription;

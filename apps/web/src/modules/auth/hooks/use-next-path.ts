@@ -16,7 +16,9 @@ const BASE = "https://same.site";
  * redirect. Resolving against a placeholder origin catches every spelling browsers accept.
  */
 export function safeNextPath(next: string | null): Route {
-  if (!next?.startsWith("/")) return "/dashboard";
+  if (!next?.startsWith("/")) {
+    return "/dashboard";
+  }
   const url = new URL(next, BASE);
   return (url.origin === BASE ? url.pathname + url.search + url.hash : "/dashboard") as Route;
 }
@@ -31,7 +33,9 @@ export function useAuthStepHref() {
   return (path: "/sign-in" | "/sign-up" | "/verify-email", email?: string): Route => {
     const params = new URLSearchParams(current);
     params.delete("email");
-    if (email) params.set("email", email);
+    if (email) {
+      params.set("email", email);
+    }
     const query = params.toString();
     return (query ? `${path}?${query}` : path) as Route;
   };

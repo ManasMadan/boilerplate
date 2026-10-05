@@ -54,7 +54,9 @@ export function checkRepositories(
   );
   let violations = 0;
   for (const file of new Glob("**/*.{ts,tsx}").scanSync(modules)) {
-    if (file.endsWith(".repository.ts")) continue;
+    if (file.endsWith(".repository.ts")) {
+      continue;
+    }
     if (query.test(readFileSync(join(modules, file), "utf8"))) {
       violations += 1;
       fail(
@@ -62,7 +64,9 @@ export function checkRepositories(
       );
     }
   }
-  if (violations) return 1;
+  if (violations) {
+    return 1;
+  }
   ok("only repositories touch Prisma");
   return 0;
 }
@@ -71,7 +75,9 @@ export function checkRepositories(
 export function checkClientHooks(api = join(ROOT, "packages/client/src/api")): number {
   let violations = 0;
   for (const file of new Glob("**/*.{ts,tsx}").scanSync(api)) {
-    if (/\.test\.tsx?$/.test(file)) continue;
+    if (/\.test\.tsx?$/.test(file)) {
+      continue;
+    }
     const source = readFileSync(join(api, file), "utf8");
     const hooks = [
       ...source.matchAll(/^export\s+(?:async\s+)?(?:function|const)\s+(use[A-Z]\w*)/gm),
@@ -83,9 +89,13 @@ export function checkClientHooks(api = join(ROOT, "packages/client/src/api")): n
       );
     }
   }
-  if (violations) return 1;
+  if (violations) {
+    return 1;
+  }
   ok("one client hook per file");
   return 0;
 }
 
-if (import.meta.main) process.exit(checkRepositories() | checkClientHooks());
+if (import.meta.main) {
+  process.exit(checkRepositories() | checkClientHooks());
+}

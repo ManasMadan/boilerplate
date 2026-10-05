@@ -33,7 +33,9 @@ describe("the dashboard", () => {
 
   it("loads older todos page by page", async () => {
     await signUp();
-    for (let index = 1; index <= 21; index++) await api.todo.create({ title: `Todo ${index}` });
+    for (let index = 1; index <= 21; index++) {
+      await api.todo.create({ title: `Todo ${index}` });
+    }
     const page = await renderPage(<DashboardPage />, { url: "/dashboard" });
     await expect.element(page.getByText("Todo 21")).toBeVisible();
     expect(page.getByText("Todo 1", { exact: true }).query()).toBeNull();

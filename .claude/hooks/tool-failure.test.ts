@@ -5,7 +5,9 @@ import { toolFailure } from "./tool-failure";
 
 const sessions: string[] = [];
 afterEach(() => {
-  for (const session of sessions.splice(0)) rmSync(hintedFile(session), { force: true });
+  for (const session of sessions.splice(0)) {
+    rmSync(hintedFile(session), { force: true });
+  }
 });
 
 function failed(command?: string): HookInput {

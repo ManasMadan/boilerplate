@@ -16,13 +16,27 @@ type SessionEndReason = EventPayload<"auth.session_ended.v1">["reason"];
 
 /** How a new session was obtained, from the endpoint that created it. */
 export function sessionMethod(path: string | undefined): SessionMethod {
-  if (!path) return "other";
-  if (path === "/sign-in/email" || path === "/sign-up/email") return "password";
-  if (path.startsWith("/passkey/")) return "passkey";
-  if (path.startsWith("/callback/") || path.startsWith("/sign-in/social")) return "social";
-  if (path.startsWith("/two-factor/")) return "two-factor";
-  if (path.startsWith("/email-otp/")) return "email-code";
-  if (path.startsWith("/admin/impersonate")) return "impersonation";
+  if (!path) {
+    return "other";
+  }
+  if (path === "/sign-in/email" || path === "/sign-up/email") {
+    return "password";
+  }
+  if (path.startsWith("/passkey/")) {
+    return "passkey";
+  }
+  if (path.startsWith("/callback/") || path.startsWith("/sign-in/social")) {
+    return "social";
+  }
+  if (path.startsWith("/two-factor/")) {
+    return "two-factor";
+  }
+  if (path.startsWith("/email-otp/")) {
+    return "email-code";
+  }
+  if (path.startsWith("/admin/impersonate")) {
+    return "impersonation";
+  }
   return "other";
 }
 

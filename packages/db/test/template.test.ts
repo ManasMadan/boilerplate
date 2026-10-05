@@ -74,8 +74,9 @@ describe("preparing the template", () => {
       const { rows } = await client.query<{ nspname: string }>(
         "SELECT nspname FROM pg_namespace WHERE nspowner = 'migrator'::regrole",
       );
-      for (const { nspname } of rows)
+      for (const { nspname } of rows) {
         await client.query(`DROP SCHEMA ${pg.escapeIdentifier(nspname)} CASCADE`);
+      }
       await client.query("DROP TABLE public._prisma_migrations");
     });
     await prepareTemplate(template.name);

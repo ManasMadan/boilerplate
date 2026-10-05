@@ -11,7 +11,9 @@ afterEach(() => mock.restore());
 /** A git repository holding `files`. */
 function repo(files: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), "rename-"));
-  for (const [path, text] of Object.entries(files)) writeFileSync(join(dir, path), text);
+  for (const [path, text] of Object.entries(files)) {
+    writeFileSync(join(dir, path), text);
+  }
   Bun.spawnSync(["git", "init", "-q"], { cwd: dir });
   Bun.spawnSync(["git", "add", "-A"], { cwd: dir });
   return dir;
@@ -35,7 +37,9 @@ describe("renaming the project", () => {
         "http://shop-webhooks.shop.svc.cluster.local",
       "EMAIL_FROM=no-reply@boilerplate.test": "EMAIL_FROM=no-reply@shop.test",
     };
-    for (const [before, after] of Object.entries(lines)) expect(rewrite(before, acme)).toBe(after);
+    for (const [before, after] of Object.entries(lines)) {
+      expect(rewrite(before, acme)).toBe(after);
+    }
   });
 
   it("derives the product and bundle id from the name", () => {

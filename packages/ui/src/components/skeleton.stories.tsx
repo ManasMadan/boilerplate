@@ -20,6 +20,8 @@ export const Row: Story = {
     const shapes = canvasElement.querySelectorAll('[data-slot="skeleton"]');
     await expect(shapes).toHaveLength(3);
     // Placeholders only: nothing in them for a screen reader to read out.
-    for (const shape of shapes) await expect(shape).toBeEmptyDOMElement();
+    for (const shape of shapes) {
+      await expect(shape).toBeEmptyDOMElement();
+    }
   },
 };

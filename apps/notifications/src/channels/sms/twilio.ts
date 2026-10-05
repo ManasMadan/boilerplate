@@ -60,7 +60,9 @@ export class TwilioTransport implements SmsTransport {
       };
     }
     const result = twilioResult.parse(await response.json().catch(() => ({})));
-    if (response.ok && result.sid) return { ok: true, providerMessageId: result.sid };
+    if (response.ok && result.sid) {
+      return { ok: true, providerMessageId: result.sid };
+    }
     const code = result.code ?? 0;
     return {
       ok: false,

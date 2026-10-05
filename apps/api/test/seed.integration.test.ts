@@ -38,7 +38,9 @@ afterAll(() => harness?.close());
 /** Runs a command's entry point in this process, with what it logs. */
 async function command(entry: string, env: Record<string, string | undefined> = {}) {
   vi.resetModules();
-  for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+  for (const [name, value] of Object.entries(env)) {
+    vi.stubEnv(name, value);
+  }
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
   try {
@@ -163,7 +165,9 @@ describe("the load-test users command", () => {
   it("writes a session cookie per user for k6", async () => {
     // A developer's own file is put back afterwards.
     const had = existsSync(output);
-    if (had) await rename(output, kept);
+    if (had) {
+      await rename(output, kept);
+    }
     try {
       const run = await command("../src/load-users", { LOAD_USERS: "2" });
       expect(run.lines).toEqual([`2 signed-in users written to ${output}`]);
@@ -174,7 +178,9 @@ describe("the load-test users command", () => {
       ]);
     } finally {
       await rm(output, { force: true });
-      if (had) await rename(kept, output);
+      if (had) {
+        await rename(kept, output);
+      }
     }
   });
 

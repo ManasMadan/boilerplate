@@ -64,8 +64,12 @@ export function codeForStatus(status: number): ErrorCode {
 /** What an error thrown outside a procedure means, as a catalog error. */
 function toHttpError(error: unknown): { code: ErrorCode; params: Params } {
   const known = isAppError(error) ? error : fromPrismaError(error);
-  if (known) return { code: known.code, params: known.params };
-  if (error instanceof HttpException) return { code: codeForStatus(error.getStatus()), params: {} };
+  if (known) {
+    return { code: known.code, params: known.params };
+  }
+  if (error instanceof HttpException) {
+    return { code: codeForStatus(error.getStatus()), params: {} };
+  }
   const status = fieldOf(error, "statusCode");
   return { code: typeof status === "number" ? codeForStatus(status) : "INTERNAL", params: {} };
 }
@@ -75,11 +79,14 @@ const log = new Logger("HttpErrors");
 /** Answers any error as a catalog error; 5xx ones are logged. */
 export function handleHttpError(error: unknown, request: FastifyRequest, reply: FastifyReply) {
   const { code, params } = toHttpError(error);
-  if (ERROR_CODES[code] >= 500)
+  if (ERROR_CODES[code] >= 500) {
     log.error({ err: describeError(error), url: request.routeOptions.url }, "request failed");
+  }
   // Load shedding says when to come back.
   const retryAfter = fieldOf(fieldOf(error, "headers"), "retry-after");
-  if (retryAfter) reply.header("retry-after", retryAfter);
+  if (retryAfter) {
+    reply.header("retry-after", retryAfter);
+  }
   return sendError(reply, code, params);
 }
 

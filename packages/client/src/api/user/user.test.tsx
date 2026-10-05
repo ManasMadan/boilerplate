@@ -26,7 +26,9 @@ function accountApi() {
       me: os.user.me.handler(() => account),
       sendPhoneCode: os.user.sendPhoneCode.handler(() => ({ expiresInSeconds: 600 })),
       verifyPhone: os.user.verifyPhone.handler(({ input }) => {
-        if (input.code !== "123456") throw new ORPCError("PHONE_CODE_INVALID");
+        if (input.code !== "123456") {
+          throw new ORPCError("PHONE_CODE_INVALID");
+        }
         account.phoneNumber = input.phoneNumber;
         return account;
       }),

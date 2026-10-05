@@ -37,7 +37,9 @@ export function useAssistant() {
       try {
         const stream = await client.ai.ask({ question }, { signal: controller.signal });
         for await (const event of stream) {
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted) {
+            return;
+          }
           setState((previous) => {
             switch (event.type) {
               case "text":
@@ -52,8 +54,9 @@ export function useAssistant() {
           });
         }
       } catch (error) {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setState((previous) => ({ ...previous, status: "error", error }));
+        }
       }
     },
     [client],

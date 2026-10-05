@@ -6,7 +6,9 @@ let server: Server | undefined;
 const sockets = new Set<Socket>();
 
 function closeServer() {
-  for (const socket of sockets) socket.destroy();
+  for (const socket of sockets) {
+    socket.destroy();
+  }
   sockets.clear();
   const closing = server;
   server = undefined;
@@ -25,8 +27,12 @@ function streamedFile(buffer: Buffer) {
   const chunks: Buffer[] = [];
   while (offset + 4 <= buffer.length) {
     const size = buffer.readUInt32BE(offset);
-    if (size === 0) return Buffer.concat(chunks);
-    if (offset + 4 + size > buffer.length) return undefined;
+    if (size === 0) {
+      return Buffer.concat(chunks);
+    }
+    if (offset + 4 + size > buffer.length) {
+      return undefined;
+    }
     chunks.push(buffer.subarray(offset + 4, offset + 4 + size));
     offset += 4 + size;
   }
@@ -44,12 +50,18 @@ async function fakeClamd(answer: (bytes: Buffer) => string | null) {
     let buffer = Buffer.alloc(0);
     socket.on("data", (data: Buffer) => {
       buffer = Buffer.concat([buffer, data]);
-      if (buffer.length < INSTREAM.length) return;
+      if (buffer.length < INSTREAM.length) {
+        return;
+      }
       expect(buffer.subarray(0, INSTREAM.length).toString()).toBe(INSTREAM);
       const streamed = streamedFile(buffer);
-      if (!streamed) return;
+      if (!streamed) {
+        return;
+      }
       const reply = answer(streamed);
-      if (reply !== null) socket.end(`${reply}\0`);
+      if (reply !== null) {
+        socket.end(`${reply}\0`);
+      }
     });
   });
   await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));

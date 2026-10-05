@@ -80,8 +80,12 @@ describe("every workflow", () => {
         const endpoints = String(options["allowed-endpoints"] ?? "")
           .split(/\s+/)
           .filter(Boolean);
-        if (policy === "audit" && endpoints.length === 0) return [];
-        if (policy === "block" && endpoints.every((e) => /^[\w*.-]+:\d+$/.test(e))) return [];
+        if (policy === "audit" && endpoints.length === 0) {
+          return [];
+        }
+        if (policy === "block" && endpoints.every((e) => /^[\w*.-]+:\d+$/.test(e))) {
+          return [];
+        }
         return [`${file}: ${name}`];
       }),
     );
@@ -97,7 +101,7 @@ describe("every workflow", () => {
     expect(blocking.length).toBeGreaterThan(0);
     for (const job of blocking) {
       const endpoints = String(job.steps?.[0]?.with?.["allowed-endpoints"]).split(/\s+/);
-      if (job.steps?.some((step) => step.uses === "./.github/actions/setup"))
+      if (job.steps?.some((step) => step.uses === "./.github/actions/setup")) {
         expect(endpoints).toEqual(
           expect.arrayContaining([
             "github.com:443",
@@ -105,16 +109,18 @@ describe("every workflow", () => {
             "*.blob.core.windows.net:443",
           ]),
         );
+      }
     }
   });
 
   it("blocks egress where the traffic is known: the area check, the title check, ci-ok", () => {
     const { jobs } = workflow("ci.yml");
-    for (const name of ["changes", "pr-title", "ci-ok"])
+    for (const name of ["changes", "pr-title", "ci-ok"]) {
       expect({ name, policy: jobs[name]?.steps?.[0]?.with?.["egress-policy"] }).toEqual({
         name,
         policy: "block",
       });
+    }
   });
 
   it("pins every action by commit, with its version beside it", () => {
@@ -160,10 +166,11 @@ describe("claude-review.yml", () => {
     expect(args).toMatch(/--max-turns \d+/);
     const tools = /--allowedTools "([^"]+)"/.exec(args)?.[1]?.split(",") ?? [];
     expect(tools).toContain("Agent");
-    for (const tool of tools)
+    for (const tool of tools) {
       expect(tool).toMatch(
         /^(Read|Glob|Grep|Agent|Bash\((git (diff|log|show)|gh pr (comment|diff|view)) \*\))$/,
       );
+    }
   });
 
   it("asks for the repository's own reviewer agents", () => {
@@ -212,13 +219,16 @@ describe("the GitHub-only parts", () => {
 
   it("are each in docs/deploy.md with what replaces them", () => {
     for (const [used, documented] of parts) {
-      if (workflows.includes(used))
+      if (workflows.includes(used)) {
         expect({ used, documented: table.includes(documented) }).toEqual({
           used,
           documented: true,
         });
+      }
     }
-    if (previews.includes("github:")) expect(table).toContain("`pullRequest.github`");
+    if (previews.includes("github:")) {
+      expect(table).toContain("`pullRequest.github`");
+    }
   });
 });
 
@@ -363,8 +373,9 @@ describe("ci.yml's path filters", () => {
     expect(heavy.length).toBeGreaterThan(10);
     for (const [job, needed] of Object.entries(gates)) {
       const condition = jobs[job]?.if ?? "";
-      for (const area of needed)
+      for (const area of needed) {
         expect(condition).toContain(`needs.changes.outputs.${area} == 'true'`);
+      }
     }
   });
 
@@ -548,8 +559,9 @@ describe("CI's caches", () => {
       "scripts",
       ".claude/hooks",
       "turbo/generators",
-    ])
+    ]) {
       expect(paths).toContain(`${dir}/node_modules/.cache/tsc`);
+    }
   });
 
   it("builds the component library's Storybook through turbo, whose cache CI keeps", () => {
@@ -611,7 +623,9 @@ describe("stripe.yml", () => {
   it("passes without the key, doing nothing but saying so", () => {
     const after = steps.slice(2);
     expect(after.length).toBeGreaterThan(0);
-    for (const step of after) expect(step.if).toBe("steps.key.outputs.present == 'true'");
+    for (const step of after) {
+      expect(step.if).toBe("steps.key.outputs.present == 'true'");
+    }
     expect(steps[1]?.run).toContain("::notice::STRIPE_CONTRACT_SECRET_KEY isn't set");
   });
 

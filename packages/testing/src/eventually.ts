@@ -29,8 +29,9 @@ export function eventually<T>(
   return vi.waitFor(
     async () => {
       const value = await read();
-      if (!done(value))
+      if (!done(value)) {
         throw new Error(`still waiting, last read: ${inspect(value, { depth: 2 })}`);
+      }
       return value;
     },
     { timeout, interval },

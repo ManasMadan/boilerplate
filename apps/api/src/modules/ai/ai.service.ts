@@ -46,7 +46,9 @@ export class AiService {
   constructor(@InjectPinoLogger(AiService.name) private readonly log: PinoLogger) {}
 
   private get ai() {
-    if (!this.client) throw new AppError("FEATURE_DISABLED", { params: { feature: "ai" } });
+    if (!this.client) {
+      throw new AppError("FEATURE_DISABLED", { params: { feature: "ai" } });
+    }
     return this.client;
   }
 
@@ -80,8 +82,12 @@ export class AiService {
   async removeDocument(userId: UserId, orgId: OrgId, role: OrgRole, documentId: DocumentId) {
     if (!canManageWorkspace(role)) {
       const document = (await this.documents(userId, orgId)).find((d) => d.id === documentId);
-      if (!document) throw new AppError("DOCUMENT_NOT_FOUND");
-      if (document.createdBy !== userId) throw new AppError("FORBIDDEN");
+      if (!document) {
+        throw new AppError("DOCUMENT_NOT_FOUND");
+      }
+      if (document.createdBy !== userId) {
+        throw new AppError("FORBIDDEN");
+      }
     }
     await this.call(() => this.ai.deleteDocument(this.caller(userId, orgId), documentId));
   }
@@ -105,7 +111,9 @@ export class AiService {
       try {
         yield* stream;
       } catch (error) {
-        if (signal?.aborted) return; // the client went away
+        if (signal?.aborted) {
+          return; // the client went away
+        }
         // The client hears the service failed either way; the log says which it was.
         log[streamFailureLevel(error)]({ err: describeError(error) }, "assistant stream failed");
         yield { type: "error", code: "UPSTREAM_UNAVAILABLE" } as const;
@@ -144,7 +152,9 @@ export function streamFailureLevel(error: unknown): "warn" | "error" {
 }
 
 function toAppError(error: unknown): AppError {
-  if (error instanceof AppError) return error;
+  if (error instanceof AppError) {
+    return error;
+  }
   if (error instanceof AiServiceError && PASSED_ON.has(error.code)) {
     return new AppError(error.code, { params: error.params });
   }

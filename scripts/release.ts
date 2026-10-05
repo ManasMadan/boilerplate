@@ -49,17 +49,25 @@ export function releaseNotes(commits: Commit[]): string {
   const sections = new Map<string, string[]>(SECTIONS.map(([type]) => [type, []]));
   for (const commit of commits) {
     const match = CONVENTIONAL.exec(commit.subject)?.groups;
-    if (!match?.type || !match.subject) continue;
+    if (!match?.type || !match.subject) {
+      continue;
+    }
     const scope = match.scope ? `**${match.scope}:** ` : "";
     const line = `- ${scope}${match.subject} (${commit.hash})`;
-    if (match.breaking || /^BREAKING[ -]CHANGE: /m.test(commit.body)) breaking.push(line);
+    if (match.breaking || /^BREAKING[ -]CHANGE: /m.test(commit.body)) {
+      breaking.push(line);
+    }
     sections.get(match.type)?.push(line);
   }
   const parts: string[] = [];
-  if (breaking.length) parts.push(`## Breaking changes\n\n${breaking.join("\n")}`);
+  if (breaking.length) {
+    parts.push(`## Breaking changes\n\n${breaking.join("\n")}`);
+  }
   for (const [type, title] of SECTIONS) {
     const lines = sections.get(type) ?? [];
-    if (lines.length) parts.push(`## ${title}\n\n${lines.join("\n")}`);
+    if (lines.length) {
+      parts.push(`## ${title}\n\n${lines.join("\n")}`);
+    }
   }
   return parts.length ? `${parts.join("\n\n")}\n` : "Maintenance only: no user-facing changes.\n";
 }
@@ -97,7 +105,9 @@ export interface ReleaseFacts {
  * code.
  */
 export function releaseImageTag(commit: string, facts: ReleaseFacts): string | undefined {
-  if (facts.deployed(commit)) return `sha-${commit}`;
+  if (facts.deployed(commit)) {
+    return `sha-${commit}`;
+  }
   const parent = facts.parent(commit);
   const staging = facts.changedFiles(commit);
   const bump =
@@ -132,7 +142,9 @@ interface WorkflowRun {
 function helpers({ run, root }: Tools) {
   const command = (name: string) => (args: string[]) => {
     const result = run(name, args, { cwd: root });
-    if (result.status !== 0) throw new Error(`${name} ${args.join(" ")}: ${result.stderr.trim()}`);
+    if (result.status !== 0) {
+      throw new Error(`${name} ${args.join(" ")}: ${result.stderr.trim()}`);
+    }
     return result.stdout.trim();
   };
   const git = command("git");
@@ -165,7 +177,9 @@ async function settled({ runsOf }: Helpers, sleep: Tools["sleep"], commit: strin
     const busy = runsOf(commit).filter(
       (run) => ["CI", "Deploy"].includes(run.workflowName) && run.status !== "completed",
     );
-    if (busy.length === 0 || Date.now() > deadline) return;
+    if (busy.length === 0 || Date.now() > deadline) {
+      return;
+    }
     console.log(
       `  waiting for ${busy.map((run) => run.workflowName).join(" and ")} on ${commit.slice(0, 7)}`,
     );
@@ -201,16 +215,22 @@ function commitsSince({ run, root, git }: Helpers, tag: string): Commit[] {
 async function check(tools: Helpers, sleep: Tools["sleep"], tag: string) {
   const { run, root, git, facts } = tools;
   const problems: string[] = [];
-  if (!TAG.test(tag)) problems.push(`${tag} isn't a version tag like v1.4.0`);
+  if (!TAG.test(tag)) {
+    problems.push(`${tag} isn't a version tag like v1.4.0`);
+  }
   const commit = git(["rev-list", "-n", "1", tag]);
   const ancestor = run("git", ["merge-base", "--is-ancestor", commit, "origin/master"], {
     cwd: root,
   });
   const onMaster = ancestor.status === 0;
-  if (!onMaster) problems.push(`${tag} (${commit.slice(0, 7)}) isn't on master`);
+  if (!onMaster) {
+    problems.push(`${tag} (${commit.slice(0, 7)}) isn't on master`);
+  }
   await settled(tools, sleep, commit);
   const images = releaseImageTag(commit, facts);
-  if (!images) problems.push(noImages(tag, commit));
+  if (!images) {
+    problems.push(noImages(tag, commit));
+  }
   const version = mobileVersion(git(["show", `${tag}:${MOBILE_CONFIG}`]));
   if (version !== tag.slice(1)) {
     problems.push(
@@ -218,8 +238,12 @@ async function check(tools: Helpers, sleep: Tools["sleep"], tag: string) {
         "first (store builds of this release carry it), then tag that commit",
     );
   }
-  for (const problem of problems) fail(problem);
-  if (problems.length) return 1;
+  for (const problem of problems) {
+    fail(problem);
+  }
+  if (problems.length) {
+    return 1;
+  }
   ok(`${tag} is a release of ${commit.slice(0, 7)}, with the images ${images}`);
   return 0;
 }
@@ -267,7 +291,9 @@ export async function release(argv = process.argv.slice(2), given: Partial<Tools
     return 1;
   }
   const commands = helpers(tools);
-  if (command === "check") return check(commands, tools.sleep, tag);
+  if (command === "check") {
+    return check(commands, tools.sleep, tag);
+  }
   if (command === "notes") {
     tools.write(releaseNotes(commitsSince(commands, tag)));
     return 0;
@@ -275,4 +301,6 @@ export async function release(argv = process.argv.slice(2), given: Partial<Tools
   return promote(commands, tag);
 }
 
-if (import.meta.main) process.exit(await release());
+if (import.meta.main) {
+  process.exit(await release());
+}

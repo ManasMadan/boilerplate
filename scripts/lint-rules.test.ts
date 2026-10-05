@@ -11,6 +11,11 @@ import { ROOT } from "./lib";
 
 /** A sample that breaks one rule, by the rule's Biome category. */
 const SAMPLES: Record<string, string> = {
+  "lint/style/useBlockStatements": `export function f(a: number) {
+  if (a > 1) return a;
+  return 0;
+}
+`,
   "lint/style/noParameterAssign": `export function f(a: number) {
   a = 2;
   return a;

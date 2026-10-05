@@ -17,13 +17,17 @@ import {
 /** The decision on an edit, or nothing when it's allowed. */
 export async function guardFiles(input: HookInput, shipped = isShipped): Promise<HookOutput> {
   const path = targetPath(input);
-  if (!path) return;
+  if (!path) {
+    return;
+  }
   const verdict = verdictFor({
     path,
     shipped: shipped(await defaultBranch(), path),
     ...editedText(input),
   });
-  if (!verdict) return;
+  if (!verdict) {
+    return;
+  }
   return {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
@@ -33,4 +37,6 @@ export async function guardFiles(input: HookInput, shipped = isShipped): Promise
   };
 }
 
-if (import.meta.main) process.exit(await runHook(guardFiles, { failClosed: true }));
+if (import.meta.main) {
+  process.exit(await runHook(guardFiles, { failClosed: true }));
+}

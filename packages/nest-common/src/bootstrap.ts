@@ -48,7 +48,7 @@ async function registerProtections(
   // Shed load instead of queueing it: when the event loop or heap is saturated, answer
   // 503 immediately (the load balancer retries elsewhere) rather than letting every
   // request time out. Readiness fails too, so Kubernetes stops routing here.
-  if (options.loadShedding !== false)
+  if (options.loadShedding !== false) {
     await app.register(underPressure, {
       // Shed load (503 + Retry-After) only when the process is really saturated: event
       // loop utilisation is sustained busyness; a single slow tick (GC, the OS briefly
@@ -59,6 +59,7 @@ async function registerProtections(
       retryAfter: 5,
       exposeStatusRoute: false,
     });
+  }
 
   if (options.corsOrigins?.length) {
     await app.register(cors, {
@@ -85,7 +86,9 @@ function logRequests(app: NestFastifyApplication, options: Omit<BootstrapOptions
     .getHttpAdapter()
     .getInstance()
     .addHook("onResponse", async (request, reply) => {
-      if (request.url.startsWith("/health")) return;
+      if (request.url.startsWith("/health")) {
+        return;
+      }
       const status = reply.statusCode;
       const line = {
         requestId: request.id,
@@ -94,9 +97,13 @@ function logRequests(app: NestFastifyApplication, options: Omit<BootstrapOptions
         status,
         durationMs: Math.round(reply.elapsedTime),
       };
-      if (status >= 500) requestLog.error(line, "request completed");
-      else if (status >= 400) requestLog.warn(line, "request completed");
-      else requestLog.info(line, "request completed");
+      if (status >= 500) {
+        requestLog.error(line, "request completed");
+      } else if (status >= 400) {
+        requestLog.warn(line, "request completed");
+      } else {
+        requestLog.info(line, "request completed");
+      }
     });
 
   // Echo the id so clients and upstream proxies can correlate their logs with ours.
@@ -123,7 +130,9 @@ function closeUnusedConnections(app: NestFastifyApplication) {
   });
   fastify.server.on("request", (request: IncomingMessage) => unused.delete(request.socket));
   fastify.addHook("preClose", async () => {
-    for (const socket of unused) socket.destroy();
+    for (const socket of unused) {
+      socket.destroy();
+    }
   });
 }
 

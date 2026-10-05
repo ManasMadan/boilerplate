@@ -19,7 +19,9 @@ describe("scrub", () => {
   it("scrubs inside arrays, keeps errors whole and stops at a depth limit", () => {
     const error = new Error("boom");
     let deep: unknown = { token: "deepest" };
-    for (let i = 0; i < 9; i++) deep = { inner: deep };
+    for (let i = 0; i < 9; i++) {
+      deep = { inner: deep };
+    }
     const out = scrub({ items: [{ token: "t" }, 1], error, deep }) as Record<string, unknown>;
     expect(out.items).toEqual([{ token: "[redacted]" }, 1]);
     expect(out.error).toBe(error);

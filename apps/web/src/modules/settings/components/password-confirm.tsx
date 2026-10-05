@@ -31,8 +31,11 @@ export function PasswordConfirm({
       noValidate
       onSubmit={form.handleSubmit(async ({ password }) => {
         const error = await onConfirm(password);
-        if (error) form.setError("password", { message: error });
-        else form.reset();
+        if (error) {
+          form.setError("password", { message: error });
+        } else {
+          form.reset();
+        }
       })}
     >
       <FieldGroup>

@@ -43,8 +43,9 @@ export class FcmTransport implements PushTransport {
   constructor(private readonly config: FcmConfig) {}
 
   private async token() {
-    if (this.accessToken && this.accessToken.expiresAt > Date.now() + MINUTE_MS)
+    if (this.accessToken && this.accessToken.expiresAt > Date.now() + MINUTE_MS) {
       return this.accessToken.value;
+    }
     const tokenUrl = this.config.tokenUrl ?? "https://oauth2.googleapis.com/token";
     this.key ??= importPKCS8(this.config.privateKey, "RS256");
     const assertion = await new SignJWT({
@@ -65,8 +66,9 @@ export class FcmTransport implements PushTransport {
       }),
       signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
-    if (!response.ok)
+    if (!response.ok) {
       throw new Error(`FCM auth failed: ${response.status} ${await response.text()}`);
+    }
     const body = tokenResponse.parse(await response.json());
     this.accessToken = { value: body.access_token, expiresAt: Date.now() + body.expires_in * 1000 };
     return body.access_token;
@@ -90,8 +92,9 @@ export class FcmTransport implements PushTransport {
       }),
       signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
-    if (response.ok)
+    if (response.ok) {
       return { ok: true, providerMessageId: sendResponse.parse(await response.json()).name };
+    }
     const text = await response.text();
     return {
       ok: false,
@@ -107,7 +110,9 @@ export class FcmTransport implements PushTransport {
  * anything else is our message's fault, and forgetting the device for it would be wrong.
  */
 export function tokenIsDead(status: number, body: string): boolean {
-  if (status === 404 || body.includes("UNREGISTERED")) return true;
+  if (status === 404 || body.includes("UNREGISTERED")) {
+    return true;
+  }
   let json: unknown;
   try {
     json = JSON.parse(body);

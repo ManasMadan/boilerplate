@@ -132,7 +132,9 @@ describe("MCP access tokens", () => {
       () => clock,
     );
     expect((await verify(await sign(ours))).ok).toBe(true);
-    for (let i = 0; i < 20; i++) expect((await verify(await sign(unknown))).ok).toBe(false);
+    for (let i = 0; i < 20; i++) {
+      expect((await verify(await sign(unknown))).ok).toBe(false);
+    }
     expect(loads).toBe(1);
     clock = KEY_RELOAD_MS;
     await verify(await sign(unknown));

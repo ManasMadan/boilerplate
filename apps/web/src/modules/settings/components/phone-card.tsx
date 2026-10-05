@@ -40,14 +40,19 @@ export function PhoneCard() {
   const [stale, setStale] = useState(false);
 
   const handle = (error: unknown) => {
-    if (errorCode(error) === "FRESH_SESSION_REQUIRED") setStale(true);
-    else toast.error(errorMessage(error));
+    if (errorCode(error) === "FRESH_SESSION_REQUIRED") {
+      setStale(true);
+    } else {
+      toast.error(errorMessage(error));
+    }
   };
 
   let content: ReactNode;
-  if (stale) content = <ReauthPrompt />;
-  else if (!me.data) content = <Skeleton className="h-9 w-48" />;
-  else if (step.name === "view") {
+  if (stale) {
+    content = <ReauthPrompt />;
+  } else if (!me.data) {
+    content = <Skeleton className="h-9 w-48" />;
+  } else if (step.name === "view") {
     content = (
       <CurrentNumber
         phoneNumber={me.data.phoneNumber}
@@ -202,7 +207,9 @@ function CodeStep({
           await verify.mutateAsync({ phoneNumber, code });
           onDone();
         } catch (error) {
-          if (errorCode(error) === "FRESH_SESSION_REQUIRED") return onError(error);
+          if (errorCode(error) === "FRESH_SESSION_REQUIRED") {
+            return onError(error);
+          }
           form.setValue("code", "");
           form.setError("code", { message: errorMessage(error) });
         }

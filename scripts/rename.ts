@@ -63,16 +63,21 @@ export function identityFrom(argv: string[]): Identity {
     },
   });
   const [name] = positionals;
-  if (!name || !/^[a-z][a-z0-9-]*$/.test(name))
+  if (!name || !/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(
       "The name must be lowercase letters, digits and dashes, starting with a letter.",
     );
-  if (!values.owner || !/^[A-Za-z0-9-]+$/.test(values.owner))
+  }
+  if (!values.owner || !/^[A-Za-z0-9-]+$/.test(values.owner)) {
     throw new Error("--owner must be the GitHub user or organization that owns the repository.");
-  if (name === OLD.name) throw new Error(`The project is already called ${OLD.name}.`);
+  }
+  if (name === OLD.name) {
+    throw new Error(`The project is already called ${OLD.name}.`);
+  }
   const bundleId = values["bundle-id"] ?? `com.${name.replaceAll("-", "")}.app`;
-  if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(bundleId))
+  if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(bundleId)) {
     throw new Error("--bundle-id must be reverse DNS, like com.example.app.");
+  }
   const product = values.product ?? name.charAt(0).toUpperCase() + name.slice(1);
   return { name, owner: values.owner, product, bundleId };
 }
@@ -96,7 +101,9 @@ export function rename(root: string, identity: Identity) {
   const changed: string[] = [];
   for (const path of tracked.filter((path) => !SELF.has(path))) {
     const bytes = readFileSync(join(root, path));
-    if (bytes.includes(0)) continue; // binary
+    if (bytes.includes(0)) {
+      continue; // binary
+    }
     const before = bytes.toString("utf8");
     const after = rewrite(before, identity);
     files.set(path, after);
@@ -120,7 +127,9 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
   const { changed, left } = rename(root, identity);
   ok(`${changed.length} files rewritten for ${identity.owner}/${identity.name}`);
   if (left.length > 0) {
-    for (const line of left) console.error(`  ${line}`);
+    for (const line of left) {
+      console.error(`  ${line}`);
+    }
     fail(`${left.length} lines still name the template; change them by hand.`);
     return 1;
   }
@@ -130,4 +139,6 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
   return 0;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) {
+  process.exit(main());
+}

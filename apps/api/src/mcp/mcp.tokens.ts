@@ -55,8 +55,9 @@ export function createTokenVerifier(options: TokenVerifierOptions) {
     try {
       return (await verifyWith(token, keys ?? (await load()))).payload;
     } catch (error) {
-      if (!(error instanceof errors.JWKSNoMatchingKey) || now() - loadedAt < KEY_RELOAD_MS)
+      if (!(error instanceof errors.JWKSNoMatchingKey) || now() - loadedAt < KEY_RELOAD_MS) {
         throw error;
+      }
       return (await verifyWith(token, await load())).payload;
     }
   }

@@ -104,7 +104,9 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
   /** Sends one user's digest for `date` (their local date), at most once. */
   async send(userId: UserId, date: string) {
     const key = `digest:${userId}:${date}`;
-    if (!(await this.log.claim(key, "email", "digest", userId))) return;
+    if (!(await this.log.claim(key, "email", "digest", userId))) {
+      return;
+    }
     const [recipient] = await this.recipients.resolve({ userId });
     const scoped = withUser(this.database.write, userId);
     const items = await scoped.notificationDigestItem.findMany({

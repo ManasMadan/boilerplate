@@ -32,5 +32,7 @@ export type TodoListSnapshot = { previous: [QueryKey, TodoListData | undefined][
 
 /** A failed todo mutation's onError: puts every list back as it was. */
 export function restoreTodoLists(queryClient: QueryClient, context: TodoListSnapshot | undefined) {
-  for (const [key, data] of context?.previous ?? []) queryClient.setQueryData(key, data);
+  for (const [key, data] of context?.previous ?? []) {
+    queryClient.setQueryData(key, data);
+  }
 }

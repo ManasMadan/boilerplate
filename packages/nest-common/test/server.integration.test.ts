@@ -63,7 +63,9 @@ const options = { service: "test", logLevel: "silent" as const, trustedProxies: 
 const apps: INestApplication[] = [];
 afterEach(() => vi.restoreAllMocks());
 afterAll(async () => {
-  for (const app of apps) await app.close();
+  for (const app of apps) {
+    await app.close();
+  }
 });
 
 async function build(module: Type, extra: { loadShedding?: boolean } = {}) {

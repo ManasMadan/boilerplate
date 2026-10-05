@@ -13,4 +13,6 @@ export function formatPrisma(run = runSync): number {
   );
 }
 
-if (import.meta.main) process.exit(formatPrisma());
+if (import.meta.main) {
+  process.exit(formatPrisma());
+}

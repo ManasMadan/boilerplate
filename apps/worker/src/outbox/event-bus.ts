@@ -34,7 +34,9 @@ export class BullMqEventBus extends EventBus implements OnModuleDestroy {
     await Promise.all(
       this.producers.map(async ([queue, producer]) => {
         const accepted = events.filter((event) => eventSubscribers[queue](event.name));
-        if (accepted.length === 0) return;
+        if (accepted.length === 0) {
+          return;
+        }
         await producer.addBulk(
           accepted.map((event) => ({
             name: "event" as const,

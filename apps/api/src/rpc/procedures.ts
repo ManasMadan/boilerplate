@@ -76,8 +76,9 @@ export interface OrgCaller {
  * outlives a stolen session (API keys, webhook endpoints), as for account changes.
  */
 export function requireFresh(caller: Pick<OrgCaller, "signedInAt">) {
-  if (!caller.signedInAt || Date.now() - caller.signedInAt.getTime() >= FRESH_SESSION_AGE * 1000)
+  if (!caller.signedInAt || Date.now() - caller.signedInAt.getTime() >= FRESH_SESSION_AGE * 1000) {
     throw new AppError("FRESH_SESSION_REQUIRED");
+  }
 }
 
 type ErrorParams = ErrorData["params"];
@@ -95,8 +96,11 @@ export function toContractError(thrown: unknown, log: LogError): ORPCError<Error
   // A Prisma error a client can act on (a conflict, a row gone) becomes its catalog code.
   const error = fromPrismaError(thrown) ?? thrown;
   if (isAppError(error)) {
-    if (error.status >= 500) log(error, "error");
-    else if (error.cause !== undefined) log(error, "debug");
+    if (error.status >= 500) {
+      log(error, "error");
+    } else if (error.cause !== undefined) {
+      log(error, "debug");
+    }
     return new ORPCError(error.code, {
       status: error.status,
       data: { params: error.params, requestId },
@@ -128,7 +132,9 @@ export function toContractError(thrown: unknown, log: LogError): ORPCError<Error
 
 /** A validation path's segment as the contract sends it; JSON can't carry a symbol, so its name. */
 function pathKey(segment: PropertyKey | { key: PropertyKey }): string | number {
-  if (typeof segment === "object") return String(segment.key);
+  if (typeof segment === "object") {
+    return String(segment.key);
+  }
   return typeof segment === "symbol" ? String(segment) : segment;
 }
 
@@ -142,10 +148,14 @@ const VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/;
 function isOlderVersion(version: string, minimum: string) {
   // The environment only accepts major.minor.patch for the minimum (src/env.ts).
   const [a, b] = [VERSION.exec(version), required(VERSION.exec(minimum), "a minimum version")];
-  if (!a) return true;
+  if (!a) {
+    return true;
+  }
   for (let i = 1; i <= 3; i++) {
     const diff = Number(a[i]) - Number(b[i]);
-    if (diff !== 0) return diff < 0;
+    if (diff !== 0) {
+      return diff < 0;
+    }
   }
   return a[4] !== undefined && b[4] === undefined;
 }
@@ -159,8 +169,9 @@ export interface LimitKeys {
 /** The key a call spends its limit under. A per-workspace limit needs a workspace. */
 export function rateLimitKey(limit: RateLimit, keys: LimitKeys) {
   const key = keys[limit.per];
-  if (key === undefined)
+  if (key === undefined) {
     throw new Error(`limit "${limit.name}" is per ${limit.per}, and the call has none`);
+  }
   return key;
 }
 
@@ -172,7 +183,9 @@ function limitSpender(redis: Redis) {
   const limiters = new Map<string, RateLimiter>();
   return async (meta: ProcedureMeta, keys: LimitKeys) => {
     const limit = meta.rateLimit;
-    if (!limit || "exempt" in limit) return;
+    if (!limit || "exempt" in limit) {
+      return;
+    }
     let limiter = limiters.get(limit.name);
     if (!limiter) {
       limiter = createRateLimiter(redis, limit);
@@ -205,16 +218,24 @@ function orgCallerFor(
     const apiKey = headers.get(API_KEY_HEADER);
     if (apiKey !== null) {
       // Everything without a scope is for signed-in people only.
-      if (!scope) throw new AppError("FORBIDDEN");
+      if (!scope) {
+        throw new AppError("FORBIDDEN");
+      }
       return authenticateApiKey(apiKey, scope);
     }
     const result = await signedIn(auth, headers);
-    if (!result) throw new AppError("UNAUTHENTICATED");
+    if (!result) {
+      throw new AppError("UNAUTHENTICATED");
+    }
     updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });
     const orgId = result.session.activeOrganizationId;
-    if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
+    if (!orgId) {
+      throw new AppError("NO_ACTIVE_ORGANIZATION");
+    }
     const role = await memberships.role(orgId, result.user.id);
-    if (!role) throw new AppError("NO_ACTIVE_ORGANIZATION");
+    if (!role) {
+      throw new AppError("NO_ACTIVE_ORGANIZATION");
+    }
     return {
       orgId,
       role,
@@ -254,7 +275,9 @@ export function createProcedures(
       },
     }) => {
       const result = await signedIn(auth, context.headers);
-      if (!result) throw new AppError("UNAUTHENTICATED");
+      if (!result) {
+        throw new AppError("UNAUTHENTICATED");
+      }
       // The column is NOT NULL; better-auth types optional fields as nullable.
       updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });
       await spendLimit(meta, { user: result.user.id });
@@ -264,8 +287,9 @@ export function createProcedures(
 
   // Sensitive account changes, like better-auth's own fresh-session rule.
   const fresh = authed.use(async ({ context, next }) => {
-    if (Date.now() - new Date(context.session.createdAt).getTime() >= FRESH_SESSION_AGE * 1000)
+    if (Date.now() - new Date(context.session.createdAt).getTime() >= FRESH_SESSION_AGE * 1000) {
       throw new AppError("FRESH_SESSION_REQUIRED");
+    }
     return next();
   });
 
@@ -286,7 +310,9 @@ export function createProcedures(
 
   /** Organization owners and admins only (settings, members, audit log). */
   const orgAdmin = inOrg.use(async ({ context, next }) => {
-    if (!canManageWorkspace(context.role)) throw new AppError("FORBIDDEN");
+    if (!canManageWorkspace(context.role)) {
+      throw new AppError("FORBIDDEN");
+    }
     return next();
   });
 

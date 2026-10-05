@@ -23,7 +23,9 @@ type Catalog = Record<string, Schema>;
 export function breakingChanges(base: Catalog, head: Catalog): string[] {
   return Object.entries(base).flatMap(([name, before]) => {
     const after = head[name];
-    if (!after) return [`${name} was removed`];
+    if (!after) {
+      return [`${name} was removed`];
+    }
     // Fields the base didn't have are fine, if optional: the required list shows that.
     const properties = Object.fromEntries(
       Object.entries(after.properties ?? {}).filter(
@@ -45,7 +47,9 @@ export function check(
   head = () => readFileSync(join(import.meta.dir, "..", CATALOG), "utf8"),
 ): { problems: string[]; note?: string } {
   const base = show(baseRef, CATALOG);
-  if (!base) return { problems: [], note: "The base branch has no event catalog yet." };
+  if (!base) {
+    return { problems: [], note: "The base branch has no event catalog yet." };
+  }
   return {
     problems: breakingChanges(JSON.parse(base) as Catalog, JSON.parse(head()) as Catalog),
   };
@@ -56,9 +60,15 @@ export function report(
   { problems, note }: ReturnType<typeof check>,
   out: Pick<Console, "log" | "error"> = console,
 ) {
-  if (note) out.log(note);
-  for (const problem of problems) out.error(`::error file=${CATALOG}::${problem}`);
+  if (note) {
+    out.log(note);
+  }
+  for (const problem of problems) {
+    out.error(`::error file=${CATALOG}::${problem}`);
+  }
   return problems.length > 0 ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(report(check(process.argv[2] ?? "origin/master")));
+if (import.meta.main) {
+  process.exit(report(check(process.argv[2] ?? "origin/master")));
+}

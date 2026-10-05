@@ -16,20 +16,28 @@ function webPushSupported() {
 }
 
 export async function currentSubscription() {
-  if (!webPushSupported()) return null;
+  if (!webPushSupported()) {
+    return null;
+  }
   const registration = await navigator.serviceWorker.getRegistration("/");
   return (await registration?.pushManager.getSubscription()) ?? null;
 }
 
 export async function browserPushState(): Promise<BrowserPushState> {
-  if (!webPushSupported()) return "unsupported";
-  if (Notification.permission === "denied") return "blocked";
+  if (!webPushSupported()) {
+    return "unsupported";
+  }
+  if (Notification.permission === "denied") {
+    return "blocked";
+  }
   return Notification.permission === "granted" && (await currentSubscription()) ? "on" : "off";
 }
 
 /** Asks for permission and subscribes; `null` when the user doesn't allow notifications. */
 export async function subscribe(publicKey: string) {
-  if ((await Notification.requestPermission()) !== "granted") return null;
+  if ((await Notification.requestPermission()) !== "granted") {
+    return null;
+  }
   const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
   await navigator.serviceWorker.ready;
   return registration.pushManager.subscribe({

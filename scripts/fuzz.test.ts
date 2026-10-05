@@ -76,8 +76,12 @@ describe("the fuzz run", () => {
   it("names what failed, and still runs the rest", async () => {
     const printed = captureOutput();
     const { given, calls } = stack({}, (line) => {
-      if (line.includes("apps/ai/")) return { status: 1 };
-      if (line.endsWith("todo.list")) return { status: null };
+      if (line.includes("apps/ai/")) {
+        return { status: 1 };
+      }
+      if (line.endsWith("todo.list")) {
+        return { status: null };
+      }
       return undefined;
     });
     expect(await fuzz(given)).toBe(1);

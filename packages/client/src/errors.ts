@@ -16,9 +16,13 @@ export function errorCode(error: unknown): ErrorCode {
   // A thrown ORPCError, or a code the API reported inside a response, as `{ code }` (an
   // answer that stopped, a document that couldn't be prepared).
   const code = fieldOf(error, "code");
-  if (isErrorCode(code)) return code;
+  if (isErrorCode(code)) {
+    return code;
+  }
   // Network failures, CORS, aborted requests: the API was not reached.
-  if (error instanceof TypeError) return "SERVICE_UNAVAILABLE";
+  if (error instanceof TypeError) {
+    return "SERVICE_UNAVAILABLE";
+  }
   return "INTERNAL";
 }
 
@@ -27,7 +31,9 @@ export const errorMessageKey = (error: unknown) => `errors.${errorCode(error)}` 
 
 /** An error's data as the contract defines it, or nothing when it has none (or not that). */
 function dataOf(error: unknown) {
-  if (!isOrpcError(error)) return undefined;
+  if (!isOrpcError(error)) {
+    return undefined;
+  }
   const parsed = errorData.safeParse(error.data);
   return parsed.success ? parsed.data : undefined;
 }
@@ -43,7 +49,9 @@ export function errorRequestId(error: unknown): string | undefined {
 
 /** Per-field validation problems: `{ title: "too_small" }`. */
 export function fieldErrors(error: unknown): Record<string, string> {
-  if (!isOrpcError(error) || error.code !== "VALIDATION_FAILED") return {};
+  if (!isOrpcError(error) || error.code !== "VALIDATION_FAILED") {
+    return {};
+  }
   const issues = dataOf(error)?.issues ?? [];
   return Object.fromEntries(issues.map((issue) => [issue.path.join("."), issue.code]));
 }

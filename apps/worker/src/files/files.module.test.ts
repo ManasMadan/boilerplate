@@ -7,7 +7,9 @@ afterEach(() => {
 });
 
 async function scanner(variables: Record<string, string>) {
-  for (const [key, value] of Object.entries(variables)) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries(variables)) {
+    vi.stubEnv(key, value);
+  }
   return (await import("./files.module")).createScanner();
 }
 

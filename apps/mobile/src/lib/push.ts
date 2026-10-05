@@ -23,7 +23,9 @@ export function presentForegroundNotifications() {
 }
 
 export async function pushState(): Promise<PushState> {
-  if (!Device.isDevice || Platform.OS === "web") return "unavailable";
+  if (!Device.isDevice || Platform.OS === "web") {
+    return "unavailable";
+  }
   const { status } = await Notifications.getPermissionsAsync();
   return status as PushState;
 }
@@ -33,7 +35,9 @@ export async function devicePushToken(): Promise<{
   platform: "ios" | "android";
   token: string;
 } | null> {
-  if ((await pushState()) === "unavailable") return null;
+  if ((await pushState()) === "unavailable") {
+    return null;
+  }
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
       name: "Default",
@@ -41,7 +45,9 @@ export async function devicePushToken(): Promise<{
     });
   }
   const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== "granted") return null;
+  if (status !== "granted") {
+    return null;
+  }
   const { data }: { data: unknown } = await Notifications.getDevicePushTokenAsync();
   return { platform: Platform.OS === "ios" ? "ios" : "android", token: String(data) };
 }

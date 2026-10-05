@@ -58,11 +58,15 @@ class HealthController {
     const status = this.indicator.check(dep);
     try {
       if (dep === "db") {
-        if (!this.database) throw new Error("DatabaseModule is not registered");
+        if (!this.database) {
+          throw new Error("DatabaseModule is not registered");
+        }
         await this.database.write.$queryRaw`SELECT 1`;
       }
       if (dep === "redis") {
-        if (!this.redis) throw new Error("RedisModule is not registered");
+        if (!this.redis) {
+          throw new Error("RedisModule is not registered");
+        }
         await this.redis.ping();
       }
       return status.up();

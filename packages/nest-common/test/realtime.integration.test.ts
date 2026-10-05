@@ -27,10 +27,14 @@ async function collect(channels: string[], count: number, publish: () => Promise
   const reading = (async () => {
     for await (const message of hub.stream(channels, controller.signal)) {
       received.push(message);
-      if (received.length === count) controller.abort();
+      if (received.length === count) {
+        controller.abort();
+      }
     }
   })();
-  for (const channel of channels) await subscribed(channel, 1);
+  for (const channel of channels) {
+    await subscribed(channel, 1);
+  }
   await publish();
   await eventually(
     () => received.length,
@@ -68,7 +72,9 @@ describe("RealtimeHub", () => {
     const reading = (async () => {
       for await (const _ of stream) {
         listeners.push(getEventListeners(controller.signal, "abort").length);
-        if (listeners.length === 20) controller.abort();
+        if (listeners.length === 20) {
+          controller.abort();
+        }
       }
     })();
     await subscribed(channel, 1);
@@ -149,10 +155,12 @@ describe("RealtimeHub", () => {
     // Takes the first message, then reads nothing while 149 more arrive.
     const first = slow.next();
     const fast = await collect([channel], 150, async () => {
-      for (let i = 0; i < 50; i++)
+      for (let i = 0; i < 50; i++) {
         await publishRealtime(redis, channel, { type: "notifications.changed" });
-      for (let i = 0; i < 100; i++)
+      }
+      for (let i = 0; i < 100; i++) {
         await publishRealtime(redis, channel, { type: "todos.changed" });
+      }
     });
     expect(fast).toHaveLength(150);
     expect((await first).value).toEqual({ type: "notifications.changed" });
@@ -160,7 +168,9 @@ describe("RealtimeHub", () => {
     const behind: unknown[] = [];
     for await (const message of slow) {
       behind.push(message);
-      if (behind.length === 100) controller.abort();
+      if (behind.length === 100) {
+        controller.abort();
+      }
     }
     expect(behind).toEqual(Array.from({ length: 100 }, () => ({ type: "todos.changed" })));
   });

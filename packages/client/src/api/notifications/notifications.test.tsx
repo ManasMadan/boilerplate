@@ -34,10 +34,16 @@ describe("the inbox", () => {
         }),
         unreadCount: os.notifications.unreadCount.handler(() => ({ count: unread() })),
         markRead: os.notifications.markRead.handler(({ input }) => {
-          for (const n of inbox) if (input.ids.includes(n.id)) n.readAt = new Date();
+          for (const n of inbox) {
+            if (input.ids.includes(n.id)) {
+              n.readAt = new Date();
+            }
+          }
         }),
         markAllRead: os.notifications.markAllRead.handler(() => {
-          for (const n of inbox) n.readAt = new Date();
+          for (const n of inbox) {
+            n.readAt = new Date();
+          }
         }),
       },
     }));

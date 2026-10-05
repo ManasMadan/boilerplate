@@ -23,7 +23,9 @@ vi.mock("next/headers", () => ({
   headers: async () => {
     const headers = new Headers(request.headers);
     const cookie = [...request.cookies].map(([name, value]) => `${name}=${value}`).join("; ");
-    if (cookie) headers.set("cookie", cookie);
+    if (cookie) {
+      headers.set("cookie", cookie);
+    }
     return headers;
   },
 }));

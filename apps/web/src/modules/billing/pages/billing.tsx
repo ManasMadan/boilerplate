@@ -88,8 +88,12 @@ function statusText(
   if (subscription.status === "active") {
     return t("status.active", { date: date(subscription.currentPeriodEnd) });
   }
-  if (subscription.status === "past_due") return t("status.past_due");
-  if (subscription.status === "unpaid") return t("status.unpaid");
+  if (subscription.status === "past_due") {
+    return t("status.past_due");
+  }
+  if (subscription.status === "unpaid") {
+    return t("status.unpaid");
+  }
   return t("status.canceled");
 }
 

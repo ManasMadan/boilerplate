@@ -38,6 +38,8 @@ function hasField<K extends string>(value: unknown, key: K): value is Record<K, 
  * requires when its feature is on). Throws, naming it, if it isn't.
  */
 export function required<T>(value: T | null | undefined, what: string): T {
-  if (value === null || value === undefined) throw new Error(`${what} is missing`);
+  if (value === null || value === undefined) {
+    throw new Error(`${what} is missing`);
+  }
   return value;
 }

@@ -12,7 +12,9 @@ function files(env?: string) {
   const dir = mkdtempSync(join(tmpdir(), "setup-"));
   const paths = { envPath: join(dir, ".env"), examplePath: join(dir, ".env.example") };
   writeFileSync(paths.examplePath, "PORT=3001\nAUTH_SECRET=change-me\nNEW=x\n");
-  if (env !== undefined) writeFileSync(paths.envPath, env);
+  if (env !== undefined) {
+    writeFileSync(paths.envPath, env);
+  }
   return paths;
 }
 

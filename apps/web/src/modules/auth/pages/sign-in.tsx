@@ -46,13 +46,18 @@ export function SignInPage() {
       return;
     }
     // With two-step verification on, the auth client continues on /two-factor instead.
-    if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) done(data);
+    if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) {
+      done(data);
+    }
   }
 
   async function signInWithPasskey() {
     const result = await authClient.signIn.passkey();
-    if (!result?.error) done(result?.data);
-    else toast.error(errorMessage(result.error));
+    if (!result?.error) {
+      done(result?.data);
+    } else {
+      toast.error(errorMessage(result.error));
+    }
   }
 
   return (

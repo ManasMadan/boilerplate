@@ -52,8 +52,11 @@ export class RealtimeService implements OnApplicationShutdown {
     } finally {
       // Counted up when this stream started.
       const remaining = required(this.open.get(userId), "the user's stream count") - 1;
-      if (remaining > 0) this.open.set(userId, remaining);
-      else this.open.delete(userId);
+      if (remaining > 0) {
+        this.open.set(userId, remaining);
+      } else {
+        this.open.delete(userId);
+      }
     }
   }
 

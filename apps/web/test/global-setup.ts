@@ -26,12 +26,16 @@ const EXIT_WITH_PARENT =
 async function waitUntilReady(url: string, child: ChildProcess, log: string) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`the API exited early; see ${log}`);
+    if (child.exitCode !== null) {
+      throw new Error(`the API exited early; see ${log}`);
+    }
     const ok = await fetch(`${url}/health/ready`).then(
       (response) => response.ok,
       () => false,
     );
-    if (ok) return;
+    if (ok) {
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`the API at ${url} never became ready; see ${log}`);
@@ -46,7 +50,9 @@ export default async function setup() {
   const services = await shared.webTestServices;
   return async () => {
     shared.webTestUsers = (shared.webTestUsers ?? 1) - 1;
-    if (shared.webTestUsers === 0) await services.close();
+    if (shared.webTestUsers === 0) {
+      await services.close();
+    }
   };
 }
 
@@ -59,7 +65,9 @@ async function start(): Promise<Services> {
     cwd: API_DIR,
     stdio: "inherit",
   });
-  if (build.status !== 0) throw new Error("building apps/api failed");
+  if (build.status !== 0) {
+    throw new Error("building apps/api failed");
+  }
 
   await prepareTemplate();
   const database = await createTestDatabase();

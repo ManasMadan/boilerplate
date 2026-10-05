@@ -159,7 +159,9 @@ function workspaceHooks({
     // Invitations count towards the member limit, so a full plan can't over-invite.
     beforeCreateInvitation: async ({ organization: org }) => {
       const { members: limit } = await billing.entitlements(orgIdOf(org));
-      if (limit === null) return;
+      if (limit === null) {
+        return;
+      }
       const [members, pending] = await Promise.all([
         db.member.count({ where: { organizationId: org.id } }),
         db.invitation.count({ where: { organizationId: org.id, status: "pending" } }),
@@ -314,7 +316,9 @@ export function mcpPlugin({ env, memberships }: AuthContext) {
 
 /** Turnstile on the forms that create accounts or send codes, when it's configured. */
 export function captchaPlugins(env: Env) {
-  if (!features.captcha || !env.TURNSTILE_SECRET_KEY) return [];
+  if (!features.captcha || !env.TURNSTILE_SECRET_KEY) {
+    return [];
+  }
   return [
     captcha({
       provider: "cloudflare-turnstile",

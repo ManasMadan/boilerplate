@@ -28,10 +28,13 @@ type Doctor = {
 function checkRuntimes({ version, problem }: Doctor, bunVersion: string) {
   const wantedNode = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim();
   const node = version(["node", "--version"]);
-  if (!node) problem("Node is not installed. Install it with nvm: `nvm install` (reads .nvmrc).");
-  else if (node.match(/^v(\d+)\./)?.[1] !== wantedNode)
+  if (!node) {
+    problem("Node is not installed. Install it with nvm: `nvm install` (reads .nvmrc).");
+  } else if (node.match(/^v(\d+)\./)?.[1] !== wantedNode) {
     problem(`Node ${node} found, ${wantedNode} expected. Run \`nvm use\`.`);
-  else ok(`Node ${node}`);
+  } else {
+    ok(`Node ${node}`);
+  }
 
   // package.json pins the Bun that CI, the images and bun.lock use (packageManager), and
   // the oldest one the scripts work with (engines).
@@ -40,15 +43,17 @@ function checkRuntimes({ version, problem }: Doctor, bunVersion: string) {
     engines: { bun: string };
   };
   const pinnedBun = manifest.packageManager.replace(/^bun@/, "");
-  if (!Bun.semver.satisfies(bunVersion, manifest.engines.bun))
+  if (!Bun.semver.satisfies(bunVersion, manifest.engines.bun)) {
     problem(
       `Bun ${bunVersion} found, ${manifest.engines.bun} needed. Run \`bun upgrade\` (CI uses ${pinnedBun}).`,
     );
-  else if (bunVersion !== pinnedBun)
+  } else if (bunVersion !== pinnedBun) {
     warn(
       `Bun ${bunVersion}; CI and the images use ${pinnedBun} (\`bun upgrade --version ${pinnedBun}\`).`,
     );
-  else ok(`Bun ${bunVersion}`);
+  } else {
+    ok(`Bun ${bunVersion}`);
+  }
 }
 
 /** uv, Worktrunk (optional) and Docker; whether Docker is running. */
@@ -56,23 +61,30 @@ function checkTools({ version, problem }: Doctor): boolean {
   // Not only for the Python service: codegen runs it (turbo's gen → @repo/ai-client →
   // @repo/ai#gen), and setup, dev, check-types and test all depend on codegen.
   const uv = version(["uv", "--version"]);
-  if (uv) ok(uv);
-  else
+  if (uv) {
+    ok(uv);
+  } else {
     problem(
       "uv is not installed. Setup, `bun dev`, types and tests need it (the AI service's code generation): `brew install uv`, or see https://docs.astral.sh/uv/.",
     );
+  }
 
   // Optional: parallel branches and agents in worktrees (.config/wt.toml).
   const wt = version(["wt", "--version"]);
-  if (wt) ok(wt);
-  else
+  if (wt) {
+    ok(wt);
+  } else {
     warn(
       "Worktrunk isn't installed (optional: one worktree per branch, for parallel work and agents): `brew install worktrunk && wt config shell install`.",
     );
+  }
 
   const docker = version(["docker", "info", "--format", "{{.ServerVersion}}"]);
-  if (docker) ok(`Docker ${docker}`);
-  else problem("Docker is not running. Start Docker Desktop (or your Docker daemon).");
+  if (docker) {
+    ok(`Docker ${docker}`);
+  } else {
+    problem("Docker is not running. Start Docker Desktop (or your Docker daemon).");
+  }
   return Boolean(docker);
 }
 
@@ -80,7 +92,9 @@ function checkTools({ version, problem }: Doctor): boolean {
 function checkEnv({ problem }: Doctor, envPath: string, examplePath: string) {
   const env = readEnv(envPath);
   const example = readEnv(examplePath);
-  if (env.size === 0) return problem("No .env yet. Run `bun run setup`.");
+  if (env.size === 0) {
+    return problem("No .env yet. Run `bun run setup`.");
+  }
   const missing = [...example.keys()].filter((key) => !env.has(key));
   // `bun run setup --stack <n>` names a checkout's own compose project; .env.example
   // leaves it to docker-compose.yml's `name:`.
@@ -88,18 +102,22 @@ function checkEnv({ problem }: Doctor, envPath: string, examplePath: string) {
     (key) => !example.has(key) && key !== "COMPOSE_PROJECT_NAME",
   );
   const placeholders = [...env].filter(([, value]) => PLACEHOLDER.test(value)).map(([key]) => key);
-  if (missing.length)
+  if (missing.length) {
     problem(
       `Missing in .env: ${missing.join(", ")}. Run \`bun run setup\`: it adds them, generating the secrets.`,
     );
-  if (unknown.length)
+  }
+  if (unknown.length) {
     warn(
       `In .env but not in .env.example (renamed or removed?): ${unknown.join(", ")}. Remove them with \`bun run env:unset ${unknown.join(" ")}\`.`,
     );
-  if (placeholders.length)
+  }
+  if (placeholders.length) {
     problem(`Still set to a placeholder: ${placeholders.join(", ")}. Run \`bun run setup\`.`);
-  if (!missing.length && !placeholders.length)
+  }
+  if (!missing.length && !placeholders.length) {
     ok(`${env.size} variables, in sync with .env.example`);
+  }
 }
 
 /** The core compose services are up, and the database has its service roles. */
@@ -122,10 +140,15 @@ function checkServices({ version, problem }: Doctor) {
   );
   for (const service of ["postgres", "valkey", "mailpit"]) {
     const status = running.get(service);
-    if (status === "healthy" || status === "running") ok(`${service} ${status}`);
-    else problem(`${service} is not running. Run \`bun run db:up\`.`);
+    if (status === "healthy" || status === "running") {
+      ok(`${service} ${status}`);
+    } else {
+      problem(`${service} is not running. Run \`bun run db:up\`.`);
+    }
   }
-  if (running.get("postgres") !== "healthy") return;
+  if (running.get("postgres") !== "healthy") {
+    return;
+  }
 
   // A volume created before the role bootstrap existed has no service roles, and every
   // service would fail with "password authentication failed".
@@ -143,11 +166,13 @@ function checkServices({ version, problem }: Doctor) {
     "-Atc",
     "select count(*) from pg_roles where rolname in ('migrator','app_api','app_worker','app_notifications','app_webhooks','app_ai')",
   ]);
-  if (roles === "6") ok("database roles bootstrapped");
-  else
+  if (roles === "6") {
+    ok("database roles bootstrapped");
+  } else {
     problem(
       "Database roles are missing (volume predates infra/postgres/init). Recreate it: `docker compose down -v && bun run setup` (this deletes local data).",
     );
+  }
 }
 
 /**
@@ -186,4 +211,6 @@ export function doctor({
   return problems ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(doctor());
+if (import.meta.main) {
+  process.exit(doctor());
+}

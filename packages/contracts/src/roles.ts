@@ -18,11 +18,15 @@ const STRENGTH: Record<OrgRole, number> = { member: 0, admin: 1, owner: 2 };
  * empty or any part of it isn't a role this knows.
  */
 export function parseOrgRole(stored: string | null | undefined): OrgRole | null {
-  if (!stored) return null;
+  if (!stored) {
+    return null;
+  }
   const roles: OrgRole[] = [];
   for (const part of stored.split(",")) {
     const role = orgRoleSchema.safeParse(part.trim());
-    if (!role.success) return null;
+    if (!role.success) {
+      return null;
+    }
     roles.push(role.data);
   }
   return roles.reduce((strongest, role) =>

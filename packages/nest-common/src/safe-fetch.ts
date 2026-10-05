@@ -52,7 +52,9 @@ export interface SafeFetchResponse {
 
 /** True only for addresses on the public internet. */
 export function isPublicAddress(address: string): boolean {
-  if (!ipaddr.isValid(address)) return false;
+  if (!ipaddr.isValid(address)) {
+    return false;
+  }
   // An IPv4-mapped IPv6 address (::ffff:10.0.0.1) is judged as the IPv4 address it is.
   return ipaddr.process(address).range() === "unicast";
 }
@@ -74,8 +76,9 @@ export async function resolvePermitted(
     lookup(name, { all: true, verbatim: true }),
 ) {
   const addresses = await resolve(hostname);
-  if (addresses.length === 0 || !addresses.every(({ address }) => permitted(address, allowlist)))
+  if (addresses.length === 0 || !addresses.every(({ address }) => permitted(address, allowlist))) {
     throw new AppError("DESTINATION_NOT_ALLOWED", { params: { hostname } });
+  }
   return addresses;
 }
 
@@ -88,8 +91,11 @@ export function guardedLookup(
     resolvePermitted(hostname, allowlist, resolve)
       .then(([chosen]) => {
         const { address, family } = required(chosen, `an address for ${hostname}`);
-        if (options.all) callback(null, [{ address, family }]);
-        else callback(null, address, family);
+        if (options.all) {
+          callback(null, [{ address, family }]);
+        } else {
+          callback(null, address, family);
+        }
       })
       .catch((error: unknown) => callback(asError(error), "", 4));
   };
@@ -116,7 +122,9 @@ async function readLimited(
   let size = 0;
   while (reader) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      break;
+    }
     size += value.byteLength;
     if (size > maxResponseBytes) {
       await reader.cancel();

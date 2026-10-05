@@ -19,7 +19,9 @@ const workspaceMetadata = z.object({ personal: z.boolean().optional() });
 
 /** Personal workspaces (one per user, created at sign-up) can't be shared or deleted. */
 export function isPersonal(organization: { metadata?: unknown }) {
-  if (typeof organization.metadata !== "string") return false;
+  if (typeof organization.metadata !== "string") {
+    return false;
+  }
   try {
     return workspaceMetadata.safeParse(JSON.parse(organization.metadata)).data?.personal === true;
   } catch {
@@ -48,7 +50,9 @@ export function useSwitchWorkspace() {
   const { refetch } = authClient.useSession();
   return async (organizationId: string) => {
     const { error } = await authClient.organization.setActive({ organizationId });
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
     await refetch();
     // Every cached query belonged to the previous workspace.
     await queryClient.invalidateQueries();

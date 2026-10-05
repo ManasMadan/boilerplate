@@ -125,8 +125,9 @@ function fits({ needed, free, total, inUse, starting }: Plan, flag: string | und
     }
     return false;
   }
-  if (starting.length > 0)
+  if (starting.length > 0) {
     ok(`${starting.join(", ")} fit in memory (up to ${gb(needed)} of ${gb(free)} free)`);
+  }
   return true;
 }
 
@@ -141,17 +142,23 @@ function start({ oneShots, longRunning }: Plan, compose: (args: string[]) => num
     "--wait",
     ...longRunning.filter((name) => !IN_BACKGROUND.has(name)),
   ]);
-  if (up !== 0) return up;
+  if (up !== 0) {
+    return up;
+  }
   for (const name of oneShots) {
     const status = compose(["run", "--rm", name]);
-    if (status !== 0) return status;
+    if (status !== 0) {
+      return status;
+    }
   }
   if (background.length > 0) {
     warn(
       `Starting ${background.join(", ")} in the background: on a first start ClamAV downloads its virus signatures (up to 6 minutes), and uploads stay pending until it answers (\`docker compose logs -f clamav\`).`,
     );
     const status = compose(["up", "-d", ...background]);
-    if (status !== 0) return status;
+    if (status !== 0) {
+      return status;
+    }
   }
   // Postgres runs its init files only on a new volume; the local read-only role (for the
   // Postgres MCP server) is safe to reapply, so a database made before it gets it too.
@@ -195,8 +202,12 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
     return 1;
   }
   const plan = budget(run, profileArgs);
-  if (!plan || !fits(plan, flag)) return 1;
-  if (command === "check") return 0;
+  if (!plan || !fits(plan, flag)) {
+    return 1;
+  }
+  if (command === "check") {
+    return 0;
+  }
   return start(
     plan,
     (args) =>
@@ -205,4 +216,6 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
   );
 }
 
-if (import.meta.main) process.exit(services());
+if (import.meta.main) {
+  process.exit(services());
+}

@@ -43,10 +43,14 @@ const NAMED_PORT =
 
 /** Each `file:line` that fixes one of .env.example's ports. */
 function fixedPorts(path: string, text: string): string[] {
-  if (FIXED_PORTS_ALLOWED.some((pattern) => pattern.test(path))) return [];
+  if (FIXED_PORTS_ALLOWED.some((pattern) => pattern.test(path))) {
+    return [];
+  }
   return text.split("\n").flatMap((written, index) => {
     // Comments describe the defaults.
-    if (/^\s*(#|\/\/|\*|\/\*)/.test(written)) return [];
+    if (/^\s*(#|\/\/|\*|\/\*)/.test(written)) {
+      return [];
+    }
     // docker compose's own fallback for an unset variable (`${WEB_URL:-http://...}`).
     const line = path === "docker-compose.yml" ? written.replace(/:-[^}]*\}/g, "}") : written;
     return [...line.matchAll(NAMED_PORT)]

@@ -26,7 +26,9 @@ const stored: { method: string; headers: IncomingHttpHeaders; body: string }[] =
 beforeAll(async () => {
   storage = createServer(async (request, response) => {
     let body = "";
-    for await (const chunk of request) body += String(chunk);
+    for await (const chunk of request) {
+      body += String(chunk);
+    }
     stored.push({ method: request.method ?? "", headers: request.headers, body });
     response.writeHead(storageStatus).end();
   });

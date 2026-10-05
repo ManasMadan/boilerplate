@@ -33,7 +33,9 @@ function notificationFor(event: Routed): NotificationPayload | undefined {
     case "notification.requested.v1":
       return notificationPayload.parse(events[event.name].parse(event.payload).notification);
     case "webhook.endpoint_disabled.v1": {
-      if (!event.orgId) return undefined;
+      if (!event.orgId) {
+        return undefined;
+      }
       const payload = events[event.name].parse(event.payload);
       return {
         template: "webhooks.endpoint-disabled",
@@ -43,7 +45,9 @@ function notificationFor(event: Routed): NotificationPayload | undefined {
     }
     case "org.api_key_created.v1":
     case "webhook.endpoint_created.v1": {
-      if (!event.orgId) return undefined;
+      if (!event.orgId) {
+        return undefined;
+      }
       const apiKey = event.name === "org.api_key_created.v1";
       const label = apiKey
         ? events["org.api_key_created.v1"].parse(event.payload).name
@@ -70,14 +74,18 @@ export class EventsProcessor extends JobProcessor {
     const { meta, payload: event } = parseJob("events-notifications", "event", job.data);
     const { name } = event;
     // An event routed here by a newer relay this build doesn't know yet.
-    if (!eventSubscribers["events-notifications"](name)) return;
+    if (!eventSubscribers["events-notifications"](name)) {
+      return;
+    }
     if (name === "email.feedback_received.v1") {
       const { address, kind } = events[name].parse(event.payload);
       await this.policy.suppress("email", address, kind);
       return;
     }
     const notification = notificationFor({ ...event, name });
-    if (!notification) return;
+    if (!notification) {
+      return;
+    }
     await runJob(meta, `event:${event.id}`, () => this.dispatcher.dispatch(notification, event.id));
   }
 }

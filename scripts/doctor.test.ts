@@ -28,13 +28,27 @@ const healthy = "postgres healthy running\nvalkey healthy running\nmailpit  runn
 /** A machine with every tool, services as `ps` says, and some answers overridden. */
 function machine(answers: Record<string, Partial<Ran>> = {}, ps = healthy) {
   return fakeRun((line) => {
-    if (line in answers) return answers[line];
-    if (line === "node --version") return { stdout: `v${node}.1.0\n` };
-    if (line === "uv --version") return { stdout: "uv 0.12.0\n" };
-    if (line === "wt --version") return { stdout: "wt 0.57.0\n" };
-    if (line.startsWith("docker info")) return { stdout: "29.0.0\n" };
-    if (line.startsWith("docker compose ps")) return { stdout: ps };
-    if (line.startsWith("docker compose exec")) return { stdout: "6\n" };
+    if (line in answers) {
+      return answers[line];
+    }
+    if (line === "node --version") {
+      return { stdout: `v${node}.1.0\n` };
+    }
+    if (line === "uv --version") {
+      return { stdout: "uv 0.12.0\n" };
+    }
+    if (line === "wt --version") {
+      return { stdout: "wt 0.57.0\n" };
+    }
+    if (line.startsWith("docker info")) {
+      return { stdout: "29.0.0\n" };
+    }
+    if (line.startsWith("docker compose ps")) {
+      return { stdout: ps };
+    }
+    if (line.startsWith("docker compose exec")) {
+      return { stdout: "6\n" };
+    }
     return {};
   }).run;
 }

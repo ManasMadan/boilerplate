@@ -36,8 +36,11 @@ export function InvitationPage({ id }: { id: string }) {
 
   async function decline() {
     const { error } = await authClient.organization.rejectInvitation({ invitationId: id });
-    if (error) toast.error(errorMessage(error));
-    else router.replace("/dashboard");
+    if (error) {
+      toast.error(errorMessage(error));
+    } else {
+      router.replace("/dashboard");
+    }
   }
 
   return (

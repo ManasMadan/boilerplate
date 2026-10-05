@@ -116,11 +116,18 @@ export function toLcov(coverage: Map<string, FileCoverage>) {
   return records
     .map(([path, file]) => {
       const out = [`SF:${path}`];
-      for (const [name, line] of file.functionLines) out.push(`FN:${line},${name}`);
-      for (const [name, calls] of file.functions) out.push(`FNDA:${calls},${name}`);
-      for (const [id, taken] of file.branches) out.push(`BRDA:${id},${taken}`);
-      for (const [number, hits] of [...file.lines].sort(([a], [b]) => a - b))
+      for (const [name, line] of file.functionLines) {
+        out.push(`FN:${line},${name}`);
+      }
+      for (const [name, calls] of file.functions) {
+        out.push(`FNDA:${calls},${name}`);
+      }
+      for (const [id, taken] of file.branches) {
+        out.push(`BRDA:${id},${taken}`);
+      }
+      for (const [number, hits] of [...file.lines].sort(([a], [b]) => a - b)) {
         out.push(`DA:${number},${hits}`);
+      }
       return [...out, "end_of_record"].join("\n");
     })
     .join("\n");
@@ -172,14 +179,19 @@ export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): numb
     console.error("No coverage reports: run `bun run test:coverage` first.");
     return 1;
   }
-  for (const { path, base, owns } of found)
+  for (const { path, base, owns } of found) {
     mergeLcov(coverage, readFileSync(join(root, path), "utf8"), base, root, owns);
+  }
   mkdirSync(join(root, "coverage"), { recursive: true });
   const measured = new Map([...coverage].filter(([path]) => isSource(path)));
   writeFileSync(join(root, "coverage/merged.lcov"), `${toLcov(measured)}\n`);
   const inScope = (path: string) =>
     scopes.length === 0 || scopes.some((scope) => path.startsWith(scope.replace(/\/?$/, "/")));
-  for (const path of measured.keys()) if (!inScope(path)) measured.delete(path);
+  for (const path of measured.keys()) {
+    if (!inScope(path)) {
+      measured.delete(path);
+    }
+  }
 
   // A source file no test ever loads is in no report at all: it counts as uncovered.
   const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: root }).stdout.toString().split("\n");
@@ -210,4 +222,6 @@ export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): numb
   return failing > 0 ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(checkCoverage());
+if (import.meta.main) {
+  process.exit(checkCoverage());
+}

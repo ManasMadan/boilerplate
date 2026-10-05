@@ -248,7 +248,9 @@ describe("Google sign-in on the mobile app", () => {
     const real = globalThis.fetch;
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = input instanceof Request ? input.url : String(input);
-      if (!url.startsWith("https://oauth2.googleapis.com/token")) return real(input, init);
+      if (!url.startsWith("https://oauth2.googleapis.com/token")) {
+        return real(input, init);
+      }
       const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
       const claims = {
         iss: "https://accounts.google.com",
@@ -427,18 +429,24 @@ describe("sign-up and verification", () => {
     await session.auth("/sign-up/email", { email, password, name: "Codes" });
     // Eleven requests for a code, within each endpoint's per-address limit: the sign-up,
     // three resets, five verification codes and two sign-ins to the unverified account.
-    for (let i = 0; i < 3; i++) await session.auth("/forget-password/email-otp", { email });
+    for (let i = 0; i < 3; i++) {
+      await session.auth("/forget-password/email-otp", { email });
+    }
     for (let i = 0; i < 5; i++) {
       await session.auth("/email-otp/send-verification-otp", { email, type: "email-verification" });
     }
-    for (let i = 0; i < 2; i++) await session.auth("/sign-in/email", { email, password });
+    for (let i = 0; i < 2; i++) {
+      await session.auth("/sign-in/email", { email, password });
+    }
     // Codes go out in the background: once the limit has counted all eleven (the last
     // one refused), every code that will be queued has been.
     await eventually(
       () => harness.redis.get(`{rl:email:codesPerRecipient}:${email.toLowerCase()}`),
       (count) => count === "11",
     );
-    for (let i = 0; i < 10; i++) await takeOtp(harness, email);
+    for (let i = 0; i < 10; i++) {
+      await takeOtp(harness, email);
+    }
     expect(await queuedNotification(harness, "auth.otp", email)).toBeUndefined();
   });
 
@@ -527,7 +535,9 @@ describe("session revocation", () => {
     const attempt = (guess: string) =>
       createSession(harness).auth("/sign-in/email", { email, password: guess });
     const statuses: number[] = [];
-    for (let i = 0; i < 10; i++) statuses.push((await attempt(`wrong-password-${i}`)).status);
+    for (let i = 0; i < 10; i++) {
+      statuses.push((await attempt(`wrong-password-${i}`)).status);
+    }
     expect(statuses.every((status) => status === 401)).toBe(true);
     const locked = await attempt(password);
     expect(locked.status).toBe(429);
@@ -569,8 +579,9 @@ describe("account security", () => {
       .finally(() => db.end());
     const [code, ...others] = enabled.body.backupCodes;
     expect(code).toMatch(/^[\w-]{11}$/);
-    for (const backup of enabled.body.backupCodes)
+    for (const backup of enabled.body.backupCodes) {
       expect(stored.rows[0]?.backup_codes).not.toContain(backup);
+    }
 
     const again = createSession(harness);
     const signIn = await again.auth<{ twoFactorRedirect?: boolean }>("/sign-in/email", {
@@ -882,10 +893,12 @@ describe("organizations and the audit trail", () => {
       });
     // Two workspaces, so the per-workspace limit on waiting invitations isn't what stops it.
     const [first, second] = [await workspace(), await workspace()];
-    for (let i = 0; i < PENDING_INVITATION_LIMIT; i++)
+    for (let i = 0; i < PENDING_INVITATION_LIMIT; i++) {
       expect((await invite(first)).status).toBe(200);
-    for (let i = PENDING_INVITATION_LIMIT; i < 30; i++)
+    }
+    for (let i = PENDING_INVITATION_LIMIT; i < 30; i++) {
       expect((await invite(second)).status).toBe(200);
+    }
     const over = await invite(second);
     expect(over.status).toBe(429);
     expect(over.body.code).toBe("RATE_LIMITED");
@@ -930,8 +943,9 @@ describe("organizations and the audit trail", () => {
         slug: `many-${randomUUID().slice(0, 8)}`,
       });
     // The personal workspace is the first.
-    for (let count = 1; count < ORGANIZATION_LIMIT; count++)
+    for (let count = 1; count < ORGANIZATION_LIMIT; count++) {
       expect((await create()).status).toBe(200);
+    }
     const over = await create();
     expect(over.status).toBe(403);
     expect(over.body.code).toBe("YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS");
@@ -1054,7 +1068,9 @@ describe("organizations and the audit trail", () => {
         .finally(() => admin.end());
       // As a membership change through better-auth would, forget the cached role.
       const cached = await harness.redis.keys(`cache:membership:*${orgId}:${memberId}`);
-      if (cached.length) await harness.redis.del(...cached);
+      if (cached.length) {
+        await harness.redis.del(...cached);
+      }
     };
 
     // better-auth joins several roles with commas: the strongest one counts.
@@ -1082,7 +1098,9 @@ describe("webhook endpoints", () => {
       url,
       events: ["todo.created.v1"],
     });
-    for (let i = 0; i < 10; i++) await session.rpc.webhooks.sendTest({ id: endpoint.id });
+    for (let i = 0; i < 10; i++) {
+      await session.rpc.webhooks.sendTest({ id: endpoint.id });
+    }
     const limited = await expectError(
       session.rpc.webhooks.sendTest({ id: endpoint.id }),
       "RATE_LIMITED",
@@ -1338,7 +1356,9 @@ describe("webhook endpoints", () => {
 
   it("limits endpoints per organization", async () => {
     const { session } = await signedInUser();
-    for (let i = 0; i < 20; i++) await session.rpc.webhooks.createEndpoint({ url });
+    for (let i = 0; i < 20; i++) {
+      await session.rpc.webhooks.createEndpoint({ url });
+    }
     const error = await expectError(
       session.rpc.webhooks.createEndpoint({ url }),
       "WEBHOOK_ENDPOINT_LIMIT",
@@ -1353,7 +1373,9 @@ describe("realtime", () => {
     const received: unknown[] = [];
     for await (const message of stream) {
       received.push(message);
-      if (received.length === count) break;
+      if (received.length === count) {
+        break;
+      }
     }
     return received;
   }
@@ -1398,11 +1420,15 @@ describe("realtime", () => {
     await expectError(
       (async () => {
         const extra = await session.rpc.realtime.subscribe();
-        for await (const _ of extra) break;
+        for await (const _ of extra) {
+          break;
+        }
       })(),
       "RATE_LIMITED",
     );
-    for (const controller of controllers) controller.abort();
+    for (const controller of controllers) {
+      controller.abort();
+    }
     // Aborting ends each reader with an AbortError: expected.
     await Promise.allSettled(readers);
     // Closed streams give their slots back: a new one opens and delivers.
@@ -1828,7 +1854,9 @@ describe("phone number", () => {
 
   it("limits texts per account and per number", async () => {
     const { session } = await signedInUser();
-    for (let i = 0; i < 5; i++) await session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() });
+    for (let i = 0; i < 5; i++) {
+      await session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() });
+    }
     const limited = await expectError(
       session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
       "RATE_LIMITED",
@@ -2147,7 +2175,9 @@ describe("uploads and the profile picture", { tags: ["files"] }, () => {
         contentType: "image/png",
         size: 10,
       });
-    for (let i = 0; i < 30; i++) await start();
+    for (let i = 0; i < 30; i++) {
+      await start();
+    }
     await expectError(start(), "RATE_LIMITED");
   });
 
@@ -2471,8 +2501,9 @@ describe("todos", () => {
   it("creates, pages, completes and deletes, with typed errors", async () => {
     const { session } = await signedInUser();
     const created = [];
-    for (const title of ["one", "two", "three"])
+    for (const title of ["one", "two", "three"]) {
       created.push(await session.rpc.todo.create({ title }));
+    }
     expect(created[0]?.createdAt).toBeInstanceOf(Date);
 
     const first = await session.rpc.todo.list({ limit: 2 });
@@ -2483,7 +2514,9 @@ describe("todos", () => {
     expect(second.nextCursor).toBeNull();
 
     const todo = created[0];
-    if (!todo) throw new Error("no todo");
+    if (!todo) {
+      throw new Error("no todo");
+    }
     const done = await session.rpc.todo.setCompleted({
       id: todo.id,
       completed: true,

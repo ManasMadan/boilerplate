@@ -80,7 +80,9 @@ export function authContext(dependencies: Omit<AuthDependencies, "database">): A
     },
     async localeFor(email, headers) {
       const user = await db.user.findUnique({ where: { email }, select: { locale: true } });
-      if (user && isLocale(user.locale)) return user.locale;
+      if (user && isLocale(user.locale)) {
+        return user.locale;
+      }
       return negotiateLocale(headers?.get("x-locale") ?? headers?.get("accept-language"));
     },
     leavingWithAccount: new Map(),

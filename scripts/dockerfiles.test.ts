@@ -27,7 +27,8 @@ describe("the Dockerfiles", () => {
   it.each(files)("%s pins every image by digest", (file) => {
     const refs = references(readFileSync(join(DIR, file), "utf8"));
     expect(refs.length).toBeGreaterThan(1);
-    for (const ref of refs)
+    for (const ref of refs) {
       expect({ ref, pinned: DIGEST.test(ref) }).toEqual({ ref, pinned: true });
+    }
   });
 });

@@ -14,4 +14,6 @@ export function tofuFmt(files = process.argv.slice(2), run = runSync): number {
   return run("tofu", ["fmt", ...files], { cwd: ROOT, stdio: "inherit" }).status ?? 1;
 }
 
-if (import.meta.main) process.exit(tofuFmt());
+if (import.meta.main) {
+  process.exit(tofuFmt());
+}

@@ -44,7 +44,9 @@ beforeAll(async () => {
   // Stands in for apps/webhooks + the outbox relay: verify, then queue for billing.
   receiver = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk as Buffer);
+    for await (const chunk of request) {
+      chunks.push(chunk as Buffer);
+    }
     const event = await Stripe.webhooks.constructEventAsync(
       Buffer.concat(chunks),
       String(request.headers["stripe-signature"]),
@@ -125,7 +127,9 @@ async function relayMembership(orgId: OrgId) {
     [orgId],
   );
   const jobs: Job[] = [];
-  for (const row of rows) jobs.push(await queueEvent(row.name, row.key, row.payload, orgId));
+  for (const row of rows) {
+    jobs.push(await queueEvent(row.name, row.key, row.payload, orgId));
+  }
   return jobs;
 }
 

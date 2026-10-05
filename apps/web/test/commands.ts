@@ -63,9 +63,13 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   if (!navigations.has(page)) {
     await page.route("https://challenges.cloudflare.com/turnstile/**", async (route) => {
       // Held: answered once the test picks another mode (a slow network, under control).
-      while (turnstileModes.get(page) === "held") await new Promise((r) => setTimeout(r, 20));
+      while (turnstileModes.get(page) === "held") {
+        await new Promise((r) => setTimeout(r, 20));
+      }
       const mode = turnstileModes.get(page);
-      if (mode === "blocked") return route.abort();
+      if (mode === "blocked") {
+        return route.abort();
+      }
       return route.fulfill({
         contentType: "text/javascript",
         body: mode === "empty" ? "" : FAKE_TURNSTILE,
@@ -82,7 +86,9 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
         const failure = failing.get(page)?.find(({ part }) => request.url().includes(part));
         if (failure) {
           failure.hits += 1;
-          if (!failure.status) return route.abort();
+          if (!failure.status) {
+            return route.abort();
+          }
           return failure.body === undefined
             ? route.fulfill({ status: failure.status, body: "" })
             : route.fulfill({
@@ -91,8 +97,9 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
                 body: JSON.stringify(failure.body),
               });
         }
-        if (!request.isNavigationRequest() || request.frame() === page.mainFrame())
+        if (!request.isNavigationRequest() || request.frame() === page.mainFrame()) {
           return route.fallback();
+        }
         navigations.get(page)?.push(request.url());
         return route.fulfill({ status: 204 });
       },
@@ -104,7 +111,9 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
     // Only this test's own: a request the last test left in flight is answered during
     // this one, and would satisfy a wait before this test's page did anything.
     page.on("requestfinished", (request) => {
-      if (started.get(page)?.has(request)) finished.get(page)?.push(request.url());
+      if (started.get(page)?.has(request)) {
+        finished.get(page)?.push(request.url());
+      }
     });
   }
   started.set(page, new WeakSet());
@@ -268,7 +277,9 @@ const grantPermissions: BrowserCommand<[permissions: string[]]> = async (
   permissions,
 ) => {
   await context.clearPermissions();
-  if (permissions.length) await context.grantPermissions(permissions);
+  if (permissions.length) {
+    await context.grantPermissions(permissions);
+  }
 };
 
 /** The code an authenticator app shows for `secret` now. */
@@ -284,7 +295,9 @@ const editSession: BrowserCommand<
   [fields: Record<string, unknown>, userFields?: Record<string, unknown>]
 > = async ({ context }, fields, userFields = {}) => {
   const cookie = (await context.cookies()).find((c) => c.name === "better-auth.session_token");
-  if (!cookie) throw new Error("not signed in");
+  if (!cookie) {
+    throw new Error("not signed in");
+  }
   const key = `auth:${decodeURIComponent(cookie.value).split(".")[0]}`;
   const redis = new Redis(REDIS_URL);
   try {
@@ -292,7 +305,9 @@ const editSession: BrowserCommand<
       session: Record<string, unknown>;
       user: Record<string, unknown>;
     } | null;
-    if (!stored) throw new Error(`no session at ${key}`);
+    if (!stored) {
+      throw new Error(`no session at ${key}`);
+    }
     Object.assign(stored.session, fields);
     Object.assign(stored.user, userFields);
     await redis.set(key, JSON.stringify(stored), "KEEPTTL");
@@ -336,7 +351,9 @@ const signInElsewhere: BrowserCommand<
     },
     body: JSON.stringify({ email, password }),
   });
-  if (!response.ok) throw new Error(`sign-in answered ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`sign-in answered ${response.status}`);
+  }
 };
 
 /**
@@ -350,7 +367,9 @@ const refuseNextPut: BrowserCommand<[part: string, status: number]> = async (
 ) => {
   const matches = (url: URL) => url.href.includes(part);
   const handler = async (route: Route) => {
-    if (route.request().method() !== "PUT") return route.fallback();
+    if (route.request().method() !== "PUT") {
+      return route.fallback();
+    }
     await page.unroute(matches, handler);
     return route.fulfill({ status, headers: { "access-control-allow-origin": "*" } });
   };
@@ -365,7 +384,9 @@ const refuseNextPut: BrowserCommand<[part: string, status: number]> = async (
  */
 const withStorageCors = new WeakSet<Page>();
 const storageCors: BrowserCommand<[]> = async ({ page }) => {
-  if (withStorageCors.has(page)) return;
+  if (withStorageCors.has(page)) {
+    return;
+  }
   withStorageCors.add(page);
   const storage = new URL(process.env.S3_ENDPOINT ?? "http://localhost:59000").host;
   await page.route(
@@ -378,8 +399,9 @@ const storageCors: BrowserCommand<[]> = async ({ page }) => {
         "access-control-allow-headers": "*",
         "access-control-expose-headers": "ETag",
       };
-      if (route.request().method() === "OPTIONS")
+      if (route.request().method() === "OPTIONS") {
         return route.fulfill({ status: 204, headers: cors });
+      }
       const response = await route.fetch();
       return route.fulfill({ response, headers: { ...response.headers(), ...cors } });
     },
@@ -410,7 +432,9 @@ const fakeStripe: BrowserCommand<[path: string, method?: string]> = async (
   method = "GET",
 ) => {
   const response = await fetch(`${(await services()).stripeUrl}${path}`, { method });
-  if (!response.ok) throw new Error(`the fake Stripe answered ${path} with ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`the fake Stripe answered ${path} with ${response.status}`);
+  }
   return response.json();
 };
 

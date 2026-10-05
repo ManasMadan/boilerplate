@@ -43,9 +43,13 @@ function unwrap(node: ts.Expression): ts.Expression {
 /** `JSON.parse(...)` or `<anything>.json()`. */
 function isParsedJson(node: ts.Expression) {
   const call = unwrap(node);
-  if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression)) return false;
+  if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression)) {
+    return false;
+  }
   const { expression, name } = call.expression;
-  if (name.text === "json") return call.arguments.length === 0;
+  if (name.text === "json") {
+    return call.arguments.length === 0;
+  }
   return name.text === "parse" && ts.isIdentifier(expression) && expression.text === "JSON";
 }
 
@@ -87,7 +91,9 @@ function comparesMemberRole(node: ts.BinaryExpression) {
   const equality =
     kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
     kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
-  if (!equality) return false;
+  if (!equality) {
+    return false;
+  }
   const member = (side: ts.Expression) => ts.isStringLiteral(side) && side.text === "member";
   return (
     (member(node.right) && namesRole(node.left)) || (member(node.left) && namesRole(node.right))
@@ -97,7 +103,9 @@ function comparesMemberRole(node: ts.BinaryExpression) {
 /** `reply.status(n).send({ code ... })` or `.code(n).send(...)`. */
 function sendsErrorByHand(node: ts.CallExpression) {
   const callee = node.expression;
-  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "send") return false;
+  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "send") {
+    return false;
+  }
   const status = callee.expression;
   const [body] = node.arguments;
   return (
@@ -113,7 +121,9 @@ function sendsErrorByHand(node: ts.CallExpression) {
 /** Whether a loop in the same function encloses `node`: a poll, which waits for something. */
 function inLoop(node: ts.Node): boolean {
   for (let scope = node.parent; scope && !ts.isFunctionLike(scope); scope = scope.parent) {
-    if (ts.isIterationStatement(scope, false)) return true;
+    if (ts.isIterationStatement(scope, false)) {
+      return true;
+    }
   }
   return false;
 }
@@ -124,10 +134,16 @@ function inLoop(node: ts.Node): boolean {
  */
 function sleeps(node: ts.CallExpression) {
   const [first] = node.arguments;
-  if (!ts.isIdentifier(node.expression) || node.expression.text !== "setTimeout") return false;
-  if (!first || !ts.isIdentifier(first)) return false;
+  if (!ts.isIdentifier(node.expression) || node.expression.text !== "setTimeout") {
+    return false;
+  }
+  if (!first || !ts.isIdentifier(first)) {
+    return false;
+  }
   let executor = node.parent;
-  while (executor && !ts.isFunctionLike(executor)) executor = executor.parent;
+  while (executor && !ts.isFunctionLike(executor)) {
+    executor = executor.parent;
+  }
   if (!executor || (!ts.isArrowFunction(executor) && !ts.isFunctionExpression(executor))) {
     return false;
   }
@@ -144,14 +160,18 @@ function sleeps(node: ts.CallExpression) {
 export function findPatterns(path: string, text: string): Finding[] {
   const source = SOURCE.test(path) && !TEST.test(path) && !GENERATED.test(path);
   const test = TEST.test(path);
-  if (!source && !test) return [];
+  if (!source && !test) {
+    return [];
+  }
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
   const found: Finding[] = [];
   const report = (node: ts.Node, problem: string) =>
     found.push({ line: file.getLineAndCharacterOfPosition(node.getStart()).line + 1, problem });
 
   const visit = (node: ts.Node) => {
-    if (source) checkSource(node, path, report);
+    if (source) {
+      checkSource(node, path, report);
+    }
     if (test && ts.isCallExpression(node) && sleeps(node)) {
       report(node, "a fixed sleep: wait for the condition (eventually, vi.waitFor, expect.poll)");
     }
@@ -201,9 +221,15 @@ export function checkPatterns(root = ROOT): number {
       ({ line, problem }) => `${path}:${line}: ${problem}`,
     ),
   );
-  for (const line of found) fail(line);
-  if (found.length === 0) ok("no ruled-out code patterns");
+  for (const line of found) {
+    fail(line);
+  }
+  if (found.length === 0) {
+    ok("no ruled-out code patterns");
+  }
   return found.length === 0 ? 0 : 1;
 }
 
-if (import.meta.main) process.exit(checkPatterns());
+if (import.meta.main) {
+  process.exit(checkPatterns());
+}

@@ -487,7 +487,9 @@ describe("notifications service", () => {
       );
     }
     await events.close();
-    for (const id of ids) await settle(id, 2);
+    for (const id of ids) {
+      await settle(id, 2);
+    }
 
     const subjects = async (email: string) => {
       const res = await fetch(
@@ -898,7 +900,9 @@ describe("notifications service", () => {
     ];
     const due = zones.find((zone) => localClock(zone).hour >= 8);
     const early = zones.find((zone) => localClock(zone).hour < 8);
-    if (!due || !early) throw new Error("no suitable time zones right now");
+    if (!due || !early) {
+      throw new Error("no suitable time zones right now");
+    }
     return { due, early, dateIn: (zone: string) => localClock(zone).date };
   }
 
@@ -1324,8 +1328,12 @@ describe("notifications service", () => {
         null,
       ),
     ];
-    for (const item of quiet) await events.add("event", item, { jobId: item.id });
-    for (const item of quiet) expect(await finished(events.queue, item.id)).toBe("completed");
+    for (const item of quiet) {
+      await events.add("event", item, { jobId: item.id });
+    }
+    for (const item of quiet) {
+      expect(await finished(events.queue, item.id)).toBe("completed");
+    }
     await events.close();
     for (const item of quiet) {
       expect(
@@ -1340,7 +1348,9 @@ describe("notifications service", () => {
     const user = await digestUser("UTC");
     const date = new Date().toISOString().slice(0, 10);
     const gone = userIdSchema.parse(randomUUID());
-    for (const userId of [user.id, gone]) await (await digests()).send(userId, date);
+    for (const userId of [user.id, gone]) {
+      await (await digests()).send(userId, date);
+    }
     expect(
       await sql(
         "SELECT status, error FROM notifications.delivery WHERE idempotency_key = ANY($1) ORDER BY idempotency_key",

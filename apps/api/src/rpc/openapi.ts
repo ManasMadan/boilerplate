@@ -57,9 +57,12 @@ export function dropBodiesNeverSent(spec: Spec) {
   );
   for (const operation of operations) {
     for (const response of Object.values(operation?.responses ?? {})) {
-      if (!("content" in response)) continue;
-      if (nothing.safeParse(response.content?.["application/json"]?.schema).success)
+      if (!("content" in response)) {
+        continue;
+      }
+      if (nothing.safeParse(response.content?.["application/json"]?.schema).success) {
         delete response.content;
+      }
     }
   }
 }
@@ -126,10 +129,14 @@ const apiKeyScope = z.enum(API_KEY_SCOPES).optional();
  * take a key with that scope too, and say so.
  */
 export function markApiKeyOperations(spec: Spec, router: unknown) {
-  if (isOperation(router)) return markOperation(spec, router);
+  if (isOperation(router)) {
+    return markOperation(spec, router);
+  }
   if (typeof router === "object" && router !== null) {
     const children: unknown[] = Object.values(router);
-    for (const child of children) markApiKeyOperations(spec, child);
+    for (const child of children) {
+      markApiKeyOperations(spec, child);
+    }
   }
 }
 
@@ -138,7 +145,9 @@ function markOperation(spec: Spec, procedure: Operation) {
   const { route, meta } = procedure["~orpc"];
   const operation =
     route.path && route.method ? spec.paths?.[route.path]?.[METHODS[route.method]] : undefined;
-  if (!operation) return;
+  if (!operation) {
+    return;
+  }
   const scope = apiKeyScope.parse(fieldOf(meta, "apiKeyScope"));
   operation.security = scope ? [{ session: [] }, { apiKey: [] }] : [{ session: [] }];
   if (scope) {

@@ -38,7 +38,9 @@ const SYSTEMS: [RegExp, string][] = [
 
 /** A readable device name from a user agent, without a parsing library. */
 function deviceName(userAgent: string | null | undefined) {
-  if (!userAgent) return null;
+  if (!userAgent) {
+    return null;
+  }
   const first = (names: [RegExp, string][]) =>
     names.find(([pattern]) => pattern.test(userAgent))?.[1];
   const browser = first(BROWSERS) ?? "Browser";
@@ -58,8 +60,11 @@ export function SessionsCard() {
 
   async function run(action: () => Promise<{ error: { code?: string | undefined } | null }>) {
     const { error } = await action();
-    if (error) toast.error(errorMessage(error));
-    else toast.success(t("revoked"));
+    if (error) {
+      toast.error(errorMessage(error));
+    } else {
+      toast.success(t("revoked"));
+    }
     await queryClient.invalidateQueries({ queryKey: authKeys.sessions() });
   }
 

@@ -104,7 +104,9 @@ describe("webhook deliveries", () => {
         }),
         redeliver: os.webhooks.redeliver.handler(({ input }) => {
           const found = deliveries.find((d) => d.id === input.id);
-          if (found) found.status = "succeeded";
+          if (found) {
+            found.status = "succeeded";
+          }
         }),
       },
     }));

@@ -12,8 +12,12 @@ const servers: ReturnType<typeof Bun.serve>[] = [];
 const atExit: (() => void)[] = [];
 afterEach(() => {
   mock.restore();
-  for (const server of servers.splice(0)) server.stop(true);
-  for (const handler of atExit.splice(0)) handler();
+  for (const server of servers.splice(0)) {
+    server.stop(true);
+  }
+  for (const handler of atExit.splice(0)) {
+    handler();
+  }
 });
 
 const KUBECTL = "kubectl --context kind-boilerplate";
@@ -31,15 +35,18 @@ function gateway(answer: (host: string, path: string) => Response | Promise<Resp
 
 /** Every route answering as a healthy stack's do. */
 const healthy = (host: string, path: string) => {
-  if (host === "files.localhost")
+  if (host === "files.localhost") {
     return new Response(null, { status: path === "/health" ? 200 : 404 });
+  }
   if (path === "/ai/mcp") {
     return new Response(null, {
       status: 401,
       headers: { "www-authenticate": 'Bearer resource_metadata="http://localhost/.well-known/x"' },
     });
   }
-  if (path === "/webhooks/stripe") return new Response(null, { status: 405 });
+  if (path === "/webhooks/stripe") {
+    return new Response(null, { status: 405 });
+  }
   return new Response("ok");
 };
 
@@ -55,13 +62,24 @@ function machine(
   const jobStatuses = ["", "1,"];
   const commands = fakeRun((line) => {
     const given = answer(line);
-    if (given) return given;
-    if (line === "docker info --format {{.MemTotal}}") return { stdout: `${8 * 1024 ** 3}\n` };
-    if (line === "docker buildx inspect boilerplate") return { status: 1 };
-    if (line.startsWith(`${KUBECTL} -n boilerplate get secret`)) return { status: 1 };
-    if (/ get job reencrypt-\d+ /.test(line)) return { stdout: jobStatuses.shift() ?? "1," };
-    if (/ logs job\/reencrypt-\d+$/.test(line))
+    if (given) {
+      return given;
+    }
+    if (line === "docker info --format {{.MemTotal}}") {
+      return { stdout: `${8 * 1024 ** 3}\n` };
+    }
+    if (line === "docker buildx inspect boilerplate") {
+      return { status: 1 };
+    }
+    if (line.startsWith(`${KUBECTL} -n boilerplate get secret`)) {
+      return { status: 1 };
+    }
+    if (/ get job reencrypt-\d+ /.test(line)) {
+      return { stdout: jobStatuses.shift() ?? "1," };
+    }
+    if (/ logs job\/reencrypt-\d+$/.test(line)) {
       return { stdout: "starting\nRe-encrypted 12 rows\n" };
+    }
     return undefined;
   });
   const exitHandlers = atExit;
@@ -71,8 +89,9 @@ function machine(
       if (command === "openssl" && typeof options.cwd === "string") {
         for (const flag of ["-out", "-keyout"]) {
           const file = args[args.indexOf(flag) + 1];
-          if (args.includes(flag) && file)
+          if (args.includes(flag) && file) {
             writeFileSync(join(options.cwd, file), `stand-in ${file}`);
+          }
         }
       }
       return commands.run(command, args, options);
@@ -226,7 +245,9 @@ describe("the local cluster", () => {
         (name) => name.startsWith("boilerplate-k8s-") && !logsBefore.includes(name),
       );
     expect(logs()).toHaveLength(1);
-    for (const handler of exitHandlers.splice(0)) handler();
+    for (const handler of exitHandlers.splice(0)) {
+      handler();
+    }
     expect(logs()).toEqual([]);
   });
 
@@ -234,8 +255,12 @@ describe("the local cluster", () => {
     const printed = captureOutput();
     const { given, calls } = machine(
       (line) => {
-        if (line === "kind get clusters") return { stdout: "kind\nboilerplate\n" };
-        if (line.startsWith(`${KUBECTL} -n boilerplate get secret`)) return { status: 0 };
+        if (line === "kind get clusters") {
+          return { stdout: "kind\nboilerplate\n" };
+        }
+        if (line.startsWith(`${KUBECTL} -n boilerplate get secret`)) {
+          return { status: 0 };
+        }
         return undefined;
       },
       { env: { CI: "true", ACTIONS_CACHE_URL: "https://cache.example" } },
@@ -383,7 +408,9 @@ describe("the local cluster", () => {
       await expect(k8s(["smoke"], hanging.given)).rejects.toThrow("exit 1");
       expect(printed()).toContain("web page: /sign-in → 0");
     } finally {
-      for (const socket of sockets) socket.destroy();
+      for (const socket of sockets) {
+        socket.destroy();
+      }
       silent.close();
     }
 
@@ -403,8 +430,12 @@ describe("the local cluster", () => {
     expect(printed()).toContain("re-encryption: cronjob not found");
 
     const failed = machine((line) => {
-      if (/ get job /.test(line)) return { stdout: ",1" };
-      if (/ logs job\//.test(line)) return { stdout: "ENCRYPTION_KEYS is malformed\n" };
+      if (/ get job /.test(line)) {
+        return { stdout: ",1" };
+      }
+      if (/ logs job\//.test(line)) {
+        return { stdout: "ENCRYPTION_KEYS is malformed\n" };
+      }
       return undefined;
     });
     await expect(k8s(["smoke"], failed.given)).rejects.toThrow("exit 1");

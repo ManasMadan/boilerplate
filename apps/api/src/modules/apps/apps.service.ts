@@ -43,7 +43,9 @@ export class AppsService {
   disconnect(userId: UserId, id: string) {
     return transaction(this.database.write, async (tx) => {
       const grant = await this.apps.find(tx, id, userId);
-      if (!grant?.referenceId) throw new AppError("APP_NOT_FOUND");
+      if (!grant?.referenceId) {
+        throw new AppError("APP_NOT_FOUND");
+      }
       await this.apps.remove(tx, { ...grant, referenceId: grant.referenceId }, userId);
       // An approval's reference is the workspace it was given for (auth/auth-plugins.ts).
       const organizationId = orgIdSchema.parse(grant.referenceId);

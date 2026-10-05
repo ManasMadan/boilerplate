@@ -43,7 +43,9 @@ async function proxy(request: Request, url: URL) {
     redirect: "manual",
   });
   const headers = new Headers(upstream.headers);
-  for (const name of HOP_BY_HOP) headers.delete(name);
+  for (const name of HOP_BY_HOP) {
+    headers.delete(name);
+  }
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
@@ -60,8 +62,12 @@ Bun.serve({
   port,
   fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === "/healthz") return new Response("ok");
-    if (/^\/(rpc|api)(\/|$)/.test(url.pathname)) return proxy(request, url);
+    if (url.pathname === "/healthz") {
+      return new Response("ok");
+    }
+    if (/^\/(rpc|api)(\/|$)/.test(url.pathname)) {
+      return proxy(request, url);
+    }
     return asset(url.pathname);
   },
 });

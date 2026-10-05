@@ -66,4 +66,6 @@ export function secretScan(run = runSync): number {
   return scan.status ?? 1;
 }
 
-if (import.meta.main) process.exit(secretScan());
+if (import.meta.main) {
+  process.exit(secretScan());
+}

@@ -94,7 +94,9 @@ async function real(key: string): Promise<Target> {
       return subscription.id;
     },
     async close() {
-      for (const customer of customers) await stripe.customers.del(customer);
+      for (const customer of customers) {
+        await stripe.customers.del(customer);
+      }
     },
   };
 }
@@ -102,7 +104,9 @@ async function real(key: string): Promise<Target> {
 const key = process.env.STRIPE_CONTRACT_SECRET_KEY;
 const targets: [string, () => Promise<Target>][] = [["the fake", fake]];
 if (key) {
-  if (!key.startsWith("sk_test_")) throw new Error("STRIPE_CONTRACT_SECRET_KEY must be a test key");
+  if (!key.startsWith("sk_test_")) {
+    throw new Error("STRIPE_CONTRACT_SECRET_KEY must be a test key");
+  }
   targets.push(["Stripe's test mode", () => real(key)]);
 }
 

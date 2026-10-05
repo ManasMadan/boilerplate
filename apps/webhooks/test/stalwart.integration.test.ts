@@ -46,7 +46,9 @@ async function jmap(method: string, args: Record<string, unknown>) {
       methodCalls: [[method, args, "c"]],
     }),
   });
-  if (!response.ok) throw new Error(`${method}: HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`${method}: HTTP ${response.status}`);
+  }
   const body = (await response.json()) as { methodResponses: [string, Record<string, unknown>][] };
   const [name, result] = body.methodResponses[0] ?? [];
   const failed = result?.notCreated ?? result?.notDestroyed;

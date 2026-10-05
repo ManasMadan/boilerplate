@@ -75,11 +75,15 @@ export class FilesProcessor extends JobProcessor {
   }
 
   async check(fileId: FileId) {
-    if (!this.storage) throw new Error("files are off (no S3_BUCKET) but a file was queued");
+    if (!this.storage) {
+      throw new Error("files are off (no S3_BUCKET) but a file was queued");
+    }
     const db = this.database.write;
     const file = await db.file.findUnique({ where: { id: fileId } });
     const quarantine = `quarantine/${fileId}`;
-    if (!file) return;
+    if (!file) {
+      return;
+    }
     // Decided already, maybe by an attempt that crashed before removing the original:
     // only the cleanup is left (deleting is idempotent).
     if (file.status === "ready" || file.status === "rejected") {
@@ -112,7 +116,9 @@ export class FilesProcessor extends JobProcessor {
       await this.storage.delete(quarantine);
       this.log.info({ fileId, purpose: file.purpose }, "upload accepted");
     } catch (error) {
-      if (!(error instanceof Rejected)) throw error;
+      if (!(error instanceof Rejected)) {
+        throw error;
+      }
       await db.file.update({
         where: { id: fileId },
         data: { status: "rejected", rejectReason: error.reason },
@@ -132,10 +138,16 @@ export class FilesProcessor extends JobProcessor {
   ) {
     const rules = uploadPurposes[purpose];
     const head = await storage.head(key);
-    if (!head) throw new Rejected("FILE_UNREADABLE");
-    if (head.size > rules.maxBytes) throw new Rejected("FILE_TOO_LARGE");
+    if (!head) {
+      throw new Rejected("FILE_UNREADABLE");
+    }
+    if (head.size > rules.maxBytes) {
+      throw new Rejected("FILE_TOO_LARGE");
+    }
     // Not what the client said it would upload (smaller or larger): refused as such.
-    if (head.size !== declaredSize) throw new Rejected("FILE_SIZE_MISMATCH");
+    if (head.size !== declaredSize) {
+      throw new Rejected("FILE_SIZE_MISMATCH");
+    }
     const bytes = await storage.read(key, rules.maxBytes);
 
     const scan = await this.scanner.scan(bytes);

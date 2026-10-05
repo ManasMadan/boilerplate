@@ -35,7 +35,9 @@ export const envSchema = {
     z.url({ protocol: /^smtps?$/ }).superRefine((value, context) => {
       const problem =
         process.env.NODE_ENV === "production" ? productionSmtpProblem(value) : undefined;
-      if (problem) context.addIssue({ code: "custom", message: problem });
+      if (problem) {
+        context.addIssue({ code: "custom", message: problem });
+      }
     }),
     "smtp://localhost:51025",
   ),
@@ -132,7 +134,8 @@ export const pushPlatforms = {
 
 function complete(name: string, values: (string | undefined)[]) {
   const set = values.filter(Boolean).length;
-  if (set !== 0 && set !== values.length)
+  if (set !== 0 && set !== values.length) {
     throw new Error(`${name} needs all of its variables set, or none`);
+  }
   return set === values.length;
 }

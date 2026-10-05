@@ -91,7 +91,9 @@ export class BillingService {
   }
 
   private get client() {
-    if (!this.stripe) throw new AppError("FEATURE_DISABLED", { params: { feature: "billing" } });
+    if (!this.stripe) {
+      throw new AppError("FEATURE_DISABLED", { params: { feature: "billing" } });
+    }
     return this.stripe;
   }
 
@@ -109,7 +111,9 @@ export class BillingService {
   }
 
   async entitlements(orgId: OrgId): Promise<Entitlements> {
-    if (!this.enabled) return unlimited;
+    if (!this.enabled) {
+      return unlimited;
+    }
     return plans[planOf(await this.repository.current(orgId))].entitlements;
   }
 
@@ -211,7 +215,9 @@ export class BillingService {
   async portal(orgId: OrgId) {
     const stripe = this.client;
     const row = await this.repository.customer(orgId);
-    if (!row) throw new AppError("NO_SUBSCRIPTION");
+    if (!row) {
+      throw new AppError("NO_SUBSCRIPTION");
+    }
     const session = await fromStripe(() =>
       stripe.billingPortal.sessions.create({
         customer: row.stripeCustomerId,
@@ -224,7 +230,9 @@ export class BillingService {
   async invoices(orgId: OrgId) {
     const stripe = this.client;
     const row = await this.repository.customer(orgId);
-    if (!row) return [];
+    if (!row) {
+      return [];
+    }
     const list = await fromStripe(() =>
       stripe.invoices.list({ customer: row.stripeCustomerId, limit: 24 }),
     );
@@ -244,7 +252,9 @@ export class BillingService {
   private async customer(orgId: OrgId) {
     const stripe = this.client;
     const existing = await this.repository.customer(orgId);
-    if (existing) return existing.stripeCustomerId;
+    if (existing) {
+      return existing.stripeCustomerId;
+    }
     const org = await this.repository.organizationName(orgId);
     const created = await fromStripe(() =>
       stripe.customers.create(
@@ -269,7 +279,9 @@ export class BillingService {
       this.log.warn({ subscriptionId }, "ignoring a subscription that isn't ours");
       return;
     }
-    if (!(await this.repository.organization(orgId))) return; // deleted meanwhile
+    if (!(await this.repository.organization(orgId))) {
+      return; // deleted meanwhile
+    }
     const data: SubscriptionData = {
       plan: price.plan,
       status: subscription.status,
@@ -285,7 +297,9 @@ export class BillingService {
       await this.repository.saveSubscription(tx, subscription.id, orgId, data);
       return this.repository.otherPaid(tx, orgId, subscription.id);
     });
-    if (data.status === "trialing") await this.oneTrialPerCard(subscription);
+    if (data.status === "trialing") {
+      await this.oneTrialPerCard(subscription);
+    }
     // Checkout keeps one session open per workspace, so this shouldn't happen; if it does
     // (a session paid in the moment before it was expired), someone must refund one.
     if (paid.has(data.status) && others.length > 0) {
@@ -305,12 +319,18 @@ export class BillingService {
     const stripe = this.client;
     const method = subscription.default_payment_method;
     // A trial started without a card on file (Checkout's "if_required") has nothing to check.
-    if (typeof method !== "string") return;
+    if (typeof method !== "string") {
+      return;
+    }
     const card = (await stripe.paymentMethods.retrieve(method)).card?.fingerprint;
     // Only cards have fingerprints; other methods keep their trial (Stripe Radar rules can
     // cover them).
-    if (!card) return;
-    if ((await this.repository.claimTrial(card, subscription.id)) === subscription.id) return;
+    if (!card) {
+      return;
+    }
+    if ((await this.repository.claimTrial(card, subscription.id)) === subscription.id) {
+      return;
+    }
     await stripe.subscriptions.update(
       subscription.id,
       { trial_end: "now" },
@@ -323,12 +343,18 @@ export class BillingService {
   async syncSeats(orgId: OrgId) {
     const stripe = this.client;
     const current = await this.repository.current(orgId);
-    if (!current || !paid.has(current.status)) return;
+    if (!current || !paid.has(current.status)) {
+      return;
+    }
     const seats = Math.max(1, await this.repository.memberCount(orgId));
-    if (seats === current.quantity) return;
+    if (seats === current.quantity) {
+      return;
+    }
     const subscription = await stripe.subscriptions.retrieve(current.id);
     const item = subscription.items.data[0];
-    if (!item || item.quantity === seats) return;
+    if (!item || item.quantity === seats) {
+      return;
+    }
     await stripe.subscriptions.update(
       current.id,
       { items: [{ id: item.id, quantity: seats }], proration_behavior: "create_prorations" },
@@ -338,7 +364,9 @@ export class BillingService {
 
   /** Before an organization is deleted: nothing may keep charging for it. */
   async cancelFor(orgId: OrgId) {
-    if (!this.stripe) return;
+    if (!this.stripe) {
+      return;
+    }
     const live = await this.repository.live(orgId);
     for (const { id } of live) {
       await this.stripe.subscriptions.cancel(id, {}, { idempotencyKey: `cancel-${id}` });

@@ -42,11 +42,13 @@ export interface KeyProvider {
 export function keysFromEnv(value: string): KeyProvider {
   const keys = value.split(",").map((entry) => {
     const [id, encoded] = entry.trim().split(":");
-    if (!id || !encoded || !/^[\w-]+$/.test(id))
+    if (!id || !encoded || !/^[\w-]+$/.test(id)) {
       throw new Error("ENCRYPTION_KEYS entries must look like `id:base64key`");
+    }
     const key = Buffer.from(encoded, "base64");
-    if (key.length !== 32)
+    if (key.length !== 32) {
       throw new Error(`Encryption key "${id}" must be 32 bytes (openssl rand -base64 32)`);
+    }
     return { id, key };
   });
   // split() always yields an entry, and each one was checked above.
@@ -78,16 +80,20 @@ export class SecretBox {
   /** Fails if `stored` was encrypted for another context, or tampered with. */
   decrypt(stored: string, context: string): string {
     const [version, id, iv, body] = stored.split(".");
-    if ((version !== VERSION && version !== "v1") || !id || !iv || !body)
+    if ((version !== VERSION && version !== "v1") || !id || !iv || !body) {
       throw new Error("Unrecognised ciphertext format");
+    }
     const key = this.keys.get(id);
-    if (!key)
+    if (!key) {
       throw new Error(
         `Unknown encryption key "${id}"; it may have been removed before re-encryption finished`,
       );
+    }
     const data = Buffer.from(body, "base64url");
     const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));
-    if (version === VERSION) decipher.setAAD(Buffer.from(context, "utf8"));
+    if (version === VERSION) {
+      decipher.setAAD(Buffer.from(context, "utf8"));
+    }
     decipher.setAuthTag(data.subarray(data.length - 16));
     return Buffer.concat([
       decipher.update(data.subarray(0, data.length - 16)),

@@ -46,7 +46,9 @@ export class ApnsTransport implements PushTransport {
   constructor(private readonly config: ApnsConfig) {}
 
   private async token(renew: boolean) {
-    if (!renew && this.jwt && Date.now() - this.jwt.issuedAt < REFRESH_MS) return this.jwt.value;
+    if (!renew && this.jwt && Date.now() - this.jwt.issuedAt < REFRESH_MS) {
+      return this.jwt.value;
+    }
     this.key ??= importPKCS8(this.config.privateKey, "ES256");
     const value = await new SignJWT({})
       .setProtectedHeader({ alg: "ES256", kid: this.config.keyId })
@@ -111,8 +113,12 @@ export class ApnsTransport implements PushTransport {
     if ("reason" in answer && answer.reason === "ExpiredProviderToken") {
       answer = await this.request(token, body, await this.token(true), message.collapseKey);
     }
-    if ("failed" in answer) return { ok: false, gone: false, error: answer.failed };
-    if (answer.status === 200) return { ok: true };
+    if ("failed" in answer) {
+      return { ok: false, gone: false, error: answer.failed };
+    }
+    if (answer.status === 200) {
+      return { ok: true };
+    }
     return {
       ok: false,
       gone: answer.status === 410 || DEAD_TOKEN.has(answer.reason),

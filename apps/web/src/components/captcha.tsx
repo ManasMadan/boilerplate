@@ -69,13 +69,17 @@ export function useCaptcha(): Captcha {
 
   useEffect(() => {
     const element = container.current;
-    if (!siteKey || !element) return;
+    if (!siteKey || !element) {
+      return;
+    }
     let cancelled = false;
     let turnstile: TurnstileApi | undefined;
     setFailed(false);
     loadTurnstile().then(
       (api) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         turnstile = api;
         widgetId.current = api.render(element, {
           sitekey: siteKey,
@@ -87,19 +91,25 @@ export function useCaptcha(): Captcha {
       },
       // Blocked by an extension or offline: say so instead of leaving the form stuck.
       () => {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) {
+          setFailed(true);
+        }
       },
     );
     return () => {
       cancelled = true;
-      if (turnstile && widgetId.current) turnstile.remove(widgetId.current);
+      if (turnstile && widgetId.current) {
+        turnstile.remove(widgetId.current);
+      }
       widgetId.current = undefined;
     };
   }, [siteKey, locale]);
 
   const reset = useCallback(() => {
     setToken(null);
-    if (widgetId.current) window.turnstile?.reset(widgetId.current);
+    if (widgetId.current) {
+      window.turnstile?.reset(widgetId.current);
+    }
   }, []);
 
   return {

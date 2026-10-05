@@ -56,10 +56,16 @@ const stripeObject = z.object({
 
 /** The subscription a Stripe event is about, or undefined when it isn't about one. */
 function subscriptionOf(type: string, found: z.infer<typeof stripeObject>) {
-  if (SUBSCRIPTION_EVENTS.has(type)) return found.id;
-  if (type === "checkout.session.completed") return found.subscription;
+  if (SUBSCRIPTION_EVENTS.has(type)) {
+    return found.id;
+  }
+  if (type === "checkout.session.completed") {
+    return found.subscription;
+  }
   // An invoice outside a subscription (a one-off charge) has no subscription details.
-  if (type.startsWith("invoice.")) return found.parent?.subscription_details?.subscription;
+  if (type.startsWith("invoice.")) {
+    return found.parent?.subscription_details?.subscription;
+  }
   return undefined;
 }
 
@@ -76,7 +82,9 @@ export class BillingEventsProcessor extends JobProcessor {
     const { meta, payload: event } = parseJob("events-billing", "event", job.data);
     const { name } = event;
     // An event routed here by a newer relay this build doesn't know yet.
-    if (!this.billing.enabled || !eventSubscribers["events-billing"](name)) return;
+    if (!this.billing.enabled || !eventSubscribers["events-billing"](name)) {
+      return;
+    }
     await runJob(meta, `event:${event.id}`, () => this.handle(event.id, name, event.payload));
   }
 
@@ -89,13 +97,17 @@ export class BillingEventsProcessor extends JobProcessor {
     const { type, object } = events[name].parse(raw);
     const found = stripeObject.parse(object);
     const subscriptionId = subscriptionOf(type, found);
-    if (!subscriptionId) return;
+    if (!subscriptionId) {
+      return;
+    }
     await this.billing.sync(subscriptionId);
 
     if (type === "invoice.payment_failed") {
       const invoice = failedInvoice.parse(object);
       const org = await this.billing.orgFor(subscriptionId);
-      if (!org) return;
+      if (!org) {
+        return;
+      }
       await this.notifications.add(
         "send",
         {

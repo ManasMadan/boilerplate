@@ -34,7 +34,9 @@ type Http = {
 };
 /** What startTelemetry passed to the SDK; fails the test if it made none. */
 const options = () => {
-  if (!sdk.options) throw new Error("startTelemetry created no SDK");
+  if (!sdk.options) {
+    throw new Error("startTelemetry created no SDK");
+  }
   return sdk.options;
 };
 

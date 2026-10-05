@@ -58,7 +58,9 @@ const webPushHosts = [
 export function isWebPushEndpoint(endpoint: string, extraHosts: readonly string[] = []) {
   // The host must follow "https://" directly: no credentials, no port.
   const hostname = /^https:\/\/([a-z0-9.-]+)\//i.exec(endpoint)?.[1]?.toLowerCase();
-  if (!hostname) return false;
+  if (!hostname) {
+    return false;
+  }
   return [...webPushHosts, ...extraHosts].some((host) =>
     host.startsWith(".") ? hostname.endsWith(host) : hostname === host,
   );

@@ -48,7 +48,9 @@ export function check(paths: string[], run: Run = runSync): string[] {
       "100",
       "--detail",
     ];
-    for (const pattern of IGNORED) args.push("--ignore-files", pattern);
+    for (const pattern of IGNORED) {
+      args.push("--ignore-files", pattern);
+    }
     const result = run("bunx", args, { cwd: ROOT });
     if (result.status === 0) {
       ok(path);
@@ -65,4 +67,6 @@ export function main(argv = process.argv.slice(2), run: Run = runSync): number {
   return check(argv.length ? argv : workspaces(), run).length ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) {
+  process.exit(main());
+}

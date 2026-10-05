@@ -29,10 +29,15 @@ export function main(run: Run = runSync): number {
     return run(command, args, { cwd: ROOT, stdio: "inherit" }).status ?? 1;
   });
   for (const step of STEPS) {
-    if (failed.includes(step)) fail(step.join(" "));
-    else ok(step.join(" "));
+    if (failed.includes(step)) {
+      fail(step.join(" "));
+    } else {
+      ok(step.join(" "));
+    }
   }
   return failed.length ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) {
+  process.exit(main());
+}

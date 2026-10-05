@@ -43,8 +43,9 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
     "/terms",
     "/privacy",
     "/unsubscribe",
-  ])
+  ]) {
     await page.goto(path);
+  }
   await signUp(page);
   for (const path of [
     "/dashboard",

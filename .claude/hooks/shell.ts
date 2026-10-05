@@ -40,7 +40,9 @@ class Lexer {
   /** Words and operators, with quotes and backslashes resolved. */
   read(): string[] {
     for (; this.i < this.line.length; this.i++) {
-      if (!this.step(this.line[this.i] as string, this.line[this.i + 1])) break;
+      if (!this.step(this.line[this.i] as string, this.line[this.i + 1])) {
+        break;
+      }
     }
     this.flush();
     return this.tokens;
@@ -48,26 +50,40 @@ class Lexer {
 
   /** Reads one character (and what it starts); false to stop reading the line. */
   private step(char: string, next: string | undefined): boolean {
-    if (char === "'" || char === '"') this.quote(char);
-    else if (char === "\\" && next !== undefined) this.append(next, 1);
-    else if (char === " " || char === "\t") this.flush();
-    else return this.operatorStep(char, next);
+    if (char === "'" || char === '"') {
+      this.quote(char);
+    } else if (char === "\\" && next !== undefined) {
+      this.append(next, 1);
+    } else if (char === " " || char === "\t") {
+      this.flush();
+    } else {
+      return this.operatorStep(char, next);
+    }
     return true;
   }
 
   /** Reads an operator or redirect, or else one more character of the word. */
   private operatorStep(char: string, next: string | undefined): boolean {
-    if ((char === "&" || char === "|") && next === char) this.operator(char + next, 1);
-    else if (char === ">" || (char === "&" && next === ">")) this.redirect(char);
-    else if (char === "<" && next === "<") return this.heredoc();
+    if ((char === "&" || char === "|") && next === char) {
+      this.operator(char + next, 1);
+    } else if (char === ">" || (char === "&" && next === ">")) {
+      this.redirect(char);
+    } else if (char === "<" && next === "<") {
+      return this.heredoc();
+    }
     // Input: its file is read, not written.
-    else if (char === "<" || OPERATORS.has(char)) this.operator(char, 0);
-    else this.append(char, 0);
+    else if (char === "<" || OPERATORS.has(char)) {
+      this.operator(char, 0);
+    } else {
+      this.append(char, 0);
+    }
     return true;
   }
 
   private flush() {
-    if (this.inWord) this.tokens.push(this.word);
+    if (this.inWord) {
+      this.tokens.push(this.word);
+    }
     this.word = "";
     this.inWord = false;
   }
@@ -95,7 +111,9 @@ class Lexer {
     const { line } = this;
     // `2>` and `&>` redirect too: the descriptor digit belongs to the operator.
     const descriptor = /^\d$/.test(this.word) ? this.word : "";
-    if (descriptor) this.word = "";
+    if (descriptor) {
+      this.word = "";
+    }
     this.flush();
     const append = line[this.i + (char === "&" ? 2 : 1)] === ">";
     this.tokens.push(`${descriptor}${char === "&" ? "&>" : ">"}${append ? ">" : ""}`);
@@ -104,7 +122,9 @@ class Lexer {
     if (line[this.i + 1] === "&") {
       this.tokens.pop();
       this.i++;
-      while (/\d/.test(line[this.i + 1] ?? "")) this.i++;
+      while (/\d/.test(line[this.i + 1] ?? "")) {
+        this.i++;
+      }
     }
   }
 
@@ -115,7 +135,9 @@ class Lexer {
     const rest = line.slice(this.i + 2).replace(/^[-~]?\s*/, "");
     const marker = /^['"]?(\w+)['"]?/.exec(rest)?.[1];
     const bodyStart = line.indexOf("\n", this.i);
-    if (!marker || bodyStart === -1) return false;
+    if (!marker || bodyStart === -1) {
+      return false;
+    }
     const end = line.indexOf(`\n${marker}`, bodyStart);
     this.tokens.push("\n");
     this.i = end === -1 ? line.length : end + marker.length + 1;
@@ -130,13 +152,18 @@ function splitCommands(tokens: string[]): Simple[] {
   const commands: Simple[] = [];
   let current = emptyCommand();
   const end = () => {
-    if (current.words.length || current.redirects.length) commands.push(current);
+    if (current.words.length || current.redirects.length) {
+      commands.push(current);
+    }
     current = emptyCommand();
   };
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i] as string;
-    if (OPERATORS.has(token) || token === "&&" || token === "||") end();
-    else i += addToken(current, token, tokens[i + 1]);
+    if (OPERATORS.has(token) || token === "&&" || token === "||") {
+      end();
+    } else {
+      i += addToken(current, token, tokens[i + 1]);
+    }
   }
   end();
   return commands;
@@ -148,9 +175,13 @@ function splitCommands(tokens: string[]): Simple[] {
  */
 function addToken(command: Simple, token: string, next: string | undefined): number {
   // Input: its file is read, not written.
-  if (token === "<") return 1;
+  if (token === "<") {
+    return 1;
+  }
   if (/^\d?&?>>?$/.test(token)) {
-    if (next && next !== "/dev/null") command.redirects.push(next);
+    if (next && next !== "/dev/null") {
+      command.redirects.push(next);
+    }
     return 1;
   }
   if (!command.words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
@@ -165,7 +196,9 @@ function addToken(command: Simple, token: string, next: string | undefined): num
 /** The command a wrapper runs (`sudo`, `env A=b`, ...), with the wrapper's variables. */
 function unwrapped(command: Simple): Simple {
   const words = [...command.words];
-  while (["sudo", "command", "time", "nohup", "exec"].includes(words[0] ?? "")) words.shift();
+  while (["sudo", "command", "time", "nohup", "exec"].includes(words[0] ?? "")) {
+    words.shift();
+  }
   if (words[0] === "env") {
     words.shift();
     while (words[0]?.includes("=")) {
@@ -186,11 +219,17 @@ const operands = (words: string[]) => words.slice(1).filter((word) => !word.star
 function writesOf({ words, redirects }: Simple): string[] {
   const [program = ""] = words;
   const targets = [...redirects];
-  if (program === "tee") targets.push(...operands(words));
-  if (["rm", "unlink", "truncate", "shred"].includes(program)) targets.push(...operands(words));
+  if (program === "tee") {
+    targets.push(...operands(words));
+  }
+  if (["rm", "unlink", "truncate", "shred"].includes(program)) {
+    targets.push(...operands(words));
+  }
   if (["cp", "mv", "install", "ln", "rsync"].includes(program)) {
     const paths = operands(words);
-    if (paths.length >= 2) targets.push(paths.at(-1) as string);
+    if (paths.length >= 2) {
+      targets.push(paths.at(-1) as string);
+    }
   }
   if (program === "dd") {
     targets.push(...words.filter((word) => word.startsWith("of=")).map((word) => word.slice(3)));
@@ -199,7 +238,9 @@ function writesOf({ words, redirects }: Simple): string[] {
   if ((program === "sed" || program === "perl") && inPlace !== -1) {
     // After the flags come the script (unless -e gave it) and then the files.
     const rest = words.slice(1).filter((word, index) => {
-      if (word.startsWith("-")) return false;
+      if (word.startsWith("-")) {
+        return false;
+      }
       // macOS `sed -i ''`: the empty suffix follows -i.
       return !(word === "" && words[index] === words[inPlace]);
     });
@@ -232,9 +273,12 @@ function worktrunkVerdict(
       "wt merge lands the branch on master locally and removes the worktree; changes reach master through pull requests.",
     );
   }
-  if (sub === "remove") return ask("wt remove deletes the worktree and, once merged, its branch.");
-  if (sub === "config")
+  if (sub === "remove") {
+    return ask("wt remove deletes the worktree and, once merged, its branch.");
+  }
+  if (sub === "config") {
     return ask("wt config changes the user's Worktrunk setup (shell, plugins).");
+  }
   if (
     sub === "step" &&
     ["commit", "squash", "push", "rebase", "promote", "prune", "relocate"].includes(third)
@@ -254,10 +298,13 @@ function worktrunkVerdict(
 
 /** Whether a docker command stops or deletes something (`compose down`, `volume rm`, ...). */
 function dockerRemoves([, sub = "", third = "", ...rest]: string[]) {
-  if (["rm", "rmi", "kill", "stop"].includes(sub)) return true;
+  if (["rm", "rmi", "kill", "stop"].includes(sub)) {
+    return true;
+  }
   // Past compose's own flags (`-p x`, `--profile full`).
-  if (sub === "compose")
+  if (sub === "compose") {
     return [third, ...rest].some((word) => ["down", "rm", "kill", "stop"].includes(word));
+  }
   const objects = ["volume", "container", "image", "network", "system", "builder", "buildx"];
   return objects.includes(sub) && ["rm", "prune"].includes(third);
 }
@@ -273,7 +320,9 @@ function gitPublishVerdict({ words, has }: Command): Verdict {
   if (has("--no-verify") || (sub === "commit" && shortNoVerify)) {
     return deny("--no-verify skips the commit and push hooks' checks. Fix what they report.");
   }
-  if (sub === "commit") return ask("Commits need the user's approval (CLAUDE.md).");
+  if (sub === "commit") {
+    return ask("Commits need the user's approval (CLAUDE.md).");
+  }
   if (has("--force", "-f") || words.some((word) => /^\+/.test(word))) {
     return deny("Force-pushing rewrites shared history; the user does that by hand if ever.");
   }
@@ -287,10 +336,18 @@ function gitPublishVerdict({ words, has }: Command): Verdict {
 function gitVerdict(command: Command): Verdict {
   const { words, has } = command;
   const [, sub = "", third = ""] = words;
-  if (sub === "commit" || sub === "push") return gitPublishVerdict(command);
-  if (sub === "branch" && has("-D", "--delete")) return ask("Deleting a branch loses its commits.");
-  if (sub === "reset" && has("--hard")) return ask("git reset --hard discards uncommitted work.");
-  if (sub === "clean") return ask("git clean deletes untracked files.");
+  if (sub === "commit" || sub === "push") {
+    return gitPublishVerdict(command);
+  }
+  if (sub === "branch" && has("-D", "--delete")) {
+    return ask("Deleting a branch loses its commits.");
+  }
+  if (sub === "reset" && has("--hard")) {
+    return ask("git reset --hard discards uncommitted work.");
+  }
+  if (sub === "clean") {
+    return ask("git clean deletes untracked files.");
+  }
   // Read-only forms are fine; anything else swaps work in and out of a stack every
   // worktree shares, so one session's stash can land in another's tree.
   if (sub === "stash" && !["list", "show"].includes(third)) {
@@ -342,10 +399,14 @@ function bunVerdict({ words }: Command): Verdict {
   const [, sub = "", third = ""] = words;
   // A new dependency is code from outside: the user picks it (and Renovate waits 3 days
   // for any release; bunfig.toml makes `bun add` wait too).
-  if (sub === "add") return ask("Adding a dependency brings in outside code; the user decides.");
+  if (sub === "add") {
+    return ask("Adding a dependency brings in outside code; the user decides.");
+  }
   const script = sub === "run" ? third : sub;
   const destructive = DESTRUCTIVE_SCRIPTS[script];
-  if (destructive) return ask(destructive);
+  if (destructive) {
+    return ask(destructive);
+  }
   if (words.includes("reset") && words.some((word) => word.includes("@repo/db"))) {
     return ask("Resets the local database (prisma migrate reset).");
   }

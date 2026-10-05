@@ -15,8 +15,9 @@ export class SmsChannel {
   }
 
   async send(to: string, body: string, idempotencyKey: string): Promise<SmsResult> {
-    if (!this.transport)
+    if (!this.transport) {
       return { ok: false, permanent: true, suppress: null, error: "no SMS provider configured" };
+    }
     const result = await this.transport.send(to, body, idempotencyKey);
     // Never log the body or the full number: texts carry codes, numbers are personal data.
     this.log.info(

@@ -38,14 +38,20 @@ export default function SignIn() {
       return;
     }
     // With two-step verification on, the auth client continues on /two-factor instead.
-    if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) router.replace("/");
+    if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) {
+      router.replace("/");
+    }
   });
 
   const google = async () => {
     setFailure(undefined);
     const { signedIn, error } = await signInWithGoogle();
-    if (error) setFailure(errorMessage(error));
-    if (signedIn) router.replace("/");
+    if (error) {
+      setFailure(errorMessage(error));
+    }
+    if (signedIn) {
+      router.replace("/");
+    }
   };
 
   return (

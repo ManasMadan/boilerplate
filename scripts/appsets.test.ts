@@ -27,8 +27,12 @@ type GitGenerator = NonNullable<AppSetGenerator["git"]>;
 
 function* gitGenerators(generators: AppSetGenerator[]): Generator<GitGenerator> {
   for (const generator of generators) {
-    if (generator.git) yield generator.git;
-    if (generator.matrix) yield* gitGenerators(generator.matrix.generators);
+    if (generator.git) {
+      yield generator.git;
+    }
+    if (generator.matrix) {
+      yield* gitGenerators(generator.matrix.generators);
+    }
   }
 }
 
@@ -47,8 +51,9 @@ describe("git file generators", () => {
         const clashes = (git.files ?? []).some((f) =>
           matched(f.path).some((values) => "path" in values),
         );
-        if (clashes)
+        if (clashes) {
           expect({ file, prefix: git.pathParamPrefix }).toEqual({ file, prefix: "file" });
+        }
       }
     }
   });
@@ -69,7 +74,9 @@ describe("what each environment deploys", () => {
       );
       const ours = [...patchOf(file).matchAll(/boilerplate\.git\n\s+targetRevision: (.+)/g)];
       expect(ours.length).toBeGreaterThan(0);
-      for (const [, revision] of ours) expect(revision).toBe('"{{ .revision }}"');
+      for (const [, revision] of ours) {
+        expect(revision).toBe('"{{ .revision }}"');
+      }
     }
   });
 
@@ -144,9 +151,10 @@ describe("the cluster facts the add-ons read", () => {
   });
 
   it("fall back the same way in both ApplicationSets that read them", () => {
-    for (const file of ["platform.yaml", "observability.yaml"])
+    for (const file of ["platform.yaml", "observability.yaml"]) {
       expect(readFileSync(join(APPSETS, file), "utf8")).toContain(
         "{{- $value = $value | default $fallback }}",
       );
+    }
   });
 });

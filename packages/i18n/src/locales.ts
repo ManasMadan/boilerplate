@@ -17,7 +17,9 @@ export const localeOrDefault = (value: unknown): Locale =>
 
 /** Whether `value` is a time zone this runtime knows ("Europe/Lisbon", "UTC"). */
 export function isTimeZone(value: unknown): value is string {
-  if (typeof value !== "string" || value === "") return false;
+  if (typeof value !== "string" || value === "") {
+    return false;
+  }
   try {
     new Intl.DateTimeFormat("en", { timeZone: value });
     return true;
@@ -48,9 +50,13 @@ export function negotiateLocale(
           .filter(Boolean)
       : (preferences ?? []);
   for (const tag of list) {
-    if (isLocale(tag)) return tag;
+    if (isLocale(tag)) {
+      return tag;
+    }
     const base = tag.split("-")[0];
-    if (isLocale(base)) return base;
+    if (isLocale(base)) {
+      return base;
+    }
   }
   return defaultLocale;
 }

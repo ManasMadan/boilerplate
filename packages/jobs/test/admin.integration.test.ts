@@ -24,12 +24,16 @@ beforeAll(async () => {
   worker = new Worker(
     "jobs-admin",
     async (job) => {
-      if (!succeed) throw new Error(`provider down (${job.data.n})`);
+      if (!succeed) {
+        throw new Error(`provider down (${job.data.n})`);
+      }
       handled.push(job.id ?? "");
     },
     { connection, prefix },
   );
-  for (const n of [1, 2, 3]) await queue.add("send", { n }, { jobId: `job-${n}`, attempts: 2 });
+  for (const n of [1, 2, 3]) {
+    await queue.add("send", { n }, { jobId: `job-${n}`, attempts: 2 });
+  }
   expect(await until(async () => (await queue.getFailedCount()) === 3)).toBe(true);
 });
 
@@ -91,7 +95,9 @@ describe("a long failed set", () => {
     const busy = new Worker(
       "jobs-admin-many",
       async (job) => {
-        if (failing) throw new Error("provider down");
+        if (failing) {
+          throw new Error("provider down");
+        }
         done.add(job.id as string);
       },
       { connection, prefix, concurrency: 100 },

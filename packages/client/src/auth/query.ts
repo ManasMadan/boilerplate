@@ -22,6 +22,8 @@ export async function authData<T>(
   call: Promise<{ data: T; error: null } | { data: null; error: object }>,
 ): Promise<T> {
   const answer = await call;
-  if (answer.error) throw answer.error;
+  if (answer.error) {
+    throw answer.error;
+  }
   return answer.data;
 }

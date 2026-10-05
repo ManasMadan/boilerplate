@@ -40,27 +40,37 @@ export function subagentStop(input: HookInput): HookOutput {
 
   if (agent === "verifier") {
     const rows = message.match(/^\|[^\n]*\|\s*(pass|fail|not run)\s*\|/gim) ?? [];
-    if (rows.length === 0)
+    if (rows.length === 0) {
       return sendBack(
         "the verify skill's results table (`| command | pass / fail / not run | duration |`)",
       );
+    }
     const open = rows.filter((row) => !/\|\s*pass\s*\|/i.test(row));
-    if (open.length === 0) return undefined;
+    if (open.length === 0) {
+      return undefined;
+    }
     return context(
       `The verifier reports checks that failed or didn't run:\n${open.join("\n")}\nThe change isn't verified until they pass: fix them, or tell the user which can't run here and why.`,
     );
   }
   const verdicts = VERDICTS[agent];
-  if (!verdicts) return undefined;
+  if (!verdicts) {
+    return undefined;
+  }
   const verdict = verdictOf(message, [...verdicts.pass, ...verdicts.fail]);
-  if (!verdict)
+  if (!verdict) {
     return sendBack(
       `one of these verdicts on its own line: ${[...verdicts.pass, ...verdicts.fail].map((v) => `\`${v}\``).join(", ")}`,
     );
-  if (verdicts.pass.includes(verdict)) return undefined;
+  }
+  if (verdicts.pass.includes(verdict)) {
+    return undefined;
+  }
   return context(
     `The ${agent} agent's verdict is \`${verdict}\`. Fix what it found (or tell the user why a finding doesn't apply), then run it again before calling the work done.`,
   );
 }
 
-if (import.meta.main) process.exit(await runHook(subagentStop));
+if (import.meta.main) {
+  process.exit(await runHook(subagentStop));
+}

@@ -100,9 +100,13 @@ export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
     runWithContext(contextFor(request), async () => {
       const header = request.headers.authorization;
       const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
-      if (!token) return challenge(reply);
+      if (!token) {
+        return challenge(reply);
+      }
       const verified = await verify(token);
-      if (!verified.ok) return challenge(reply, verified.description);
+      if (!verified.ok) {
+        return challenge(reply, verified.description);
+      }
       const { caller } = verified;
       updateContext({ userId: caller.userId, orgId: caller.orgId });
 

@@ -36,8 +36,12 @@ describe("the generators check", () => {
     let dir = "";
     let copied = "";
     const { run, calls } = fakeRun((line) => {
-      if (line.startsWith("git worktree add")) dir = line.split(" ")[5] as string;
-      if (line.startsWith("git ls-files")) return { stdout: "package.json\0deleted.ts\0" };
+      if (line.startsWith("git worktree add")) {
+        dir = line.split(" ")[5] as string;
+      }
+      if (line.startsWith("git ls-files")) {
+        return { stdout: "package.json\0deleted.ts\0" };
+      }
       if (line === "bun install --frozen-lockfile") {
         copied = readFileSync(join(dir, "package.json"), "utf8");
       }

@@ -38,4 +38,6 @@ export async function statusline(
   return `${branch}${dirty ? ` +${dirty}` : ""} | ${status}`;
 }
 
-if (import.meta.main) process.stdout.write(await statusline());
+if (import.meta.main) {
+  process.stdout.write(await statusline());
+}

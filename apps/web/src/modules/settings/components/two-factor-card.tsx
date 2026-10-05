@@ -38,7 +38,9 @@ export function TwoFactorCard() {
 
   async function disable(password: string) {
     const { error } = await authClient.twoFactor.disable({ password });
-    if (error) return errorMessage(error);
+    if (error) {
+      return errorMessage(error);
+    }
     await refetch();
     return undefined;
   }
@@ -47,7 +49,9 @@ export function TwoFactorCard() {
     // The authenticator (TOTP) method, which needs a scan-and-confirm step: its answer is
     // always the secret and backup codes.
     const { data, error } = await authClient.twoFactor.enable({ password, method: "totp" });
-    if (error) return errorMessage(error);
+    if (error) {
+      return errorMessage(error);
+    }
     setSetup(data as Setup);
     return undefined;
   }

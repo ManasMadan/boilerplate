@@ -22,12 +22,20 @@ function realtimeApi(connections: Connection[]) {
       subscribe: os.realtime.subscribe.handler(async ({ signal }) => {
         const connection = connections[opened++];
         const aborted = new Promise((resolve) => signal?.addEventListener("abort", resolve));
-        if (connection === "silent") await aborted;
-        if (typeof connection === "object" && "fails" in connection)
+        if (connection === "silent") {
+          await aborted;
+        }
+        if (typeof connection === "object" && "fails" in connection) {
           throw new ORPCError(connection.fails);
+        }
         return (async function* () {
-          if (connection === undefined) await aborted;
-          else for (const type of connection as RealtimeMessage["type"][]) yield { type };
+          if (connection === undefined) {
+            await aborted;
+          } else {
+            for (const type of connection as RealtimeMessage["type"][]) {
+              yield { type };
+            }
+          }
         })();
       }),
     },

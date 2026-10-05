@@ -60,12 +60,18 @@ function changesOf(
   current: { url: string; description: string | null; disabledAt: Date | null },
 ): Changed {
   const changed: Changed = [];
-  if (input.url !== undefined && input.url !== current.url) changed.push("url");
-  if (input.description !== undefined && input.description !== current.description)
+  if (input.url !== undefined && input.url !== current.url) {
+    changed.push("url");
+  }
+  if (input.description !== undefined && input.description !== current.description) {
     changed.push("description");
-  if (input.events !== undefined) changed.push("events");
-  if (input.enabled !== undefined && input.enabled !== (current.disabledAt === null))
+  }
+  if (input.events !== undefined) {
+    changed.push("events");
+  }
+  if (input.enabled !== undefined && input.enabled !== (current.disabledAt === null)) {
     changed.push("enabled");
+  }
   return changed;
 }
 
@@ -124,10 +130,14 @@ export class WebhooksService implements OnApplicationShutdown {
   }
 
   async updateEndpoint(orgId: OrgId, input: EndpointUpdate) {
-    if (input.url !== undefined) await assertDeliverableUrl(input.url);
+    if (input.url !== undefined) {
+      await assertDeliverableUrl(input.url);
+    }
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findEndpoint(tx, input.id);
-      if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: input.id } });
+      if (!current) {
+        throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: input.id } });
+      }
       const changed = changesOf(input, current);
       const endpoint = await this.repository.updateEndpoint(tx, input.id, {
         ...(input.url !== undefined && { url: input.url }),
@@ -148,7 +158,9 @@ export class WebhooksService implements OnApplicationShutdown {
   deleteEndpoint(orgId: OrgId, id: WebhookEndpointId) {
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findEndpoint(tx, id);
-      if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
+      if (!current) {
+        throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
+      }
       await this.repository.deleteEndpoint(tx, id);
       await emitEvent(tx, "webhook.endpoint_deleted.v1", id, { endpointId: id, url: current.url });
     });
@@ -163,7 +175,9 @@ export class WebhooksService implements OnApplicationShutdown {
     const secret = newWebhookSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findSecret(tx, id);
-      if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
+      if (!current) {
+        throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
+      }
       await this.repository.setSecret(tx, id, {
         secret: this.box.encrypt(secret, webhookSecretContext(id)),
         // Same row, so the same context: the ciphertext moves as it is.

@@ -68,6 +68,9 @@
       },
       "style": {
         "noNonNullAssertion": "error",
+        // Every if, else and loop body in braces: a second line added to an unbraced body
+        // silently runs outside the condition.
+        "useBlockStatements": "error",
         "useImportType": "error",
         // Reassigning a parameter hides what the caller passed; name the new value.
         "noParameterAssign": "error",

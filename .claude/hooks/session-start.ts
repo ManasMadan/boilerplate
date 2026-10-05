@@ -41,8 +41,11 @@ async function summary(doctor: typeof runDoctor, cache: string) {
     return `The doctor didn't finish in ${DOCTOR_TIMEOUT_MS / 1000} s, so the machine wasn't checked. Run \`bun run doctor\` if the task needs the local services.\n`;
   }
   const text = stripVTControlCharacters(stdout);
-  if (exitCode === 0) await Bun.write(cache, text);
-  else rmSync(cache, { force: true });
+  if (exitCode === 0) {
+    await Bun.write(cache, text);
+  } else {
+    rmSync(cache, { force: true });
+  }
   return text;
 }
 
@@ -68,4 +71,6 @@ export async function sessionStart(
   };
 }
 
-if (import.meta.main) process.exit(await runHook(sessionStart));
+if (import.meta.main) {
+  process.exit(await runHook(sessionStart));
+}

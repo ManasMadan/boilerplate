@@ -112,11 +112,16 @@ export class Dispatcher implements OnApplicationShutdown {
 
     for (const channel of channels) {
       // From here on, the template renders to the channel and the recipient is on it.
-      if (!renders(template, channel) || !reaches(recipient, channel)) continue;
+      if (!renders(template, channel) || !reaches(recipient, channel)) {
+        continue;
+      }
       const key = `${idempotencyKey}:${channel}:${recipient.userId ?? recipient.email ?? recipient.phone}`;
       const delivery = { recipient, template, context, policy, key };
-      if (channel === "push") failures.push(...(await this.tryPush(delivery)));
-      else failures.push(...(await this.sendClaimed(channel, delivery)));
+      if (channel === "push") {
+        failures.push(...(await this.tryPush(delivery)));
+      } else {
+        failures.push(...(await this.sendClaimed(channel, delivery)));
+      }
     }
     return failures;
   }
@@ -141,7 +146,9 @@ export class Dispatcher implements OnApplicationShutdown {
     { recipient, template, context, policy, key }: Delivery,
   ) {
     const name = context.payload.template;
-    if (!(await this.log.claim(key, channel, name, recipient.userId))) return [];
+    if (!(await this.log.claim(key, channel, name, recipient.userId))) {
+      return [];
+    }
     try {
       await this.send(channel, key, recipient, template, context, policy);
       return [];
@@ -247,9 +254,13 @@ export class Dispatcher implements OnApplicationShutdown {
     deferred,
   }: PushDelivery) {
     const name = context.payload.template;
-    if (policy && !policy.allows(template.category, "push")) return [];
+    if (policy && !policy.allows(template.category, "push")) {
+      return [];
+    }
     const devices = await this.push.devices(userId);
-    if (devices.length === 0) return [];
+    if (devices.length === 0) {
+      return [];
+    }
 
     const delay = deferred ? 0 : quietDelayMs(policy?.quietHours ?? null, recipient.timeZone);
     if (delay > 0) {
@@ -262,9 +273,13 @@ export class Dispatcher implements OnApplicationShutdown {
     const failures: unknown[] = [];
     for (const device of devices) {
       const deviceKey = `${key}:${device.id}`;
-      if (!(await this.log.claim(deviceKey, "push", name, userId))) continue;
+      if (!(await this.log.claim(deviceKey, "push", name, userId))) {
+        continue;
+      }
       const failure = await this.pushTo(userId, device, message, deviceKey);
-      if (failure) failures.push(failure);
+      if (failure) {
+        failures.push(failure);
+      }
     }
     return failures;
   }
@@ -328,7 +343,9 @@ export class Dispatcher implements OnApplicationShutdown {
     key: string,
   ) {
     const [recipient] = await this.recipients.resolve({ userId });
-    if (!recipient) return;
+    if (!recipient) {
+      return;
+    }
     const template = await this.templates.bind(payload);
     const policy = await this.policy.forUser(userId);
     const t = await this.i18n.getTranslator(recipient.locale, recipient.timeZone);
@@ -342,8 +359,9 @@ export class Dispatcher implements OnApplicationShutdown {
       key,
       deferred: true,
     });
-    if (failures.length > 0)
+    if (failures.length > 0) {
       throw new AggregateError(failures, "deferred delivery failed; retrying");
+    }
   }
 
   private unsubscribeToken(userId: UserId, category: string) {

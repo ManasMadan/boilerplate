@@ -9,7 +9,9 @@ import { captureOutput, fakeRun } from "./stand-ins";
 const roots: string[] = [];
 afterEach(() => {
   mock.restore();
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 const REPO = join(import.meta.dir, "..");
@@ -47,9 +49,15 @@ const ARGOCD = [
 function tools(overrides: (line: string) => Partial<Ran> | undefined = () => undefined) {
   return fakeRun((line) => {
     const given = overrides(line);
-    if (given) return given;
-    if (line.includes("-s templates/rules.yaml")) return { stdout: RULES };
-    if (line.startsWith("helm template argocd argo-cd")) return { stdout: ARGOCD };
+    if (given) {
+      return given;
+    }
+    if (line.includes("-s templates/rules.yaml")) {
+      return { stdout: RULES };
+    }
+    if (line.startsWith("helm template argocd argo-cd")) {
+      return { stdout: ARGOCD };
+    }
     if (line.startsWith("helm template")) {
       return { stdout: `rendered: ${line.split(" ").slice(2, 4).join(" ")}\n` };
     }
@@ -66,10 +74,18 @@ function brokenIn(root: string) {
     if (line.startsWith(`helm template production ${root}/deploy/charts/data`)) {
       return { status: 1, stderr: "production data broke" };
     }
-    if (line.startsWith("helm template mail ")) return { status: 1, stderr: "mail broke" };
-    if (line.startsWith("helm template optional ")) return { status: 1, stderr: "optional broke" };
-    if (line.includes("-s templates/rules.yaml")) return { status: 1, stderr: "rules broke" };
-    if (line.startsWith("helm template argocd argo-cd")) return { stdout: "name: argocd-cm\n" };
+    if (line.startsWith("helm template mail ")) {
+      return { status: 1, stderr: "mail broke" };
+    }
+    if (line.startsWith("helm template optional ")) {
+      return { status: 1, stderr: "optional broke" };
+    }
+    if (line.includes("-s templates/rules.yaml")) {
+      return { status: 1, stderr: "rules broke" };
+    }
+    if (line.startsWith("helm template argocd argo-cd")) {
+      return { stdout: "name: argocd-cm\n" };
+    }
     return undefined;
   };
 }

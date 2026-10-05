@@ -110,7 +110,9 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
 
   /** Starts a drain, or asks the running one to go round again. Never runs two at once. */
   kick() {
-    if (this.stopped) return;
+    if (this.stopped) {
+      return;
+    }
     if (this.draining !== undefined) {
       this.rerun = true;
       return;
@@ -153,7 +155,9 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
             LIMIT ${env.RELAY_BATCH_SIZE}
             FOR UPDATE SKIP LOCKED`,
         );
-        if (claimed.length === 0) return 0;
+        if (claimed.length === 0) {
+          return 0;
+        }
         // A row that isn't a valid event never will be: publishing it would fail this
         // batch, and every batch after it, forever. It's logged and set aside (marked
         // published, so it stays in the table until retention, for someone to look at).
@@ -217,7 +221,9 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
   }
 
   private scheduleReconnect() {
-    if (this.stopped || this.reconnect) return;
+    if (this.stopped || this.reconnect) {
+      return;
+    }
     const previous = this.listener;
     this.listener = undefined;
     void closeQuietly(previous);

@@ -16,12 +16,15 @@ export function PushSync() {
   const { mutate } = useRegisterDeviceMutation();
 
   useEffect(() => {
-    if (!userId || typeof Notification === "undefined" || Notification.permission !== "granted")
+    if (!userId || typeof Notification === "undefined" || Notification.permission !== "granted") {
       return;
+    }
     let cancelled = false;
     void currentSubscription()
       .then((subscription) => {
-        if (subscription && !cancelled) mutate({ device: toDevice(subscription) });
+        if (subscription && !cancelled) {
+          mutate({ device: toDevice(subscription) });
+        }
       })
       // A subscription without keys stays unregistered: turning push on in settings shows
       // the error (toDevice throws it there too).

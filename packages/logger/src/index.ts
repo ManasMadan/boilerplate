@@ -54,9 +54,15 @@ const MAX_DEPTH = 8;
 
 /** Returns a copy of `value` with every sensitive field censored. Exported for tests. */
 export function scrub(value: unknown, depth = 0): unknown {
-  if (depth > MAX_DEPTH || value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map((item) => scrub(item, depth + 1));
-  if (value instanceof Error) return value;
+  if (depth > MAX_DEPTH || value === null || typeof value !== "object") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => scrub(item, depth + 1));
+  }
+  if (value instanceof Error) {
+    return value;
+  }
   return scrubFields(value, depth);
 }
 

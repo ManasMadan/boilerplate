@@ -41,4 +41,6 @@ export function lintMigrations(
   return run("bunx", [SQUAWK, ...changed], { cwd: ROOT, stdio: "inherit" }).status ?? 1;
 }
 
-if (import.meta.main) process.exit(lintMigrations());
+if (import.meta.main) {
+  process.exit(lintMigrations());
+}

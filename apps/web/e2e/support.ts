@@ -24,7 +24,9 @@ export { totp };
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:58025";
 /** The site's origin: E2E_BASE_URL, else WEB_URL (the root .env's, or the e2e run's). */
 const site = process.env.E2E_BASE_URL ?? process.env.WEB_URL;
-if (!site) throw new Error("Set WEB_URL (the root .env has it) or E2E_BASE_URL.");
+if (!site) {
+  throw new Error("Set WEB_URL (the root .env has it) or E2E_BASE_URL.");
+}
 export const BASE_URL = site;
 
 const randomIp = () => `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
@@ -116,7 +118,9 @@ export async function signUp(
   options: { expectUrl?: RegExp } = {},
 ) {
   const inbox = await mailbox(user.email);
-  if (!/\/sign-up/.test(page.url())) await page.goto("/sign-up");
+  if (!/\/sign-up/.test(page.url())) {
+    await page.goto("/sign-up");
+  }
   await page.getByLabel("Full name").fill(user.name);
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
@@ -129,7 +133,9 @@ export async function signUp(
 }
 
 export async function signIn(page: Page, user: User, options: { expectUrl?: RegExp } = {}) {
-  if (!/\/sign-in/.test(page.url())) await page.goto("/sign-in");
+  if (!/\/sign-in/.test(page.url())) {
+    await page.goto("/sign-in");
+  }
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("main").getByRole("button", { name: "Sign in", exact: true }).click();
@@ -242,7 +248,9 @@ export async function ageSession(context: BrowserContext, ms: number) {
     session: { createdAt: string };
   } | null;
   expect(stored, `a session at ${key}`).not.toBeNull();
-  if (!stored) return;
+  if (!stored) {
+    return;
+  }
   stored.session.createdAt = new Date(Date.now() - ms).toISOString();
   await authStore().set(key, JSON.stringify(stored), "KEEPTTL");
 }
@@ -252,7 +260,9 @@ export async function expireCodes(email: string) {
   let expired = 0;
   for (const key of await authStore().keys("auth:verification:*")) {
     const raw = await authStore().get(key);
-    if (!raw?.includes(email)) continue;
+    if (!raw?.includes(email)) {
+      continue;
+    }
     const stored = JSON.parse(raw) as { expiresAt: string };
     stored.expiresAt = new Date(Date.now() - 1000).toISOString();
     await authStore().set(key, JSON.stringify(stored), "KEEPTTL");

@@ -12,10 +12,15 @@ export function envUnset(argv = process.argv.slice(2), path = ENV_PATH): number 
     return 1;
   }
   for (const key of argv) {
-    if (removeEnvValue(path, key)) ok(`${key} removed from .env`);
-    else warn(`${key} isn't in .env`);
+    if (removeEnvValue(path, key)) {
+      ok(`${key} removed from .env`);
+    } else {
+      warn(`${key} isn't in .env`);
+    }
   }
   return 0;
 }
 
-if (import.meta.main) process.exit(envUnset());
+if (import.meta.main) {
+  process.exit(envUnset());
+}

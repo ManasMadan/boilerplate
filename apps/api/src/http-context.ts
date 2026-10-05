@@ -24,8 +24,9 @@ export function contextFor(request: FastifyRequest): RequestContext & { locale: 
 export function toHeaders(request: FastifyRequest) {
   const headers = new Headers();
   for (const [key, value] of Object.entries(request.headers)) {
-    if (value !== undefined)
+    if (value !== undefined) {
       headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
+    }
   }
   return headers;
 }
@@ -47,9 +48,13 @@ export function toWebRequest(request: FastifyRequest, url: URL, headers = toHead
 export async function fromWebResponse(reply: FastifyReply, response: Response) {
   reply.status(response.status);
   for (const [key, value] of response.headers) {
-    if (key !== "set-cookie") reply.header(key, value);
+    if (key !== "set-cookie") {
+      reply.header(key, value);
+    }
   }
   const cookies = response.headers.getSetCookie();
-  if (cookies.length > 0) reply.header("set-cookie", cookies);
+  if (cookies.length > 0) {
+    reply.header("set-cookie", cookies);
+  }
   return response.body ? Buffer.from(await response.arrayBuffer()) : null;
 }

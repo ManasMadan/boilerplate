@@ -7,7 +7,9 @@ afterEach(() => {
 
 /** env.ts as a fresh process would load it, with these variables. */
 async function load(variables: Record<string, string>) {
-  for (const [key, value] of Object.entries(variables)) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries(variables)) {
+    vi.stubEnv(key, value);
+  }
   return import("./env");
 }
 

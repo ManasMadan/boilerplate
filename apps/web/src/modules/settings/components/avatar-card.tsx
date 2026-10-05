@@ -57,7 +57,9 @@ function useAvatarUpload() {
 
   // After every render, but it acts once per verdict: either answer clears `fileId`.
   useEffect(() => {
-    if (!fileId || !file.data) return;
+    if (!fileId || !file.data) {
+      return;
+    }
     if (file.data.status === "rejected") {
       // The worker's reason, with the limits its message names (too large, wrong type).
       setProblem(
@@ -77,7 +79,9 @@ function useAvatarUpload() {
     const chosen = picker.files?.[0];
     // Cleared, so choosing the same file again still counts as a change.
     picker.value = "";
-    if (!chosen) return;
+    if (!chosen) {
+      return;
+    }
     setProblem(null);
     const refused = checkUpload("avatar", chosen);
     if (refused) {
@@ -115,7 +119,9 @@ export function AvatarCard() {
   const { data: me } = useMeQuery();
   const { choose, remove, uploading, busy, problem } = useAvatarUpload();
 
-  if (!system?.features.files || !me) return null;
+  if (!system?.features.files || !me) {
+    return null;
+  }
   return (
     <Card>
       <CardHeader>

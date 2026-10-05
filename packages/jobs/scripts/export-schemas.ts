@@ -113,11 +113,19 @@ for (const [file, { title, schema, io }] of Object.entries(schemas)) {
     // A uuid's format says it all; the regex zod adds too can't apply to Python's UUID type.
     override: ({ zodSchema, jsonSchema }) => {
       const name = titles.get(zodSchema);
-      if (name) jsonSchema.title = name;
-      if (jsonSchema.format === "uuid") delete jsonSchema.pattern;
+      if (name) {
+        jsonSchema.title = name;
+      }
+      if (jsonSchema.format === "uuid") {
+        delete jsonSchema.pattern;
+      }
       // zod bounds integers to JavaScript's safe range; Python's ints have no such limit.
-      if (jsonSchema.minimum === Number.MIN_SAFE_INTEGER) delete jsonSchema.minimum;
-      if (jsonSchema.maximum === Number.MAX_SAFE_INTEGER) delete jsonSchema.maximum;
+      if (jsonSchema.minimum === Number.MIN_SAFE_INTEGER) {
+        delete jsonSchema.minimum;
+      }
+      if (jsonSchema.maximum === Number.MAX_SAFE_INTEGER) {
+        delete jsonSchema.maximum;
+      }
     },
   });
   writeFileSync(join(out, `${file}.json`), `${JSON.stringify({ title, ...json }, null, 2)}\n`);

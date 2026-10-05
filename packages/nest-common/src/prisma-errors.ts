@@ -10,7 +10,9 @@ import { Prisma } from "@repo/db";
 import { AppError } from "./errors";
 
 export function fromPrismaError(error: unknown): AppError | undefined {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return undefined;
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return undefined;
+  }
   switch (error.code) {
     case "P2002": // unique constraint
     case "P2034": // write conflict or deadlock; retrying may succeed

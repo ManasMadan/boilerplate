@@ -32,7 +32,9 @@ const result = (check: Check, code: number, timedOut = false) => ({
 describe("the session's end", () => {
   it("removes its turn state", () => {
     const input = turn({ hook_event_name: "SessionEnd" });
-    for (const file of sessionFiles) writeFileSync(file(input.session_id), "x");
+    for (const file of sessionFiles) {
+      writeFileSync(file(input.session_id), "x");
+    }
     expect(sessionEnd(input)).toBeUndefined();
     for (const file of sessionFiles) {
       expect(existsSync(file(input.session_id))).toBe(false);

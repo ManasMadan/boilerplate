@@ -37,8 +37,12 @@ export function standIn(
     const request = new Request(input, init);
     calls.push(new URL(request.url).pathname.replace(/^\/rpc\//, ""));
     const { matched, response } = await handler.handle(request, { prefix: "/rpc" });
-    if (!matched) return new Response("no such procedure", { status: 404 });
-    if (!response.body || streamsAfterAbort) return response;
+    if (!matched) {
+      return new Response("no such procedure", { status: 404 });
+    }
+    if (!response.body || streamsAfterAbort) {
+      return response;
+    }
     // As a browser's fetch does, aborting the request fails a response still streaming.
     const { readable, writable } = new TransformStream();
     response.body.pipeTo(writable, { signal: request.signal }).catch(() => undefined);
@@ -106,7 +110,9 @@ export async function until(check: () => void) {
       check();
       return;
     } catch (error) {
-      if (attempt === 500) throw error;
+      if (attempt === 500) {
+        throw error;
+      }
       await new Promise((resolve) => setImmediate(resolve));
     }
   }

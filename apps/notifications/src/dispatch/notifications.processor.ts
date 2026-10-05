@@ -21,7 +21,9 @@ async function handle(queue: NotificationQueue, job: UncheckedJob, dispatcher: D
     );
     return;
   }
-  if (job.name !== "send") throw new Error(`Unknown job "${job.name}" on ${queue}`);
+  if (job.name !== "send") {
+    throw new Error(`Unknown job "${job.name}" on ${queue}`);
+  }
   const { meta, payload } = parseJob(queue, "send", job.data);
   // Restore the producer's request context so these logs carry its request id.
   await runJob(meta, `job:${jobId}`, () =>

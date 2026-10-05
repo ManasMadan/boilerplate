@@ -42,7 +42,9 @@ export function fillPlaceholders(values: Record<string, string>): Record<string,
     filled.VAPID_PRIVATE_KEY = pair.privateKey;
   }
   for (const [key, value] of Object.entries(filled)) {
-    if (PLACEHOLDER.test(value)) filled[key] = newSecret(key);
+    if (PLACEHOLDER.test(value)) {
+      filled[key] = newSecret(key);
+    }
   }
   return filled;
 }

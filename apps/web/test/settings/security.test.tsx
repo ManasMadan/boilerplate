@@ -39,8 +39,9 @@ describe("signed-in devices", () => {
       "curl/8.4.0",
       "",
     ];
-    for (const userAgent of agents)
+    for (const userAgent of agents) {
       await commands.signInElsewhere(user.email, user.password, userAgent);
+    }
     await commands.signInElsewhere(user.email, user.password, "curl/8.4.0", { withoutIp: true });
 
     const page = await renderPage(<SessionsCard />, { url: "/settings/security" });

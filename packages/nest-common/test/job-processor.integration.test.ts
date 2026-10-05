@@ -19,7 +19,9 @@ const connection = { url: redisDatabase(12) };
 @Processor(QUEUE)
 class FailingProcessor extends JobProcessor {
   async process(job: { data: { kind: string } }) {
-    if (job.data.kind === "bad") throw new UnrecoverableError("bad payload");
+    if (job.data.kind === "bad") {
+      throw new UnrecoverableError("bad payload");
+    }
     throw new Error("outer", { cause: new Error("the real reason") });
   }
 }

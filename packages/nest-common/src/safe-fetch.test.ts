@@ -52,8 +52,11 @@ describe("safeFetch", () => {
     };
     server = createServer((req, res) => {
       const route = routes[req.url ?? ""];
-      if (route) route(req, res);
-      else res.end("ok");
+      if (route) {
+        route(req, res);
+      } else {
+        res.end("ok");
+      }
     });
     // Both loopbacks: `localhost` may resolve to either, or both.
     await new Promise<void>((resolve) => server.listen(0, "::", resolve));

@@ -23,7 +23,9 @@ function pwnedPasswords(answer: (prefix: string) => Response) {
   const asked: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (!url.startsWith(RANGE)) return real(input, init);
+    if (!url.startsWith(RANGE)) {
+      return real(input, init);
+    }
     asked.push(url.slice(RANGE.length));
     return Promise.resolve(answer(url.slice(RANGE.length)));
   });

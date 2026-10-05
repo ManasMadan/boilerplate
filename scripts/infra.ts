@@ -57,10 +57,14 @@ export function infraCheck({
       continue;
     }
     check(`${root}: validate`, tofu(["validate", "-no-color"], dir));
-    if (existsSync(join(dir, "tests"))) check(`${root}: tests`, tofu(["test", "-no-color"], dir));
+    if (existsSync(join(dir, "tests"))) {
+      check(`${root}: tests`, tofu(["test", "-no-color"], dir));
+    }
   }
 
   return failed ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(infraCheck());
+if (import.meta.main) {
+  process.exit(infraCheck());
+}

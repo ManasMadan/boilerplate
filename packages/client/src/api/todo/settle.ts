@@ -21,7 +21,11 @@ export function useSettleTodoMutation() {
   // What onMutate returned (a new snapshot each time) tells the settling mutation apart.
   return (_data: unknown, _error: unknown, _input: unknown, snapshot: unknown) => {
     const pending = queryClient.getMutationCache().findAll({ mutationKey, status: "pending" });
-    for (const mutation of pending) if (mutation.state.context === snapshot) settled.add(mutation);
+    for (const mutation of pending) {
+      if (mutation.state.context === snapshot) {
+        settled.add(mutation);
+      }
+    }
     return pending.every((mutation) => settled.has(mutation))
       ? queryClient.invalidateQueries({ queryKey: listKey })
       : undefined;

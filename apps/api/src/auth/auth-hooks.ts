@@ -120,14 +120,17 @@ export function requestHooks(context: AuthContext) {
   const { db, emailLimits, accountLimits, memberRemoved } = context;
   return {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path === "/expo-authorization-proxy") checkAuthorizationProxy(requestOf(ctx).query);
+      if (ctx.path === "/expo-authorization-proxy") {
+        checkAuthorizationProxy(requestOf(ctx).query);
+      }
       // Invitation emails go out in the background, too late to refuse; so the limit is
       // taken here, for new invitations and resends alike.
       if (ctx.path === "/organization/invite-member") {
         const session = await getSessionFromCtx(ctx);
         const email = fieldOf(requestOf(ctx).body, "email");
-        if (session && typeof email === "string")
+        if (session && typeof email === "string") {
           await emailLimits.invitation(session.user.id, email);
+        }
       }
       // Per account, on top of the per-address limits above (account-limits.ts).
       await accountLimits({
@@ -137,7 +140,9 @@ export function requestHooks(context: AuthContext) {
       });
     }),
     after: createAuthMiddleware(async (ctx) => {
-      if (isAPIError(ctx.context.returned)) return;
+      if (isAPIError(ctx.context.returned)) {
+        return;
+      }
       // Hooks get no session; the member who left is the one returned.
       if (ctx.path === "/organization/leave") {
         const member = removedMemberSchema.parse(ctx.context.returned);
@@ -145,7 +150,9 @@ export function requestHooks(context: AuthContext) {
         return;
       }
       const alert = securityAlertFor(ctx);
-      if (!alert) return;
+      if (!alert) {
+        return;
+      }
       // better-auth has committed the change by now: whatever fails here is logged, and
       // never turns a change that happened into an error for the user.
       try {
@@ -241,7 +248,9 @@ function sessionHooks({ db, record, actor }: AuthContext): DatabaseHooks["sessio
     create: {
       // New sessions start in the user's first workspace (their personal one).
       before: async (session) => {
-        if (session.activeOrganizationId) return { data: session };
+        if (session.activeOrganizationId) {
+          return { data: session };
+        }
         const membership = await db.member.findFirst({
           where: { userId: session.userId },
           orderBy: { createdAt: "asc" },
@@ -294,8 +303,9 @@ async function soleWorkspaces({ db }: AuthContext, userId: UserId) {
   const soleMember: OrgId[] = [];
   for (const { organizationId, organization } of owned) {
     const others = organization.members.filter((member) => member.userId !== userId);
-    if (others.length === 0) soleMember.push(orgIdSchema.parse(organizationId));
-    else if (!others.some((member) => parseOrgRole(member.role) === "owner")) {
+    if (others.length === 0) {
+      soleMember.push(orgIdSchema.parse(organizationId));
+    } else if (!others.some((member) => parseOrgRole(member.role) === "owner")) {
       throw new APIError("BAD_REQUEST", {
         code: "ORGANIZATION_NEEDS_OWNER" satisfies AuthErrorCode,
         message: "Transfer ownership of your shared workspaces before deleting your account.",
@@ -325,7 +335,9 @@ export function accountDeletion(context: AuthContext): DeleteUser {
       });
       leavingWithAccount.set(userId, removedMemberSchema.array().parse(shared));
       // Nothing may keep charging for a workspace that's going away.
-      for (const organizationId of soleMember) await billing.cancelFor(organizationId);
+      for (const organizationId of soleMember) {
+        await billing.cancelFor(organizationId);
+      }
       await transaction(db, async (tx) => {
         await tx.organization.deleteMany({ where: { id: { in: soleMember } } });
         for (const organizationId of soleMember) {
@@ -346,7 +358,9 @@ export function accountDeletion(context: AuthContext): DeleteUser {
       // beforeDelete ran first, in the same request.
       const left = required(leavingWithAccount.get(userId), "the memberships the account left");
       leavingWithAccount.delete(userId);
-      for (const member of left) await memberRemoved(member, userId);
+      for (const member of left) {
+        await memberRemoved(member, userId);
+      }
     },
   };
 }

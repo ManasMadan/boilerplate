@@ -13,8 +13,9 @@ import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv } from "./lib";
  */
 export function postgresPort(envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH): number {
   const port = readEnv(envPath).get("POSTGRES_PORT") ?? readEnv(examplePath).get("POSTGRES_PORT");
-  if (port === undefined)
+  if (port === undefined) {
     throw new Error(`POSTGRES_PORT is in neither ${envPath} nor ${examplePath}`);
+  }
   return Number(port);
 }
 
@@ -48,4 +49,6 @@ export async function startServer(
   return server.exited;
 }
 
-if (import.meta.main) process.exit(await startServer());
+if (import.meta.main) {
+  process.exit(await startServer());
+}

@@ -25,13 +25,17 @@ export class AvatarService {
   ) {}
 
   async set(userId: UserId, fileId: FileId | null) {
-    if (fileId) await this.files.ready(userId, fileId, "avatar");
+    if (fileId) {
+      await this.files.ready(userId, fileId, "avatar");
+    }
     const current = await this.users.image(userId);
     const previous = fileIdSchema.safeParse(AVATAR_PATH.exec(current.image ?? "")?.[1]).data;
     const context = await this.auth.$context;
     await context.internalAdapter.updateUser(userId, {
       image: fileId ? fileContentPath(fileId) : null,
     });
-    if (previous && previous !== fileId) await this.files.remove(userId, previous);
+    if (previous && previous !== fileId) {
+      await this.files.remove(userId, previous);
+    }
   }
 }

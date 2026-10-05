@@ -50,7 +50,9 @@ describe("ApiProvider", () => {
     const api = standIn((os) => ({
       user: {
         me: os.user.me.handler(() => {
-          if (!signedIn) throw new ORPCError("UNAUTHENTICATED");
+          if (!signedIn) {
+            throw new ORPCError("UNAUTHENTICATED");
+          }
           return me;
         }),
       },
@@ -76,7 +78,9 @@ describe("ApiProvider", () => {
     const api = standIn((os) => ({
       user: {
         me: os.user.me.handler(() => {
-          if (!signedIn) throw new ORPCError("UNAUTHENTICATED");
+          if (!signedIn) {
+            throw new ORPCError("UNAUTHENTICATED");
+          }
           return me;
         }),
       },

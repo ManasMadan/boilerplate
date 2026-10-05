@@ -35,10 +35,18 @@ const DOCS = [/\.md$/, /^LICENSE$/];
 
 /** The areas one changed file touches. */
 export function areasOf(file: string): Area[] {
-  if (EVERYTHING.some((pattern) => pattern.test(file))) return AREAS;
-  if (file.startsWith(".claude/")) return ["scripts"];
-  if (DOCS.some((pattern) => pattern.test(file))) return [];
-  if (file.startsWith("deploy/docker/") || file === "docker-bake.hcl") return ["images"];
+  if (EVERYTHING.some((pattern) => pattern.test(file))) {
+    return AREAS;
+  }
+  if (file.startsWith(".claude/")) {
+    return ["scripts"];
+  }
+  if (DOCS.some((pattern) => pattern.test(file))) {
+    return [];
+  }
+  if (file.startsWith("deploy/docker/") || file === "docker-bake.hcl") {
+    return ["images"];
+  }
   if (
     ["deploy/argocd/root.yaml", "deploy/argocd/argo-cd-values.yaml"].includes(file) ||
     file === "infra/tofu/modules/bootstrap/variables.tf"
@@ -46,12 +54,24 @@ export function areasOf(file: string): Area[] {
     // The bootstrap reads these, and charts:check renders Argo CD at the bootstrap's pin.
     return ["charts", "infra", "scripts"];
   }
-  if (file.startsWith("deploy/") || file === ".sops.yaml") return ["charts", "scripts"];
-  if (file.startsWith("infra/tofu/")) return ["infra", "scripts"];
-  if (/^scripts\/(charts|secrets-check)\.ts$/.test(file)) return ["charts", "scripts"];
-  if (file === "scripts/infra.ts") return ["infra", "scripts"];
-  if (file === "scripts/image-smoke.ts") return ["images", "scripts"];
-  if (file.startsWith("scripts/")) return ["scripts"];
+  if (file.startsWith("deploy/") || file === ".sops.yaml") {
+    return ["charts", "scripts"];
+  }
+  if (file.startsWith("infra/tofu/")) {
+    return ["infra", "scripts"];
+  }
+  if (/^scripts\/(charts|secrets-check)\.ts$/.test(file)) {
+    return ["charts", "scripts"];
+  }
+  if (file === "scripts/infra.ts") {
+    return ["infra", "scripts"];
+  }
+  if (file === "scripts/image-smoke.ts") {
+    return ["images", "scripts"];
+  }
+  if (file.startsWith("scripts/")) {
+    return ["scripts"];
+  }
   return ["app"];
 }
 
@@ -80,8 +100,12 @@ export function main(base = process.argv[2], run: Run = runSync): number {
     files = diff.stdout.split("\n").filter(Boolean);
   }
   const result = areas(files);
-  for (const area of AREAS) console.log(`${area}=${result[area]}`);
+  for (const area of AREAS) {
+    console.log(`${area}=${result[area]}`);
+  }
   return 0;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) {
+  process.exit(main());
+}

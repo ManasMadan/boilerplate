@@ -60,10 +60,18 @@ describe("reading a diff", () => {
     const git = (args: string[]) => {
       calls.push(args.join(" "));
       // A branch never pushed: no upstream.
-      if (args[0] === "rev-parse") return "";
-      if (args[0] === "symbolic-ref") return "origin/main\n";
-      if (args[0] === "merge-base") return "abc\n";
-      if (args[0] === "ls-files") return "new.ts\n";
+      if (args[0] === "rev-parse") {
+        return "";
+      }
+      if (args[0] === "symbolic-ref") {
+        return "origin/main\n";
+      }
+      if (args[0] === "merge-base") {
+        return "abc\n";
+      }
+      if (args[0] === "ls-files") {
+        return "new.ts\n";
+      }
       return "+++ b/x.ts\n@@ -1 +1 @@\n";
     };
     expect(changedLines(true, git, root)).toEqual(new Map([["x.ts", lines(1)]]));

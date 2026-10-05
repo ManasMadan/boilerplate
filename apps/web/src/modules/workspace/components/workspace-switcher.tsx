@@ -42,7 +42,9 @@ export function WorkspaceSwitcher() {
   const [opened, setOpened] = useState(false);
   const activeId = active.data?.id;
   let activeName = "…";
-  if (active.data) activeName = isPersonal(active.data) ? t("personal") : active.data.name;
+  if (active.data) {
+    activeName = isPersonal(active.data) ? t("personal") : active.data.name;
+  }
 
   return (
     <>
@@ -61,8 +63,9 @@ export function WorkspaceSwitcher() {
             <DropdownMenuRadioGroup
               value={activeId ?? ""}
               onValueChange={(id: string) => {
-                if (id && id !== activeId)
+                if (id && id !== activeId) {
                   switchTo(id).catch((error: unknown) => toast.error(errorMessage(error)));
+                }
               }}
             >
               {(workspaces.data ?? []).map((workspace) => (

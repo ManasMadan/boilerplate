@@ -26,9 +26,13 @@ export function ResetPasswordPage() {
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { otp: "", password: "" } });
 
   useEffect(() => {
-    if (!email) router.replace("/forgot-password");
+    if (!email) {
+      router.replace("/forgot-password");
+    }
   }, [email, router]);
-  if (!email) return null;
+  if (!email) {
+    return null;
+  }
   // The handlers below only exist once an address is known.
   const address = email;
 

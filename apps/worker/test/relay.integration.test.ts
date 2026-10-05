@@ -81,7 +81,9 @@ function bus(options: { failing?: boolean; hold?: Promise<void> } = {}) {
     events,
     async publish(batch: EventEnvelope[]) {
       await options.hold;
-      if (options.failing) throw new Error("broker down");
+      if (options.failing) {
+        throw new Error("broker down");
+      }
       events.push(...batch);
     },
   };
@@ -196,7 +198,9 @@ describe("outbox relay", () => {
     } finally {
       vi.useRealTimers();
       vi.unstubAllEnvs();
-      for (const socket of sockets) socket.destroy();
+      for (const socket of sockets) {
+        socket.destroy();
+      }
       await new Promise((resolve) => silent.close(resolve));
     }
   });
@@ -207,7 +211,9 @@ describe("outbox relay", () => {
     const held: Socket[] = [];
     let holding = false;
     const proxy: Server = createServer((socket) => {
-      if (holding) return void held.push(socket.resume());
+      if (holding) {
+        return void held.push(socket.resume());
+      }
       const upstream = connect(Number(database.port), database.hostname);
       socket.pipe(upstream).pipe(socket);
       socket.on("error", () => upstream.destroy());
@@ -245,7 +251,9 @@ describe("outbox relay", () => {
       expect(logged).toEqual(["warn: outbox listener lost its connection; reconnecting"]);
     } finally {
       vi.unstubAllEnvs();
-      for (const socket of held) socket.destroy();
+      for (const socket of held) {
+        socket.destroy();
+      }
       await new Promise((resolve) => proxy.close(resolve));
     }
   });

@@ -36,7 +36,9 @@ export const envSchema = {
     .string()
     .optional()
     .transform((value, ctx) => {
-      if (!value) return undefined;
+      if (!value) {
+        return undefined;
+      }
       try {
         return parseAuthSecrets(value);
       } catch (error) {

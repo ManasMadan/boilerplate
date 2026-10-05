@@ -15,4 +15,6 @@
 
 import { jobs } from "@repo/jobs/cli";
 
-if (import.meta.main) process.exit(await jobs(process.argv.slice(2), process.env.REDIS_URL));
+if (import.meta.main) {
+  process.exit(await jobs(process.argv.slice(2), process.env.REDIS_URL));
+}

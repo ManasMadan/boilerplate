@@ -24,7 +24,9 @@ describe("push transports", () => {
 
   /** The platforms PushModule sets up, with these variables. */
   async function platforms(variables: Record<string, string>) {
-    for (const [key, value] of Object.entries(variables)) vi.stubEnv(key, value);
+    for (const [key, value] of Object.entries(variables)) {
+      vi.stubEnv(key, value);
+    }
     // Fresh copies, after the module reset: the same injection tokens as PushModule's.
     const { DatabaseModule, LoggerModule } = await import("@repo/nest-common");
     const { PushModule } = await import("./push.module");

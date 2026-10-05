@@ -35,7 +35,9 @@ export class FanoutProcessor extends JobProcessor {
     const event = eventEnvelope.parse(payload);
     // Customer webhooks are per organization; events without one have no audience.
     const orgId = event.orgId;
-    if (!orgId) return;
+    if (!orgId) {
+      return;
+    }
     await runJob(meta, `event:${event.id}`, async () => {
       const tenant = withTenant(this.database.write, orgId);
       const endpoints = await tenant.webhookEndpoint.findMany({
@@ -45,7 +47,9 @@ export class FanoutProcessor extends JobProcessor {
         },
         select: { id: true },
       });
-      if (endpoints.length === 0) return;
+      if (endpoints.length === 0) {
+        return;
+      }
 
       // Standard Webhooks payload shape: { type, timestamp, data }.
       const body = JSON.stringify({

@@ -21,7 +21,9 @@ export interface Clamd {
 
 /** clamd's answer to one connection's bytes, or null while the stream isn't over. */
 export function answer(received: Buffer): string | null {
-  if (received.length < COMMAND.length) return null;
+  if (received.length < COMMAND.length) {
+    return null;
+  }
   if (received.subarray(0, COMMAND.length).toString() !== COMMAND) {
     return "UNKNOWN COMMAND\0";
   }
@@ -33,7 +35,9 @@ export function answer(received: Buffer): string | null {
       const scanned = Buffer.concat(chunks).toString("latin1");
       return scanned.includes(EICAR) ? "stream: Eicar-Test-Signature FOUND\0" : "stream: OK\0";
     }
-    if (offset + 4 + size > received.length) return null;
+    if (offset + 4 + size > received.length) {
+      return null;
+    }
     chunks.push(received.subarray(offset + 4, offset + 4 + size));
     offset += 4 + size;
   }
@@ -46,7 +50,9 @@ export function serve(socket: Pick<Socket, "on" | "end">) {
   socket.on("data", (data: Buffer) => {
     received = Buffer.concat([received, data]);
     const reply = answer(received);
-    if (reply !== null) socket.end(reply);
+    if (reply !== null) {
+      socket.end(reply);
+    }
   });
 }
 
@@ -80,7 +86,11 @@ function answers(url: string) {
  */
 export async function clamdFor(url: string, env = process.env): Promise<Clamd> {
   // A clamd that's already running belongs to whoever started it: nothing to close.
-  if (await answers(url)) return { url, close: () => Promise.resolve() };
-  if (env.CI) throw new Error(`clamd isn't answering at ${url}; CI runs the real ClamAV.`);
+  if (await answers(url)) {
+    return { url, close: () => Promise.resolve() };
+  }
+  if (env.CI) {
+    throw new Error(`clamd isn't answering at ${url}; CI runs the real ClamAV.`);
+  }
   return startFakeClamd();
 }

@@ -30,8 +30,9 @@ beforeAll(async () => {
   api = createDb({ url: testDb.urlFor("app_api"), poolMax: 5, service: "test" });
   // Tenant rows reference real organizations and users (foreign keys).
   await api.user.create({ data: { id: userId, name: "Owner", email: `${userId}@test.dev` } });
-  for (const id of [orgA, orgB])
+  for (const id of [orgA, orgB]) {
     await api.organization.create({ data: { id, name: id, slug: id } });
+  }
   await tenantTx(api, orgA, (tx) =>
     tx.todo.create({ data: { orgId: orgA, createdById: userId, title: "A1" } }),
   );

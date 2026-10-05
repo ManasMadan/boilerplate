@@ -10,14 +10,18 @@ export function quietDelayMs(
   timeZone: string,
   now = new Date(),
 ): number {
-  if (!window || window.start === window.end) return 0;
+  if (!window || window.start === window.end) {
+    return 0;
+  }
   const clock = wallClock(timeZone, now);
   const minute = clock.hour * 60 + clock.minute;
   const crossesMidnight = window.start > window.end;
   const inside = crossesMidnight
     ? minute >= window.start || minute < window.end
     : minute >= window.start && minute < window.end;
-  if (!inside) return 0;
+  if (!inside) {
+    return 0;
+  }
   const minutesLeft = (window.end - minute + 1440) % 1440;
   return (minutesLeft * 60 - clock.second) * 1000;
 }

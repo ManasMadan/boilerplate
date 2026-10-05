@@ -53,8 +53,9 @@ describe("rate limits", () => {
   it("are declared by every procedure that changes something, or it says why not", () => {
     expect(unlimitedMutations(contract)).toEqual([]);
     for (const { path, meta } of proceduresOf(contract)) {
-      if (meta.rateLimit && "exempt" in meta.rateLimit)
+      if (meta.rateLimit && "exempt" in meta.rateLimit) {
         expect(meta.rateLimit.exempt.trim(), path).not.toBe("");
+      }
     }
   });
 

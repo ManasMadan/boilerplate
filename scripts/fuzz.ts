@@ -93,7 +93,9 @@ export async function fuzz(given: Partial<Fuzz> = {}): Promise<number> {
     stdio: "inherit",
     env: { ...env, LOAD_USERS: String(ids.length) },
   });
-  if (signedIn.status !== 0) return signedIn.status ?? 1;
+  if (signedIn.status !== 0) {
+    return signedIn.status ?? 1;
+  }
   const cookies = z.array(z.string()).parse(JSON.parse(readFileSync(deps.sessions, "utf8")));
   const sessions = cookies.map((cookie) => cookie.slice(cookie.indexOf("=") + 1));
 
@@ -119,15 +121,21 @@ export async function fuzz(given: Partial<Fuzz> = {}): Promise<number> {
     ).status ?? 1;
 
   const failed: string[] = [];
-  if (schemathesis("apps/ai/openapi.json", `http://localhost:${AI_PORT}`, []) !== 0)
+  if (schemathesis("apps/ai/openapi.json", `http://localhost:${AI_PORT}`, []) !== 0) {
     failed.push("the AI service");
+  }
   for (const [index, id] of ids.entries()) {
     const args = ["--include-operation-id", id];
-    if (schemathesis("apps/api/openapi.json", `${api}/api/v1`, args, sessions[index]) !== 0)
+    if (schemathesis("apps/api/openapi.json", `${api}/api/v1`, args, sessions[index]) !== 0) {
       failed.push(id);
+    }
   }
-  for (const name of failed) fail(`${name}: see its run above`);
+  for (const name of failed) {
+    fail(`${name}: see its run above`);
+  }
   return failed.length > 0 ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(await fuzz());
+if (import.meta.main) {
+  process.exit(await fuzz());
+}

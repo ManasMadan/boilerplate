@@ -70,8 +70,9 @@ describe("live updates", () => {
     const fetch = window.fetch;
     vi.spyOn(window, "fetch").mockImplementation(async (...args) => {
       const response = await fetch(...args);
-      if (String(args[0] instanceof Request ? args[0].url : args[0]).includes("/rpc/realtime/"))
+      if (String(args[0] instanceof Request ? args[0].url : args[0]).includes("/rpc/realtime/")) {
         streaming = true;
+      }
       return response;
     });
     const page = await renderPage(

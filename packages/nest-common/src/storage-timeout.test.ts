@@ -12,7 +12,9 @@ beforeAll(async () => {
   port = (server.address() as { port: number }).port;
 });
 afterAll(() => {
-  for (const socket of sockets) socket.destroy();
+  for (const socket of sockets) {
+    socket.destroy();
+  }
   return new Promise<void>((resolve) => server.close(() => resolve()));
 });
 

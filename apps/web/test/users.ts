@@ -37,7 +37,9 @@ export async function auth<T = unknown>(path: string, body: unknown = {}): Promi
     body: JSON.stringify(body),
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`${path} answered ${response.status}: ${text}`);
+  if (!response.ok) {
+    throw new Error(`${path} answered ${response.status}: ${text}`);
+  }
   // The page's auth client learns of it, as after its own calls (useSession refetches).
   authClient.$store.notify("$sessionSignal");
   return (text ? JSON.parse(text) : null) as T;
@@ -59,8 +61,12 @@ export async function signUp(details: Partial<ReturnType<typeof newUser>> = {}):
       () => undefined,
       (error: Error) => error,
     );
-    if (!failed) break;
-    if (attempt === 3 || !failed.message.includes("answered 500")) throw failed;
+    if (!failed) {
+      break;
+    }
+    if (attempt === 3 || !failed.message.includes("answered 500")) {
+      throw failed;
+    }
   }
   await auth("/email-otp/verify-email", { email: user.email, otp: await takeOtp(user.email) });
   const session = await currentSession();
@@ -105,7 +111,9 @@ export async function rateLimit(path: string, body: unknown) {
       },
       body: JSON.stringify(body),
     });
-    if (response.status === 429) return;
+    if (response.status === 429) {
+      return;
+    }
   }
   throw new Error(`${path} was never rate limited`);
 }

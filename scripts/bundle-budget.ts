@@ -34,7 +34,9 @@ const changed = (what: string) =>
 function manifests(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return manifests(path);
+    if (entry.isDirectory()) {
+      return manifests(path);
+    }
     return entry.name === "page_client-reference-manifest.js" ? [path] : [];
   });
 }
@@ -43,11 +45,15 @@ function manifests(dir: string): string[] {
 function entryFiles(path: string): string[] {
   const source = readFileSync(path, "utf8");
   const start = source.indexOf("= {");
-  if (start === -1) throw changed(`${path} no longer assigns a JSON object`);
+  if (start === -1) {
+    throw changed(`${path} no longer assigns a JSON object`);
+  }
   const manifest = JSON.parse(source.slice(start + 2, source.lastIndexOf("}") + 1)) as {
     entryJSFiles?: Record<string, string[]>;
   };
-  if (typeof manifest.entryJSFiles !== "object") throw changed(`${path} has no entryJSFiles`);
+  if (typeof manifest.entryJSFiles !== "object") {
+    throw changed(`${path} has no entryJSFiles`);
+  }
   return Object.values(manifest.entryJSFiles).flat();
 }
 
@@ -68,8 +74,9 @@ export function firstLoad(next: string) {
   const build = JSON.parse(readFileSync(join(next, "build-manifest.json"), "utf8")) as {
     rootMainFiles?: unknown;
   };
-  if (!Array.isArray(build.rootMainFiles) || build.rootMainFiles.length === 0)
+  if (!Array.isArray(build.rootMainFiles) || build.rootMainFiles.length === 0) {
     throw changed("build-manifest.json lists no rootMainFiles");
+  }
   const shared = new Set(build.rootMainFiles as string[]);
   const app = join(next, "server/app");
   const routes = manifests(app)
@@ -78,7 +85,9 @@ export function firstLoad(next: string) {
       return { route: route || "/", size: total(new Set([...shared, ...entryFiles(path)])) };
     })
     .sort((a, b) => b.size - a.size);
-  if (routes.length === 0) throw new Error("No routes found: run `next build` first.");
+  if (routes.length === 0) {
+    throw new Error("No routes found: run `next build` first.");
+  }
   return { shared: total(shared), routes };
 }
 
@@ -95,10 +104,16 @@ export function main(next = join(ROOT, "apps/web/.next"), log = console.log): nu
   };
   log("First-load JavaScript, gzipped:");
   line("shared by every route", shared, SHARED_BUDGET);
-  for (const { route, size } of routes) line(route, size, ROUTE_BUDGET);
-  if (!over) return 0;
+  for (const { route, size } of routes) {
+    line(route, size, ROUTE_BUDGET);
+  }
+  if (!over) {
+    return 0;
+  }
   log("\nOver budget: see scripts/bundle-budget.ts.");
   return 1;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) {
+  process.exit(main());
+}

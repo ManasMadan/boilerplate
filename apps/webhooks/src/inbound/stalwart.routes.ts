@@ -46,9 +46,13 @@ function verifiedBatch(
   now: number,
 ): StalwartEvent[] | "BAD_REQUEST" | "INVALID_SIGNATURE" {
   const signature = headers["x-signature"];
-  if (typeof signature !== "string" || !Buffer.isBuffer(rawBody)) return "BAD_REQUEST";
+  if (typeof signature !== "string" || !Buffer.isBuffer(rawBody)) {
+    return "BAD_REQUEST";
+  }
   const body = rawBody.toString("utf8");
-  if (!verifySignature(secrets, body, signature)) return "INVALID_SIGNATURE";
+  if (!verifySignature(secrets, body, signature)) {
+    return "INVALID_SIGNATURE";
+  }
   let json: unknown;
   try {
     json = JSON.parse(body);
@@ -56,7 +60,9 @@ function verifiedBatch(
     return "BAD_REQUEST";
   }
   const parsed = stalwartBatch.safeParse(json);
-  if (!parsed.success) return "BAD_REQUEST";
+  if (!parsed.success) {
+    return "BAD_REQUEST";
+  }
   return isFresh(parsed.data.events, now) ? parsed.data.events : "INVALID_SIGNATURE";
 }
 
@@ -79,7 +85,9 @@ async function record(database: Database, events: StalwartEvent[]) {
       const address = bouncedAddress(event);
       // Nothing to act on, or already received (in an earlier request or twice in
       // this batch: deleting the key makes the first copy the only one acted on).
-      if (!address || !fresh.delete(key)) continue;
+      if (!address || !fresh.delete(key)) {
+        continue;
+      }
       await emitEvent(
         tx,
         "email.feedback_received.v1",
@@ -102,9 +110,13 @@ export function mountStalwart(
     rawBodies(scope, "application/json");
 
     scope.post("/webhooks/stalwart", async (request, reply) => {
-      if (!secrets) return sendError(reply, "NOT_FOUND");
+      if (!secrets) {
+        return sendError(reply, "NOT_FOUND");
+      }
       const events = verifiedBatch(request.headers, request.body, secrets, now());
-      if (typeof events === "string") return sendError(reply, events);
+      if (typeof events === "string") {
+        return sendError(reply, events);
+      }
       await record(database, events);
       return reply.status(200).send({ received: true });
     });

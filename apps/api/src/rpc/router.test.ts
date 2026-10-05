@@ -63,8 +63,9 @@ describe("authorization", () => {
   it("refuses every call without a session, except the public endpoints", async () => {
     const open: string[] = [];
     for (const [path, procedure] of procedures) {
-      if (!(path in PUBLIC) && (await anonymousCall(procedure)) !== "UNAUTHENTICATED")
+      if (!(path in PUBLIC) && (await anonymousCall(procedure)) !== "UNAUTHENTICATED") {
         open.push(path);
+      }
     }
     expect(open).toEqual([]);
   });
@@ -125,10 +126,14 @@ describe("declared errors", () => {
     const thrown = thrownIn(source);
     const all = Object.values(procedures);
     // An API key without the procedure's scope (modules/api-keys).
-    if (all.some((procedure) => (procedure["~orpc"].meta as ProcedureMeta).apiKeyScope))
+    if (all.some((procedure) => (procedure["~orpc"].meta as ProcedureMeta).apiKeyScope)) {
       thrown.add("API_KEY_SCOPE_MISSING");
-    for (const [code, builders] of Object.entries(BUILDER_CODES))
-      if (builders.test(source)) thrown.add(code);
+    }
+    for (const [code, builders] of Object.entries(BUILDER_CODES)) {
+      if (builders.test(source)) {
+        thrown.add(code);
+      }
+    }
     const declared = new Set(all.flatMap((procedure) => Object.keys(procedure["~orpc"].errorMap)));
     return [...declared]
       .filter((code) => !common.has(code) && !thrown.has(code))

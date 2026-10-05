@@ -26,7 +26,9 @@ export default function Settings() {
 
   async function switchWorkspace(organizationId: string) {
     const { error } = await authClient.organization.setActive({ organizationId });
-    if (error) return setFailure(errorMessage(error));
+    if (error) {
+      return setFailure(errorMessage(error));
+    }
     await refetch();
     // Every cached query belonged to the previous workspace.
     await queryClient.invalidateQueries();
@@ -34,7 +36,9 @@ export default function Settings() {
 
   async function setLanguage(locale: Locale) {
     const { error } = await authClient.updateUser({ locale });
-    if (error) return setFailure(errorMessage(error));
+    if (error) {
+      return setFailure(errorMessage(error));
+    }
     await refetch();
   }
 
@@ -148,7 +152,9 @@ function PushStatus({ onFailure }: { onFailure: (message: string) => void }) {
   if (push === "denied") {
     return <Text className="text-muted-foreground">{t("settings.pushDenied")}</Text>;
   }
-  if (push === "granted" && register.isSuccess) return <Text>{t("settings.pushEnabled")}</Text>;
+  if (push === "granted" && register.isSuccess) {
+    return <Text>{t("settings.pushEnabled")}</Text>;
+  }
   return (
     <Button onPress={onEnable} disabled={register.isPending || push === undefined}>
       <Text>{t("settings.enablePush")}</Text>

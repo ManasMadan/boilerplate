@@ -10,7 +10,9 @@ import { startFakeStripe } from "./index";
 
 const required = (name: string) => {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} must be set to run the fake Stripe`);
+  if (!value) {
+    throw new Error(`${name} must be set to run the fake Stripe`);
+  }
   return value;
 };
 

@@ -287,7 +287,9 @@ describe("outbound deliveries", () => {
     const created = await publish(orgId, "todo.created.v1");
     const elsewhere = await publish(orgIdSchema.parse(randomUUID()), "todo.deleted.v1");
     const deleted = await publish(orgId, "todo.deleted.v1");
-    for (const event of [created, elsewhere, deleted]) await processed("events-webhooks", event.id);
+    for (const event of [created, elsewhere, deleted]) {
+      await processed("events-webhooks", event.id);
+    }
     // Every event has been handled and made one delivery between them: nothing else is on
     // its way.
     const rows = await asRole("postgres", (client) =>
@@ -730,7 +732,9 @@ describe("inbound Stalwart feedback", () => {
       .update(payload)
       .digest("base64");
     const headers: Record<string, string> = { "content-type": "application/json" };
-    if (options.signature !== null) headers["x-signature"] = options.signature ?? signature;
+    if (options.signature !== null) {
+      headers["x-signature"] = options.signature ?? signature;
+    }
     const response = await fetch(`${baseUrl}/webhooks/stalwart`, {
       method: "POST",
       headers,

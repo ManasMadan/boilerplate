@@ -57,13 +57,17 @@ export function isJobName<Q extends QueueName>(queue: Q, name: string): name is 
 
 /** A job's name, checked against its queue's contract. */
 export function jobName<Q extends QueueName>(queue: Q, name: string): JobName<Q> {
-  if (!isJobName(queue, name)) throw new Error(`Unknown job "${name}" on queue "${queue}"`);
+  if (!isJobName(queue, name)) {
+    throw new Error(`Unknown job "${name}" on queue "${queue}"`);
+  }
   return name;
 }
 
 /** A job's id. Every job BullMQ hands back has one (it's in the job's Redis key). */
 export function idOf(job: Pick<Job, "id" | "name">): string {
-  if (job.id === undefined) throw new Error(`Job "${job.name}" has no id`);
+  if (job.id === undefined) {
+    throw new Error(`Job "${job.name}" has no id`);
+  }
   return job.id;
 }
 

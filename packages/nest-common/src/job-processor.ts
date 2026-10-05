@@ -15,7 +15,9 @@ export function asError(error: unknown): Error {
 
 /** An error and its causes, as plain fields (undici puts the real reason in `cause`). */
 export function describeError(error: unknown, depth = 0): Record<string, unknown> {
-  if (!(error instanceof Error)) return { message: String(error) };
+  if (!(error instanceof Error)) {
+    return { message: String(error) };
+  }
   return {
     type: error.name,
     message: error.message,

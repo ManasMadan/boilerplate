@@ -62,13 +62,21 @@ async function listenOnce(
   try {
     const stream = await client.realtime.subscribe(undefined, { signal });
     connected = true;
-    if (reconnect) handlers.current.onReconnect();
-    for await (const message of stream) handlers.current.onMessage(message);
+    if (reconnect) {
+      handlers.current.onReconnect();
+    }
+    for await (const message of stream) {
+      handlers.current.onMessage(message);
+    }
   } catch (error) {
-    if (signal.aborted) return "stop";
+    if (signal.aborted) {
+      return "stop";
+    }
     // Signed out or no workspace: the app handles those; don't hammer the API.
     const code = errorCode(error);
-    if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") return "stop";
+    if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") {
+      return "stop";
+    }
   }
   return connected ? "connected" : "failed";
 }
@@ -79,7 +87,9 @@ async function follow(client: Client, handlers: Handlers, signal: AbortSignal) {
   let first = true;
   while (!signal.aborted) {
     const outcome = await listenOnce(client, handlers, signal, !first);
-    if (outcome === "stop") return;
+    if (outcome === "stop") {
+      return;
+    }
     if (outcome === "connected") {
       first = false;
       delay = RETRY_MIN_MS;
@@ -103,7 +113,9 @@ export function useRealtime(
   });
 
   useEffect(() => {
-    if (key === null || key === undefined) return;
+    if (key === null || key === undefined) {
+      return;
+    }
     const controller = new AbortController();
 
     void follow(client, handlers, controller.signal);
@@ -126,7 +138,9 @@ export function useLiveUpdates(activeOrganizationId: string | null | undefined) 
   useRealtime(
     (message) => void refetch[message.type](),
     () => {
-      for (const run of Object.values(refetch)) void run();
+      for (const run of Object.values(refetch)) {
+        void run();
+      }
     },
     activeOrganizationId,
   );

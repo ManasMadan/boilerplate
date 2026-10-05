@@ -31,8 +31,11 @@ export function PasskeysCard() {
   async function add() {
     const result = await authClient.passkey.addPasskey();
     if (result?.error) {
-      if (needsRecentSignIn(result.error)) setStaleSession(true);
-      else toast.error(errorMessage(result.error));
+      if (needsRecentSignIn(result.error)) {
+        setStaleSession(true);
+      } else {
+        toast.error(errorMessage(result.error));
+      }
       return;
     }
     // The list is up to date by the time the confirmation shows.
@@ -42,7 +45,9 @@ export function PasskeysCard() {
 
   async function remove(id: string) {
     const { error } = await authClient.passkey.deletePasskey({ id });
-    if (error) toast.error(errorMessage(error));
+    if (error) {
+      toast.error(errorMessage(error));
+    }
     await refresh();
   }
 

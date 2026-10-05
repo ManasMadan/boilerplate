@@ -34,7 +34,9 @@ import {
 export function WorkspaceGeneralPage() {
   const t = useTranslations("workspace.general");
   const active = useActiveWorkspace();
-  if (!active.data) return <Skeleton className="h-40" />;
+  if (!active.data) {
+    return <Skeleton className="h-40" />;
+  }
   const workspace = active.data;
   const personal = isPersonal(workspace);
 
@@ -81,7 +83,9 @@ function RenameForm({ id, name, disabled }: { id: string; name: string; disabled
           organizationId: id,
           data: { name: values.name.trim() },
         });
-        if (error) return void toast.error(errorMessage(error));
+        if (error) {
+          return void toast.error(errorMessage(error));
+        }
         await refresh();
         form.reset(values);
         toast.success(t("saved"));
@@ -114,9 +118,13 @@ function DeleteWorkspaceCard({ id, name }: { id: string; name: string }) {
   async function remove() {
     // Move to another workspace first, so no request ever runs in a deleted one.
     const next = (await workspaces.refetch()).data?.find((workspace) => workspace.id !== id);
-    if (next) await switchTo(next.id);
+    if (next) {
+      await switchTo(next.id);
+    }
     const { error } = await authClient.organization.delete({ organizationId: id });
-    if (error) return void toast.error(errorMessage(error));
+    if (error) {
+      return void toast.error(errorMessage(error));
+    }
     toast.success(t("deleted"));
     router.replace("/dashboard");
   }

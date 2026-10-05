@@ -22,8 +22,12 @@ import { STACK_FILE } from "@repo/testing/stack";
 export function findEnvExample(from = process.cwd()): string {
   for (let dir = from; ; dir = dirname(dir)) {
     const candidate = join(dir, ".env.example");
-    if (existsSync(candidate)) return candidate;
-    if (dirname(dir) === dir) throw new Error(`No .env.example above ${from}`);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+    if (dirname(dir) === dir) {
+      throw new Error(`No .env.example above ${from}`);
+    }
   }
 }
 
@@ -35,7 +39,9 @@ export function findEnvExample(from = process.cwd()): string {
 export function testEnvironment(example = findEnvExample()): Record<string, string> {
   const values = parseEnv(readFileSync(example, "utf8"));
   const stack = join(dirname(example), STACK_FILE);
-  if (existsSync(stack)) Object.assign(values, parseEnv(readFileSync(stack, "utf8")));
+  if (existsSync(stack)) {
+    Object.assign(values, parseEnv(readFileSync(stack, "utf8")));
+  }
   // The test runner sets NODE_ENV (test); the example's is for `bun dev`.
   delete values.NODE_ENV;
   return fillPlaceholders(
@@ -52,7 +58,9 @@ export function applyTestEnvironment(
 ): string[] {
   const applied: string[] = [];
   for (const [key, value] of Object.entries(testEnvironment(example))) {
-    if (env[key] !== undefined) continue;
+    if (env[key] !== undefined) {
+      continue;
+    }
     env[key] = value;
     applied.push(key);
   }

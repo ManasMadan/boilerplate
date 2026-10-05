@@ -56,7 +56,9 @@ const CLAUDE = join(ROOT, ".claude");
 
 function frontmatter(path: string): Record<string, unknown> {
   const text = readFileSync(path, "utf8");
-  if (!text.startsWith("---\n")) throw new Error(`${path} has no frontmatter`);
+  if (!text.startsWith("---\n")) {
+    throw new Error(`${path} has no frontmatter`);
+  }
   const end = text.indexOf("\n---", 3);
   return Bun.YAML.parse(text.slice(4, end)) as Record<string, unknown>;
 }
@@ -70,7 +72,9 @@ describe("skills", () => {
     expect(Object.keys(fields).filter((field) => !SKILL_FIELDS.has(field))).toEqual([]);
     expect(fields.name).toBe(skill);
     expect(typeof fields.description).toBe("string");
-    if (typeof fields.agent === "string") expect(agents).toContain(fields.agent);
+    if (typeof fields.agent === "string") {
+      expect(agents).toContain(fields.agent);
+    }
   });
 
   it("start the seam swaps only when a person asks", () => {

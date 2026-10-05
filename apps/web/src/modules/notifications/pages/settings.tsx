@@ -37,7 +37,9 @@ export function NotificationSettingsPage() {
       onError: (error) => toast.error(errorMessage(error)),
     });
 
-  if (!preferences.data) return <Skeleton className="h-64" />;
+  if (!preferences.data) {
+    return <Skeleton className="h-64" />;
+  }
   const data: NotificationPreferences = preferences.data;
   const quiet = data.quietHours;
 
@@ -131,10 +133,13 @@ export function NotificationSettingsPage() {
                     type="time"
                     defaultValue={toTime(quiet[edge])}
                     onBlur={(event) => {
-                      if (!event.target.value) return;
+                      if (!event.target.value) {
+                        return;
+                      }
                       const minutes = toMinutes(event.target.value);
-                      if (minutes !== quiet[edge])
+                      if (minutes !== quiet[edge]) {
                         save({ quietHours: { ...quiet, [edge]: minutes } });
+                      }
                     }}
                   />
                 </Field>

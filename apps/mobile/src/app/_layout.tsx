@@ -30,7 +30,9 @@ export default function RootLayout() {
       SplashScreen.hide();
     }
   }, [isPending, started]);
-  if (!started) return null;
+  if (!started) {
+    return null;
+  }
 
   const saved = session?.user.locale;
   const locale = isLocale(saved) ? saved : deviceLocale();

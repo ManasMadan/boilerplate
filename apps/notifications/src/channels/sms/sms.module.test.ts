@@ -10,7 +10,9 @@ afterEach(() => {
 
 /** Whether the SMS channel the module builds, with these variables, can text. */
 async function enabledWith(variables: Record<string, string>) {
-  for (const [key, value] of Object.entries(variables)) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries(variables)) {
+    vi.stubEnv(key, value);
+  }
   const { SmsModule } = await import("./sms.module");
   const { SmsChannel } = await import("./sms.channel");
   @Module({ imports: [LoggerModule.forRoot({ service: "test", level: "silent" }), SmsModule] })

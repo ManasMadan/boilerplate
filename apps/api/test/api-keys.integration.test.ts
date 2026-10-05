@@ -255,7 +255,9 @@ describe("managing keys", () => {
 
   it(`stops at ${API_KEY_LIMIT} keys per workspace`, async () => {
     const user = await signedInUser();
-    for (let i = 0; i < API_KEY_LIMIT; i++) await newKey(user);
+    for (let i = 0; i < API_KEY_LIMIT; i++) {
+      await newKey(user);
+    }
     const error = await expectError(newKey(user), "API_KEY_LIMIT_REACHED");
     expect(error.data?.params).toEqual({ limit: API_KEY_LIMIT });
   });
@@ -404,7 +406,9 @@ describe("calling the API with a key", () => {
     const other = await newKey(user);
     await query("UPDATE auth.api_key SET rate_limit_max = 3 WHERE id = $1", [apiKey.id]);
     const statuses: number[] = [];
-    for (let i = 0; i < 4; i++) statuses.push((await rest(key, "GET", "/todos")).status);
+    for (let i = 0; i < 4; i++) {
+      statuses.push((await rest(key, "GET", "/todos")).status);
+    }
     expect(statuses).toEqual([200, 200, 200, 429]);
     const limited = await rest(key, "GET", "/todos");
     expect(limited.body.code).toBe("RATE_LIMITED");

@@ -37,8 +37,12 @@ function identical(before: string[], after: string[]) {
     return true;
   }
   fail("the restore differs from the source");
-  for (const line of lost) console.log(`    - ${line}`);
-  for (const line of extra) console.log(`    + ${line}`);
+  for (const line of lost) {
+    console.log(`    - ${line}`);
+  }
+  for (const line of extra) {
+    console.log(`    + ${line}`);
+  }
   return false;
 }
 
@@ -104,4 +108,6 @@ export function restoreDrill(
   return passed ? 0 : 1;
 }
 
-if (import.meta.main) process.exit(restoreDrill());
+if (import.meta.main) {
+  process.exit(restoreDrill());
+}

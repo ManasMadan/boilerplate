@@ -62,7 +62,9 @@ describe("rate limiter", () => {
       windowSeconds: 60,
     });
     const results = [];
-    for (let i = 0; i < 4; i++) results.push(await limiter.consume("ip-1"));
+    for (let i = 0; i < 4; i++) {
+      results.push(await limiter.consume("ip-1"));
+    }
     expect(results.map((r) => r.allowed)).toEqual([true, true, true, false]);
     expect(results[3]?.retryAfterSeconds).toBeGreaterThan(0);
     expect((await limiter.consume("ip-2")).allowed).toBe(true);
@@ -117,7 +119,9 @@ describe("rate limiter", () => {
     expect((await closed.consume("x")).allowed).toBe(false);
     expect((await open.consume("x")).allowed).toBe(true);
     // Said, not silent, and once per limiter however many requests hit the outage.
-    for (let i = 0; i < 5; i++) await closed.consume("x");
+    for (let i = 0; i < 5; i++) {
+      await closed.consume("x");
+    }
     expect(logged).toHaveBeenCalledTimes(2);
     expect(logged).toHaveBeenCalledWith(
       expect.objectContaining({ limiter: "c", failing: "closed" }),

@@ -48,5 +48,7 @@ for (const [label, from] of [
     process.stderr.write(`Drift (${label}):\n${unexpected.map((l) => `  ${l}`).join("\n")}\n`);
   }
 }
-if (failed) process.exit(1);
+if (failed) {
+  process.exit(1);
+}
 process.stdout.write("No drift between migrations, schema and database.\n");

@@ -42,7 +42,9 @@ test("other workspaces' changes don't leak into the stream", async ({ page, brow
   await signUp(stranger.page);
   const requests: string[] = [];
   page.on("request", (request) => {
-    if (request.url().includes("/rpc/todo/list")) requests.push(request.url());
+    if (request.url().includes("/rpc/todo/list")) {
+      requests.push(request.url());
+    }
   });
   await page.waitForTimeout(1_000);
   const before = requests.length;

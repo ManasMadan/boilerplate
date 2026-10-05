@@ -30,18 +30,24 @@ export default function Invitation() {
 
   async function accept() {
     const { data, error } = await authClient.organization.acceptInvitation({ invitationId: id });
-    if (error) return setFailure(errorMessage(error));
+    if (error) {
+      return setFailure(errorMessage(error));
+    }
     await authClient.organization.setActive({ organizationId: data.invitation.organizationId });
     router.replace("/");
   }
 
   async function decline() {
     const { error } = await authClient.organization.rejectInvitation({ invitationId: id });
-    if (error) return setFailure(errorMessage(error));
+    if (error) {
+      return setFailure(errorMessage(error));
+    }
     router.replace("/");
   }
 
-  if (organizationName === undefined) return <Screen>{null}</Screen>;
+  if (organizationName === undefined) {
+    return <Screen>{null}</Screen>;
+  }
   return (
     <Screen title={t("title")}>
       <Text role={failure ? "alert" : undefined}>

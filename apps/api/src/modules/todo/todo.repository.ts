@@ -38,7 +38,9 @@ export class TodoRepository {
       where: { id, version },
       data: { completed, version: { increment: 1 } },
     });
-    if (count === 0) return null;
+    if (count === 0) {
+      return null;
+    }
     return tx.todo.findUniqueOrThrow({ where: { id }, select: columns });
   }
 

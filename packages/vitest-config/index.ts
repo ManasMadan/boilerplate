@@ -58,7 +58,9 @@ export function decoratorMetadata() {
     name: "repo:decorator-metadata",
     enforce: "post" as const,
     transform(code: string) {
-      if (!code.includes('=== "undefined" ? Object : ')) return undefined;
+      if (!code.includes('=== "undefined" ? Object : ')) {
+        return undefined;
+      }
       const replaced = code.replace(guard, (match, name: string) => name.padEnd(match.length));
       return { code: replaced, map: null };
     },

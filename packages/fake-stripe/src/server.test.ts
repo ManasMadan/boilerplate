@@ -24,7 +24,9 @@ let refuse = false;
 beforeAll(async () => {
   receiver = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk as Buffer);
+    for await (const chunk of request) {
+      chunks.push(chunk as Buffer);
+    }
     if (refuse) {
       response.writeHead(503).end();
       return;
@@ -172,7 +174,9 @@ describe("the API", () => {
     const { customer, session } = await checkout();
     await pay(session.id);
     const [subscription] = (await stripe.subscriptions.list({ customer: customer.id })).data;
-    if (!subscription) throw new Error("no subscription");
+    if (!subscription) {
+      throw new Error("no subscription");
+    }
     expect(subscription).toMatchObject({ status: "active", metadata: {}, trial_end: null });
     const item = subscription.items.data[0] as Stripe.SubscriptionItem;
     expect(item).toMatchObject({ quantity: 2, price: { unit_amount: 1_200 } });

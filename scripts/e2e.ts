@@ -54,7 +54,9 @@ export function stackPorts(
 ) {
   const port = (key: string) => {
     const value = env[key] || example.get(key);
-    if (!value) throw new Error(`${key} is in neither .env nor .env.example`);
+    if (!value) {
+      throw new Error(`${key} is in neither .env nor .env.example`);
+    }
     return [key, value];
   };
   return Object.fromEntries(PORTS.map(port)) as Ports;
@@ -141,9 +143,13 @@ type Running = { name: string; process: Pick<ChildProcess, "pid" | "exitCode"> }
 async function ready(stack: Stack, url: string, child: Pick<ChildProcess, "exitCode">) {
   const deadline = Date.now() + stack.readyTimeoutMs;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) return false;
+    if (child.exitCode !== null) {
+      return false;
+    }
     const response = await stack.fetch(url).catch(() => undefined);
-    if (response?.ok) return true;
+    if (response?.ok) {
+      return true;
+    }
     await stack.sleep(500);
   }
   return false;
@@ -178,7 +184,9 @@ function suitesFor(argv: string[]) {
     .map((arg) => /^--shard=(\d+)\//.exec(arg)?.[1])
     .find((n) => n !== undefined);
   const everything = SUITES.filter((suite) => !shard || (SHARD_OF[suite] ?? shard) === shard);
-  if (appFlag === -1) return { apps: everything, playwrightArgs };
+  if (appFlag === -1) {
+    return { apps: everything, playwrightArgs };
+  }
   const app = argv[appFlag + 1];
   return app && SUITES.includes(app) ? { apps: [app], playwrightArgs } : undefined;
 }
@@ -194,7 +202,9 @@ function build(stack: Stack) {
       stdio: "inherit",
       env: { ...stack.env, NODE_ENV: "production" },
     });
-    if (built.status !== 0) return built.status ?? 1;
+    if (built.status !== 0) {
+      return built.status ?? 1;
+    }
   }
   return 0;
 }
@@ -235,7 +245,9 @@ async function startAll(stack: Stack, running: Running[], ports: Ports) {
   }
   for (const [index, service] of all.entries()) {
     const child = running[index]?.process;
-    if (!service.ready || !child) continue;
+    if (!service.ready || !child) {
+      continue;
+    }
     if (!(await ready(stack, service.ready, child))) {
       const log = readFileSync(join(stack.logs, `${service.name}.log`), "utf8");
       console.error(log.split("\n").slice(-50).join("\n"));
@@ -269,7 +281,9 @@ function runSuites(stack: Stack, apps: string[], playwrightArgs: string[], ports
           stdio: "inherit",
           env,
         });
-    if (suite.status !== 0) status = suite.status ?? 1;
+    if (suite.status !== 0) {
+      status = suite.status ?? 1;
+    }
   }
   return status;
 }
@@ -284,7 +298,9 @@ export async function e2e(
 
   const busy = await busyServices(stack, services(ports));
   if (busy.length > 0) {
-    for (const s of busy) fail(`${s.name}: something already listens on ${new URL(s.ready).host}`);
+    for (const s of busy) {
+      fail(`${s.name}: something already listens on ${new URL(s.ready).host}`);
+    }
     console.error(
       "Stop the running stack first, or test against it with `bun run --cwd apps/web test:e2e`.",
     );
@@ -298,7 +314,9 @@ export async function e2e(
   }
 
   const built = build(stack);
-  if (built !== 0) return built;
+  if (built !== 0) {
+    return built;
+  }
 
   mkdirSync(stack.logs, { recursive: true });
   const running: Running[] = [];
@@ -322,4 +340,6 @@ export async function e2e(
   }
 }
 
-if (import.meta.main) process.exit(await e2e());
+if (import.meta.main) {
+  process.exit(await e2e());
+}

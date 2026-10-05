@@ -91,7 +91,9 @@ describe("billing", () => {
     const { api, looks } = billingApi();
     renderHook(() => useBillingOverviewQuery({ untilPaid: true }), api);
     await until(() => expect(looks()).toBe(1));
-    for (let i = 0; i < 40; i++) await vi.advanceTimersByTimeAsync(2_000);
+    for (let i = 0; i < 40; i++) {
+      await vi.advanceTimersByTimeAsync(2_000);
+    }
     await until(() => expect(looks()).toBe(30));
     await vi.advanceTimersByTimeAsync(10_000);
     expect(looks()).toBe(30);

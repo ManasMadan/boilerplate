@@ -26,7 +26,9 @@ interface Doc {
 
 async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(chunk as Buffer);
+  for await (const chunk of request) {
+    chunks.push(chunk as Buffer);
+  }
   return chunks.length
     ? (JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>)
     : {};
@@ -104,16 +106,22 @@ export async function startFakeAi() {
       },
       "POST /v1/assistant/answers": () => {
         const question = String(input.question);
-        if (question.includes("[budget]")) return fail(429, "AI_BUDGET_EXCEEDED");
+        if (question.includes("[budget]")) {
+          return fail(429, "AI_BUDGET_EXCEEDED");
+        }
         return streamAnswer(question, response);
       },
     };
     const handle = routes[route];
-    if (handle) return handle();
+    if (handle) {
+      return handle();
+    }
     const remove = /^DELETE \/v1\/documents\/([0-9a-f-]{36})$/.exec(route);
     if (remove) {
       const index = documents.findIndex((doc) => doc.id === remove[1] && doc.org === org);
-      if (index === -1) return fail(404, "DOCUMENT_NOT_FOUND");
+      if (index === -1) {
+        return fail(404, "DOCUMENT_NOT_FOUND");
+      }
       documents.splice(index, 1);
       return reply(204);
     }

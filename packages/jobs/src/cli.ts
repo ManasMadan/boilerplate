@@ -32,7 +32,9 @@ async function status(open: (queue: QueueName) => UncheckedQueue, names: QueueNa
 async function onFailed(command: string, queue: UncheckedQueue, rest: string[]) {
   if (command === "failed") {
     const failed = await failedJobs(queue, Number(rest[0] ?? 20));
-    if (failed.length === 0) print("No failed jobs.");
+    if (failed.length === 0) {
+      print("No failed jobs.");
+    }
     for (const job of failed) {
       print(
         `${job.id}  ${job.name}  ${job.failedAt?.toISOString() ?? "?"}  after ${job.attemptsMade} attempts\n  ${job.failedReason}`,
@@ -62,7 +64,9 @@ export async function jobs(argv: string[], url: string | undefined): Promise<num
     new Queue(queue, { connection, prefix: queuePrefix(queue) });
 
   try {
-    if (command === "status") return await status(open, names);
+    if (command === "status") {
+      return await status(open, names);
+    }
     if (!["failed", "retry", "discard"].includes(command)) {
       fail(`Unknown command "${command}": status, failed, retry or discard.`);
       return 1;

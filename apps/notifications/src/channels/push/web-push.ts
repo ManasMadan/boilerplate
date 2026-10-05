@@ -37,14 +37,17 @@ export class WebPushTransport implements PushTransport {
       return { ok: false, gone: true, error: "stored subscription isn't JSON" };
     }
     const parsed = subscriptionSchema.safeParse(stored);
-    if (!parsed.success)
+    if (!parsed.success) {
       return { ok: false, gone: true, error: "stored subscription is malformed" };
+    }
     const subscription: webPush.PushSubscription = parsed.data;
     const endpoint = subscription.endpoint;
     const allowed =
       isWebPushEndpoint(endpoint) ||
       (this.config.testOrigin !== undefined && endpoint.startsWith(`${this.config.testOrigin}/`));
-    if (!allowed) return { ok: false, gone: true, error: "not a browser push service" };
+    if (!allowed) {
+      return { ok: false, gone: true, error: "not a browser push service" };
+    }
 
     const request = webPush.generateRequestDetails(
       subscription,
@@ -77,8 +80,9 @@ export class WebPushTransport implements PushTransport {
     } catch (error) {
       return { ok: false, gone: false, error: `Web Push: ${asError(error).message}` };
     }
-    if (response.ok)
+    if (response.ok) {
       return { ok: true, providerMessageId: response.headers.get("location") ?? undefined };
+    }
     const text = await response.text();
     return {
       ok: false,

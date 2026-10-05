@@ -49,7 +49,9 @@ export function syncEnv(envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH) {
   }
   const env = readEnv(envPath);
   for (const [key, value] of readEnv(examplePath)) {
-    if (!env.has(key)) writeEnvValue(envPath, key, value);
+    if (!env.has(key)) {
+      writeEnvValue(envPath, key, value);
+    }
   }
   // Placeholders become fresh secrets in each variable's format (the VAPID pair together).
   const current = Object.fromEntries(readEnv(envPath));
@@ -72,10 +74,13 @@ export const composeProject = (root = ROOT) =>
 export function useStack(stack: number, envPath: string, examplePath: string, project: string) {
   const example = Object.fromEntries(readEnv(examplePath));
   const changes = stackValues(Object.fromEntries(readEnv(envPath)), example, stack, project);
-  for (const [key, value] of Object.entries(changes)) writeEnvValue(envPath, key, value);
+  for (const [key, value] of Object.entries(changes)) {
+    writeEnvValue(envPath, key, value);
+  }
   const forTests = join(dirname(envPath), STACK_FILE);
-  if (stack === 0) rmSync(forTests, { force: true });
-  else {
+  if (stack === 0) {
+    rmSync(forTests, { force: true });
+  } else {
     const values = Object.entries(stackValues(example, example, stack));
     writeFileSync(forTests, `${values.map(([key, value]) => envLine(key, value)).join("\n")}\n`);
   }
@@ -104,11 +109,15 @@ export function setup({
 }: Options = {}) {
   console.log("\n1. Environment");
   syncEnv(envPath, examplePath);
-  if (stack !== undefined) useStack(stack, envPath, examplePath, project);
+  if (stack !== undefined) {
+    useStack(stack, envPath, examplePath, project);
+  }
   for (const [title, [command = "", ...args]] of STEPS) {
     console.log(`\n${title}`);
     const { status } = run(command, args, { stdio: "inherit" });
-    if (status !== 0) return status ?? 1;
+    if (status !== 0) {
+      return status ?? 1;
+    }
   }
   console.log("\nSetup complete. Start everything with `bun dev`.\n");
   return 0;
@@ -122,7 +131,9 @@ export function main(argv = process.argv.slice(2), options: Omit<Options, "stack
     fail(`--stack takes a number from 0 to ${STACKS - 1}.`);
     return 1;
   }
-  if (!argv.includes("--env")) return setup({ ...options, stack });
+  if (!argv.includes("--env")) {
+    return setup({ ...options, stack });
+  }
   const { envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH } = options;
   syncEnv(envPath, examplePath);
   if (stack !== undefined) {
@@ -131,4 +142,6 @@ export function main(argv = process.argv.slice(2), options: Omit<Options, "stack
   return 0;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) {
+  process.exit(main());
+}

@@ -126,8 +126,11 @@ export function parseForm(body: string): Form {
 
 /** Sets a field of a form part; the value set. */
 function setField<V>(node: FormPart, name: string, value: V): V {
-  if (Array.isArray(node)) node[Number(name)] = value;
-  else node[name] = value;
+  if (Array.isArray(node)) {
+    node[Number(name)] = value;
+  } else {
+    node[name] = value;
+  }
   return value;
 }
 
@@ -228,7 +231,9 @@ class Fake {
       headers: { "content-type": "application/json", "stripe-signature": signature },
       body: payload,
     });
-    if (!response.ok) throw new Error(`webhook ${type} was refused: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`webhook ${type} was refused: ${response.status}`);
+    }
   }
 
   invoiceFor(subscription: Subscription, status: string) {
@@ -257,7 +262,9 @@ class Fake {
   subscribe(session: CheckoutSession, paymentMethod: string | null) {
     const [line] = withFirstLine.parse(session).line_items;
     const price = this.options.prices[line.price];
-    if (!price) throw new Error(`unknown price ${line.price}`);
+    if (!price) {
+      throw new Error(`unknown price ${line.price}`);
+    }
     const data = subscriptionData.parse(session.subscription_data ?? {});
     const trialDays = Number(data.trial_period_days ?? 0);
     const start = now();
@@ -299,7 +306,9 @@ class Fake {
    */
   takeCard(session: CheckoutSession, form: Form) {
     const trial = subscriptionData.optional().parse(session.subscription_data)?.trial_period_days;
-    if (session.payment_method_collection === "if_required" && trial) return null;
+    if (session.payment_method_collection === "if_required" && trial) {
+      return null;
+    }
     const card = typeof form.card === "string" ? form.card : "4242";
     const paymentMethod: PaymentMethod =
       form.method === "sepa_debit"
@@ -354,7 +363,9 @@ class Fake {
 
   private createCheckout(form: Form) {
     const { customer } = form;
-    if (typeof customer !== "string" || !this.customers.has(customer)) return notFound("customer");
+    if (typeof customer !== "string" || !this.customers.has(customer)) {
+      return notFound("customer");
+    }
     const session = { ...form, customer, id: id("cs"), object: "checkout.session", status: "open" };
     this.sessions.set(session.id, session);
     return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
@@ -366,13 +377,17 @@ class Fake {
 
   private checkout(sessionId = "") {
     const session = this.sessions.get(sessionId);
-    if (!session) return notFound("checkout session");
+    if (!session) {
+      return notFound("checkout session");
+    }
     return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
   }
 
   private expire(sessionId = "") {
     const session = this.sessions.get(sessionId);
-    if (!session) return notFound("checkout session");
+    if (!session) {
+      return notFound("checkout session");
+    }
     if (session.status !== "open") {
       return {
         status: 400,
@@ -390,7 +405,9 @@ class Fake {
 
   private createPortal(form: Form) {
     const { customer } = form;
-    if (typeof customer !== "string" || !this.customers.has(customer)) return notFound("customer");
+    if (typeof customer !== "string" || !this.customers.has(customer)) {
+      return notFound("customer");
+    }
     const portal = id("bps");
     this.portals.set(portal, { customer, return_url: form.return_url });
     return {
@@ -403,10 +420,18 @@ class Fake {
   /** A subscription: read it, cancel it now (DELETE) or change it (POST). */
   private subscription(method: string, subscriptionId = "", form: Form) {
     const subscription = this.subscriptions.get(subscriptionId);
-    if (!subscription) return notFound("subscription");
-    if (method === "GET") return subscription;
-    if (method === "DELETE") return this.cancel(subscription);
-    if (method === "POST") return this.update(subscription, form);
+    if (!subscription) {
+      return notFound("subscription");
+    }
+    if (method === "GET") {
+      return subscription;
+    }
+    if (method === "DELETE") {
+      return this.cancel(subscription);
+    }
+    if (method === "POST") {
+      return this.update(subscription, form);
+    }
     return undefined;
   }
 
@@ -420,11 +445,16 @@ class Fake {
   private async update(subscription: Subscription, form: Form) {
     for (const change of lineItems.parse(form.items ?? [])) {
       const item = subscription.items.data.find((existing) => existing.id === change.id);
-      if (!item) return notFound("subscription item");
-      if (change.quantity !== undefined) item.quantity = Number(change.quantity);
+      if (!item) {
+        return notFound("subscription item");
+      }
+      if (change.quantity !== undefined) {
+        item.quantity = Number(change.quantity);
+      }
     }
-    if (form.cancel_at_period_end !== undefined)
+    if (form.cancel_at_period_end !== undefined) {
       subscription.cancel_at_period_end = form.cancel_at_period_end === "true";
+    }
     // Ending a trial now charges the card at once, as Stripe does.
     if (form.trial_end === "now" && subscription.status === "trialing") {
       subscription.status = "active";
@@ -453,23 +483,31 @@ class Fake {
   /** The hosted pages: Checkout and the billing portal. */
   async hosted(method: string, path: string, form: Form): Promise<Page> {
     const checkout = /^\/checkout\/(cs_\w+)(\/pay)?$/.exec(path);
-    if (checkout) return this.checkoutPage(method, checkout[1], !!checkout[2], form);
+    if (checkout) {
+      return this.checkoutPage(method, checkout[1], !!checkout[2], form);
+    }
     const portal = /^\/portal\/(bps_\w+)(\/cancel|\/resume)?$/.exec(path);
-    if (portal) return this.portalPage(method, portal[1], portal[2]);
+    if (portal) {
+      return this.portalPage(method, portal[1], portal[2]);
+    }
     return { status: 404, html: page("Not found", "") };
   }
 
   // The page's path always has the session's id (the regex requires it).
   private async checkoutPage(method: string, sessionId = "", pay: boolean, form: Form) {
     const session = this.sessions.get(sessionId);
-    if (!session) return { status: 404, html: page("Not found", "") };
+    if (!session) {
+      return { status: 404, html: page("Not found", "") };
+    }
     if (session.status === "expired") {
       return {
         status: 410,
         html: page("Fake Stripe Checkout", "<p>This checkout session has expired.</p>"),
       };
     }
-    if (method === "POST" && pay) return this.pay(session, form);
+    if (method === "POST" && pay) {
+      return this.pay(session, form);
+    }
     const line = withFirstLine.safeParse(session).data?.line_items[0];
     const price = this.options.prices[line?.price ?? ""];
     return {
@@ -496,7 +534,9 @@ class Fake {
       };
     }
     const successUrl = z.string().parse(session.success_url);
-    if (session.status !== "open") return { status: 303, location: successUrl };
+    if (session.status !== "open") {
+      return { status: 303, location: successUrl };
+    }
     session.status = "complete";
     const subscription = this.subscribe(session, this.takeCard(session, form));
     this.invoiceFor(subscription, "paid");
@@ -510,7 +550,9 @@ class Fake {
 
   private async portalPage(method: string, portalId = "", action: string | undefined) {
     const session = this.portals.get(portalId);
-    if (!session) return { status: 404, html: page("Not found", "") };
+    if (!session) {
+      return { status: 404, html: page("Not found", "") };
+    }
     const subscription = [...this.subscriptions.values()].find(
       (s) => s.customer === session.customer && s.status !== "canceled",
     );
@@ -542,8 +584,12 @@ class Fake {
     // an hour before it's due), without an event, as Stripe's dashboard can leave one.
     const invoice = /^\/__fake\/subscriptions\/(sub_\w+)\/invoice$/.exec(path);
     const subscription = this.subscriptions.get((failed ?? lapsed ?? invoice)?.[1] ?? "");
-    if (!subscription) return undefined;
-    if (invoice) return this.invoiceFor(subscription, String(query.get("status")));
+    if (!subscription) {
+      return undefined;
+    }
+    if (invoice) {
+      return this.invoiceFor(subscription, String(query.get("status")));
+    }
     if (failed) {
       subscription.status = "past_due";
       const open = this.invoiceFor(subscription, "open");
@@ -584,9 +630,13 @@ class Fake {
         },
       };
     }
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
     const answer = answerFor(await this.api(method, url.pathname, form, url.searchParams));
-    if (cacheKey && method === "POST") this.idempotent.set(cacheKey, { request: raw, ...answer });
+    if (cacheKey && method === "POST") {
+      this.idempotent.set(cacheKey, { request: raw, ...answer });
+    }
     return answer;
   }
 
@@ -595,7 +645,9 @@ class Fake {
     // A server's requests always have a URL and a method.
     const url = new URL(required(request.url, "the request's URL"), "http://fake");
     const chunks: Buffer[] = [];
-    for await (const chunk of request as AsyncIterable<Buffer>) chunks.push(chunk);
+    for await (const chunk of request as AsyncIterable<Buffer>) {
+      chunks.push(chunk);
+    }
     const raw = Buffer.concat(chunks).toString();
     const form = parseForm(raw);
     try {
@@ -621,8 +673,11 @@ class Fake {
 type Page = { status: number; html?: string; location?: string };
 
 function send(response: ServerResponse, { status, html, location }: Page) {
-  if (location) response.writeHead(status, { location });
-  else response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  if (location) {
+    response.writeHead(status, { location });
+  } else {
+    response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  }
   response.end(html);
 }
 
@@ -633,7 +688,9 @@ function json(response: ServerResponse, status: number, body: unknown) {
 
 /** The portal's plan line, with the button that cancels or resumes it. */
 function planState(portalId: string, subscription: Subscription | undefined) {
-  if (!subscription) return "<p>No subscription.</p>";
+  if (!subscription) {
+    return "<p>No subscription.</p>";
+  }
   const cancels = subscription.cancel_at_period_end;
   const action = cancels ? "resume" : "cancel";
   return (

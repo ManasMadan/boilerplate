@@ -19,7 +19,9 @@ export async function registerApp(name = "Web Agent") {
       response_types: ["code"],
     }),
   });
-  if (response.status !== 201) throw new Error(`register answered ${response.status}`);
+  if (response.status !== 201) {
+    throw new Error(`register answered ${response.status}`);
+  }
   return ((await response.json()) as { client_id: string }).client_id;
 }
 

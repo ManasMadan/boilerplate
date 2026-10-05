@@ -20,10 +20,11 @@ try {
     `Re-encrypted ${result.accounts} accounts, ${result.twoFactors} two-factor settings, ` +
       `${result.signingKeys} signing keys and ${result.webhookEndpoints} webhook endpoints.`,
   );
-  if (!env.BETTER_AUTH_SECRETS)
+  if (!env.BETTER_AUTH_SECRETS) {
     console.log(
       "BETTER_AUTH_SECRETS isn't set, so better-auth's values have one key and were left as they are.",
     );
+  }
 } finally {
   await database.disconnect();
 }

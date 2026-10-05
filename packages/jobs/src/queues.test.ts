@@ -25,7 +25,9 @@ describe("event routing", () => {
       "org.member_added.v1",
       "org.member_removed.v1",
     ];
-    for (const name of billing) expect(eventSubscribers["events-billing"](name)).toBe(true);
+    for (const name of billing) {
+      expect(eventSubscribers["events-billing"](name)).toBe(true);
+    }
     // Checked by the compiler: an event the route doesn't list isn't a billing event.
     const unrouted: Takes<RoutedEvent<"events-billing">, "todo.created.v1"> = false;
     const bumped: Takes<RoutedEvent<"events-notifications">, "notification.requested.v2"> = false;
@@ -45,7 +47,9 @@ describe("event routing", () => {
   it("retries with jitter, so jobs that failed together don't all come back at once", () => {
     for (const [name, queue] of Object.entries(queues)) {
       const backoff = queue.options.backoff as { type?: string; jitter?: number } | undefined;
-      if (backoff?.type === "exponential") expect(backoff.jitter, name).toBeGreaterThan(0);
+      if (backoff?.type === "exponential") {
+        expect(backoff.jitter, name).toBeGreaterThan(0);
+      }
     }
   });
 });

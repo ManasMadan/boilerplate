@@ -59,8 +59,11 @@ class Hub<S extends z.ZodType> {
     this.subscriber = redis.duplicate();
     this.subscriber.on("message", (channel: string, raw: string) => {
       const message = parseMessage(schema, raw);
-      if (message.success) this.local.emit(channel.slice(PREFIX.length), message.data);
-      else onDropped(channel, raw);
+      if (message.success) {
+        this.local.emit(channel.slice(PREFIX.length), message.data);
+      } else {
+        onDropped(channel, raw);
+      }
     });
   }
 
@@ -73,13 +76,17 @@ class Hub<S extends z.ZodType> {
     let wake: (() => void) | undefined;
     const onMessage = (message: z.infer<S>) => {
       buffer.push(message);
-      if (buffer.length > MAX_BUFFERED) buffer.shift();
+      if (buffer.length > MAX_BUFFERED) {
+        buffer.shift();
+      }
       wake?.();
     };
     // One listener for the stream's whole life, not one per wait.
     const onAbort = () => wake?.();
     signal.addEventListener("abort", onAbort, { once: true });
-    for (const channel of channels) this.local.on(channel, onMessage);
+    for (const channel of channels) {
+      this.local.on(channel, onMessage);
+    }
     try {
       // Inside the try: if subscribing fails, the finally still undoes the rest.
       await Promise.all(channels.map((channel) => this.retain(channel)));
@@ -92,13 +99,17 @@ class Hub<S extends z.ZodType> {
         wake = undefined;
         while (!signal.aborted) {
           const next = buffer.shift();
-          if (next === undefined) break;
+          if (next === undefined) {
+            break;
+          }
           yield next;
         }
       }
     } finally {
       signal.removeEventListener("abort", onAbort);
-      for (const channel of channels) this.local.off(channel, onMessage);
+      for (const channel of channels) {
+        this.local.off(channel, onMessage);
+      }
       await Promise.all(channels.map((channel) => this.release(channel)));
     }
   }
@@ -106,7 +117,9 @@ class Hub<S extends z.ZodType> {
   private async retain(channel: string) {
     const count = (this.refs.get(channel) ?? 0) + 1;
     this.refs.set(channel, count);
-    if (count === 1) await this.subscriber.subscribe(PREFIX + channel);
+    if (count === 1) {
+      await this.subscriber.subscribe(PREFIX + channel);
+    }
   }
 
   private async release(channel: string) {

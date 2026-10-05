@@ -7,7 +7,9 @@ afterEach(() => {
 });
 
 async function load(variables: Record<string, string>) {
-  for (const [name, value] of Object.entries(variables)) vi.stubEnv(name, value);
+  for (const [name, value] of Object.entries(variables)) {
+    vi.stubEnv(name, value);
+  }
   const { env } = await import("./env");
   const { features } = await import("./features");
   return { env, features };

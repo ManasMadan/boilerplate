@@ -60,15 +60,23 @@ const DOMAIN_GONE = /^DNS lookup failed: (Domain not found|Domain does not accep
  * suppressing the recipient for them would silently cut off people whose mailbox is fine.
  */
 export function isHardBounce(details: string) {
-  if (DOMAIN_GONE.test(details)) return true;
+  if (DOMAIN_GONE.test(details)) {
+    return true;
+  }
   const reply = SMTP_REPLY.exec(details);
-  if (!reply) return false;
+  if (!reply) {
+    return false;
+  }
   const [, command = "", code = "", status, subject, detail] = reply;
   // RFC 3463: 5.1.x is a bad destination address (except 5.1.7 and 5.1.8, which are
   // about the sender), 5.2.1 a disabled mailbox. 5.2.2 (mailbox full) passes with time.
   if (status !== "0") {
-    if (status !== "5") return false;
-    if (subject === "1") return detail !== "7" && detail !== "8";
+    if (status !== "5") {
+      return false;
+    }
+    if (subject === "1") {
+      return detail !== "7" && detail !== "8";
+    }
     return subject === "2" && detail === "1";
   }
   // A server without enhanced codes: only a recipient refused as unknown (RFC 5321).
@@ -77,9 +85,13 @@ export function isHardBounce(details: string) {
 
 /** The address to suppress for an event, or null for events we only record. */
 export function bouncedAddress(event: StalwartEvent) {
-  if (event.type !== "delivery.dsn-perm-fail") return null;
+  if (event.type !== "delivery.dsn-perm-fail") {
+    return null;
+  }
   const { to, details } = event.data;
-  if (typeof details !== "string" || !isHardBounce(details)) return null;
+  if (typeof details !== "string" || !isHardBounce(details)) {
+    return null;
+  }
   const address = z.email().safeParse(to);
   return address.success ? address.data : null;
 }

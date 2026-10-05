@@ -44,8 +44,11 @@ export function EmailCard() {
       fetchOptions: { headers: captcha.headers() },
     });
     captcha.reset();
-    if (error) toast.error(errorMessage(error));
-    else setStep({ name: "current" });
+    if (error) {
+      toast.error(errorMessage(error));
+    } else {
+      setStep({ name: "current" });
+    }
   }
 
   return (

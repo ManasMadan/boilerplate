@@ -19,7 +19,9 @@ export default function VerifyEmail() {
   const [notice, setNotice] = useState<{ text: string; error: boolean }>();
   const schema = z.object({ otp: schemas.otp });
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { otp: "" } });
-  if (!email || !z.email().safeParse(email).success) return <Redirect href="/sign-in" />;
+  if (!email || !z.email().safeParse(email).success) {
+    return <Redirect href="/sign-in" />;
+  }
 
   const submit = form.handleSubmit(async ({ otp }) => {
     const { error } = await authClient.emailOtp.verifyEmail({ email, otp });

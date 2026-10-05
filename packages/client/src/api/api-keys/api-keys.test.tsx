@@ -28,7 +28,9 @@ describe("API keys", () => {
           return { apiKey, key: "bp_abcdef" };
         }),
         revoke: os.apiKeys.revoke.handler(({ input }) => {
-          if (!keys.some((k) => k.id === input.id)) throw new ORPCError("API_KEY_NOT_FOUND");
+          if (!keys.some((k) => k.id === input.id)) {
+            throw new ORPCError("API_KEY_NOT_FOUND");
+          }
           keys = keys.filter((k) => k.id !== input.id);
         }),
       },

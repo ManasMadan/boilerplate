@@ -48,7 +48,9 @@ export class IdempotencyStore {
     if (!claimed) {
       // A lock that expired just now reads as null: still no result to replay.
       const record = stored.parse(JSON.parse(String(await this.redis.get(redisKey))));
-      if (record?.state === "done") return schema.parse(record.result);
+      if (record?.state === "done") {
+        return schema.parse(record.result);
+      }
       throw new AppError("IDEMPOTENCY_IN_PROGRESS");
     }
     try {

@@ -49,7 +49,9 @@ export const GOAWAY_APNS_TOKEN = "a0".repeat(32);
 
 function verifyJwt(jwt: string, key: KeyObject, algorithm: "RSA-SHA256" | "SHA256") {
   const [header, claims, signature] = jwt.split(".");
-  if (!header || !claims || !signature) return undefined;
+  if (!header || !claims || !signature) {
+    return undefined;
+  }
   const ok = createVerify(algorithm)
     .update(`${header}.${claims}`)
     .verify(
@@ -63,7 +65,9 @@ function verifyJwt(jwt: string, key: KeyObject, algorithm: "RSA-SHA256" | "SHA25
 
 async function readBody(request: AsyncIterable<Buffer | string>) {
   const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  for await (const chunk of request) {
+    chunks.push(Buffer.from(chunk));
+  }
   return Buffer.concat(chunks);
 }
 
@@ -113,15 +117,17 @@ export async function startFakePush() {
   function fcmToken(raw: Buffer, reply: Reply) {
     const assertion = new URLSearchParams(raw.toString()).get("assertion") ?? "";
     const claims = verifyJwt(assertion, fcmKeys.publicKey, "RSA-SHA256");
-    if (claims?.scope !== "https://www.googleapis.com/auth/firebase.messaging")
+    if (claims?.scope !== "https://www.googleapis.com/auth/firebase.messaging") {
       return reply(401, { error: "invalid_grant" });
+    }
     return reply(200, { access_token: accessToken, expires_in: 3600 });
   }
 
   /** FCM's send API; the token's prefix picks the outcome. */
   async function fcmSend(request: IncomingMessage, raw: Buffer, reply: Reply) {
-    if (request.headers.authorization !== `Bearer ${accessToken}`)
+    if (request.headers.authorization !== `Bearer ${accessToken}`) {
       return reply(401, { error: { status: "UNAUTHENTICATED" } });
+    }
     const { message } = JSON.parse(raw.toString()) as {
       message: {
         token: string;
@@ -130,13 +136,18 @@ export async function startFakePush() {
       };
     };
     // A provider that drops the connection: the transport's fetch throws.
-    if (message.token.startsWith("crash")) return request.socket.destroy();
+    if (message.token.startsWith("crash")) {
+      return request.socket.destroy();
+    }
     const failure = Object.entries(FCM_FAILURES).find(([prefix]) =>
       message.token.startsWith(prefix),
     )?.[1];
-    if (failure) return reply(failure.status, failure.body);
-    if (message.token.startsWith("flaky") && !healthy)
+    if (failure) {
+      return reply(failure.status, failure.body);
+    }
+    if (message.token.startsWith("flaky") && !healthy) {
       return reply(500, { error: { status: "INTERNAL" } });
+    }
     await hooks.whileDelivering?.();
     delivered.push({
       provider: "fcm",
@@ -158,14 +169,19 @@ export async function startFakePush() {
     response: ServerResponse,
     reply: Reply,
   ) {
-    if (push === "gone") return reply(410, {});
+    if (push === "gone") {
+      return reply(410, {});
+    }
     const subscriber = subscribers.get(push);
     const authorization = request.headers.authorization ?? "";
     const signed =
       authorization.startsWith("vapid t=") && authorization.includes(`k=${vapid.publicKey}`);
-    if (!subscriber || !signed) return reply(401, {});
-    if (request.headers["content-encoding"] !== "aes128gcm" || !request.headers.ttl)
+    if (!subscriber || !signed) {
+      return reply(401, {});
+    }
+    if (request.headers["content-encoding"] !== "aes128gcm" || !request.headers.ttl) {
       return reply(400, {});
+    }
     const payload = JSON.parse(
       decrypt(raw, {
         version: "aes128gcm",
@@ -196,12 +212,16 @@ export async function startFakePush() {
       response.writeHead(status, { "content-type": "application/json" });
       response.end(JSON.stringify(body));
     };
-    if (url.pathname === "/token") return fcmToken(raw, reply);
+    if (url.pathname === "/token") {
+      return fcmToken(raw, reply);
+    }
     if (url.pathname === "/v1/projects/test-project/messages:send") {
       return fcmSend(request, raw, reply);
     }
     const push = /^\/push\/([\w-]+)$/.exec(url.pathname)?.[1];
-    if (push) return webPushDelivery(push, request, raw, response, reply);
+    if (push) {
+      return webPushDelivery(push, request, raw, response, reply);
+    }
     reply(404, {});
   });
 
@@ -223,7 +243,9 @@ export async function startFakePush() {
       return { status: 400, reason: "TopicDisallowed" };
     }
     const always = APNS_REFUSED[token];
-    if (always) return always;
+    if (always) {
+      return always;
+    }
     // The first provider token that sends to it expires; a newly signed one works.
     if (token === EXPIRING_APNS_TOKEN && (expired.size === 0 || expired.has(jwt))) {
       expired.add(jwt);
@@ -242,16 +264,22 @@ export async function startFakePush() {
     };
     const token = /^\/3\/device\/([0-9a-f]+)$/.exec(String(headers[":path"]))?.[1];
     const jwt = String(headers.authorization ?? "").replace(/^bearer /, "");
-    if (!token) return reply(403, { reason: "InvalidProviderToken" });
+    if (!token) {
+      return reply(403, { reason: "InvalidProviderToken" });
+    }
     const refused = apnsRefusal(token, jwt, headers);
-    if (refused) return reply(refused.status, { reason: refused.reason });
+    if (refused) {
+      return reply(refused.status, { reason: refused.reason });
+    }
     const { aps, link } = JSON.parse(raw.toString()) as {
       aps: { alert: { title: string; body: string } };
       link?: string;
     };
     delivered.push({ provider: "apns", token, ...aps.alert, link, headers });
     reply(200);
-    if (token === GOAWAY_APNS_TOKEN) stream.session?.goaway();
+    if (token === GOAWAY_APNS_TOKEN) {
+      stream.session?.goaway();
+    }
   });
 
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));

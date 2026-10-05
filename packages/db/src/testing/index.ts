@@ -45,8 +45,9 @@ const SERVICE_ROLES = Object.keys(ROLE_PASSWORDS).filter((role) => role !== "mig
 
 function serverUrl() {
   const url = process.env.MIGRATOR_DATABASE_URL;
-  if (!url)
+  if (!url) {
     throw new Error("MIGRATOR_DATABASE_URL must be set for integration tests (see .env.example).");
+  }
   return new URL(url);
 }
 
@@ -106,7 +107,9 @@ async function isStale(client: pg.Client) {
   const table = await client.query<{ t: string | null }>(
     "SELECT to_regclass('public._prisma_migrations') AS t",
   );
-  if (!table.rows[0]?.t) return false;
+  if (!table.rows[0]?.t) {
+    return false;
+  }
   const { rows } = await client.query<{ migration_name: string; checksum: string }>(
     "SELECT migration_name, checksum FROM public._prisma_migrations WHERE finished_at IS NOT NULL",
   );
@@ -192,7 +195,9 @@ export async function createTestDatabase(): Promise<TestDatabase> {
             "SELECT count(*)::int AS open FROM pg_stat_activity WHERE datname = $1 AND usename <> current_user",
             [name],
           );
-          if (rows[0]?.open === 0) break;
+          if (rows[0]?.open === 0) {
+            break;
+          }
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
         await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);

@@ -14,4 +14,6 @@ export async function turnStart(input: HookInput, fingerprint = treeFingerprint)
   return undefined;
 }
 
-if (import.meta.main) process.exit(await runHook(turnStart));
+if (import.meta.main) {
+  process.exit(await runHook(turnStart));
+}

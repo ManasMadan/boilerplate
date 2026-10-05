@@ -18,11 +18,21 @@ const config = {
 function docker(total: number, stats: string, answers: Record<string, Partial<Ran>> = {}) {
   return fakeRun((line) => {
     const words = line.replace(/^docker (compose (--profile \w+ )?)?/, "");
-    if (words in answers) return answers[words];
-    if (words === "config --format json") return { stdout: JSON.stringify(config) };
-    if (words.startsWith("ps")) return { stdout: "valkey\n" };
-    if (words.startsWith("info")) return { stdout: `${total}\n` };
-    if (words.startsWith("stats")) return { stdout: stats };
+    if (words in answers) {
+      return answers[words];
+    }
+    if (words === "config --format json") {
+      return { stdout: JSON.stringify(config) };
+    }
+    if (words.startsWith("ps")) {
+      return { stdout: "valkey\n" };
+    }
+    if (words.startsWith("info")) {
+      return { stdout: `${total}\n` };
+    }
+    if (words.startsWith("stats")) {
+      return { stdout: stats };
+    }
     return {};
   });
 }

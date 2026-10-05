@@ -32,7 +32,9 @@ describe("the previews ApplicationSet", () => {
   it("takes charts, values and Secrets from the target branch, never the pull request's", () => {
     const revisions = [...patch.matchAll(/targetRevision:\s*(.+)/g)].map((m) => m[1]?.trim());
     expect(revisions.length).toBeGreaterThan(0);
-    for (const revision of revisions) expect(revision).toBe('"{{ .target_branch }}"');
+    for (const revision of revisions) {
+      expect(revision).toBe('"{{ .target_branch }}"');
+    }
   });
 
   it("runs the pull request's images", () => {

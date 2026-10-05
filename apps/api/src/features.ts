@@ -10,16 +10,18 @@ import type { Feature } from "@repo/contracts/api";
 import { env } from "./env";
 
 function pair(name: string, a: string | undefined, b: string | undefined) {
-  if (Boolean(a) !== Boolean(b))
+  if (Boolean(a) !== Boolean(b)) {
     throw new Error(`${name} needs both of its variables set, or neither`);
+  }
   return Boolean(a && b);
 }
 
 function billing() {
   const set = [env.STRIPE_SECRET_KEY, env.STRIPE_PRICE_PRO_MONTHLY, env.STRIPE_PRICE_PRO_YEARLY];
   const count = set.filter(Boolean).length;
-  if (count !== 0 && count !== set.length)
+  if (count !== 0 && count !== set.length) {
     throw new Error("Billing needs STRIPE_SECRET_KEY and both STRIPE_PRICE_PRO_* set, or none");
+  }
   return count === set.length;
 }
 

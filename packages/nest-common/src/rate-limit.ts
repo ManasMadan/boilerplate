@@ -68,7 +68,9 @@ export function createRateLimiter(redis: Redis, options: RateLimiterOptions) {
           "rate limiter can't reach Redis",
         );
       }
-      if (failOpen) return { allowed: true, remaining: 0, retryAfterSeconds: 0 };
+      if (failOpen) {
+        return { allowed: true, remaining: 0, retryAfterSeconds: 0 };
+      }
       return { allowed: false, remaining: 0, retryAfterSeconds: options.windowSeconds };
     }
   }

@@ -49,7 +49,9 @@ describe("a reviewer's verdict", () => {
   it("names the verdicts each agent's own instructions end with", () => {
     for (const [agent, { pass, fail }] of Object.entries(VERDICTS)) {
       const text = readFileSync(join(ROOT, ".claude/agents", `${agent}.md`), "utf8");
-      for (const verdict of [...pass, ...fail]) expect(text).toContain(`\`${verdict}\``);
+      for (const verdict of [...pass, ...fail]) {
+        expect(text).toContain(`\`${verdict}\``);
+      }
     }
   });
 });

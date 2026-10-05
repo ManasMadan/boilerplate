@@ -21,7 +21,9 @@ import { register } from "node:module";
 
 /** Starts the SDK when an OTLP endpoint is configured; returns whether it started. */
 export async function startTelemetry(service: string): Promise<boolean> {
-  if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) return false;
+  if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+    return false;
+  }
   // ES modules are instrumented through a loader hook, registered before they load.
   register("@opentelemetry/instrumentation/hook.mjs", import.meta.url);
 
@@ -79,7 +81,9 @@ export async function startTelemetry(service: string): Promise<boolean> {
  */
 export function redactQuery(url: string): string {
   const start = url.indexOf("?");
-  if (start === -1) return url;
+  if (start === -1) {
+    return url;
+  }
   const names = [...new URLSearchParams(url.slice(start + 1)).keys()];
   return `${url.slice(0, start)}?${names.map((name) => `${encodeURIComponent(name)}=`).join("&")}`;
 }
@@ -94,7 +98,9 @@ export function redactSpanUrls(span: {
 }) {
   for (const key of URL_ATTRIBUTES) {
     const value = span.attributes?.[key];
-    if (typeof value !== "string") continue;
+    if (typeof value !== "string") {
+      continue;
+    }
     span.setAttribute(
       key,
       key === "url.query" ? redactQuery(`?${value}`).slice(1) : redactQuery(value),

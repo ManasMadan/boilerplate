@@ -41,7 +41,9 @@ export async function signInWithGoogle(): Promise<{ signedIn: boolean; error: un
   const handoff = await authClient.$fetch<{ id: string; secret: string }>("/mobile/sign-in/start", {
     method: "POST",
   });
-  if (!handoff.data) return { signedIn: false, error: handoff.error };
+  if (!handoff.data) {
+    return { signedIn: false, error: handoff.error };
+  }
   const callbackURL = `${Linking.createURL("/")}?handoff=${encodeURIComponent(handoff.data.id)}`;
   // The provider's page, opened here rather than by the Expo plugin, which would expect
   // the session in the link.
@@ -51,10 +53,14 @@ export async function signInWithGoogle(): Promise<{ signedIn: boolean; error: un
     disableRedirect: true,
   });
   const url = started.data && "url" in started.data ? started.data.url : undefined;
-  if (!url) return { signedIn: false, error: started.error };
+  if (!url) {
+    return { signedIn: false, error: started.error };
+  }
   const proxy = `${apiUrl}/api/auth/expo-authorization-proxy?${new URLSearchParams({ authorizationURL: url })}`;
   const result = await WebBrowser.openAuthSessionAsync(proxy, callbackURL);
-  if (result.type !== "success") return { signedIn: false, error: null };
+  if (result.type !== "success") {
+    return { signedIn: false, error: null };
+  }
   // The answer's cookies are the session; the Expo plugin keeps them like any sign-in's.
   const finished = await authClient.$fetch("/mobile/sign-in/finish", {
     method: "POST",

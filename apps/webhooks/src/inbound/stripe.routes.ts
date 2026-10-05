@@ -27,7 +27,9 @@ export function mountStripe(
     rawBodies(scope, "application/json");
 
     scope.post("/webhooks/stripe", async (request, reply) => {
-      if (!secret) return sendError(reply, "NOT_FOUND");
+      if (!secret) {
+        return sendError(reply, "NOT_FOUND");
+      }
       const signature = request.headers["stripe-signature"];
       if (typeof signature !== "string" || !Buffer.isBuffer(request.body)) {
         return sendError(reply, "BAD_REQUEST");
@@ -54,7 +56,9 @@ export function mountStripe(
           select: { id: true },
         });
         const row = inserted[0];
-        if (!row) return; // already received: acknowledge, don't process twice
+        if (!row) {
+          return; // already received: acknowledge, don't process twice
+        }
         await emitEvent(
           tx,
           "stripe.event_received.v1",

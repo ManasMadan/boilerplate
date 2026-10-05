@@ -49,7 +49,9 @@ const MAX_DEVICES_PER_USER = 20;
  * (fixed key order), so registering and removing the same subscription match.
  */
 function deviceToken(device: PushDeviceInput) {
-  if (device.platform !== "web") return device.token;
+  if (device.platform !== "web") {
+    return device.token;
+  }
   const { endpoint, keys } = device.subscription;
   return JSON.stringify({ endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } });
 }
@@ -142,7 +144,9 @@ export class NotificationsService {
     device: PushDeviceInput,
     appVersion?: string,
   ) {
-    if (session.impersonatedBy) throw new AppError("FORBIDDEN");
+    if (session.impersonatedBy) {
+      throw new AppError("FORBIDDEN");
+    }
     const { userId } = session;
     return userTx(this.database.write, userId, async (tx) => {
       const id = await this.repository.registerDevice(tx, {
@@ -165,8 +169,9 @@ export class NotificationsService {
     const [signed, category] = this.tokens.verify("unsubscribe", token) ?? [];
     const userId = userIdSchema.safeParse(signed).data;
     const parsed = notificationCategorySchema.safeParse(category);
-    if (!userId || !parsed.success || !notificationCategories[parsed.data].mutable)
+    if (!userId || !parsed.success || !notificationCategories[parsed.data].mutable) {
       throw new AppError("UNSUBSCRIBE_LINK_INVALID");
+    }
     const name = parsed.data;
     await this.updatePreferences(userId, {
       channels: [{ category: name, channel: "email", enabled: false }],

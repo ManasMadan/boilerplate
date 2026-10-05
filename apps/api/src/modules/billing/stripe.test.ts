@@ -6,7 +6,9 @@ afterEach(() => {
 });
 
 async function stripeWith(variables: Record<string, string>) {
-  for (const [name, value] of Object.entries(variables)) vi.stubEnv(name, value);
+  for (const [name, value] of Object.entries(variables)) {
+    vi.stubEnv(name, value);
+  }
   const { createStripe } = await import("./stripe");
   return createStripe();
 }

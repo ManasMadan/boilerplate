@@ -110,10 +110,15 @@ export function createSession(
     for (const cookie of response.headers.getSetCookie()) {
       const [pair] = cookie.split(";");
       const [name, ...rest] = (pair ?? "").split("=");
-      if (!name) continue;
+      if (!name) {
+        continue;
+      }
       const value = rest.join("=");
-      if (value === "" || /max-age=0/i.test(cookie)) cookies.delete(name);
-      else cookies.set(name, value);
+      if (value === "" || /max-age=0/i.test(cookie)) {
+        cookies.delete(name);
+      } else {
+        cookies.set(name, value);
+      }
     }
   };
 
@@ -192,7 +197,9 @@ async function findNotification<T extends NotificationPayload["template"]>(
   const request = rows.find(
     (row) => !takenRequests.has(row.id) && matches(row.payload.notification),
   );
-  if (!request) return undefined;
+  if (!request) {
+    return undefined;
+  }
   takenRequests.add(request.id);
   return request.payload.notification as Notification<T>;
 }
@@ -259,7 +266,9 @@ export async function takeOtp(harness: Harness, email: string) {
 /** The Redis key holding a session (better-auth secondary storage, keyPrefix "auth:"). */
 function sessionKey(session: { cookies(): Map<string, string> }) {
   const cookie = session.cookies().get("better-auth.session_token");
-  if (!cookie) throw new Error("not signed in");
+  if (!cookie) {
+    throw new Error("not signed in");
+  }
   return `auth:${decodeURIComponent(cookie).split(".")[0]}`;
 }
 
@@ -273,7 +282,9 @@ export async function editSession(
   const stored = JSON.parse((await harness.redis.get(key)) ?? "null") as {
     session: { createdAt: string; expiresAt: string };
   } | null;
-  if (!stored) throw new Error(`no session at ${key}`);
+  if (!stored) {
+    throw new Error(`no session at ${key}`);
+  }
   edit(stored.session);
   await harness.redis.set(key, JSON.stringify(stored), "KEEPTTL");
 }
@@ -283,13 +294,17 @@ export async function expireOtps(harness: Harness, email: string) {
   let expired = 0;
   for (const key of await harness.redis.keys("auth:verification:*")) {
     const raw = await harness.redis.get(key);
-    if (!raw?.includes(email)) continue;
+    if (!raw?.includes(email)) {
+      continue;
+    }
     const stored = JSON.parse(raw) as { expiresAt: string };
     stored.expiresAt = new Date(Date.now() - 1000).toISOString();
     await harness.redis.set(key, JSON.stringify(stored), "KEEPTTL");
     expired += 1;
   }
-  if (!expired) throw new Error(`no pending code for ${email}`);
+  if (!expired) {
+    throw new Error(`no pending code for ${email}`);
+  }
 }
 
 export const newEmail = () => `user-${randomUUID()}@test.dev`;

@@ -20,7 +20,9 @@ export class FilesCleanup {
   ) {}
 
   async run() {
-    if (!this.storage) return { stale: 0, objects: 0 };
+    if (!this.storage) {
+      return { stale: 0, objects: 0 };
+    }
     const db = this.database.write;
     const { count: stale } = await db.file.deleteMany({
       where: {
@@ -31,11 +33,17 @@ export class FilesCleanup {
     let objects = 0;
     for (;;) {
       const queued = await db.fileObjectDeletion.findMany({ take: BATCH, select: { key: true } });
-      if (queued.length === 0) break;
-      for (const { key } of queued) await this.storage.delete(key); // idempotent
+      if (queued.length === 0) {
+        break;
+      }
+      for (const { key } of queued) {
+        await this.storage.delete(key); // idempotent
+      }
       await db.fileObjectDeletion.deleteMany({ where: { key: { in: queued.map((q) => q.key) } } });
       objects += queued.length;
-      if (queued.length < BATCH) break;
+      if (queued.length < BATCH) {
+        break;
+      }
     }
     return { stale, objects };
   }

@@ -14,8 +14,11 @@ import type { FastifyInstance } from "fastify";
 
 /** `type`: the content type to take raw, or "*" for every one. */
 export function rawBodies(scope: FastifyInstance, type = "*") {
-  if (type === "*") scope.removeAllContentTypeParsers();
-  else scope.removeContentTypeParser(type);
+  if (type === "*") {
+    scope.removeAllContentTypeParsers();
+  } else {
+    scope.removeContentTypeParser(type);
+  }
   scope.addContentTypeParser(type, { parseAs: "buffer" }, (_request, body, done) =>
     done(null, body),
   );

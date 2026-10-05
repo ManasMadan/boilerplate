@@ -64,7 +64,9 @@ function toScopes(permissions: unknown): ApiKeyScope[] {
   const parsed = permissionsSchema.safeParse(
     typeof permissions === "string" ? safeJson(permissions) : permissions,
   );
-  if (!parsed.success) return [];
+  if (!parsed.success) {
+    return [];
+  }
   const granted = new Set(
     Object.entries(parsed.data).flatMap(([resource, actions]) =>
       actions.map((action) => `${resource}:${action}`),
@@ -140,7 +142,9 @@ export class ApiKeysService {
   revoke(orgId: OrgId, userId: UserId, id: ApiKeyId) {
     return transaction(this.database.write, async (tx) => {
       const key = await this.keys.findForRevoke(tx, orgId, id);
-      if (!key) throw new AppError("API_KEY_NOT_FOUND");
+      if (!key) {
+        throw new AppError("API_KEY_NOT_FOUND");
+      }
       await this.keys.remove(tx, key.id);
       await emitEvent(
         tx,
@@ -171,7 +175,9 @@ export class ApiKeysService {
     const orgId = orgIdSchema.parse(result.key.referenceId);
     const userId = createdBy(result.key.metadata);
     const role = userId ? await this.memberships.role(orgId, userId) : null;
-    if (!userId || !role) throw new AppError("UNAUTHENTICATED");
+    if (!userId || !role) {
+      throw new AppError("UNAUTHENTICATED");
+    }
     if (!toScopes(result.key.permissions).includes(scope)) {
       throw new AppError("API_KEY_SCOPE_MISSING", { params: { scope } });
     }

@@ -37,7 +37,9 @@ function movedPorts(
   for (const [key, port] of Object.entries(defaultPorts(example))) {
     const next = String(port + stack * STEP);
     const now = current[key] ?? String(port);
-    if (now === next) continue;
+    if (now === next) {
+      continue;
+    }
     changes[key] = next;
     moved.set(now, next);
   }
@@ -69,11 +71,15 @@ export function stackValues(
   const { changes, moved } = movedPorts(current, example, stack);
   for (const [key, value] of Object.entries(current)) {
     const url = repointed(value, moved);
-    if (!(key in changes) && url !== value) changes[key] = url;
+    if (!(key in changes) && url !== value) {
+      changes[key] = url;
+    }
   }
   if (project !== undefined) {
     const name = stack === 0 ? project : `${project}-stack${stack}`;
-    if (current.COMPOSE_PROJECT_NAME !== name) changes.COMPOSE_PROJECT_NAME = name;
+    if (current.COMPOSE_PROJECT_NAME !== name) {
+      changes.COMPOSE_PROJECT_NAME = name;
+    }
   }
   return changes;
 }

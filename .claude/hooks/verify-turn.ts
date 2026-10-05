@@ -68,7 +68,9 @@ const regenerated = (results: { check: Check }[]) =>
 export async function verifyTurn(input: HookInput, given: Partial<Turn> = {}): Promise<HookOutput> {
   const turn = { ...REAL, ...given };
   const start = turnFile(input.session_id);
-  if (existsSync(start) && readFileSync(start, "utf8") === (await turn.fingerprint())) return;
+  if (existsSync(start) && readFileSync(start, "utf8") === (await turn.fingerprint())) {
+    return;
+  }
 
   const countFile = stopCountFile(input.session_id);
   const count = existsSync(countFile) ? Number(readFileSync(countFile, "utf8")) : 0;
@@ -111,4 +113,6 @@ export async function verifyTurn(input: HookInput, given: Partial<Turn> = {}): P
   return undefined;
 }
 
-if (import.meta.main) process.exit(await runHook(verifyTurn));
+if (import.meta.main) {
+  process.exit(await runHook(verifyTurn));
+}

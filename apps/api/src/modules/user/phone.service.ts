@@ -78,7 +78,9 @@ export class PhoneService {
   async sendCode(userId: UserId, locale: string | null | undefined, phoneNumber: string) {
     await this.perNumber.take(phoneNumber);
     // Its own number again: nothing to verify (and nothing learned about anyone else's).
-    if ((await this.current(userId)) === phoneNumber) throw new AppError("PHONE_NUMBER_TAKEN");
+    if ((await this.current(userId)) === phoneNumber) {
+      throw new AppError("PHONE_NUMBER_TAKEN");
+    }
 
     const code = String(randomInt(0, 10 ** PHONE_CODE_LENGTH)).padStart(PHONE_CODE_LENGTH, "0");
     // A new code replaces the previous one, attempts and all.
@@ -124,11 +126,15 @@ export class PhoneService {
       pending.phoneNumber === phoneNumber &&
       timingSafeEqual(Buffer.from(pending.hash, "hex"), Buffer.from(hashCode(userId, code), "hex"));
     if (!matches) {
-      if (attempt === MAX_ATTEMPTS) await this.redis.del(key);
+      if (attempt === MAX_ATTEMPTS) {
+        await this.redis.del(key);
+      }
       throw new AppError("PHONE_CODE_INVALID");
     }
     // One use only, even if two requests race with the right code.
-    if ((await this.redis.del(key)) === 0) throw new AppError("PHONE_CODE_INVALID");
+    if ((await this.redis.del(key)) === 0) {
+      throw new AppError("PHONE_CODE_INVALID");
+    }
     return this.change(userId, phoneNumber);
   }
 
@@ -143,7 +149,9 @@ export class PhoneService {
         .setPhoneNumber(tx, userId, phoneNumber)
         .catch((error: { code?: string }) => {
           // Someone else verified this number in the meantime.
-          if (error.code === "P2002") throw new AppError("PHONE_NUMBER_TAKEN");
+          if (error.code === "P2002") {
+            throw new AppError("PHONE_NUMBER_TAKEN");
+          }
           throw error;
         });
       const previous = before.phoneNumber;

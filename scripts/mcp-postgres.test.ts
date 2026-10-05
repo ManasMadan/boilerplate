@@ -9,7 +9,9 @@ import { captureOutput } from "./stand-ins";
 const servers: Server[] = [];
 afterEach(() => {
   mock.restore();
-  for (const server of servers.splice(0)) server.close();
+  for (const server of servers.splice(0)) {
+    server.close();
+  }
 });
 
 async function openPort() {

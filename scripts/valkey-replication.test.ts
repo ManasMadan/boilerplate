@@ -16,7 +16,9 @@ setDefaultTimeout(30_000);
 
 const dirs: string[] = [];
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 /** A node's disk and a PATH whose valkey-cli answers `sentinels` (host → primary). */

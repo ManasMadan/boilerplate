@@ -100,7 +100,9 @@ test("the wrong type or a file too big is refused before uploading", async ({ pa
   await page.goto("/settings");
   const uploads: string[] = [];
   page.on("request", (request) => {
-    if (request.url().includes("createUpload")) uploads.push(request.url());
+    if (request.url().includes("createUpload")) {
+      uploads.push(request.url());
+    }
   });
 
   await choose(page, "notes.txt", "text/plain", Buffer.from("hello"));

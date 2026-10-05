@@ -14,7 +14,9 @@ export const webhooksRouter = (
   ),
   // Pointing an endpoint somewhere else is as sensitive as creating one.
   updateEndpoint: orgAdmin.webhooks.updateEndpoint.handler(({ context, input }) => {
-    if (input.url !== undefined) requireFresh(context);
+    if (input.url !== undefined) {
+      requireFresh(context);
+    }
     return webhooks.updateEndpoint(context.orgId, input);
   }),
   deleteEndpoint: orgAdmin.webhooks.deleteEndpoint.handler(({ context, input }) =>
