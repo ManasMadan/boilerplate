@@ -59,6 +59,8 @@ describe("the web image's build", () => {
       .split("\n")
       .filter((file) => file && !file.includes("/node_modules/"))
       .map((file) => relative(ROOT, file))
+      // Next writes these itself, as the build starts.
+      .filter((file) => !/^apps\/web\/(\.next\/|next-env\.d\.ts$)/.test(file))
       .filter((file) => !(committed.has(file) && pruned.some((dir) => file.startsWith(dir))));
     expect(missing).toEqual([]);
   });
