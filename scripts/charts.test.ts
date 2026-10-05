@@ -119,8 +119,9 @@ describe("the charts check", () => {
     expect(inputs).toContain(
       `rendered: staging ${root}/deploy/charts/data\n\n---\nrendered: staging ${root}/deploy/charts/stack\n`,
     );
+    // The platform's own charts, as their add-on's release, in its namespace.
     expect(calls).toContain(
-      `helm template config ${root}/deploy/platform/config --set domain=example.com --set tls.email=ops@example.com --set previews=true --set imagePolicy.enabled=true`,
+      `helm template platform-config ${root}/deploy/platform/config --namespace gateway-system --set domain=example.com --set tls.email=ops@example.com --set previews=true --set imagePolicy.enabled=true`,
     );
     // Add-ons from a Helm repository and from an OCI registry, at their pinned versions.
     const addon = (name: string) => calls.find((line) => line.startsWith(`helm template ${name} `));
@@ -130,7 +131,10 @@ describe("the charts check", () => {
     expect(addon("envoy-gateway")).toMatch(
       /^helm template envoy-gateway oci:\/\/registry-1\.docker\.io\/envoyproxy\/gateway-helm --version \S+ --namespace envoy-gateway-system /,
     );
-    expect(calls.filter((line) => line.startsWith("helm template platform-config"))).toEqual([]);
+    // Rendered once, as our own chart, never as a chart to fetch.
+    expect(calls.filter((line) => line.startsWith("helm template platform-config"))).toHaveLength(
+      1,
+    );
     const argocd = /default\s*=\s*"([^"]+)"/.exec(
       readFileSync(join(REPO, VARIABLES), "utf8").split('variable "argocd_version"')[1] ?? "",
     )?.[1];

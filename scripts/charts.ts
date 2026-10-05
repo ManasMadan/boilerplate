@@ -247,19 +247,49 @@ function checkOptional({ root, exec, kubeconform, check }: Checks) {
   }
 }
 
+/** The add-on definitions (deploy/platform/addons and its observability folder). */
+function addons(root: string) {
+  const platform = join(root, "deploy/platform");
+  return [join(platform, "addons"), join(platform, "addons/observability")].flatMap((dir) =>
+    readdirSync(dir)
+      .filter((name) => name.endsWith(".yaml"))
+      .sort()
+      .map((file) => fields(join(dir, file))),
+  );
+}
+
+/**
+ * The platform's own charts (the add-ons with a `path` in this repository), rendered as
+ * Argo CD does: the add-on's release name and namespace, and the values a cluster sets.
+ */
+export function platformRenders(root = ROOT): Render[] {
+  return addons(root).flatMap(({ addon, namespace, path }) =>
+    addon && namespace && path
+      ? [
+          {
+            name: `platform-${addon}`,
+            args: [
+              "template",
+              addon,
+              join(root, path),
+              "--namespace",
+              namespace,
+              ...(OWN_CHARTS[path] ?? []),
+            ],
+          },
+        ]
+      : [],
+  );
+}
+
 /** The platform's own charts rendered and validated, and the alert rules through promtool. */
 function checkPlatform({ root, exec, kubeconform, check }: Checks) {
   const platform = join(root, "deploy/platform");
-  for (const chart of ["config", "mail", "jaeger", "alerts"]) {
-    const result = exec("helm", [
-      "template",
-      chart,
-      join(platform, chart),
-      ...(OWN_CHARTS[`deploy/platform/${chart}`] ?? []),
-    ]);
-    check(`platform ${chart} renders`, result);
+  for (const { name, args } of platformRenders(root)) {
+    const result = exec("helm", args);
+    check(`${name} renders`, result);
     if (result.ok) {
-      check(`platform ${chart} is valid Kubernetes`, kubeconform(result.output));
+      check(`${name} is valid Kubernetes`, kubeconform(result.output));
     }
   }
 
@@ -277,32 +307,27 @@ function checkPlatform({ root, exec, kubeconform, check }: Checks) {
 
 /** Every add-on chart at its pinned version, with our values. */
 function checkAddons({ root, exec, check }: Checks) {
-  const platform = join(root, "deploy/platform");
-  for (const dir of [join(platform, "addons"), join(platform, "addons/observability")]) {
-    const files = readdirSync(dir).filter((name) => name.endsWith(".yaml"));
-    for (const file of files.sort()) {
-      const addon = fields(join(dir, file));
-      if (!addon.chart || !addon.repoURL || !addon.version || !addon.addon) {
-        continue;
-      }
-      const chart = addon.repoURL.startsWith("https://")
-        ? [addon.chart, "--repo", addon.repoURL]
-        : [`oci://${addon.repoURL}/${addon.chart}`];
-      check(
-        `${addon.addon} ${addon.version} renders with our values`,
-        exec("helm", [
-          "template",
-          addon.addon,
-          ...chart,
-          "--version",
-          addon.version,
-          "--namespace",
-          addon.namespace ?? "default",
-          "-f",
-          join(platform, "values", `${addon.addon}.yaml`),
-        ]),
-      );
+  for (const addon of addons(root)) {
+    if (!addon.chart || !addon.repoURL || !addon.version || !addon.addon) {
+      continue;
     }
+    const chart = addon.repoURL.startsWith("https://")
+      ? [addon.chart, "--repo", addon.repoURL]
+      : [`oci://${addon.repoURL}/${addon.chart}`];
+    check(
+      `${addon.addon} ${addon.version} renders with our values`,
+      exec("helm", [
+        "template",
+        addon.addon,
+        ...chart,
+        "--version",
+        addon.version,
+        "--namespace",
+        addon.namespace ?? "default",
+        "-f",
+        join(root, "deploy/platform/values", `${addon.addon}.yaml`),
+      ]),
+    );
   }
 }
 

@@ -39,15 +39,21 @@ a real cluster or cloud account. The checks below are offline.
   `infra/tofu/modules/bootstrap/variables.tf` and `.github/workflows/ci.yml`). A new
   file pattern needs a custom manager in `renovate.json5`.
 - `bun scripts/misconfig.ts` (as the Security workflow and the pre-commit hook run it)
-  renders the stack and data charts for every environment and optional feature into
-  `deploy/.rendered` (git ignores it), then runs Trivy's `config` scan with `trivy.yaml`,
-  and fails on any finding in those, the Dockerfiles, the other manifests and charts and
-  OpenTofu: containers run as UID and GID 10001 on a read-only root, with CPU and memory
-  limits, every object names `{{ .Release.Namespace }}`, images come from a registry in
+  renders every chart of ours into `deploy/.rendered` (git ignores it): the stack and
+  data charts for every environment and optional feature, and the platform's own charts
+  (the add-ons with a `path`) with a cluster's values. Trivy's own Helm rendering is off
+  (`trivy.yaml`): it skipped every chart that needs a value. LimitRanges and
+  ResourceQuotas are scanned in passes of their own (`deploy/.rendered/isolated`), since
+  with one in the scan Trivy checks every manifest as if it were one. It runs Trivy's
+  `config` scan and fails on any finding in those, the Dockerfiles, the other manifests
+  and OpenTofu (evaluated with `production.tfvars.example`): containers run as UID and
+  GID 10001 on a read-only root, with no added capability (a server listens on an
+  unprivileged port; the Service maps the public one to it) and CPU and memory limits,
+  every object names `{{ .Release.Namespace }}`, images come from a registry in
   `deploy/trivy/registries.yaml`, and a long-running image has a HEALTHCHECK. A finding
   that doesn't apply goes under `misconfigurations` in `.trivyignore.yaml`, with its
-  reason, for the files it applies to. A new chart under `deploy/charts` must be rendered
-  there too (`scripts/misconfig.test.ts` fails otherwise).
+  reason, for the files it applies to. A new chart anywhere under `deploy/` must be
+  rendered there too (`scripts/misconfig.test.ts` fails otherwise).
 - Secrets never go in values files or tfvars. They're SOPS-encrypted Secrets in
   `deploy/environments/<env>/secrets/` and `deploy/platform/secrets/<env>/`, or generated
   in the cluster by the data chart; never decrypt one (rotate-secrets skill).

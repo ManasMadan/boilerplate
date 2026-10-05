@@ -1,18 +1,28 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { applicationRenders, environments } from "./charts";
+import { dirname, join } from "node:path";
+import { applicationRenders, environments, platformRenders } from "./charts";
 import { type Ran, ROOT } from "./lib";
 import { misconfig, misconfigReads, RENDERED, renderCharts, TRIVY_VERSION } from "./misconfig";
 import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
 
-/** A checkout with these environments, as applicationRenders reads it. */
+/** A checkout with these environments and one platform chart, as the renders read it. */
 function checkout(...environments: string[]) {
   const root = mkdtempSync(join(tmpdir(), "misconfig-"));
   mkdirSync(join(root, "deploy/environments"), { recursive: true });
+  mkdirSync(join(root, "deploy/platform/addons/observability"), { recursive: true });
+  writeFileSync(
+    join(root, "deploy/platform/addons/mail.yaml"),
+    "addon: mail\nnamespace: mail\npath: deploy/platform/mail\n",
+  );
+  // A third-party chart: rendered by charts:check, not here (it isn't ours to fix).
+  writeFileSync(
+    join(root, "deploy/platform/addons/observability/keda.yaml"),
+    "addon: keda\nnamespace: keda\nchart: keda\n",
+  );
   for (const env of environments) {
     mkdirSync(join(root, "deploy/environments", env), { recursive: true });
   }
@@ -28,7 +38,7 @@ function tools(trivy: (line: string) => Partial<Ran> | undefined) {
 }
 
 describe("the misconfiguration scan", () => {
-  it("renders every application chart, then scans with a local trivy of CI's version", () => {
+  it("renders every chart of ours, then scans with a local trivy of CI's version", () => {
     const root = checkout("production");
     const { run, calls, options } = tools((line) => {
       if (line === "trivy --version") {
@@ -38,13 +48,17 @@ describe("the misconfiguration scan", () => {
     });
     expect(misconfig(["--format", "sarif"], run, root, "/cache")).toBe(1);
     expect(calls.filter((line) => line.startsWith("helm template"))).toHaveLength(
-      applicationRenders(root).length,
+      applicationRenders(root).length + 1,
+    );
+    expect(calls).toContain(
+      `helm template mail ${join(root, "deploy/platform/mail")} --namespace mail --set domain=example.com`,
     );
     expect(calls.slice(-2)).toEqual([
       "trivy --version",
       "trivy config --quiet --format sarif . --cache-dir /cache",
     ]);
-    expect(options.at(-1)).toEqual({ cwd: root, stdio: "inherit" });
+    expect(options.at(-1)).toMatchObject({ cwd: root, stdio: "inherit" });
+    expect(options.at(-1)?.env?.TF_VAR_state_passphrase).toBe("scanned-not-applied");
     expect(readFileSync(join(root, RENDERED, "production-data.yaml"), "utf8")).toBe(
       "rendered production-data\n",
     );
@@ -58,13 +72,41 @@ describe("the misconfiguration scan", () => {
     expect(readdirSync(join(root, RENDERED))).not.toContain("gone.yaml");
   });
 
+  it("scans each isolated kind in a pass of its own, failing on any pass", () => {
+    const root = checkout("preview");
+    const manifests = [
+      "kind: Deployment\nmetadata: { name: app }\n",
+      "\nkind: LimitRange\nmetadata: { name: preview }\n",
+      "\nkind: ResourceQuota\nmetadata: { name: preview }\n",
+    ].join("---");
+    const { run, calls } = fakeRun((line) => {
+      if (line.startsWith("helm template preview")) {
+        return { stdout: manifests };
+      }
+      if (line === "trivy --version") {
+        return { stdout: `Version: ${TRIVY_VERSION}\n` };
+      }
+      return line.includes("isolated/ResourceQuota") ? { status: 1 } : {};
+    });
+    expect(misconfig(["--format", "sarif"], run, root, "/cache")).toBe(1);
+    const rendered = (path: string) => readFileSync(join(root, RENDERED, path), "utf8");
+    expect(rendered("preview-data.yaml")).toBe("kind: Deployment\nmetadata: { name: app }\n");
+    expect(rendered("isolated/LimitRange/preview-data.yaml")).toContain("kind: LimitRange");
+    expect(rendered("isolated/ResourceQuota/preview-data.yaml")).toContain("kind: ResourceQuota");
+    expect(calls.filter((line) => line.startsWith("trivy config"))).toEqual([
+      "trivy config --quiet --format sarif . --cache-dir /cache",
+      `trivy config --quiet ${RENDERED}/isolated/LimitRange --cache-dir /cache`,
+      `trivy config --quiet ${RENDERED}/isolated/ResourceQuota --cache-dir /cache`,
+    ]);
+  });
+
   it("runs its image when the local trivy is another version, or missing", () => {
     const root = checkout();
     for (const local of [{ stdout: "Version: 0.1.0\n" }, { status: null }]) {
       const { run, calls } = fakeRun((line) => (line === "trivy --version" ? local : {}));
       expect(misconfig([], run, root)).toBe(0);
       expect(calls.at(-1)).toBe(
-        `docker run --rm --memory=512m -v ${root}:${root} -w ${root} aquasec/trivy:${TRIVY_VERSION} config --quiet .`,
+        `docker run --rm --memory=512m -v ${root}:${root} -w ${root} -e TF_VAR_state_passphrase=scanned-not-applied aquasec/trivy:${TRIVY_VERSION} config --quiet .`,
       );
     }
   });
@@ -100,16 +142,21 @@ describe("the misconfiguration scan", () => {
     );
   });
 
-  // A chart added under deploy/charts must be rendered for the scan too: Trivy alone
+  // A chart added anywhere under deploy/ must be rendered for the scan too: Trivy alone
   // skips any chart that needs values to render.
-  it("renders every chart under deploy/charts, for every environment", () => {
-    const charts = readdirSync(join(ROOT, "deploy/charts"));
-    const renders = applicationRenders(ROOT).map((render) => render.args[2]);
+  it("renders every chart under deploy/, the application's for every environment", () => {
+    const charts = readdirSync(join(ROOT, "deploy"), { recursive: true, encoding: "utf8" })
+      .filter((path) => path.endsWith("Chart.yaml") && !path.startsWith(".rendered"))
+      .map((path) => join(ROOT, "deploy", dirname(path)));
+    const renders = [...applicationRenders(ROOT), ...platformRenders(ROOT)];
+    expect(charts.length).toBeGreaterThan(2);
     for (const chart of charts) {
+      expect(renders.map((render) => render.args[2])).toContain(chart);
+    }
+    for (const chart of readdirSync(join(ROOT, "deploy/charts"))) {
       for (const env of environments(ROOT)) {
-        expect(applicationRenders(ROOT).map((render) => render.name)).toContain(`${env}-${chart}`);
+        expect(renders.map((render) => render.name)).toContain(`${env}-${chart}`);
       }
-      expect(renders).toContain(join(ROOT, "deploy/charts", chart));
     }
   });
 

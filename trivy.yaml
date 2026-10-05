@@ -6,13 +6,24 @@
 exit-code: 1
 ignorefile: .trivyignore.yaml
 scan:
-  skip-dirs: [node_modules, "**/node_modules", apps/mobile]
+  # deploy/.rendered/isolated has passes of its own (scripts/misconfig.ts, ISOLATED_KINDS).
+  skip-dirs: [node_modules, "**/node_modules", apps/mobile, deploy/.rendered/isolated]
   # No calls home: it asks GitHub for a newer release and sends usage counts otherwise.
   skip-version-check: true
   disable-telemetry: true
+misconfiguration:
+  # Every scanner but Helm's: our charts are scanned as scripts/misconfig.ts renders them
+  # (deploy/.rendered), with the values each environment and cluster sets, which Trivy's
+  # own Helm rendering doesn't have (it skipped every chart that requires a value).
+  scanners: [azure-arm, cloudformation, dockerfile, kubernetes, terraform, ansible]
+  # OpenTofu evaluated as production plans it (its one secret variable, the state
+  # passphrase, comes from TF_VAR_state_passphrase: scripts/misconfig.ts sets a stand-in).
+  terraform:
+    vars: [infra/tofu/envs/k3s/production.tfvars.example]
 rego:
   # The checks built into this Trivy version, not the latest bundle from the registry:
   # the same Trivy finds the same things locally and in CI, and a check published
-  # upstream reaches us with a reviewed Trivy upgrade.
+  # upstream reaches us with a reviewed Trivy upgrade. (Trivy logs this as "Falling back
+  # to embedded checks", an error line that's expected.)
   skip-check-update: true
   data: [deploy/trivy]
