@@ -24,7 +24,7 @@ import {
   uploadPurposes,
 } from "@repo/contracts/files";
 import { realtimeChannel } from "@repo/contracts/realtime";
-import { parseJob, queuePrefix } from "@repo/jobs";
+import { parseJob, queuePrefix, type UncheckedJob } from "@repo/jobs";
 import {
   type Database,
   InjectDatabase,
@@ -37,7 +37,6 @@ import {
   STORAGE,
   type Storage,
 } from "@repo/nest-common";
-import type { Job } from "bullmq";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
 import * as z from "zod";
@@ -69,7 +68,7 @@ export class FilesProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job<unknown>) {
+  async process(job: UncheckedJob) {
     const { meta, payload } = parseJob("files", "process", job.data);
     await runJob(meta, `job:${job.id}`, () => this.check(payload.fileId));
   }

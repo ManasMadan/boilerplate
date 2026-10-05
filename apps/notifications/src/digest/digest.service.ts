@@ -18,7 +18,7 @@ import {
 import { withUser } from "@repo/db";
 import { DigestEmail, digestSubject, renderEmail } from "@repo/email";
 import { loosely } from "@repo/i18n";
-import { createProducer } from "@repo/jobs";
+import { createProducer, type QueueOf } from "@repo/jobs";
 import {
   type Database,
   type I18n,
@@ -30,7 +30,6 @@ import {
   type Redis,
   rows,
 } from "@repo/nest-common";
-import type { Queue } from "bullmq";
 import * as z from "zod";
 import { EmailChannel } from "../channels/email/email.channel";
 import { DeliveryLog } from "../dispatch/delivery-log";
@@ -53,7 +52,7 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
     @InjectI18n() private readonly i18n: I18n,
     @InjectDatabase() private readonly database: Database,
     @InjectRedis() redis: Redis,
-    @InjectQueue("notifications-bulk") private readonly queue: Queue,
+    @InjectQueue("notifications-bulk") private readonly queue: QueueOf<"notifications-bulk">,
     private readonly recipients: RecipientResolver,
     private readonly log: DeliveryLog,
     private readonly policy: DeliveryPolicy,

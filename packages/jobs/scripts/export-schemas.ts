@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { errorData, errorIssue, errorResponse } from "@repo/contracts/api/base";
 import { ERROR_CODES, errorCode } from "@repo/contracts/errors";
 import { events } from "@repo/contracts/events";
+import { keysOf } from "@repo/contracts/objects";
 import { REALTIME_REDIS_PREFIX, realtimeChannel, realtimeMessage } from "@repo/contracts/realtime";
 import * as z from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
@@ -133,12 +134,9 @@ writeFileSync(join(out, "..", "queue-settings.json"), `${JSON.stringify(settings
 writeFileSync(join(out, "..", "error-codes.json"), `${JSON.stringify(ERROR_CODES, null, 2)}\n`);
 // What consumers accept of each event ("input": zod strips keys it doesn't know).
 const catalog = Object.fromEntries(
-  Object.keys(events)
+  keysOf(events)
     .sort()
-    .map((name) => [
-      name,
-      z.toJSONSchema(events[name as keyof typeof events], { target: "draft-2020-12", io: "input" }),
-    ]),
+    .map((name) => [name, z.toJSONSchema(events[name], { target: "draft-2020-12", io: "input" })]),
 );
 writeFileSync(join(out, "..", "events.json"), `${JSON.stringify(catalog, null, 2)}\n`);
 // The Redis channel Python publishes an organization's messages on, with `{id}` where

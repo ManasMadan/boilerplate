@@ -3,9 +3,8 @@
  * construction: the row key is the event id, so a redelivered event inserts nothing.
  */
 import { Processor } from "@nestjs/bullmq";
-import { parseJob, queuePrefix } from "@repo/jobs";
+import { parseJob, queuePrefix, type UncheckedJob } from "@repo/jobs";
 import { type Database, InjectDatabase, JobProcessor, runJob } from "@repo/nest-common";
-import type { Job } from "bullmq";
 import { env } from "../env";
 
 @Processor("events-audit", {
@@ -17,7 +16,7 @@ export class AuditProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job<unknown>) {
+  async process(job: UncheckedJob) {
     const { meta, payload: event } = parseJob("events-audit", "event", job.data);
     await runJob(meta, `event:${event.id}`, () =>
       this.database.write.auditLog.createMany({

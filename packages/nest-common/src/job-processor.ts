@@ -24,7 +24,7 @@ export abstract class JobProcessor extends WorkerHost {
   readonly #log = new Logger(this.constructor.name);
 
   @OnWorkerEvent("failed")
-  onJobFailed(job: Job | undefined, error: Error) {
+  onJobFailed(job: Job<unknown, unknown> | undefined, error: Error) {
     const attempts = job?.opts.attempts ?? 1;
     const final = !job || job.attemptsMade >= attempts || error.name === "UnrecoverableError";
     this.#log.error(

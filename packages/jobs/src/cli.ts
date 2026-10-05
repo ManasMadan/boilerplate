@@ -3,9 +3,11 @@
  * retried or discarded, against any environment's Valkey. Here rather than in the script
  * so its tests run against a real Valkey with the package's integration tests.
  */
+import { hasKey, keysOf } from "@repo/contracts/objects";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import { discardFailed, failedJobs, retryFailed } from "./admin";
+import type { UncheckedQueue } from "./producer";
 import { type QueueName, queuePrefix, queues } from "./queues";
 
 /** One line of output (a CLI, not a service: nothing here goes through the logger). */
@@ -13,7 +15,7 @@ const print = (line: string) => process.stdout.write(`${line}\n`);
 const fail = (message: string) => print(`  \x1b[31m✖\x1b[0m ${message}`);
 
 /** Every queue's counts, one line each. */
-async function status(open: (queue: QueueName) => Queue, names: QueueName[]) {
+async function status(open: (queue: QueueName) => UncheckedQueue, names: QueueName[]) {
   for (const queueName of names) {
     const queue = open(queueName);
     const counts = await queue.getJobCounts("waiting", "active", "delayed", "failed");
@@ -27,7 +29,7 @@ async function status(open: (queue: QueueName) => Queue, names: QueueName[]) {
 }
 
 /** `failed`, `retry` or `discard` on one queue's failed jobs; the exit code. */
-async function onFailed(command: string, queue: Queue, rest: string[]) {
+async function onFailed(command: string, queue: UncheckedQueue, rest: string[]) {
   if (command === "failed") {
     const failed = await failedJobs(queue, Number(rest[0] ?? 20));
     if (failed.length === 0) print("No failed jobs.");
@@ -55,8 +57,9 @@ export async function jobs(argv: string[], url: string | undefined): Promise<num
     return 1;
   }
   const connection = new Redis(url, { maxRetriesPerRequest: null });
-  const names = Object.keys(queues) as QueueName[];
-  const open = (queue: QueueName) => new Queue(queue, { connection, prefix: queuePrefix(queue) });
+  const names = keysOf(queues);
+  const open = (queue: QueueName): UncheckedQueue =>
+    new Queue(queue, { connection, prefix: queuePrefix(queue) });
 
   try {
     if (command === "status") return await status(open, names);
@@ -64,11 +67,11 @@ export async function jobs(argv: string[], url: string | undefined): Promise<num
       fail(`Unknown command "${command}": status, failed, retry or discard.`);
       return 1;
     }
-    if (!name || !names.includes(name as QueueName)) {
+    if (!name || !hasKey(queues, name)) {
       fail(`Name a queue: ${names.join(", ")}`);
       return 1;
     }
-    const queue = open(name as QueueName);
+    const queue = open(name);
     try {
       return await onFailed(command, queue, rest);
     } finally {

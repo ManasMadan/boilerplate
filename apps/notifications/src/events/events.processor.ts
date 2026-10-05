@@ -17,9 +17,9 @@ import {
   parseJob,
   queuePrefix,
   type RoutedEvent,
+  type UncheckedJob,
 } from "@repo/jobs";
 import { JobProcessor, runJob } from "@repo/nest-common";
-import type { Job } from "bullmq";
 import { Dispatcher } from "../dispatch/dispatcher";
 import { DeliveryPolicy } from "../dispatch/policy";
 
@@ -66,7 +66,7 @@ export class EventsProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job<unknown>) {
+  async process(job: UncheckedJob) {
     const { meta, payload: event } = parseJob("events-notifications", "event", job.data);
     const { name } = event;
     // An event routed here by a newer relay this build doesn't know yet.

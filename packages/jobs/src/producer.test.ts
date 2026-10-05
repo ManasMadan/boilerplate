@@ -1,6 +1,6 @@
 import { UnrecoverableError } from "bullmq";
 import { describe, expect, it } from "vitest";
-import { createProducer, parseJob } from "./producer";
+import { createProducer, idOf, isJobName, jobName, parseJob } from "./producer";
 import { queues, WEBHOOK_RETRY_DELAYS_MS } from "./queues";
 
 const payload = {
@@ -34,6 +34,21 @@ describe("parseJob", () => {
     ).toThrow(UnrecoverableError);
     // Retrying can't fix it, so the job fails at once rather than with full backoff.
     expect(() => parseJob("notifications-critical", "send", payload)).toThrow(UnrecoverableError);
+  });
+});
+
+describe("jobName, isJobName and idOf", () => {
+  it("accept only the queue's own job names", () => {
+    expect(jobName("maintenance", "files-cleanup")).toBe("files-cleanup");
+    expect(isJobName("maintenance", "send")).toBe(false);
+    // Not an own key of the queue's jobs, though every object has it.
+    expect(isJobName("maintenance", "toString")).toBe(false);
+    expect(() => jobName("files", "send")).toThrow('Unknown job "send" on queue "files"');
+  });
+
+  it("returns a job's id, and refuses a job without one", () => {
+    expect(idOf({ id: "job-1", name: "send" })).toBe("job-1");
+    expect(() => idOf({ id: undefined, name: "send" })).toThrow('Job "send" has no id');
   });
 });
 

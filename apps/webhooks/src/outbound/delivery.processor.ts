@@ -7,21 +7,26 @@ import { Processor } from "@nestjs/bullmq";
 import {
   createProducer,
   type JobName,
+  jobName,
   parseJob,
   queuePrefix,
+  type UncheckedJob,
   WEBHOOK_RETRY_DELAYS_MS,
 } from "@repo/jobs";
 import { InjectRedis, JobProcessor, type Redis, runJob } from "@repo/nest-common";
-import type { Job } from "bullmq";
 import { env } from "../env";
 import { DeliveryService } from "./delivery.service";
 
 /** Thrown to make BullMQ schedule the next attempt; the outcome is already recorded. */
 class DeliveryFailed extends Error {}
 
-/** How long to wait after a failed attempt: the schedule's step, never past its last. */
+/** How long to wait after a failed attempt: the schedule's step, never past its longest. */
 export const retryDelayMs = (attemptsMade: number) =>
-  WEBHOOK_RETRY_DELAYS_MS[attemptsMade - 1] ?? (WEBHOOK_RETRY_DELAYS_MS.at(-1) as number);
+  WEBHOOK_RETRY_DELAYS_MS[attemptsMade - 1] ?? Math.max(...WEBHOOK_RETRY_DELAYS_MS);
+
+/** Whether this attempt is the job's last. BullMQ's default is 0 attempts (one try). */
+export const isLastAttempt = (job: Pick<UncheckedJob, "attemptsMade" | "opts">) =>
+  job.attemptsMade + 1 >= (job.opts.attempts ?? 0);
 
 @Processor("webhook-deliveries", {
   concurrency: env.WEBHOOK_DELIVERY_CONCURRENCY,
@@ -39,22 +44,17 @@ export class DeliveryProcessor extends JobProcessor {
     this.queue = createProducer("webhook-deliveries", redis);
   }
 
-  async process(job: Job<unknown>) {
-    const { meta } = parseJob(
-      "webhook-deliveries",
-      job.name as JobName<"webhook-deliveries">,
-      job.data,
-    );
-    await runJob(meta, `job:${job.id}`, () => this.handle(job));
+  async process(job: UncheckedJob) {
+    const name = jobName("webhook-deliveries", job.name);
+    const { meta } = parseJob("webhook-deliveries", name, job.data);
+    await runJob(meta, `job:${job.id}`, () => this.handle(job, name));
   }
 
-  private async handle(job: Job<unknown>) {
-    switch (job.name as JobName<"webhook-deliveries">) {
+  private async handle(job: UncheckedJob, name: JobName<"webhook-deliveries">) {
+    switch (name) {
       case "deliver": {
         const { deliveryId, orgId } = parseJob("webhook-deliveries", "deliver", job.data).payload;
-        // BullMQ sets attempts on every job (0 when none were asked for).
-        const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts as number);
-        const outcome = await this.deliveries.attempt(orgId, deliveryId, isLastAttempt);
+        const outcome = await this.deliveries.attempt(orgId, deliveryId, isLastAttempt(job));
         if (outcome === "retry")
           throw new DeliveryFailed(`delivery ${deliveryId} failed; retrying`);
         return;

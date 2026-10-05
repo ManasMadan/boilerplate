@@ -12,9 +12,14 @@
  */
 import { Processor } from "@nestjs/bullmq";
 import { events } from "@repo/contracts/events";
-import { eventSubscribers, parseJob, queuePrefix, type RoutedEvent } from "@repo/jobs";
+import {
+  eventSubscribers,
+  parseJob,
+  queuePrefix,
+  type RoutedEvent,
+  type UncheckedJob,
+} from "@repo/jobs";
 import { JobProcessor, runJob } from "@repo/nest-common";
-import type { Job } from "bullmq";
 import * as z from "zod";
 import { env } from "../../env";
 import { type CriticalNotifications, InjectCriticalNotifications } from "../../notifications";
@@ -67,7 +72,7 @@ export class BillingEventsProcessor extends JobProcessor {
     super();
   }
 
-  async process(job: Job<unknown>) {
+  async process(job: UncheckedJob) {
     const { meta, payload: event } = parseJob("events-billing", "event", job.data);
     const { name } = event;
     // An event routed here by a newer relay this build doesn't know yet.

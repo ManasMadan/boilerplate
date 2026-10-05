@@ -9,7 +9,15 @@
  */
 import { InjectQueue, Processor } from "@nestjs/bullmq";
 import type { OnApplicationBootstrap } from "@nestjs/common";
-import { type JobName, parseJob, queuePrefix } from "@repo/jobs";
+import { entriesOf } from "@repo/contracts/objects";
+import {
+  type JobName,
+  jobName,
+  parseJob,
+  type QueueOf,
+  queuePrefix,
+  type UncheckedJob,
+} from "@repo/jobs";
 import {
   type Database,
   InjectDatabase,
@@ -19,7 +27,6 @@ import {
   row,
   runJob,
 } from "@repo/nest-common";
-import type { Job, Queue } from "bullmq";
 import * as z from "zod";
 import { env } from "../env";
 import { FilesCleanup } from "../files/files.cleanup";
@@ -47,7 +54,7 @@ const PARTITIONS_AHEAD = 3;
 export class MaintenanceProcessor extends JobProcessor implements OnApplicationBootstrap {
   constructor(
     @InjectDatabase() private readonly database: Database,
-    @InjectQueue("maintenance") private readonly queue: Queue,
+    @InjectQueue("maintenance") private readonly queue: QueueOf<"maintenance">,
     private readonly files: FilesCleanup,
     @InjectPinoLogger(MaintenanceProcessor.name) private readonly log: PinoLogger,
   ) {
@@ -57,7 +64,7 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
   async onApplicationBootstrap() {
     // Before any audit event arrives, make sure its month has a partition.
     await this.run("audit-partitions");
-    for (const [task, pattern] of Object.entries(SCHEDULES) as [Task, string][]) {
+    for (const [task, pattern] of entriesOf(SCHEDULES)) {
       await this.queue.upsertJobScheduler(
         task,
         { pattern, tz: "UTC" },
@@ -66,9 +73,10 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
     }
   }
 
-  async process(job: Job<unknown>) {
-    const { meta } = parseJob("maintenance", job.name as Task, job.data);
-    await runJob(meta, `job:${job.id}`, () => this.run(job.name as Task));
+  async process(job: UncheckedJob) {
+    const task = jobName("maintenance", job.name);
+    const { meta } = parseJob("maintenance", task, job.data);
+    await runJob(meta, `job:${job.id}`, () => this.run(task));
   }
 
   /** Runs one task now; also used by tests and the ops scripts. */

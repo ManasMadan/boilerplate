@@ -1,7 +1,6 @@
 import { Processor } from "@nestjs/bullmq";
-import { type NotificationQueue, parseJob, queuePrefix } from "@repo/jobs";
+import { idOf, type NotificationQueue, parseJob, queuePrefix, type UncheckedJob } from "@repo/jobs";
 import { JobProcessor, runJob } from "@repo/nest-common";
-import type { Job } from "bullmq";
 import { DigestService } from "../digest/digest.service";
 import { env } from "../env";
 import { Dispatcher } from "./dispatcher";
@@ -12,9 +11,9 @@ import { Dispatcher } from "./dispatcher";
  * Failures throw: BullMQ retries with the queue's backoff and finally keeps the job in
  * the failed set for inspection and replay.
  */
-async function handle(queue: NotificationQueue, job: Job<unknown>, dispatcher: Dispatcher) {
-  // BullMQ gives every job an id; producers choose it (createProducer requires one).
-  const jobId = job.id as string;
+async function handle(queue: NotificationQueue, job: UncheckedJob, dispatcher: Dispatcher) {
+  // Producers choose the id (createProducer requires one).
+  const jobId = idOf(job);
   if (job.name === "deferred") {
     const { meta, payload } = parseJob(queue, "deferred", job.data);
     await runJob(meta, `job:${jobId}`, () =>
@@ -39,7 +38,7 @@ export class CriticalNotificationsProcessor extends JobProcessor {
   constructor(private readonly dispatcher: Dispatcher) {
     super();
   }
-  process(job: Job) {
+  process(job: UncheckedJob) {
     return handle("notifications-critical", job, this.dispatcher);
   }
 }
@@ -55,7 +54,7 @@ export class BulkNotificationsProcessor extends JobProcessor {
   ) {
     super();
   }
-  async process(job: Job<unknown>) {
+  async process(job: UncheckedJob) {
     if (job.name === "digests") {
       parseJob("notifications-bulk", "digests", job.data);
       await this.digests.scheduleDue();

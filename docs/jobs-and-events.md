@@ -31,12 +31,18 @@ because producer and consumer can be different versions during a rolling deploy:
 ```ts
 @Processor("files", { concurrency: env.FILES_CONCURRENCY, prefix: queuePrefix("files") })
 export class FilesProcessor extends JobProcessor {
-  async process(job: Job) {
+  async process(job: UncheckedJob) {
     const { meta, payload } = parseJob("files", "process", job.data);
     ...
   }
 }
 ```
+
+A job comes in as an `UncheckedJob` (`@repo/jobs`): its data is `unknown` until
+`parseJob` checks it, and its name is any string until `jobName` checks it against the
+queue's jobs (a newer producer may have added one this build doesn't know). `idOf`
+returns its id. A queue a service adds to directly, like a job scheduler's template, is
+a `QueueOf<"<queue>">`, so its job names and data are checked when it compiles.
 
 `JobProcessor` (`@repo/nest-common`) is `WorkerHost` plus logging: every failed job is
 logged with its queue, id, attempt and the error's causes, as "job failed; it will be

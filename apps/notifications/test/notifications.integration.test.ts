@@ -10,7 +10,7 @@ import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { createDb } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
-import { createProducer, type Producer, queuePrefix } from "@repo/jobs";
+import { createProducer, type Producer, parseJob, queuePrefix } from "@repo/jobs";
 import { createRedis, DATABASE, I18N, PinoLogger, REDIS } from "@repo/nest-common";
 import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import { eventually } from "@repo/testing/eventually";
@@ -720,9 +720,10 @@ describe("notifications service", () => {
     await settle(jobId, 2);
     expect(await pushStatuses(jobId)).toEqual([]);
 
-    const delayed = (await bulk.queue.getDelayed()).filter(
-      (job) => job.name === "deferred" && job.data.payload.userId === user.id,
-    );
+    const deferredFor = (job: { name: string; data: unknown }) =>
+      job.name === "deferred" &&
+      parseJob("notifications-bulk", "deferred", job.data).payload.userId === user.id;
+    const delayed = (await bulk.queue.getDelayed()).filter(deferredFor);
     expect(delayed).toHaveLength(1);
     const [job] = delayed;
     const wait = (job?.opts.delay ?? 0) / 60_000;
@@ -733,10 +734,11 @@ describe("notifications service", () => {
     const { Dispatcher } = await import("../src/dispatch/dispatcher");
     const dispatcher = app.get(Dispatcher);
     const redelivered = await bulk.queue.getJob(jobId);
-    await dispatcher.dispatch(redelivered?.data.payload, jobId);
-    expect(
-      (await bulk.queue.getDelayed()).filter((j) => j.data.payload.userId === user.id),
-    ).toHaveLength(1);
+    await dispatcher.dispatch(
+      parseJob("notifications-bulk", "send", redelivered?.data).payload,
+      jobId,
+    );
+    expect((await bulk.queue.getDelayed()).filter(deferredFor)).toHaveLength(1);
 
     // Quiet hours are over.
     await job?.promote();
