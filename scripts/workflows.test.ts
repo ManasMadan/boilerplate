@@ -695,6 +695,19 @@ describe("stripe.yml", () => {
   });
 });
 
+describe("tools CI downloads", () => {
+  it("are checked against a pinned checksum, never installed unverified", () => {
+    const dir = join(ROOT, ".github/workflows");
+    const text = readdirSync(dir).map((file) => readFileSync(join(dir, file), "utf8"));
+    expect(text.filter((workflow) => workflow.includes("--verify=false"))).toEqual([]);
+    const step = workflow("ci.yml").jobs.charts?.steps?.find(
+      (s) => s.name === "Install helm-unittest",
+    );
+    expect(step?.env?.SHA256).toMatch(/^[0-9a-f]{64}$/);
+    expect(step?.run).toContain('echo "$SHA256  unittest.tgz" | sha256sum -c -');
+  });
+});
+
 describe("ci.yml's unit job", () => {
   it("runs the packages' unit tests only for the app, so docs alone run only the scripts'", () => {
     const steps = workflow("ci.yml").jobs.unit?.steps ?? [];

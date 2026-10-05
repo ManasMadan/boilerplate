@@ -685,11 +685,21 @@ jobs:
       - uses: ./.github/actions/setup
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with: { version: v4.3.0 }
+      # The release's Linux build, checked against its pinned checksum and unpacked into
+      # Helm's plugin folder: no install hook, which would download the binary again.
       - name: Install helm-unittest
         env:
           # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
           VERSION: v1.1.2
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version "$VERSION" --verify=false
+          # helm-unittest-linux-amd64-<version>.tgz in that release's
+          # helm-unittest-checksum.sha: update both together.
+          SHA256: de03d6b7ba7683282064702d0b36fbbe812ab2a22691fa3a8b2ce57c2682609c
+        run: |
+          curl -fsSLo unittest.tgz "https://github.com/helm-unittest/helm-unittest/releases/download/$VERSION/helm-unittest-linux-amd64-${VERSION#v}.tgz"
+          echo "$SHA256  unittest.tgz" | sha256sum -c -
+          plugin="$(helm env HELM_PLUGINS)/unittest"
+          mkdir -p "$plugin" && tar -xzf unittest.tgz -C "$plugin"
+          helm unittest --help > /dev/null
       # The schemas kubeconform downloads (scripts/charts.ts): the same ones every run, so
       # a run only fetches those a pin change moved.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

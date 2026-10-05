@@ -178,6 +178,11 @@
       groupName: "react-email",
     },
     {
+      description: "helm-unittest's download is checked against a pinned checksum",
+      matchPackageNames: ["helm-unittest/helm-unittest"],
+      prBodyNotes: ["Update `SHA256` in `.github/workflows/ci.yml` to the release's `helm-unittest-linux-amd64-<version>.tgz` line in `helm-unittest-checksum.sha` before merging."],
+    },
+    {
       description: "kind's download is checked against a pinned checksum",
       matchPackageNames: ["kubernetes-sigs/kind"],
       prBodyNotes: ["Update `SHA256` in `.github/workflows/kind.yml` to the release's `kind-linux-amd64.sha256sum` before merging."],
