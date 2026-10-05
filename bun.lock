@@ -531,6 +531,9 @@
     "packages/testing": {
       "name": "@repo/testing",
       "version": "0.0.0",
+      "dependencies": {
+        "zod": "catalog:",
+      },
       "devDependencies": {
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",

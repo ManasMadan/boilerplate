@@ -8,6 +8,7 @@
  *   process.env.CLAMAV_URL = clamd.url;   // ... then `await clamd.close()`
  */
 import { connect, createServer, type Socket } from "node:net";
+import * as z from "zod";
 
 /** What every antivirus, ClamAV included, reports in the EICAR test file. */
 const EICAR = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE";
@@ -53,7 +54,7 @@ export function serve(socket: Pick<Socket, "on" | "end">) {
 export async function startFakeClamd(): Promise<Clamd> {
   const server = createServer(serve);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as { port: number };
+  const { port } = z.object({ port: z.number() }).parse(server.address());
   return {
     url: `tcp://127.0.0.1:${port}`,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
