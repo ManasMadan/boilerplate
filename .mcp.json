@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "playwright": {
-      "command": "bunx",
-      "args": ["@playwright/mcp@0.0.83", "--isolated"]
-    },
     "postgres": {
       "command": "bun",
       "args": ["scripts/mcp-postgres.ts"]

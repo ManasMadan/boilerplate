@@ -133,9 +133,15 @@
       groupName: "bun",
     },
     {
-      description: "Playwright: the packages and the image packages/ui's visual tests run them in (its test:visual, scripts/docker-clean.ts) move together, since the screenshot baselines depend on the exact browser build (scripts/pins.test.ts)",
+      description: "Playwright: the packages and the image packages/ui's visual tests run them in (its test:visual, scripts/docker-clean.ts) move together, since the screenshot baselines depend on the exact browser build (scripts/pins.test.ts); the official skills for Claude Code committed in .claude/skills are reinstalled from the new version (scripts/playwright.test.ts runs these commands too)",
       matchPackageNames: ["@playwright/test", "playwright", "playwright-core", "mcr.microsoft.com/playwright"],
       groupName: "playwright",
+      postUpgradeTasks: {
+        commands: ["bun install", "rm -rf .claude/skills/playwright-*", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 .claude/bin/playwright-cli install --skills", "bunx playwright trace install-skill"],
+        fileFilters: [".claude/skills/playwright-*/**"],
+        executionMode: "branch",
+        installTools: { bun: {}, node: {} },
+      },
     },
     {
       description: "Node: .nvmrc (CI and local development) and EAS's builds",

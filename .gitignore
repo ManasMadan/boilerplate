@@ -24,6 +24,8 @@ coverage
 .coverage
 .coverage.*
 playwright-report
+# The Playwright CLI's snapshots, screenshots and saved sign-ins (the playwright-cli skill).
+.playwright-cli/
 storybook-static
 test-results
 # vitest's browser mode: screenshots of failed tests.

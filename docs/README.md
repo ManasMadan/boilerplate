@@ -40,6 +40,8 @@ them, but each is a plain Markdown checklist you can follow by hand.
 | [dev](../.claude/skills/dev/SKILL.md) | starting the local stack and its optional services |
 | [debug](../.claude/skills/debug/SKILL.md) | following one failing request, job or email through the logs, locally, in CI or a cluster |
 | [verify](../.claude/skills/verify/SKILL.md) | every check to run before calling a change done |
+| [playwright-cli](../.claude/skills/playwright-cli/SKILL.md) | looking at the running app in a real browser from the shell, with the Playwright CLI (Playwright's own skill) |
+| [playwright-trace](../.claude/skills/playwright-trace/SKILL.md) | reading the trace of a failed end-to-end test (Playwright's own skill) |
 | [add-feature](../.claude/skills/add-feature/SKILL.md) | a resource end to end: contract, API module, client hook, web page, tests |
 | [db-change](../.claude/skills/db-change/SKILL.md) | a schema change: migration, row-level security, grants, expand then contract |
 | [add-job](../.claude/skills/add-job/SKILL.md) | a background job, scheduled task or event consumer, in TypeScript or Python |

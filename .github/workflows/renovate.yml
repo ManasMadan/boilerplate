@@ -48,5 +48,6 @@ jobs:
           RENOVATE_REQUIRE_CONFIG: required
           # Commits made through the API as the App are signed (verified) by GitHub.
           RENOVATE_PLATFORM_COMMIT: enabled
-          RENOVATE_ALLOWED_COMMANDS: '["^bun install$"]'
+          # Exactly the commands renovate.json5's postUpgradeTasks run (scripts/playwright.test.ts).
+          RENOVATE_ALLOWED_COMMANDS: '["^bun install$", "^rm -rf \\.claude/skills/playwright-\\*$", "^PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \\.claude/bin/playwright-cli install --skills$", "^bunx playwright trace install-skill$"]'
           RENOVATE_BINARY_SOURCE: install

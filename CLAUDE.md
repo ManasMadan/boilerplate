@@ -18,6 +18,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | Coverage: every suite merged, every file at 100% (needs the full profile) | `bun run test:coverage` |
 | Tests of `scripts/`, the Claude Code hooks and the rest of the tooling (build scripts, generators, load test) | `bun test ./scripts/ ./.claude/hooks/` |
 | Every check that applies to a change | the `verify` skill |
+| Look at the running app in a browser (Playwright CLI) | `playwright-cli -s=<task> open --browser=chromium <url>` (Playwright's `playwright-cli` skill) |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
 | New database migration | `bun run db:migrate` |
 | Work on another branch in parallel (its own worktree, sharing the local services) | `wt switch --create <branch>` (`wt list` shows them) |
@@ -41,7 +42,9 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
 ## Principles (non-negotiable)
 
 1. **Fix root causes.** No workarounds, no `as any`, no `@ts-ignore`, no disabling a
-   lint rule to get green. If the design forces a workaround, change the design.
+   lint rule to get green. If the design forces a workaround, change the design. A fix
+   also lands with whatever stops it coming back (a test, a lint rule, a check or a
+   hook), so the checks catch it next time instead of someone reading the code.
 2. **Validate at every boundary**: env (t3-env), HTTP input (contract schemas), queue
    payloads (`parseJob`), cross-service data. Types come from schemas, never duplicated.
 3. **One implementation per concern.** Before writing a helper, search `packages/` for it.
@@ -128,6 +131,12 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   for the next.
 - `.claude-plugin/`: the same skills, agents and hooks as a plugin, for apps made from
   this template (`docs/new-project.md`); a new agent or hook goes in `plugin.json` too.
+- Plugins (`enabledPlugins`): Worktrunk, and from Anthropic's marketplace
+  `typescript-lsp` and `pyright-lsp` (code intelligence), `expo`, `stripe`,
+  `redis-development`, `terraform` and `security-guidance` (edit warnings and a
+  background review of each turn and commit). `.claude/rules/claude-setup.md` says what
+  each needs; none needs an account here. Install each once with
+  `claude plugin install <name>@claude-plugins-official --scope project`.
 - Worktrees: parallel branches and agents use Worktrunk (`wt`, `.config/wt.toml`), whose
   Claude Code plugin settings.json enables: an agent started with `isolation: worktree`
   gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),
@@ -137,10 +146,19 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   compose project, and every service and app port moved; `docs/environment.md`): then
   each runs its own `bun dev` and e2e suite at the same time. `wt merge` and `wt remove`
   ask first.
-- `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
-  database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
-  only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and
-  past row-level security, so it sees every workspace's rows for debugging; nothing it
-  runs can write. Use it for data, schemas, indexes and query plans. It needs `uv` and
+- Browser: Playwright's own skills, `playwright-cli` (drive a browser from the shell)
+  and `playwright-trace` (read a failed e2e test's trace), installed by Playwright's
+  commands from the root `playwright-core`, the e2e suites' version. Never edit them:
+  Renovate's Playwright updates reinstall them, and `scripts/playwright.test.ts` fails
+  and prints the commands if they drift. The session-start hook puts `.claude/bin` on the shell's PATH
+  for the `playwright-cli` command. Here, name the session after the task
+  (`-s=<task>`) so two agents never share a browser, pass `--browser=chromium` for the
+  e2e suites' Chromium, and sign in as a seeded user (docs/database.md). Snapshots go
+  to `.playwright-cli/`, which git ignores. A flow that must keep working becomes an
+  e2e spec (the write-tests skill).
+- `.mcp.json`: Postgres on the local `app` database (`scripts/mcp-postgres.ts`). It
+  connects as `app_readonly`, a role that exists only in the local database
+  (`infra/postgres/init/02-readonly-role.sql`): read-only, and past row-level security,
+  so it sees every workspace's rows for debugging; nothing it runs can write. Use it for data, schemas, indexes and query plans. It needs `uv` and
   the local services: if Postgres isn't up it says so at once; start it with
   `bun run db:up`, then reconnect with `/mcp`.
