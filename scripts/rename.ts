@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { fail, messageOf, ok, ROOT, runMain, runSync } from "./lib";
+import { fail, messageOf, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 export interface Identity {
   name: string;
@@ -25,11 +25,27 @@ export interface Identity {
   bundleId: string;
 }
 
-/** This script and its test name the template on purpose: they're left as they are. */
-const SELF = new Set(["scripts/rename.ts", "scripts/rename.test.ts"]);
+/**
+ * Left as they are: this script and its test (which name the identity on purpose; the
+ * script's `OLD` is rewritten on its own), and requests captured from other software,
+ * whose bytes it signed (Stalwart's webhooks, sent from the template's mail domain).
+ */
+const KEPT = new Set([
+  "scripts/rename.ts",
+  "scripts/rename.test.ts",
+  "apps/webhooks/src/inbound/stalwart-events.test.ts",
+]);
 
-/** What the template is called, as `rename` finds it. */
-const OLD = { name: "boilerplate", owner: "ManasMadan", product: "Boilerplate" };
+/**
+ * What the project is called now, as `rename` finds it. Renaming rewrites this too, so a
+ * renamed project can be renamed again.
+ */
+export const OLD: Identity = {
+  name: "boilerplate",
+  owner: "ManasMadan",
+  product: "Boilerplate",
+  bundleId: "com.boilerplate.app",
+};
 
 /**
  * The replacements, most specific first: each later one would mangle an earlier match.
@@ -37,16 +53,16 @@ const OLD = { name: "boilerplate", owner: "ManasMadan", product: "Boilerplate" }
  */
 export function replacements({ name, owner, product, bundleId }: Identity): [string, string][] {
   return [
-    ["ManasMadan/boilerplate", `${owner}/${name}`],
-    ["ghcr.io/manasmadan/boilerplate", `ghcr.io/${owner.toLowerCase()}/${name}`],
-    ["ManasMadan", owner],
-    ["manasmadan", owner.toLowerCase()],
+    [`${OLD.owner}/${OLD.name}`, `${owner}/${name}`],
+    [`ghcr.io/${OLD.owner.toLowerCase()}/${OLD.name}`, `ghcr.io/${owner.toLowerCase()}/${name}`],
+    [OLD.owner, owner],
+    [OLD.owner.toLowerCase(), owner.toLowerCase()],
     // The app store identifiers (with their .development / .preview variants), and the
     // push tests' APNs topic.
-    ["com.boilerplate.app", bundleId],
-    ["dev.boilerplate.app", bundleId],
-    ["Boilerplate", product],
-    ["boilerplate", name],
+    [OLD.bundleId, bundleId],
+    [`dev.${OLD.name}.app`, bundleId],
+    [OLD.product, product],
+    [OLD.name, name],
   ];
 }
 
@@ -103,7 +119,7 @@ export function rename(root: string, identity: Identity) {
     .filter(Boolean);
   const files = new Map<string, string>();
   const changed: string[] = [];
-  for (const path of tracked.filter((path) => !SELF.has(path))) {
+  for (const path of tracked.filter((path) => !KEPT.has(path))) {
     const bytes = readFileSync(join(root, path));
     if (bytes.includes(0)) {
       continue; // binary
@@ -116,11 +132,23 @@ export function rename(root: string, identity: Identity) {
       changed.push(path);
     }
   }
+  const self = join(root, "scripts/rename.ts");
+  if (tracked.includes("scripts/rename.ts")) {
+    const lines = Object.entries(identity).map(
+      ([key, value]) => `  ${key}: ${JSON.stringify(value)},`,
+    );
+    const text = readFileSync(self, "utf8").replace(
+      /export const OLD: Identity = \{[^}]*\};/,
+      `export const OLD: Identity = {\n${lines.join("\n")}\n};`,
+    );
+    writeFileSync(self, text);
+    changed.push("scripts/rename.ts");
+  }
   return { changed, left: leftovers(files) };
 }
 
 /** The command: renames the checkout at `root`; the exit code. */
-export function main(argv = process.argv.slice(2), root = ROOT): number {
+export function main(argv = process.argv.slice(2), root = ROOT, run: Run = runSync): number {
   let identity: Identity;
   try {
     identity = identityFrom(argv);
@@ -130,6 +158,19 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
   }
   const { changed, left } = rename(root, identity);
   ok(`${changed.length} files rewritten for ${identity.owner}/${identity.name}`);
+  // A longer or shorter name moves where lines wrap: format what changed, as lint expects.
+  run(
+    "bunx",
+    [
+      "biome",
+      "format",
+      "--write",
+      "--files-ignore-unknown=true",
+      "--no-errors-on-unmatched",
+      ...changed,
+    ],
+    { cwd: root, stdio: "inherit" },
+  );
   if (left.length > 0) {
     for (const line of left) {
       console.error(`  ${line}`);
