@@ -142,4 +142,12 @@ describe("the image scan", () => {
     expect(imageScan(["a/b:1"], fakeRun(() => ({ status: 1 })).run, "/repo")).toBe(1);
     expect(printed()).toContain("isn't installed and Docker isn't running");
   });
+
+  it("is in the Security workflow, weekly too, against the same Trivy", () => {
+    const security = readFileSync(join(ROOT, ".github/workflows/security.yml"), "utf8");
+    const job = security.slice(security.indexOf("  images:"), security.indexOf("  security-ok:"));
+    expect(job).toContain("run: bun scripts/image-scan.ts\n");
+    expect(job).toContain(`version: v${TRIVY_VERSION}\n`);
+    expect(security).toMatch(/needs: \[[^\]]*\bimages\b[^\]]*\]/);
+  });
 });
