@@ -79,7 +79,8 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "otlpEndpoint": { "type": "string", "pattern": "^https?://" },
-        "metricsEndpoint": { "type": "string", "pattern": "^https?://" }
+        "metricsEndpoint": { "type": "string", "pattern": "^https?://" },
+        "alertmanagerUrl": { "type": "string", "pattern": "^https?://" }
       }
     },
     "database": {

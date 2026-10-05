@@ -176,6 +176,26 @@ tests:
             name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
             value: "http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp/v1/metrics"
 
+  - it: points the api at Alertmanager with observability on, for system.alerting
+    set:
+      observability.enabled: true
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: ALERTMANAGER_URL
+            value: "http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093"
+
+  - it: leaves Alertmanager unset without observability, so system.alerting answers off
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: ALERTMANAGER_URL
+            value: "http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093"
+
   - it: lets an environment's own collector override the observability endpoints
     set:
       observability.enabled: true

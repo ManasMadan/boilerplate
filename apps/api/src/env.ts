@@ -68,6 +68,12 @@ export const envSchema = {
       z.array(z.string().regex(/^([0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$/, "a SHA-256 fingerprint")),
     ),
 
+  /**
+   * Optional: the cluster's Alertmanager, which `system.alerting` asks whether Prometheus's
+   * Watchdog alert is still arriving (src/modules/system/alerting.ts). Unset: `off`.
+   */
+  ALERTMANAGER_URL: z.url().optional(),
+
   /** Oldest web/mobile app version still supported; older clients get CLIENT_OUTDATED. */
   MINIMUM_CLIENT_VERSION: z
     .string()

@@ -70,6 +70,9 @@ observability:
   otlpEndpoint: http://jaeger.observability.svc.cluster.local:4318
   # ...and metrics to Prometheus's OTLP receiver, a full URL.
   metricsEndpoint: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp/v1/metrics
+  # Alertmanager, which the api asks whether Prometheus's Watchdog alert still arrives
+  # (system.alerting, for the uptime check outside the cluster).
+  alertmanagerUrl: http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093
 
 # Connection URLs, one Secret per database role with keys `url` and `directUrl` (both
 # straight to the primary). The data chart generates them.
@@ -211,6 +214,8 @@ services:
       WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
       BETTER_AUTH_URL: "{{ include \"stack.siteUrl\" $ }}"
       AI_URL: "{{ include \"stack.url\" (list $ \"ai\") }}"
+      # Empty (unset, so system.alerting answers "off") without observability.
+      ALERTMANAGER_URL: "{{ if .Values.observability.enabled }}{{ .Values.observability.alertmanagerUrl }}{{ end }}"
     # The AI service fetches the api's signing keys (MCP tokens) directly.
     allowFrom: [ai]
     autoscaling:

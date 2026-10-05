@@ -22,6 +22,8 @@ import { createRouter } from "./router";
 const PUBLIC: Record<string, string> = {
   "system.info":
     "Clients read it before anyone signs in: the enabled features, the oldest supported app version, and the captcha and push keys.",
+  "system.alerting":
+    "The uptime check outside the cluster reads it, signed out: only ok, stale or off, from a verdict cached for 30 seconds.",
   "notifications.unsubscribe":
     "Opened from an email's unsubscribe link, often signed out: the signed token in the link is what authorizes it.",
 };
