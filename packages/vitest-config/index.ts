@@ -34,7 +34,10 @@ export function coverage(): CoverageOptions {
       "**/*.gen.ts",
       "**/*.config.{ts,mts}",
     ],
-    reporter: ["text-summary", "lcov"],
+    // LCOV only: a run's own summary counts every file its tests load from other packages,
+    // so it reads below 100% for a package whose files are all covered. scripts/coverage.ts
+    // merges every suite's report and prints what each file actually misses.
+    reporter: ["lcov"],
     // Written even when a test fails, so the merge still shows what the rest covered.
     reportOnFailure: true,
   };

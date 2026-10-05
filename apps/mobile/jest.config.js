@@ -14,8 +14,9 @@ module.exports = {
   // Compile every dependency: more and more ship only ES modules (oRPC, use-intl's
   // formatters), and an allowlist would break each time one does. Babel caches the result.
   transformIgnorePatterns: [],
-  // Every source file, screens included. No threshold here: the rule is 100% of every
-  // file across all suites, checked on the merged reports (scripts/coverage.ts).
+  // Every source file, screens included, at 100%: only this suite runs the app's code, so
+  // its own numbers are the whole story (scripts/coverage.ts checks them again, merged).
   collectCoverageFrom: ["src/**/*.{ts,tsx}", "!src/**/*.test.{ts,tsx}"],
   coverageReporters: ["text-summary", "lcov"],
+  coverageThreshold: { global: { branches: 100, functions: 100, lines: 100, statements: 100 } },
 };
