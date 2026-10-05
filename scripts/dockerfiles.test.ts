@@ -108,5 +108,6 @@ describe("the web image's build", () => {
       .filter((file) => !/^apps\/web\/(\.next\/|next-env\.d\.ts$)/.test(file))
       .filter((file) => !(committed.has(file) && pruned.some((dir) => file.startsWith(dir))));
     expect(missing).toEqual([]);
-  });
+    // A whole type-check program: seconds alone, longer beside the other suites a push runs.
+  }, 30_000);
 });
