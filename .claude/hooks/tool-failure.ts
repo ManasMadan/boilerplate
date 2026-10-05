@@ -5,7 +5,8 @@
  * that found nothing) say nothing.
  */
 import { existsSync } from "node:fs";
-import { type HookInput, type HookOutput, hintedFile, runHook } from "./lib";
+import { runMain } from "../../scripts/lib";
+import { type HookInput, type HookOutput, hintedFile, hookMain } from "./lib";
 
 const REPO_COMMAND =
   /^\s*(bun (run|test|scripts\/)|bunx (turbo|vitest|playwright|prisma|tsc)|turbo |docker compose |uv run )/;
@@ -27,6 +28,4 @@ export async function toolFailure(input: HookInput): Promise<HookOutput> {
   };
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(toolFailure));
-}
+await runMain(import.meta, hookMain(toolFailure));

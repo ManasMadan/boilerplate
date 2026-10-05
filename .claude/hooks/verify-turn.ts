@@ -15,6 +15,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { runMain } from "../../scripts/lib";
 import { type Check, checksFor, touchesEverything } from "./checks";
 import {
   askedFile,
@@ -22,8 +23,8 @@ import {
   defaultBranch,
   type HookInput,
   type HookOutput,
+  hookMain,
   ROOT,
-  runHook,
   stopCountFile,
   treeFingerprint,
   turnFile,
@@ -113,6 +114,4 @@ export async function verifyTurn(input: HookInput, given: Partial<Turn> = {}): P
   return undefined;
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(verifyTurn));
-}
+await runMain(import.meta, hookMain(verifyTurn));

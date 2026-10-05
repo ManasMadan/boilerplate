@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Glob } from "bun";
-import { fail, ok, ROOT } from "./lib";
+import { fail, ok, ROOT, runMain } from "./lib";
 
 const PRISMA_METHODS = [
   "findMany",
@@ -96,6 +96,9 @@ export function checkClientHooks(api = join(ROOT, "packages/client/src/api")): n
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(checkRepositories() | checkClientHooks());
+/** Both checks; the exit code. */
+export function main() {
+  return checkRepositories() | checkClientHooks();
 }
+
+await runMain(import.meta, main);

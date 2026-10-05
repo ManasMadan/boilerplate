@@ -52,7 +52,10 @@ async function onFailed(command: string, queue: UncheckedQueue, rest: string[]) 
 }
 
 /** Runs the command `argv` names against the Valkey at `url`; the exit code. */
-export async function jobs(argv: string[], url: string | undefined): Promise<number> {
+export async function jobs(
+  argv = process.argv.slice(2),
+  url = process.env.REDIS_URL,
+): Promise<number> {
   const [command = "status", name, ...rest] = argv;
   if (!url) {
     fail("REDIS_URL isn't set (bun run setup writes it to .env)");

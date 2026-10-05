@@ -13,6 +13,7 @@ import {
   PLACEHOLDER,
   ROOT,
   readEnv,
+  runMain,
   runSync,
   warn,
 } from "./lib";
@@ -211,6 +212,4 @@ export function doctor({
   return problems ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(doctor());
-}
+await runMain(import.meta, doctor);

@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HOUR_MS } from "../packages/contracts/src/time";
-import { fail, ok, ROOT, type Run, runSync } from "./lib";
+import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 const TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const MOBILE_CONFIG = "apps/mobile/app.config.ts";
@@ -301,6 +301,4 @@ export async function release(argv = process.argv.slice(2), given: Partial<Tools
   return promote(commands, tag);
 }
 
-if (import.meta.main) {
-  process.exit(await release());
-}
+await runMain(import.meta, release);

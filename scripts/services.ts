@@ -18,7 +18,7 @@
  * already use. If they don't, it starts nothing: running out of memory makes Docker kill
  * containers, and not necessarily ours.
  */
-import { fail, ok, ROOT, type Run, runSync, warn } from "./lib";
+import { fail, ok, ROOT, type Run, runMain, runSync, warn } from "./lib";
 
 /** Kept free for Docker itself and the growth of what's already running. */
 const HEADROOM = 512 * 1024 ** 2;
@@ -216,6 +216,4 @@ export function services(argv = process.argv.slice(2), run = runSync): number {
   );
 }
 
-if (import.meta.main) {
-  process.exit(services());
-}
+await runMain(import.meta, services);

@@ -3,7 +3,7 @@
  * infrastructure work, so without it the commit goes on with a warning: CI's infra job
  * checks the formatting either way.
  */
-import { ROOT, runSync, warn } from "./lib";
+import { ROOT, runMain, runSync, warn } from "./lib";
 
 /** `tofu fmt` on `files` when OpenTofu is installed; the exit code. */
 export function tofuFmt(files = process.argv.slice(2), run = runSync): number {
@@ -14,6 +14,4 @@ export function tofuFmt(files = process.argv.slice(2), run = runSync): number {
   return run("tofu", ["fmt", ...files], { cwd: ROOT, stdio: "inherit" }).status ?? 1;
 }
 
-if (import.meta.main) {
-  process.exit(tofuFmt());
-}
+await runMain(import.meta, tofuFmt);

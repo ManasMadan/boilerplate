@@ -18,7 +18,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type FileCoverage, isSource, mergeLcov } from "./coverage";
-import { fail, ok, ROOT } from "./lib";
+import { fail, ok, ROOT, runMain } from "./lib";
 import { listedFiles } from "./suppressions";
 
 /** The line numbers a `@@ -a,b +c,d @@` hunk header adds, or none for another line. */
@@ -247,6 +247,4 @@ export async function unitCoverage(
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(await unitCoverage());
-}
+await runMain(import.meta, unitCoverage);

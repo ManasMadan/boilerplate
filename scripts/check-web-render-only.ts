@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Glob } from "bun";
-import { fail, ok, ROOT } from "./lib";
+import { fail, ok, ROOT, runMain } from "./lib";
 
 const ALLOWED_ROUTES = new Set(["app/healthz/route.ts"]);
 
@@ -46,6 +46,4 @@ export function checkWebRenderOnly(web = join(ROOT, "apps/web/src")): number {
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(checkWebRenderOnly());
-}
+await runMain(import.meta, checkWebRenderOnly);

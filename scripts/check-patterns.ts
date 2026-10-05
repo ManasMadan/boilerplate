@@ -21,7 +21,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { fail, ok, ROOT } from "./lib";
+import { fail, ok, ROOT, runMain } from "./lib";
 
 /** Source of the services and packages, where the rules for source apply. */
 const SOURCE = /^(apps|packages)\/[^/]+\/src\/.+\.tsx?$/;
@@ -230,6 +230,4 @@ export function checkPatterns(root = ROOT): number {
   return found.length === 0 ? 0 : 1;
 }
 
-if (import.meta.main) {
-  process.exit(checkPatterns());
-}
+await runMain(import.meta, checkPatterns);

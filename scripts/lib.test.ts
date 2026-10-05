@@ -10,6 +10,7 @@ import {
   ok,
   parseEnv,
   removeEnvValue,
+  runMain,
   runSync,
   warn,
   writeEnvValue,
@@ -114,5 +115,19 @@ describe("the status lines", () => {
       ),
     );
     mock.restore();
+  });
+});
+
+describe("a script's entry point", () => {
+  it("runs only when the file is run, and exits with the code it returns", async () => {
+    const codes: number[] = [];
+    const exit = (code: number) => codes.push(code);
+    await runMain({ main: false }, () => 3, exit);
+    expect(codes).toEqual([]);
+    await runMain({ main: true }, () => 3, exit);
+    await runMain({ main: true }, async () => 4, exit);
+    // One that reports nothing succeeded.
+    await runMain({ main: true }, () => undefined, exit);
+    expect(codes).toEqual([3, 4, 0]);
   });
 });

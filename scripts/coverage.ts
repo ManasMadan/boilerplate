@@ -17,6 +17,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { runMain } from "./lib";
 import { listedFiles } from "./suppressions";
 
 const ROOT = join(import.meta.dir, "..");
@@ -222,6 +223,4 @@ export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): numb
   return failing > 0 ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(checkCoverage());
-}
+await runMain(import.meta, checkCoverage);

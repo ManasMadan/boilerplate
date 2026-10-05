@@ -4,7 +4,7 @@
  * git call and a TCP connect per service (localhost refuses instantly when nothing
  * listens). It never calls Docker, which can take seconds to answer.
  */
-import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv } from "../../scripts/lib";
+import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv, runMain } from "../../scripts/lib";
 
 /** The core services' host ports: .env's, else .env.example's (docker-compose.yml's). */
 export function servicePorts(env = readEnv(ENV_PATH), example = readEnv(ENV_EXAMPLE_PATH)) {
@@ -38,6 +38,12 @@ export async function statusline(
   return `${branch}${dirty ? ` +${dirty}` : ""} | ${status}`;
 }
 
-if (import.meta.main) {
-  process.stdout.write(await statusline());
+/** Prints the status line (Claude Code's statusLine command). */
+export async function printStatusline(
+  write: (text: string) => unknown = process.stdout.write.bind(process.stdout),
+  stdin?: Parameters<typeof statusline>[0],
+) {
+  write(await statusline(stdin));
 }
+
+await runMain(import.meta, printStatusline);

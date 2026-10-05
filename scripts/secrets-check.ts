@@ -6,6 +6,7 @@
  */
 import { readFileSync } from "node:fs";
 import { basename, relative } from "node:path";
+import { runMain } from "./lib";
 
 /**
  * Why a file in a secrets directory isn't safe to commit, or null when it is: a
@@ -134,6 +135,4 @@ export function checkSecrets(
   return 1;
 }
 
-if (import.meta.main) {
-  process.exit(checkSecrets());
-}
+await runMain(import.meta, checkSecrets);

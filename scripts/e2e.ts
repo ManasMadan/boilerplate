@@ -28,7 +28,7 @@ import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process"
 import { mkdirSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { ENV_EXAMPLE_PATH, fail, listening, ok, ROOT, readEnv, runSync } from "./lib";
+import { ENV_EXAMPLE_PATH, fail, listening, ok, ROOT, readEnv, runMain, runSync } from "./lib";
 
 /** The ports the run's services listen on, each one of .env.example's `*_PORT`. */
 const PORTS = [
@@ -340,6 +340,4 @@ export async function e2e(
   }
 }
 
-if (import.meta.main) {
-  process.exit(await e2e());
-}
+await runMain(import.meta, e2e);

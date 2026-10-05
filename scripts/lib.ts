@@ -119,3 +119,20 @@ export async function listening(port: number, timeoutMs = 1000, host = "127.0.0.
   socket.destroy();
   return open;
 }
+
+/**
+ * A script's entry point: `await runMain(import.meta, main)` runs `main` when the file is
+ * run (`bun scripts/x.ts`), not when a test imports it, and exits with the code it
+ * returns (0 when it returns none). `main` is passed as it is, never wrapped, so a test
+ * that imports the file leaves nothing of it uncovered.
+ */
+export async function runMain(
+  meta: { main: boolean },
+  main: () => unknown,
+  exit: (code: number) => void = process.exit,
+) {
+  if (meta.main) {
+    const code = await main();
+    exit(typeof code === "number" ? code : 0);
+  }
+}

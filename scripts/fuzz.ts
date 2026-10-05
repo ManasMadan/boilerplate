@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as z from "zod";
 import { stackPorts } from "./e2e";
-import { fail, ROOT, type Run, runSync } from "./lib";
+import { fail, ROOT, type Run, runMain, runSync } from "./lib";
 
 // renovate: datasource=pypi depName=schemathesis
 const SCHEMATHESIS = "schemathesis@4.29.3";
@@ -136,6 +136,4 @@ export async function fuzz(given: Partial<Fuzz> = {}): Promise<number> {
   return failed.length > 0 ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(await fuzz());
-}
+await runMain(import.meta, fuzz);

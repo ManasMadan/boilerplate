@@ -13,7 +13,7 @@
  * single app runs that app's.
  */
 import * as z from "zod";
-import { fail, ok, ROOT, type Run, runSync } from "./lib";
+import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 import { pushBase } from "./unit-coverage";
 
 const turboList = z.object({
@@ -83,6 +83,4 @@ export function pushCoverage({ run = runSync, root = ROOT } = {}): number {
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(pushCoverage());
-}
+await runMain(import.meta, pushCoverage);

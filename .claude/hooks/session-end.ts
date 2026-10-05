@@ -5,7 +5,8 @@
  */
 
 import { rmSync } from "node:fs";
-import { type HookInput, runHook, sessionFiles } from "./lib";
+import { runMain } from "../../scripts/lib";
+import { type HookInput, hookMain, sessionFiles } from "./lib";
 
 export function sessionEnd(input: HookInput) {
   for (const file of sessionFiles) {
@@ -14,6 +15,4 @@ export function sessionEnd(input: HookInput) {
   return undefined;
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(sessionEnd));
-}
+await runMain(import.meta, hookMain(sessionEnd));

@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
-import { servicePorts, statusline } from "./statusline";
+import { printStatusline, servicePorts, statusline } from "./statusline";
 
 let repo: string;
 let server: Server;
@@ -63,5 +63,13 @@ describe("the status line", () => {
     ]);
     // By default, this checkout's files.
     expect(servicePorts().map((service) => service.name)).toEqual(["pg", "valkey", "mail"]);
+  });
+});
+
+describe("the status line command", () => {
+  it("prints the status line", async () => {
+    const printed: string[] = [];
+    await printStatusline((text) => printed.push(text), stdin(new Error("not JSON")));
+    expect(printed).toHaveLength(1);
   });
 });

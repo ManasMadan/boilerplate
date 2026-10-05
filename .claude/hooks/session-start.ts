@@ -10,7 +10,8 @@
 import { existsSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
-import { changedFiles, type HookInput, ROOT, runHook, STATE_DIR } from "./lib";
+import { runMain } from "../../scripts/lib";
+import { changedFiles, type HookInput, hookMain, ROOT, STATE_DIR } from "./lib";
 
 const DOCTOR_TIMEOUT_MS = 20_000;
 const FRESH_MS = 10 * 60_000;
@@ -71,6 +72,4 @@ export async function sessionStart(
   };
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(sessionStart));
-}
+await runMain(import.meta, hookMain(sessionStart));

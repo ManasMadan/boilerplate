@@ -9,6 +9,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { runMain } from "./lib";
 
 /** What counts, by name; each finds one occurrence per match. */
 export const SUPPRESSIONS: Record<string, RegExp> = {
@@ -128,6 +129,4 @@ export function checkSuppressions(root = join(import.meta.dir, "..")): number {
   return 1;
 }
 
-if (import.meta.main) {
-  process.exit(checkSuppressions());
-}
+await runMain(import.meta, checkSuppressions);

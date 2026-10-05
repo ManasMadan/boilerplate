@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { fail, ok, ROOT, runSync } from "./lib";
+import { fail, ok, ROOT, runMain, runSync } from "./lib";
 
 export interface Identity {
   name: string;
@@ -139,6 +139,4 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(main());
-}
+await runMain(import.meta, main);

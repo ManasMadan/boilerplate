@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import { runMain } from "./lib";
 
 const CATALOG = "packages/jobs/generated/events.json";
 
@@ -69,6 +70,9 @@ export function report(
   return problems.length > 0 ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(report(check(process.argv[2] ?? "origin/master")));
+/** The command: the base ref from the arguments (origin/master by default); the exit code. */
+export function main(argv = process.argv.slice(2)) {
+  return report(check(argv[0] ?? "origin/master"));
 }
+
+await runMain(import.meta, main);

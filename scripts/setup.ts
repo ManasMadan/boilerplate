@@ -26,6 +26,7 @@ import {
   ok,
   ROOT,
   readEnv,
+  runMain,
   runSync,
   writeEnvValue,
 } from "./lib";
@@ -142,6 +143,4 @@ export function main(argv = process.argv.slice(2), options: Omit<Options, "stack
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(main());
-}
+await runMain(import.meta, main);

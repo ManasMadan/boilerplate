@@ -14,7 +14,6 @@
  */
 
 import { jobs } from "@repo/jobs/cli";
+import { runMain } from "./lib";
 
-if (import.meta.main) {
-  process.exit(await jobs(process.argv.slice(2), process.env.REDIS_URL));
-}
+await runMain(import.meta, jobs);

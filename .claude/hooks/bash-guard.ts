@@ -5,8 +5,9 @@
  * GitHub changes, infrastructure and destructive scripts (shell.ts). Fails closed.
  */
 import { isAbsolute, join, relative } from "node:path";
+import { runMain } from "../../scripts/lib";
 import { verdictFor } from "./file-rules";
-import { defaultBranch, type HookInput, type HookOutput, isShipped, ROOT, runHook } from "./lib";
+import { defaultBranch, type HookInput, type HookOutput, hookMain, isShipped, ROOT } from "./lib";
 import { commandPolicy, writeTargets } from "./shell";
 
 const decide = (decision: "deny" | "ask", reason: string): HookOutput => ({
@@ -45,6 +46,4 @@ export async function bashGuard(input: HookInput, shipped = isShipped): Promise<
   return policy ? decide(policy.decision, policy.reason) : undefined;
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(bashGuard, { failClosed: true }));
-}
+await runMain(import.meta, hookMain(bashGuard, { failClosed: true }));

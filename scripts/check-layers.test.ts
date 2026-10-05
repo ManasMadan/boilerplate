@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkClientHooks, checkRepositories, prismaModels } from "./check-layers";
+import { checkClientHooks, checkRepositories, main, prismaModels } from "./check-layers";
 import { captureOutput } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -83,5 +83,11 @@ describe("the client's one-hook-per-file check", () => {
   it("passes the real client", () => {
     captureOutput();
     expect(checkClientHooks()).toBe(0);
+  });
+});
+
+describe("the layers command", () => {
+  it("passes on the repository as it is", () => {
+    expect(main()).toBe(0);
   });
 });

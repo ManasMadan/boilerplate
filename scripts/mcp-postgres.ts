@@ -5,7 +5,7 @@
  * it stops within a second and says what to do, instead of the server hanging past
  * Claude Code's 30-second start limit.
  */
-import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv } from "./lib";
+import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv, runMain } from "./lib";
 
 /**
  * The local Postgres port: .env's, else .env.example's, the one place its default is
@@ -49,6 +49,4 @@ export async function startServer(
   return server.exited;
 }
 
-if (import.meta.main) {
-  process.exit(await startServer());
-}
+await runMain(import.meta, startServer);

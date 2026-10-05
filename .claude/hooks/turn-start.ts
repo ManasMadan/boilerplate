@@ -5,7 +5,8 @@
  */
 
 import { rmSync } from "node:fs";
-import { type HookInput, runHook, stopCountFile, treeFingerprint, turnFile } from "./lib";
+import { runMain } from "../../scripts/lib";
+import { type HookInput, hookMain, stopCountFile, treeFingerprint, turnFile } from "./lib";
 
 /** Records the tree as the turn starts; answers nothing. */
 export async function turnStart(input: HookInput, fingerprint = treeFingerprint) {
@@ -14,6 +15,4 @@ export async function turnStart(input: HookInput, fingerprint = treeFingerprint)
   return undefined;
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(turnStart));
-}
+await runMain(import.meta, hookMain(turnStart));

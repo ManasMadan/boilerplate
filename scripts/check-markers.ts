@@ -7,7 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fail, ok, ROOT } from "./lib";
+import { fail, ok, ROOT, runMain } from "./lib";
 import { CODE } from "./suppressions";
 
 const MARKER = /\bponytail:/;
@@ -48,6 +48,4 @@ export function checkMarkers(root = ROOT): number {
   return 1;
 }
 
-if (import.meta.main) {
-  process.exit(checkMarkers());
-}
+await runMain(import.meta, checkMarkers);

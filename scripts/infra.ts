@@ -10,7 +10,7 @@
  */
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { fail, ok, ROOT, runSync } from "./lib";
+import { fail, ok, ROOT, runMain, runSync } from "./lib";
 
 const TOFU = join(ROOT, "infra/tofu");
 const PLUGIN_CACHE = join(ROOT, "node_modules/.cache/tofu-plugins");
@@ -65,6 +65,4 @@ export function infraCheck({
   return failed ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(infraCheck());
-}
+await runMain(import.meta, infraCheck);

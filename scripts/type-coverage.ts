@@ -14,7 +14,7 @@
  */
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { fail, ok, ROOT, type Run, runSync } from "./lib";
+import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 const IGNORED = [
   "**/generated/**",
@@ -67,6 +67,4 @@ export function main(argv = process.argv.slice(2), run: Run = runSync): number {
   return check(argv.length ? argv : workspaces(), run).length ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(main());
-}
+await runMain(import.meta, main);

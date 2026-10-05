@@ -4,8 +4,9 @@
  * file in its exceptions tables. The edit has happened, so Claude is told to undo it.
  */
 import { spawnSync } from "node:child_process";
+import { runMain } from "../../scripts/lib";
 import { addedSuppressions, CODE, DEFINES_THEM, listedFiles } from "../../scripts/suppressions";
-import { editedText, type HookInput, type HookOutput, ROOT, runHook, targetPath } from "./lib";
+import { editedText, type HookInput, type HookOutput, hookMain, ROOT, targetPath } from "./lib";
 
 /** Blocks an edit that adds an unlisted suppression; nothing otherwise. */
 export function suppressions(input: HookInput): HookOutput {
@@ -30,6 +31,4 @@ export function suppressions(input: HookInput): HookOutput {
   };
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(suppressions));
-}
+await runMain(import.meta, hookMain(suppressions));

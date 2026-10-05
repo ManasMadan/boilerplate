@@ -34,7 +34,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MINUTE_MS } from "../packages/contracts/src/time";
-import { fail, ok, ROOT, type Run, runSync } from "./lib";
+import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 const CLUSTER = "boilerplate";
 const NAMESPACE = "boilerplate";
@@ -645,6 +645,4 @@ export async function k8s(argv = process.argv.slice(2), given: Partial<Cluster> 
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(await k8s());
-}
+await runMain(import.meta, k8s);

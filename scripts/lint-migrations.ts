@@ -4,7 +4,7 @@
  * migrations already on master are applied everywhere and can't change anyway. Given
  * files instead (the pre-commit hook passes the staged ones), it lints those.
  */
-import { ok, ROOT, runSync } from "./lib";
+import { ok, ROOT, runMain, runSync } from "./lib";
 
 const SQUAWK = "squawk-cli@2.66.0";
 
@@ -41,6 +41,4 @@ export function lintMigrations(
   return run("bunx", [SQUAWK, ...changed], { cwd: ROOT, stdio: "inherit" }).status ?? 1;
 }
 
-if (import.meta.main) {
-  process.exit(lintMigrations());
-}
+await runMain(import.meta, lintMigrations);

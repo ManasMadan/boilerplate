@@ -163,3 +163,11 @@ export function targetPath(input: HookInput): string | null {
   const file = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
   return typeof file === "string" ? relative(ROOT, file) : null;
 }
+
+/** A hook's entry point for `runMain` (scripts/lib.ts): runs `handler` as runHook does. */
+export function hookMain(
+  handler: Parameters<typeof runHook>[0],
+  options?: Parameters<typeof runHook>[1],
+) {
+  return () => runHook(handler, options);
+}

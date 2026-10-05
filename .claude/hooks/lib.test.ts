@@ -7,6 +7,7 @@ import {
   changedFiles,
   defaultBranch,
   editedText,
+  hookMain,
   isShipped,
   ROOT,
   runHook,
@@ -82,6 +83,12 @@ describe("running a hook", () => {
     const code = await runHook((input) => ({ seen: input.tool_name }), io);
     expect(code).toBe(0);
     expect(io.written.stdout).toBe('{"seen":"Bash"}');
+  });
+
+  it("runs as a hook's entry point, with the options it's given", async () => {
+    const io = streams('{"tool_name":"Edit"}');
+    expect(await hookMain((input) => ({ seen: input.tool_name }), io)()).toBe(0);
+    expect(io.written.stdout).toBe('{"seen":"Edit"}');
   });
 
   it("writes nothing when the handler has nothing to say", async () => {

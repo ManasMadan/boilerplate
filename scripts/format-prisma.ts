@@ -3,7 +3,7 @@
  * formats the schema folder as a whole, from its package, whatever files it's given.
  */
 import { join } from "node:path";
-import { ROOT, runSync } from "./lib";
+import { ROOT, runMain, runSync } from "./lib";
 
 /** Formats the schema; Prisma's exit code. */
 export function formatPrisma(run = runSync): number {
@@ -13,6 +13,4 @@ export function formatPrisma(run = runSync): number {
   );
 }
 
-if (import.meta.main) {
-  process.exit(formatPrisma());
-}
+await runMain(import.meta, formatPrisma);

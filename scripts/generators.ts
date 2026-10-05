@@ -12,7 +12,7 @@ import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
-import { fail, ok, ROOT, type Run, runSync } from "./lib";
+import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 /** An api feature over the todo table, and a package: names nothing else uses. */
 const FEATURE = ["smoke-notes", "smoke-note", "todo", '{"title":"Smoke"}'];
@@ -112,6 +112,4 @@ export function generators(argv = process.argv.slice(2), run = runSync): number 
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(generators());
-}
+await runMain(import.meta, generators);

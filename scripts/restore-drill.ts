@@ -19,7 +19,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fail, ok, ROOT, runSync } from "./lib";
+import { fail, ok, ROOT, runMain, runSync } from "./lib";
 
 // One line per fact about the database (rows and their hash per table, security, grants,
 // functions, sequences), shared with the data chart's drill of the cluster backups.
@@ -108,6 +108,4 @@ export function restoreDrill(
   return passed ? 0 : 1;
 }
 
-if (import.meta.main) {
-  process.exit(restoreDrill());
-}
+await runMain(import.meta, restoreDrill);

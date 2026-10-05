@@ -3,14 +3,16 @@
  * dangerous, and ask the user about changes to Claude's own guard rails (file-rules.ts).
  * It fails closed: an event it can't read blocks the edit. Runs in well under 100ms.
  */
+
+import { runMain } from "../../scripts/lib";
 import { verdictFor } from "./file-rules";
 import {
   defaultBranch,
   editedText,
   type HookInput,
   type HookOutput,
+  hookMain,
   isShipped,
-  runHook,
   targetPath,
 } from "./lib";
 
@@ -37,6 +39,4 @@ export async function guardFiles(input: HookInput, shipped = isShipped): Promise
   };
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(guardFiles, { failClosed: true }));
-}
+await runMain(import.meta, hookMain(guardFiles, { failClosed: true }));

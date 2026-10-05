@@ -14,7 +14,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { fail, ok, runSync } from "./lib";
+import { fail, ok, runMain, runSync } from "./lib";
 
 const secret = () => randomBytes(32).toString("base64");
 const database = (role: string) => `postgresql://${role}:${role}@127.0.0.1:5432/app`;
@@ -120,7 +120,7 @@ async function statusOf(url: string, get: typeof request, timeoutMs: number, pol
 
 /** Smoke-tests `image`; the exit code. Waits up to `timeoutMs` for each path. */
 export async function smoke(
-  image: string | undefined,
+  image: string | undefined = process.argv[2],
   { run = runSync, get = request, timeoutMs = 120_000, pollMs = 2000 } = {},
 ): Promise<number> {
   const spec = image ? IMAGES[image] : undefined;
@@ -158,6 +158,4 @@ export async function smoke(
   return passed ? 0 : 1;
 }
 
-if (import.meta.main) {
-  process.exit(await smoke(process.argv[2]));
-}
+await runMain(import.meta, smoke);

@@ -15,7 +15,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
-import { ROOT } from "./lib";
+import { ROOT, runMain } from "./lib";
 
 /**
  * Budgets in kB, gzipped: today's sizes plus a little room. A page with no forms loads
@@ -114,6 +114,4 @@ export function main(next = join(ROOT, "apps/web/.next"), log = console.log): nu
   return 1;
 }
 
-if (import.meta.main) {
-  process.exit(main());
-}
+await runMain(import.meta, main);

@@ -4,7 +4,7 @@
  * local gitleaks, or its container when Docker is running; with neither, the commit
  * stops and says how to get one, rather than skipping the scan.
  */
-import { fail, ROOT, runSync } from "./lib";
+import { fail, ROOT, runMain, runSync } from "./lib";
 
 // renovate: datasource=github-releases depName=gitleaks/gitleaks
 const VERSION = "v8.28.0";
@@ -66,6 +66,4 @@ export function secretScan(run = runSync): number {
   return scan.status ?? 1;
 }
 
-if (import.meta.main) {
-  process.exit(secretScan());
-}
+await runMain(import.meta, secretScan);

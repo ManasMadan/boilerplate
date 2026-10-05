@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { breakingChanges, check, report } from "./events-compat";
+import { breakingChanges, check, main, report } from "./events-compat";
 
 const uuid = { type: "string", format: "uuid" };
 const todo = {
@@ -88,5 +88,12 @@ describe("event compatibility", () => {
       "::error file=packages/jobs/generated/events.json::todo.created.v1 was removed",
       "The base branch has no event catalog yet.",
     ]);
+  });
+});
+
+describe("the events compatibility command", () => {
+  it("checks the working tree against the ref it's given", () => {
+    // HEAD's catalog against the one on disk: compatible, or this change already fails.
+    expect(main(["HEAD"])).toBe(0);
   });
 });

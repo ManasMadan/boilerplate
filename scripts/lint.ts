@@ -5,7 +5,7 @@
  * hides another's results; it exits non-zero at the end if any failed. CI's lint job runs
  * the same command.
  */
-import { fail, ok, ROOT, type Run, runSync } from "./lib";
+import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 /** The steps, in order, each a `bun run` script or a command. */
 export const STEPS: string[][] = [
@@ -38,6 +38,4 @@ export function main(run: Run = runSync): number {
   return failed.length ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(main());
-}
+await runMain(import.meta, main);

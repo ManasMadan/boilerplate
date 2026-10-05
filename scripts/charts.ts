@@ -21,7 +21,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fail, ok, ROOT, runSync } from "./lib";
+import { fail, ok, ROOT, runMain, runSync } from "./lib";
 import { recipientsFor, unsafeSecret } from "./secrets-check";
 
 const KUBERNETES_VERSION = "1.34.0";
@@ -405,6 +405,4 @@ export function charts({ run = runSync, root = ROOT } = {}): number {
   return failed ? 1 : 0;
 }
 
-if (import.meta.main) {
-  process.exit(charts());
-}
+await runMain(import.meta, charts);

@@ -3,7 +3,7 @@
  *
  *   bun run env:unset OLD_VARIABLE [ANOTHER ...]
  */
-import { ENV_PATH, ok, removeEnvValue, warn } from "./lib";
+import { ENV_PATH, ok, removeEnvValue, runMain, warn } from "./lib";
 
 /** Removes each KEY in `argv` from the file at `path`; the exit code. */
 export function envUnset(argv = process.argv.slice(2), path = ENV_PATH): number {
@@ -21,6 +21,4 @@ export function envUnset(argv = process.argv.slice(2), path = ENV_PATH): number 
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(envUnset());
-}
+await runMain(import.meta, envUnset);

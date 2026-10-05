@@ -13,8 +13,10 @@ behind a `package.json` script).
   reading and writing): use them, don't copy them.
 - A script's work is an exported function that takes what it touches as parameters,
   with the real ones as defaults: the command runner (`runSync` in `scripts/lib.ts`),
-  argv, the environment, file paths. `if (import.meta.main)` is one line that calls it
-  and exits with its code. Tests are `scripts/<name>.test.ts` with `bun:test`, run by
+  argv, the environment, file paths. The file ends with
+  `await runMain(import.meta, theFunction)` (`scripts/lib.ts`), which calls it, with its
+  defaults, only when the file is run, and exits with its code; pass the function
+  itself, not a wrapper, so a test importing the file leaves nothing uncovered. Tests are `scripts/<name>.test.ts` with `bun:test`, run by
   `bun test ./scripts/` (the pre-push hook and CI's unit job), and never run Docker,
   kind, psql or anything else that changes the machine: `fakeRun` in
   `scripts/stand-ins.ts` records the commands instead, `captureOutput` what's printed,

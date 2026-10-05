@@ -5,7 +5,9 @@
  * verdict or result that isn't a pass reaches Claude as context, so it can't be skimmed
  * past on the way to "done".
  */
-import { type HookInput, type HookOutput, runHook } from "./lib";
+
+import { runMain } from "../../scripts/lib";
+import { type HookInput, type HookOutput, hookMain } from "./lib";
 
 /** Each reviewer's verdicts (the last line of its report): what passes, and what doesn't. */
 export const VERDICTS: Record<string, { pass: string[]; fail: string[] }> = {
@@ -71,6 +73,4 @@ export function subagentStop(input: HookInput): HookOutput {
   );
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(subagentStop));
-}
+await runMain(import.meta, hookMain(subagentStop));

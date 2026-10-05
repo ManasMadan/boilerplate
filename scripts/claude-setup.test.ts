@@ -127,7 +127,7 @@ describe("settings.json", () => {
       (file) =>
         file.endsWith(".ts") &&
         !file.endsWith(".test.ts") &&
-        readFileSync(join(CLAUDE, "hooks", file), "utf8").includes("if (import.meta.main)"),
+        readFileSync(join(CLAUDE, "hooks", file), "utf8").includes("runMain(import.meta"),
     );
     expect([...new Set(wired)].sort()).toEqual(entryPoints.sort());
   });

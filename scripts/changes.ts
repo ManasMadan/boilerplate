@@ -16,7 +16,7 @@
  * requests (master, the merge queue, nightly) CI runs everything without asking.
  * Prints `name=true|false` lines for $GITHUB_OUTPUT.
  */
-import { ROOT, type Run, runSync } from "./lib";
+import { ROOT, type Run, runMain, runSync } from "./lib";
 
 export type Area = "app" | "charts" | "infra" | "images" | "scripts";
 const AREAS: Area[] = ["app", "charts", "infra", "images", "scripts"];
@@ -106,6 +106,4 @@ export function main(base = process.argv[2], run: Run = runSync): number {
   return 0;
 }
 
-if (import.meta.main) {
-  process.exit(main());
-}
+await runMain(import.meta, main);

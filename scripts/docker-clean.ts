@@ -15,7 +15,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ok, ROOT, runSync, warn } from "./lib";
+import { ok, ROOT, runMain, runSync, warn } from "./lib";
 
 const CLUSTER = "boilerplate";
 const BUILDER = "boilerplate";
@@ -104,6 +104,4 @@ export function cleanDocker(run = runSync) {
   }
 }
 
-if (import.meta.main) {
-  cleanDocker();
-}
+await runMain(import.meta, cleanDocker);

@@ -4,7 +4,9 @@
  * the edit rather than at the end of the turn. Type-checking is left to the Stop hook:
  * running tsc on every edit flaps mid-refactor and costs seconds each time.
  */
-import { type HookInput, type HookOutput, ROOT, runHook, shell, targetPath } from "./lib";
+
+import { runMain } from "../../scripts/lib";
+import { type HookInput, type HookOutput, hookMain, ROOT, shell, targetPath } from "./lib";
 
 /** Formats the edited file; what lint still reports, or nothing. */
 export async function formatFile(input: HookInput, run = shell): Promise<HookOutput> {
@@ -62,6 +64,4 @@ export async function formatFile(input: HookInput, run = shell): Promise<HookOut
   };
 }
 
-if (import.meta.main) {
-  process.exit(await runHook(formatFile));
-}
+await runMain(import.meta, hookMain(formatFile));
