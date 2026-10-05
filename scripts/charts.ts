@@ -332,28 +332,70 @@ function checkPlatform({ root, exec, kubeconform, check }: Checks) {
   check("alert rules pass promtool", rules.ok ? promtool(exec, rules.output) : rules);
 }
 
+/** A chart of someone else's, at its pinned version, as a cluster installs it. */
+export type RemoteChart = {
+  name: string;
+  namespace: string;
+  /** Where helm gets it: a chart and its repository, or an OCI reference. */
+  source: string[];
+  version: string;
+  values: string;
+};
+
+/** The add-on charts from Helm repositories and OCI registries (deploy/platform/addons). */
+export function addonCharts(root = ROOT): RemoteChart[] {
+  return addons(root).flatMap(({ addon, chart, namespace, repoURL, version }) =>
+    addon && chart && namespace && repoURL && version
+      ? [
+          {
+            name: addon,
+            namespace,
+            version,
+            values: join(root, "deploy/platform/values", `${addon}.yaml`),
+            source: repoURL.startsWith("https://")
+              ? [chart, "--repo", repoURL]
+              : [`oci://${repoURL}/${chart}`],
+          },
+        ]
+      : [],
+  );
+}
+
+/** Argo CD's chart, at the version OpenTofu installs, with deploy/argocd's values. */
+export function argocdChart(root = ROOT): RemoteChart | undefined {
+  const version = /variable "argocd_version"[\s\S]*?default\s*=\s*"([^"]+)"/.exec(
+    readFileSync(join(root, "infra/tofu/modules/bootstrap/variables.tf"), "utf8"),
+  )?.[1];
+  return version
+    ? {
+        name: "argocd",
+        namespace: "argocd",
+        version,
+        values: join(root, "deploy/argocd/argo-cd-values.yaml"),
+        source: ["argo-cd", "--repo", "https://argoproj.github.io/argo-helm"],
+      }
+    : undefined;
+}
+
+/** `helm template` of a remote chart (or `chart`, a local copy of it). */
+export const remoteRender = (remote: RemoteChart, chart = remote.source) => [
+  "template",
+  remote.name,
+  ...chart,
+  "--version",
+  remote.version,
+  "--namespace",
+  remote.namespace,
+  "-f",
+  remote.values,
+];
+
 /** Every add-on chart at its pinned version, with our values. */
 function checkAddons({ root, exec, check }: Checks) {
-  for (const addon of addons(root)) {
-    if (!addon.chart || !addon.repoURL || !addon.version || !addon.addon) {
-      continue;
-    }
-    const chart = addon.repoURL.startsWith("https://")
-      ? [addon.chart, "--repo", addon.repoURL]
-      : [`oci://${addon.repoURL}/${addon.chart}`];
+  for (const addon of addonCharts(root)) {
     check(
-      `${addon.addon} ${addon.version} renders with our values`,
-      exec("helm", [
-        "template",
-        addon.addon,
-        ...chart,
-        "--version",
-        addon.version,
-        "--namespace",
-        addon.namespace ?? "default",
-        "-f",
-        join(root, "deploy/platform/values", `${addon.addon}.yaml`),
-      ]),
+      `${addon.name} ${addon.version} renders with our values`,
+      exec("helm", remoteRender(addon)),
     );
   }
 }
@@ -364,23 +406,9 @@ function checkAddons({ root, exec, check }: Checks) {
  * own manifests, validated.
  */
 function checkArgocd({ root, exec, kubeconform, check, refuse }: Checks) {
-  const argocdVersion = /variable "argocd_version"[\s\S]*?default\s*=\s*"([^"]+)"/.exec(
-    readFileSync(join(root, "infra/tofu/modules/bootstrap/variables.tf"), "utf8"),
-  )?.[1];
-  if (argocdVersion) {
-    const result = exec("helm", [
-      "template",
-      "argocd",
-      "argo-cd",
-      "--repo",
-      "https://argoproj.github.io/argo-helm",
-      "--version",
-      argocdVersion,
-      "--namespace",
-      "argocd",
-      "-f",
-      join(root, "deploy/argocd/argo-cd-values.yaml"),
-    ]);
+  const argocd = argocdChart(root);
+  if (argocd) {
+    const result = exec("helm", remoteRender(argocd));
     const wired =
       result.ok &&
       [
@@ -389,7 +417,7 @@ function checkArgocd({ root, exec, kubeconform, check, refuse }: Checks) {
         "/var/run/argocd/argocd-cmp-server",
         "secretName: sops-age",
       ].every((line) => result.output.includes(line));
-    check(`argo-cd ${argocdVersion} renders with the sops plugin`, {
+    check(`argo-cd ${argocd.version} renders with the sops plugin`, {
       ok: wired,
       output: result.ok
         ? "the sops plugin or its sidecar is missing from the output"
@@ -399,14 +427,14 @@ function checkArgocd({ root, exec, kubeconform, check, refuse }: Checks) {
     refuse("argocd_version not found in infra/tofu/modules/bootstrap/variables.tf");
   }
 
-  const argocd = ["root.yaml", "projects.yaml", "repositories.yaml"]
+  const manifests = ["root.yaml", "projects.yaml", "repositories.yaml"]
     .map((file) => join("deploy/argocd", file))
     .concat(
       readdirSync(join(root, "deploy/argocd/appsets")).map((f) => `deploy/argocd/appsets/${f}`),
     )
     .map((file) => `---\n${readFileSync(join(root, file), "utf8")}`)
     .join("\n");
-  check("Argo CD manifests are valid", kubeconform(argocd));
+  check("Argo CD manifests are valid", kubeconform(manifests));
 }
 
 /** The directories that hold committed secrets: each environment's and the platform's. */

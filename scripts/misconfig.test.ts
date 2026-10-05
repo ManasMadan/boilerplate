@@ -18,11 +18,14 @@ function checkout(...environments: string[]) {
     join(root, "deploy/platform/addons/mail.yaml"),
     "addon: mail\nnamespace: mail\npath: deploy/platform/mail\n",
   );
-  // A third-party chart: rendered by charts:check, not here (it isn't ours to fix).
+  // An add-on defined without where to get it renders nothing.
   writeFileSync(
     join(root, "deploy/platform/addons/observability/keda.yaml"),
     "addon: keda\nnamespace: keda\nchart: keda\n",
   );
+  // No Argo CD version: no Argo CD chart.
+  mkdirSync(join(root, "infra/tofu/modules/bootstrap"), { recursive: true });
+  writeFileSync(join(root, "infra/tofu/modules/bootstrap/variables.tf"), 'variable "x" {}\n');
   for (const env of environments) {
     mkdirSync(join(root, "deploy/environments", env), { recursive: true });
   }
@@ -98,6 +101,60 @@ describe("the misconfiguration scan", () => {
       `trivy config --quiet ${RENDERED}/isolated/LimitRange --cache-dir /cache`,
       `trivy config --quiet ${RENDERED}/isolated/ResourceQuota --cache-dir /cache`,
     ]);
+  });
+
+  it("renders the add-ons' and Argo CD's charts from copies pulled once, without their tests", () => {
+    const root = checkout();
+    writeFileSync(
+      join(root, "deploy/platform/addons/cert-manager.yaml"),
+      "addon: cert-manager\nnamespace: cert-manager\nrepoURL: https://charts.jetstack.io\nchart: cert-manager\nversion: v1.2.3\n",
+    );
+    writeFileSync(
+      join(root, "infra/tofu/modules/bootstrap/variables.tf"),
+      'variable "argocd_version" {\n  default = "10.9.2"\n}\n',
+    );
+    const charts = mkdtempSync(join(tmpdir(), "charts-"));
+    const { run, calls } = fakeRun((line) => {
+      const destination = /^helm pull (\S+).* --destination (\S+)$/.exec(line);
+      if (destination) {
+        writeFileSync(join(destination[2] ?? "", `${destination[1]}.tgz`), "chart");
+      }
+      return line.startsWith("helm template") ? { stdout: "kind: Deployment\n" } : {};
+    });
+    expect(renderCharts(run, root, charts)).toBe(true);
+    expect(calls.find((line) => line.startsWith("helm pull cert-manager"))).toStartWith(
+      `helm pull cert-manager --repo https://charts.jetstack.io --version v1.2.3 --destination ${charts}/pull-`,
+    );
+    expect(calls).toContain(
+      `helm template cert-manager ${charts}/cert-manager-v1.2.3.tgz --version v1.2.3 --namespace cert-manager -f ${root}/deploy/platform/values/cert-manager.yaml --skip-tests`,
+    );
+    expect(calls).toContain(
+      `helm template argocd ${charts}/argocd-10.9.2.tgz --version 10.9.2 --namespace argocd -f ${root}/deploy/argocd/argo-cd-values.yaml --skip-tests`,
+    );
+    expect(readdirSync(charts).sort()).toEqual(["argocd-10.9.2.tgz", "cert-manager-v1.2.3.tgz"]);
+    expect(readdirSync(join(root, RENDERED))).toContain("addon-cert-manager.yaml");
+    // Cached: the next scan pulls nothing.
+    const again = fakeRun(() => ({ stdout: "kind: Deployment\n" }));
+    expect(renderCharts(again.run, root, charts)).toBe(true);
+    expect(again.calls.some((line) => line.startsWith("helm pull"))).toBe(false);
+  });
+
+  it("stops when a chart can't be pulled", () => {
+    const printed = captureOutput();
+    const stderr = spyOn(process.stderr, "write").mockImplementation(() => true);
+    const root = checkout();
+    writeFileSync(
+      join(root, "infra/tofu/modules/bootstrap/variables.tf"),
+      'variable "argocd_version" {\n  default = "10.9.2"\n}\n',
+    );
+    const charts = mkdtempSync(join(tmpdir(), "charts-"));
+    const { run } = fakeRun((line) =>
+      line.startsWith("helm pull") ? { status: 1, stderr: "no such chart" } : {},
+    );
+    expect(renderCharts(run, root, charts)).toBe(false);
+    expect(stderr).toHaveBeenCalledWith("no such chart");
+    expect(printed()).toContain("helm couldn't pull the chart for addon-argocd");
+    expect(readdirSync(charts)).toEqual([]);
   });
 
   it("runs its image when the local trivy is another version, or missing", () => {

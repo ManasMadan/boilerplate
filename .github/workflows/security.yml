@@ -145,6 +145,13 @@ jobs:
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
           version: v0.74.0
+      # The third-party charts it renders, by version (scripts/misconfig.ts pulls a chart
+      # only when its file isn't there).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/boilerplate/charts
+          key: helm-charts-${{ hashFiles('deploy/platform/addons/**', 'infra/tofu/modules/bootstrap/variables.tf') }}
+          restore-keys: helm-charts-
       # The pre-commit hook's scan: the application charts rendered as each environment
       # has them (Trivy can't render them without their values), then Trivy with trivy.yaml.
       - run: bun scripts/misconfig.ts --format sarif --output trivy-config.sarif

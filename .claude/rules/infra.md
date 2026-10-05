@@ -45,8 +45,13 @@ a real cluster or cloud account. The checks below are offline.
   file pattern needs a custom manager in `renovate.json5`.
 - `bun scripts/misconfig.ts` (as the Security workflow and the pre-commit hook run it)
   renders every chart of ours into `deploy/.rendered` (git ignores it): the stack and
-  data charts for every environment and optional feature, and the platform's own charts
-  (the add-ons with a `path`) with a cluster's values. Trivy's own Helm rendering is off
+  data charts for every environment and optional feature, the platform's own charts (the
+  add-ons with a `path`) with a cluster's values, and the third-party ones (the other
+  add-ons and Argo CD) at their pinned versions with `deploy/platform/values` (pulled
+  once into `~/.cache/boilerplate/charts`, without their Helm tests). A third-party
+  chart's containers get their resources and users through its values; what an operator
+  or node-exporter needs by design is a reviewed exception scoped to its
+  `deploy/.rendered/addon-<name>.yaml`. Trivy's own Helm rendering is off
   (`trivy.yaml`): it skipped every chart that needs a value. LimitRanges and
   ResourceQuotas are scanned in passes of their own (`deploy/.rendered/isolated`), since
   with one in the scan Trivy checks every manifest as if it were one. It runs Trivy's

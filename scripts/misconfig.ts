@@ -15,10 +15,26 @@
  * not only the staged files: Trivy names a file scanned on its own by its bare name, so
  * the ignore file's paths wouldn't match, and the scan takes a few seconds.
  */
-import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { applicationRenders, platformRenders } from "./charts";
+import {
+  addonCharts,
+  applicationRenders,
+  argocdChart,
+  platformRenders,
+  type RemoteChart,
+  remoteRender,
+} from "./charts";
 import { fail, ROOT, type Run, runMain, runSync } from "./lib";
 
 /** Where the rendered charts go for the scan (git ignores it). */
@@ -58,12 +74,59 @@ function writeRender(dir: string, name: string, manifests: string) {
   writeFileSync(join(dir, `${name}.yaml`), rest.join("---"));
 }
 
-/** Renders every chart of ours into RENDERED; whether all of them rendered. */
-export function renderCharts(run: Run, root: string): boolean {
+/** Where pulled charts are kept, one file per chart and version: pulled once. */
+export const CHART_CACHE = join(homedir(), ".cache/boilerplate/charts");
+
+/**
+ * A remote chart's local copy, `<cache>/<name>-<version>.tgz`, pulled when it isn't
+ * there yet; undefined (with helm's output shown) when the pull fails.
+ */
+export function pulledChart(run: Run, remote: RemoteChart, cache: string) {
+  const file = join(cache, `${remote.name}-${remote.version}.tgz`);
+  if (existsSync(file)) {
+    return file;
+  }
+  mkdirSync(cache, { recursive: true });
+  const part = mkdtempSync(join(cache, "pull-"));
+  try {
+    const args = ["pull", ...remote.source, "--version", remote.version, "--destination", part];
+    const pulled = run("helm", args);
+    const archive = readdirSync(part).find((name) => name.endsWith(".tgz"));
+    if (pulled.status !== 0 || !archive) {
+      process.stderr.write(pulled.stderr);
+      return undefined;
+    }
+    renameSync(join(part, archive), file);
+    return file;
+  } finally {
+    rmSync(part, { recursive: true, force: true });
+  }
+}
+
+/** The renders: ours from their folders, the add-ons and Argo CD's from cached pulls. */
+function renders(run: Run, root: string, charts: string) {
+  const remote = [...addonCharts(root), argocdChart(root)].flatMap((chart) =>
+    chart ? [chart] : [],
+  );
+  const pulled = remote.map((chart) => {
+    const file = pulledChart(run, chart, charts);
+    // Helm's test pods, which Argo CD never runs, left out.
+    const args = file ? [...remoteRender(chart, [file]), "--skip-tests"] : undefined;
+    return { name: `addon-${chart.name}`, args };
+  });
+  return [...applicationRenders(root), ...platformRenders(root), ...pulled];
+}
+
+/** Renders every chart we deploy into RENDERED; whether all of them rendered. */
+export function renderCharts(run: Run, root: string, charts = CHART_CACHE): boolean {
   const dir = join(root, RENDERED);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  for (const { name, args } of [...applicationRenders(root), ...platformRenders(root)]) {
+  for (const { name, args } of renders(run, root, charts)) {
+    if (!args) {
+      fail(`helm couldn't pull the chart for ${name} (above)`);
+      return false;
+    }
     const rendered = run("helm", args, { cwd: root });
     if (rendered.status === null) {
       fail("helm isn't installed: install it (https://helm.sh/docs/intro/install/)");
@@ -115,8 +178,9 @@ export function misconfig(
   // Its own cache, which never holds a downloaded checks bundle (trivy.yaml skips the
   // update), so it uses the checks built into this version, as CI's fresh runner does.
   cache = join(homedir(), ".cache/boilerplate/trivy"),
+  charts = CHART_CACHE,
 ): number {
-  if (!renderCharts(run, root)) {
+  if (!renderCharts(run, root, charts)) {
     return 1;
   }
   // OpenTofu's only variable without a value in the example tfvars (trivy.yaml): a
