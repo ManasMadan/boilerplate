@@ -1,5 +1,5 @@
 /** A labelled text input bound to react-hook-form, showing its validation message. */
-import type { ComponentProps } from "react";
+import { type ComponentProps, useId } from "react";
 import { type Control, Controller, type FieldPath, type FieldValues } from "react-hook-form";
 import { View } from "react-native";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,9 @@ export function FormField<T extends FieldValues>({
   label,
   ...input
 }: FormFieldProps<T>) {
-  const id = `field-${name}`;
+  // Unique per field, not per name: on the web a screen stays mounted under the one pushed
+  // over it, and a second field named the same would take the first one's label.
+  const id = useId();
   return (
     <Controller
       control={control}
