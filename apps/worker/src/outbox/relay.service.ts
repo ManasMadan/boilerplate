@@ -20,6 +20,8 @@
  * Debezium reading the outbox tables) can replace polling and feed the same EventBus;
  * emitEvent and every consumer stay as they are.
  */
+
+import { Socket } from "node:net";
 import {
   Injectable,
   type OnApplicationBootstrap,
@@ -74,6 +76,8 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
   private listener: pg.Client | undefined;
   private poller: NodeJS.Timeout | undefined;
   private reconnect: NodeJS.Timeout | undefined;
+  /** The listener connection being made, and how to abandon it. */
+  private connecting: { done: Promise<void>; cancel: () => void } | undefined;
   private draining: Promise<void> | undefined;
   private rerun = false;
   private stopped = false;
@@ -85,8 +89,9 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
   ) {}
 
   async onApplicationBootstrap() {
-    await this.listen();
+    // Polling starts first, so a shutdown while the listener connects stops it too.
     this.poller = setInterval(() => this.kick(), env.RELAY_POLL_INTERVAL_MS);
+    await this.listen();
     this.kick();
   }
 
@@ -94,6 +99,10 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     this.stopped = true;
     clearInterval(this.poller);
     clearTimeout(this.reconnect);
+    // A connection still being made (at startup, or reconnecting) is dropped, not left
+    // to finish and listen after the relay has stopped.
+    this.connecting?.cancel();
+    await this.connecting?.done;
     await closeQuietly(this.listener);
     // Let the batch in flight commit, so it isn't republished by the next replica.
     await this.draining;
@@ -172,22 +181,36 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     );
   }
 
-  private async listen() {
+  private listen() {
+    // The relay's own socket: pg can't end a connection it's still making, and waits for
+    // an answer that may never come, but destroying the socket fails the connect at once.
+    const socket = new Socket();
     const client = new pg.Client({
       connectionString: env.WORKER_DATABASE_DIRECT_URL,
       application_name: "worker-outbox-listener",
+      stream: () => socket,
     });
     client.on("notification", () => this.kick());
     client.on("error", (error) => {
       this.log.warn({ err: error }, "outbox listener lost its connection; reconnecting");
       this.scheduleReconnect();
     });
+    const done = this.connect(client).finally(() => {
+      this.connecting = undefined;
+    });
+    this.connecting = { done, cancel: () => socket.destroy() };
+    return done;
+  }
+
+  private async connect(client: pg.Client) {
     try {
       await client.connect();
       await client.query("LISTEN outbox");
       this.listener = client;
     } catch (error) {
-      this.log.warn({ err: error }, "outbox listener could not connect; polling meanwhile");
+      if (!this.stopped) {
+        this.log.warn({ err: error }, "outbox listener could not connect; polling meanwhile");
+      }
       await closeQuietly(client);
       this.scheduleReconnect();
     }

@@ -4,7 +4,7 @@
  * fails, when it can't listen, and when it's asked to drain while draining. The relay
  * inside the running worker is worker.integration.test.ts.
  */
-import { createServer, type Server, type Socket } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import type { EventEnvelope } from "@repo/contracts/events";
 import { createDatabase, type Database } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
@@ -164,14 +164,18 @@ describe("outbox relay", () => {
     expect(await eventually(listeners, (rows) => rows.length === 0)).toEqual([]);
   });
 
-  it("doesn't come back to listen after it's been stopped mid-connect", async () => {
+  it("hangs up a connection it's still making when stopped while starting", async () => {
     // A database that takes the connection and never answers: connecting hangs.
     const sockets: Socket[] = [];
-    const silent: Server = createServer((socket) => void sockets.push(socket));
+    const silent: Server = createServer((socket) => {
+      // Read and drop what it's sent, so it sees the relay hang up.
+      sockets.push(socket.resume());
+    });
     await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
     const { port } = silent.address() as { port: number };
     vi.resetModules();
     vi.stubEnv("WORKER_DATABASE_DIRECT_URL", `postgresql://app_worker:x@127.0.0.1:${port}/app`);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const { logged, log } = recorder();
     try {
       const relay = await relayWith(bus(), log);
@@ -181,14 +185,68 @@ describe("outbox relay", () => {
         (count) => count === 1,
       );
       await relay.onApplicationShutdown();
-      // Now the connection fails: stopped, the relay doesn't schedule another.
-      for (const socket of sockets) socket.destroy();
       await booting;
+      // Nothing is left: no connection, no poll, and nothing to report.
+      await eventually(
+        () => sockets.every((socket) => socket.closed),
+        (closed) => closed,
+      );
+      expect(vi.getTimerCount()).toBe(0);
+      expect(logged).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => silent.close(resolve));
+    }
+  });
+
+  it("hangs up a reconnect it's still making when stopped", async () => {
+    // The relay reaches the database through a proxy that can hold new connections.
+    const database = new URL(testDb.urlFor("app_worker"));
+    const held: Socket[] = [];
+    let holding = false;
+    const proxy: Server = createServer((socket) => {
+      if (holding) return void held.push(socket.resume());
+      const upstream = connect(Number(database.port), database.hostname);
+      socket.pipe(upstream).pipe(socket);
+      socket.on("error", () => upstream.destroy());
+      upstream.on("error", () => socket.destroy());
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    const { port } = proxy.address() as { port: number };
+    const viaProxy = new URL(database);
+    viaProxy.hostname = "127.0.0.1";
+    viaProxy.port = String(port);
+    vi.resetModules();
+    vi.stubEnv("WORKER_DATABASE_DIRECT_URL", viaProxy.toString());
+    const { logged, log } = recorder();
+    try {
+      const relay = await relayWith(bus(), log);
+      await relay.onApplicationBootstrap();
+      await eventually(listeners, (rows) => rows.length === 1);
+      // The listener's connection drops; a second or so later it connects again, and
+      // that connection hangs.
+      holding = true;
+      await sql(
+        "postgres",
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND application_name = 'worker-outbox-listener'",
+        [testDb.name],
+      );
+      await eventually(
+        () => held.length,
+        (count) => count === 1,
+      );
       await relay.onApplicationShutdown();
-      expect(logged).toEqual(["warn: outbox listener could not connect; polling meanwhile"]);
+      await eventually(
+        () => held.every((socket) => socket.closed),
+        (closed) => closed,
+      );
+      expect(logged).toEqual(["warn: outbox listener lost its connection; reconnecting"]);
     } finally {
       vi.unstubAllEnvs();
-      await new Promise((resolve) => silent.close(resolve));
+      for (const socket of held) socket.destroy();
+      await new Promise((resolve) => proxy.close(resolve));
     }
   });
 });
