@@ -7,7 +7,7 @@
  *   expect(app.pathname()).toBe("/sign-in");
  */
 import { act, configure } from "@testing-library/react-native";
-import { renderRouter } from "expo-router/testing-library";
+import { getMockContext, renderRouter } from "expo-router/testing-library";
 import { authClient } from "../src/lib/auth-client";
 
 export * from "./fake-api";
@@ -19,7 +19,15 @@ export * from "./fake-api";
  */
 export const loadSession = () => act(() => authClient.$store.atoms.session?.value?.refetch());
 
-// The first render of a file loads the whole app, which takes a few seconds on a busy machine.
+// Every route, and so the whole app and its dependencies, is loaded here, when the test file
+// imports this, outside any test's timeout: on a cold Babel cache (a fresh CI runner) that
+// compiles thousands of files, which took the first test of each worker past its timeout.
+const routes = getMockContext("src/app");
+for (const route of routes.keys()) {
+  routes(route);
+}
+
+// The first render of a file still takes a few seconds on a busy machine.
 jest.setTimeout(30_000);
 // findBy* and waitFor wait for what a screen does after a fake request answers: a second
 // (the default) isn't enough when turbo runs every package's tests at once.
