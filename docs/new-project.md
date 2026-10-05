@@ -75,10 +75,14 @@ against their checksums.
       (`.claude-plugin/`): `/plugin marketplace add ManasMadan/boilerplate`, then
       `/plugin install boilerplate@boilerplate`, and commit the two to
       `.claude/settings.json` (`extraKnownMarketplaces`, `enabledPlugins`) for everyone.
-      Then delete this app's `.claude/skills`, `.claude/agents`, `.claude/output-styles`
-      and the `hooks` block of `.claude/settings.json`, or everything runs twice. The
+      Then delete this app's `.claude/skills`, `.claude/agents`, `.claude/output-styles`,
+      `.claude/bin` and the `hooks` block of `.claude/settings.json`, or everything runs
+      twice. Keep `playwright-core` in the root `package.json`: the plugin's
+      `playwright-cli` command runs the app's copy. The
       plugin has no version, so each commit to the template's default branch is an
-      update. Its skills and agents are then named `boilerplate:<name>`.
+      update. Its skills and agents are then named `boilerplate:<name>`. Installing it
+      also installs the plugins from Anthropic's marketplace that the template enables
+      (its `dependencies`; `.claude/rules/claude-setup.md` says what each needs).
 - [ ] Optional: a Claude Code review on every pull request (`claude-review.yml`, the
       repository's own reviewer agents, one comment, never a required check). Set the
       `CLAUDE_REVIEW` repository variable to `true` and the `ANTHROPIC_API_KEY` secret.

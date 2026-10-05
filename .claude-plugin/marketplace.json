@@ -4,11 +4,12 @@
   "owner": {
     "name": "Manas Madan"
   },
+  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
   "plugins": [
     {
       "name": "boilerplate",
       "source": "./",
-      "description": "Skills, agents, hooks, output style and MCP servers for apps made from this template."
+      "description": "Skills, agents, hooks, output style and Postgres MCP server for apps made from this template."
     }
   ]
 }

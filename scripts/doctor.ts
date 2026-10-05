@@ -82,6 +82,19 @@ function checkTools({ version, problem }: Doctor): boolean {
     );
   }
 
+  // Optional: the language servers Claude Code's typescript-lsp and pyright-lsp plugins
+  // start (.claude/settings.json); without them, Claude Code reports the plugin broken.
+  const servers = ["typescript-language-server", "pyright"].filter(
+    (server) => !version([server, "--version"]),
+  );
+  if (servers.length) {
+    warn(
+      `Claude Code's code intelligence needs ${servers.join(" and ")} (optional): \`bun add -g ${servers.join(" ")}\`.`,
+    );
+  } else {
+    ok("typescript-language-server and pyright, for Claude Code");
+  }
+
   const docker = version(["docker", "info", "--format", "{{.ServerVersion}}"]);
   if (docker) {
     ok(`Docker ${docker}`);
