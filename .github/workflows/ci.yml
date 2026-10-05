@@ -800,6 +800,7 @@ jobs:
         run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
       - name: Apply migrations
         if: matrix.image != 'migrate'
+        env: { MIGRATOR_DATABASE_URL: "postgresql://migrator:migrator@localhost:5432/app" }
         run: bun run db:deploy
       - name: Smoke-test the image
         run: bun scripts/image-smoke.ts ${{ matrix.image }}

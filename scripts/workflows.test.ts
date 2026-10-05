@@ -449,6 +449,20 @@ describe("jobs that run turbo", () => {
   });
 });
 
+describe("jobs that migrate the database", () => {
+  // Bun doesn't load .env by itself, and CI has none: Prisma reads the migrator's URL
+  // from the step's or the job's environment, or migrate deploy fails without it.
+  it("give the migrator's URL to every step that applies or checks migrations", () => {
+    const missing = Object.entries(workflow("ci.yml").jobs).flatMap(([name, job]) =>
+      (job.steps ?? [])
+        .filter((step) => /\bdb:deploy\b|\bbun run drift\b/.test(step.run ?? ""))
+        .filter((step) => !(step.env?.MIGRATOR_DATABASE_URL ?? job.env?.MIGRATOR_DATABASE_URL))
+        .map((step) => `${name}: ${step.name ?? step.run}`),
+    );
+    expect(missing).toEqual([]);
+  });
+});
+
 describe("preview.yml's cleanup", () => {
   const { jobs } = workflow("preview.yml");
   const script = jobs.cleanup?.steps?.[1]?.with?.script as string;
