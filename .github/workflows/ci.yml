@@ -887,6 +887,7 @@ jobs:
       - name: Every changed line covered
         if: github.event_name == 'pull_request'
         env: { BASE: "${{ github.base_ref }}" }
+        # renovate: datasource=pypi depName=diff-cover
         run: uvx diff-cover@10.6.0 coverage/merged.lcov --compare-branch "origin/$BASE" --fail-under 100
 
   ci-ok:

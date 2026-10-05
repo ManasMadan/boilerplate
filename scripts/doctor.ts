@@ -25,14 +25,16 @@ type Doctor = {
   problem: (message: string) => void;
 };
 
-/** Node at the version .nvmrc names, and Bun within package.json's range. */
+/** Node at the major version .nvmrc names, and Bun within package.json's range. */
 function checkRuntimes({ version, problem }: Doctor, bunVersion: string) {
-  const wantedNode = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim();
+  // .nvmrc pins the exact version CI uses; any release of that major will do locally.
+  const pinnedNode = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim();
+  const wantedNode = pinnedNode.split(".")[0];
   const node = version(["node", "--version"]);
   if (!node) {
     problem("Node is not installed. Install it with nvm: `nvm install` (reads .nvmrc).");
   } else if (node.match(/^v(\d+)\./)?.[1] !== wantedNode) {
-    problem(`Node ${node} found, ${wantedNode} expected. Run \`nvm use\`.`);
+    problem(`Node ${node} found, ${wantedNode} expected (CI uses ${pinnedNode}). Run \`nvm use\`.`);
   } else {
     ok(`Node ${node}`);
   }

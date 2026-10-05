@@ -6,6 +6,7 @@
  */
 import { ok, ROOT, runMain, runSync } from "./lib";
 
+// renovate: datasource=npm depName=squawk-cli
 const SQUAWK = "squawk-cli@2.66.0";
 
 /** Lints the migrations in `given`, else those changed since the base; the exit code. */

@@ -133,6 +133,16 @@
       groupName: "bun",
     },
     {
+      description: "Node: .nvmrc (CI and local development) and EAS's builds",
+      matchPackageNames: ["node"],
+      groupName: "node",
+    },
+    {
+      description: "uv: CI's (the setup action) and the devcontainer's",
+      matchPackageNames: ["astral-sh/uv", "ghcr.io/astral-sh/uv"],
+      groupName: "uv",
+    },
+    {
       description: "Python: the local version, the image and the lockfile's",
       matchPackageNames: ["python"],
       groupName: "python",

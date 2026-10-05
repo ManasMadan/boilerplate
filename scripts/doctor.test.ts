@@ -9,7 +9,8 @@ import { captureOutput, fakeRun } from "./stand-ins";
 afterEach(() => mock.restore());
 
 const ROOT = join(import.meta.dir, "..");
-const node = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim();
+// The major version: .nvmrc pins the exact one CI uses.
+const node = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim().split(".")[0];
 const pinnedBun = (
   JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { packageManager: string }
 ).packageManager.replace(/^bun@/, "");

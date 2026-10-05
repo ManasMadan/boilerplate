@@ -7,6 +7,12 @@
  */
 import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv, runMain } from "./lib";
 
+// renovate: datasource=pypi depName=postgres-mcp
+const SERVER = "postgres-mcp@0.3.0";
+// The MCP SDK the server runs on, pinned too: uvx would otherwise take the newest.
+// renovate: datasource=pypi depName=mcp
+const SDK = "mcp==1.30.0";
+
 /**
  * The local Postgres port: .env's, else .env.example's, the one place its default is
  * written (docker-compose.yml reads the same variable).
@@ -39,13 +45,10 @@ export async function startServer(
     );
     return 1;
   }
-  const server = start(
-    ["uvx", "--with", "mcp==1.30.0", "postgres-mcp@0.3.0", "--access-mode=restricted"],
-    {
-      env: { ...env, DATABASE_URI: `postgresql://app_readonly:app_readonly@localhost:${port}/app` },
-      stdio: ["inherit", "inherit", "inherit"],
-    },
-  );
+  const server = start(["uvx", "--with", SDK, SERVER, "--access-mode=restricted"], {
+    env: { ...env, DATABASE_URI: `postgresql://app_readonly:app_readonly@localhost:${port}/app` },
+    stdio: ["inherit", "inherit", "inherit"],
+  });
   return server.exited;
 }
 
