@@ -88,6 +88,8 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
   ]) {
     test(`public page ${path}`, async ({ page }) => {
       await page.goto(path);
+      // A form's submit button waits for the captcha; check the page once it's usable.
+      await expect(page.locator("button[type=submit]:disabled")).toHaveCount(0);
       await expectAccessible(page);
     });
   }

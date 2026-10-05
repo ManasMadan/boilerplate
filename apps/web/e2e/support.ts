@@ -229,8 +229,20 @@ export async function virtualAuthenticator(context: BrowserContext, page: Page) 
 
 // ---------------------------------------------------------------------------- accessibility
 
-/** Fails on any WCAG 2.2 A/AA violation on the current page. */
+/**
+ * Fails on any WCAG 2.2 A/AA violation on the current page. Transitions finish first: axe
+ * measures colours as drawn, so a button fading in would read as low contrast.
+ * Endless animations (spinners) are left running, since they never finish.
+ */
 export async function expectAccessible(page: Page) {
+  await page.evaluate(() =>
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
