@@ -10,6 +10,7 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 
 type Step = {
+  id?: string;
   name?: string;
   uses?: string;
   run?: string;
@@ -748,6 +749,108 @@ describe("the mobile app's release", () => {
     expect(String(eas["timeout-minutes"])).toBe(
       `\${{ github.event.workflow_run.name == 'Release' && 150 || 30 }}`,
     );
+  });
+});
+
+describe("the issue action", () => {
+  const action = Bun.YAML.parse(
+    readFileSync(join(ROOT, ".github/actions/issue/action.yml"), "utf8"),
+  ) as { runs: { steps: Step[] } };
+  const step = action.runs.steps[0];
+  const script = step?.with?.script as string;
+
+  /** Runs the action's script against a fake GitHub with these open issues. */
+  async function issue(
+    body: string,
+    open: { number: number; title: string; pull_request?: object }[],
+  ) {
+    const calls: [string, Record<string, unknown>][] = [];
+    const record =
+      (name: string, data: Record<string, unknown> = {}) =>
+      async (request: Record<string, unknown>) => {
+        calls.push([name, request]);
+        return { data };
+      };
+    const listForRepo = Object.assign(async () => ({}), { endpoint: "list" });
+    const github = {
+      paginate: async (fn: unknown, request: Record<string, unknown>) => {
+        expect(fn).toBe(listForRepo);
+        expect(request).toMatchObject({ state: "open" });
+        return open;
+      },
+      rest: {
+        issues: {
+          listForRepo,
+          create: record("create", { number: 9 }),
+          update: record("update"),
+          createComment: record("comment"),
+        },
+      },
+    };
+    const context = { repo: { owner: "me", repo: "boilerplate" } };
+    Object.assign(process.env, { TITLE: "Uptime: down", BODY: body, RUN: "https://run/1" });
+    const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor;
+    await new AsyncFunction("github", "context", "core", script)(github, context, {
+      info: () => undefined,
+    });
+    return calls;
+  }
+  const repo = { owner: "me", repo: "boilerplate" };
+
+  it("passes the title and body as environment variables, never into the script", () => {
+    expect(step?.uses).toStartWith("actions/github-script@");
+    expect(step?.env).toMatchObject({ TITLE: `\${{ inputs.title }}`, BODY: `\${{ inputs.body }}` });
+    expect(script).not.toContain("${{");
+  });
+
+  it("opens an issue when something goes wrong", async () => {
+    const pull = { number: 3, title: "Uptime: down", pull_request: {} };
+    expect(await issue("site down", [pull])).toEqual([
+      [
+        "create",
+        { ...repo, title: "Uptime: down", body: "site down\n\nLast checked: https://run/1" },
+      ],
+    ]);
+  });
+
+  it("keeps the open one current while it stays wrong, without a new issue", async () => {
+    expect(await issue("mail down", [{ number: 4, title: "Uptime: down" }])).toEqual([
+      ["update", { ...repo, issue_number: 4, body: "mail down\n\nLast checked: https://run/1" }],
+    ]);
+  });
+
+  it("closes it, saying so, once it's fixed", async () => {
+    expect(await issue("", [{ number: 4, title: "Uptime: down" }])).toEqual([
+      ["comment", { ...repo, issue_number: 4, body: "Fixed, as of https://run/1" }],
+      ["update", { ...repo, issue_number: 4, state: "closed", state_reason: "completed" }],
+    ]);
+  });
+
+  it("does nothing when all is well and nothing is open", async () => {
+    expect(await issue("", [{ number: 5, title: "Something else" }])).toEqual([]);
+  });
+});
+
+describe("uptime.yml", () => {
+  const { on, jobs } = workflow("uptime.yml");
+  const probe = jobs.probe as Job & { permissions: Record<string, string> };
+  const steps = probe.steps ?? [];
+
+  it("probes every environment from outside the clusters on a schedule", () => {
+    expect(Object.keys(on).sort()).toEqual(["schedule", "workflow_dispatch"]);
+    expect(on.schedule).toEqual([{ cron: "*/30 * * * *" }]);
+    expect(steps.find((s) => s.id === "probe")?.run).toContain("bun scripts/uptime.ts");
+    expect(probe.permissions).toEqual({ contents: "read", issues: "write" });
+  });
+
+  it("keeps an issue open with what's down, and fails while anything is", () => {
+    const issue = steps.find((s) => s.uses === "./.github/actions/issue");
+    expect(issue?.with).toEqual({
+      title: "Uptime: an environment is down",
+      body: `\${{ steps.probe.outputs.report }}`,
+    });
+    const last = steps.at(-1);
+    expect(last).toMatchObject({ if: "steps.probe.outputs.status != '0'", run: "exit 1" });
   });
 });
 
