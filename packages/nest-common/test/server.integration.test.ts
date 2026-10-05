@@ -125,6 +125,16 @@ describe("shutting down", () => {
       .resume()
       .on("error", () => undefined);
     await new Promise((resolve) => unused.once("connect", resolve));
+    // Connected on the client's side isn't yet accepted on the server's: wait until it is,
+    // or the close finds nothing to hang up and the test passes without testing it.
+    const server = app.getHttpServer();
+    await eventually(
+      () =>
+        new Promise<number>((resolve, reject) =>
+          server.getConnections((error, count) => (error ? reject(error) : resolve(count))),
+        ),
+      (count) => count > 0,
+    );
     await app.close();
     await eventually(
       () => unused.closed,

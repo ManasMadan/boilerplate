@@ -55,7 +55,7 @@ async function registerProtections(
       // scheduling other work) isn't. Delay is the backstop for a truly stuck loop.
       maxEventLoopUtilization: 0.98,
       maxEventLoopDelay: 3_000,
-      maxHeapUsedBytes: 0.9 * (process.constrainedMemory?.() || 1024 * 1024 * 1024 * 2),
+      maxHeapUsedBytes: maxHeapBytes(),
       retryAfter: 5,
       exposeStatusRoute: false,
     });
@@ -134,6 +134,14 @@ function closeUnusedConnections(app: NestFastifyApplication) {
       socket.destroy();
     }
   });
+}
+
+/**
+ * The heap size past which a service sheds load: 90% of its container's memory limit, or
+ * of 2 GB where it runs without one (0 from `constrainedMemory` means no limit).
+ */
+export function maxHeapBytes(constrained = process.constrainedMemory?.()) {
+  return 0.9 * (constrained || 2 * 1024 ** 3);
 }
 
 /** Builds and configures the application without listening (used by tests and bootstrap). */
