@@ -410,6 +410,17 @@ describe("ci.yml's end-to-end job", () => {
     expect(env.TURNSTILE_SITE_KEY).toBe("1x00000000000000000000AA");
     expect(env.TURNSTILE_SECRET_KEY).toBe("1x0000000000000000000000000000000AA");
   });
+
+  it("has a second shard, which fuzzes the API (scripts/e2e.ts), with uv for Schemathesis", () => {
+    const e2e = workflow("ci.yml").jobs.e2e;
+    expect(JSON.stringify(e2e)).toContain('"matrix":{"shard":[1,2,3,4]}');
+    expect(e2e?.steps?.find((s) => s.uses === "./.github/actions/setup")?.with).toEqual({
+      python: "true",
+    });
+    expect(e2e?.steps?.map((s) => s.run)).toContain(
+      `bun run test:e2e --shard=\${{ matrix.shard }}/4`,
+    );
+  });
 });
 
 describe("jobs that run turbo", () => {

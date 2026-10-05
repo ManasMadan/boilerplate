@@ -2,14 +2,16 @@
  * Runs the end-to-end suite against a stack it builds and starts itself, then stops it.
  * CI and local runs use this same script, so both test exactly what was just built.
  *
- *   bun run test:e2e                         every suite (web, mobile, then the load smoke)
+ *   bun run test:e2e                         every suite (web, mobile, the load smoke, the fuzzing)
  *   bun run test:e2e --app web e2e/assistant.spec.ts   one app; the rest goes to Playwright
  *   bun run test:e2e --app load              the k6 smoke run (load/api.ts) on its own
+ *   bun run test:e2e --app fuzz              the API's and AI service's fuzzing (scripts/fuzz.ts)
  *   bun run test:e2e --shard=2/4             a quarter of the browser tests, as each CI runner does
  *
  * The mobile suite runs the app's screens rendered for the web (react-native-web),
  * served with the API on their own origin (apps/mobile/scripts/serve-web.ts). The load
- * smoke runs last, against the same stack, with the worker relaying what it writes.
+ * smoke and the fuzzing run last, against the same stack, with the worker relaying what
+ * the API writes.
  *
  * Every service listens on this checkout's port for it (its .env's `*_PORT`, else
  * .env.example's), so a checkout with its own stack (`bun run setup --stack <n>`) runs
@@ -157,22 +159,28 @@ async function busyServices(stack: Stack, all: Service[]) {
   return listeningNow.filter((s) => s !== undefined);
 }
 
+const SUITES = ["web", "mobile", "load", "fuzz"];
 /**
- * The suites `argv` asks for (`--app web|mobile|load`, all of them by default) and the
- * arguments for Playwright; undefined when `--app` names something else.
+ * Sharded (`--shard=2/4`, CI runs four), the browser suites split, and each of the others,
+ * which aren't Playwright, runs on one shard only.
+ */
+const SHARD_OF: Partial<Record<string, string>> = { load: "1", fuzz: "2" };
+
+/**
+ * The suites `argv` asks for (`--app web|mobile|load|fuzz`, all of them by default) and
+ * the arguments for Playwright; undefined when `--app` names something else.
  */
 function suitesFor(argv: string[]) {
   const appFlag = argv.indexOf("--app");
   const playwrightArgs =
     appFlag === -1 ? argv : argv.filter((_, i) => i !== appFlag && i !== appFlag + 1);
-  // Sharded (`--shard=2/4`, CI runs four), the browser suites split and the load test,
-  // which isn't Playwright, runs on the first shard only.
-  const shard = playwrightArgs.find((arg) => arg.startsWith("--shard="));
-  const everything =
-    !shard || shard.startsWith("--shard=1/") ? ["web", "mobile", "load"] : ["web", "mobile"];
-  const apps = appFlag === -1 ? everything : [argv[appFlag + 1]];
-  if (!apps.every((app) => app === "web" || app === "mobile" || app === "load")) return undefined;
-  return { apps, playwrightArgs };
+  const shard = playwrightArgs
+    .map((arg) => /^--shard=(\d+)\//.exec(arg)?.[1])
+    .find((n) => n !== undefined);
+  const everything = SUITES.filter((suite) => !shard || (SHARD_OF[suite] ?? shard) === shard);
+  if (appFlag === -1) return { apps: everything, playwrightArgs };
+  const app = argv[appFlag + 1];
+  return app && SUITES.includes(app) ? { apps: [app], playwrightArgs } : undefined;
 }
 
 /** The production builds the stack runs; the exit code of the first that fails, or 0. */
@@ -237,24 +245,30 @@ async function startAll(stack: Stack, running: Running[], ports: Ports) {
   }
 }
 
+/** The suites that aren't Playwright: the package script each runs, and from where. */
+const OWN_COMMANDS: Partial<Record<string, { cwd: string; script: string }>> = {
+  load: { cwd: "load", script: "test:load" },
+  fuzz: { cwd: ".", script: "test:fuzz" },
+};
+
 /** Runs each suite against the running stack; 0 when all pass, else a failing one's code. */
 function runSuites(stack: Stack, apps: string[], playwrightArgs: string[], ports: Ports) {
   let status = 0;
   // The suites find the stack by its ports (the k6 smoke reaches the API on API_PORT).
   const env = { ...stack.env, ...ports };
   for (const app of apps) {
-    const suite =
-      app === "load"
-        ? stack.run("bun", ["run", "test:load"], {
-            cwd: join(ROOT, "load"),
-            stdio: "inherit",
-            env: { ...env, NODE_ENV: "test" },
-          })
-        : stack.run("bunx", ["playwright", "test", ...playwrightArgs], {
-            cwd: join(ROOT, `apps/${app}`),
-            stdio: "inherit",
-            env,
-          });
+    const own = OWN_COMMANDS[app];
+    const suite = own
+      ? stack.run("bun", ["run", own.script], {
+          cwd: join(ROOT, own.cwd),
+          stdio: "inherit",
+          env: { ...env, NODE_ENV: "test" },
+        })
+      : stack.run("bunx", ["playwright", "test", ...playwrightArgs], {
+          cwd: join(ROOT, `apps/${app}`),
+          stdio: "inherit",
+          env,
+        });
     if (suite.status !== 0) status = suite.status ?? 1;
   }
   return status;
@@ -279,7 +293,7 @@ export async function e2e(
 
   const suites = suitesFor(argv);
   if (!suites) {
-    fail("--app is web, mobile or load");
+    fail("--app is web, mobile, load or fuzz");
     return 1;
   }
 

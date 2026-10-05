@@ -23,6 +23,7 @@ Which kind goes where:
 | E2E (mobile) | `apps/mobile/e2e/*.spec.ts` (react-native-web); native flows in `apps/mobile/maestro/` | `bun run test:e2e --app mobile` | full stack |
 | Python | `apps/ai/tests/test_*.py`, `pytest.mark.integration` for DB/Redis | `bun run test` / `bun run test:integration` | Docker for integration |
 | Components | `packages/ui/src/components/*.stories.tsx` with `play`, plain `*.test.tsx` beside them | `bun run --cwd packages/ui test:stories` | Playwright browser |
+| Fuzzing | every operation of `apps/api/openapi.json` and `apps/ai/openapi.json`, settings in `schemathesis.toml` | `bun run test:fuzz` (or `bun run test:e2e --app fuzz`) | a running API and AI service |
 
 - Unit tests are pure: no network, no database, no clock you don't control. They are
   cached by turbo, so a hidden dependency gives stale results.
@@ -49,5 +50,8 @@ Which kind goes where:
 - No fixed sleeps. Wait for the condition with `eventually` (`@repo/testing/eventually`),
   `vi.waitFor` or `expect.poll`; to prove something didn't happen, wait for a signal that
   the work finished (job completed, row written, `PUBSUB NUMSUB`), then check once.
-- A bug fix starts with a test that fails without the fix.
+- A bug fix starts with a test that fails without the fix. One the fuzzing finds (a 5xx,
+  or an answer the OpenAPI document doesn't declare) gets an integration test in
+  `apps/api/test` too; something the API does on purpose that Schemathesis can't read is
+  configured in `schemathesis.toml`, with a comment saying why.
 - Tenancy changes need a test that a second organization cannot see or change the row.

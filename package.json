@@ -97,6 +97,7 @@
     "test:integration:files": "bun scripts/services.ts up --files && turbo run test:integration:files",
     "test:e2e": "bun --env-file=.env scripts/e2e.ts",
     "test:load": "bun run --cwd load test:load",
+    "test:fuzz": "bun --env-file=.env scripts/fuzz.ts",
     "charts:check": "bun scripts/charts.ts",
     "infra:check": "bun scripts/infra.ts",
     "promote": "bun scripts/release.ts promote",

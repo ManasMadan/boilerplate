@@ -6,9 +6,10 @@
 | Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/web/test` (in Chromium), `apps/ai` tests marked `integration` | `bun run test:integration` | the core: Postgres, Valkey, Mailpit (started for you) |
 | Integration, file uploads | the suites tagged `files` in `apps/api`, `apps/worker`, `packages/nest-common` and `apps/web/test` | `bun run test:integration:files` | the core plus RustFS and ClamAV (started for you) |
 | Coverage | every suite merged, every file at 100% | `bun run test:coverage` | the full profile (`bun run db:up:full`) |
-| End to end | `apps/web/e2e`, `apps/mobile/e2e`, then the k6 smoke | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
+| End to end | `apps/web/e2e`, `apps/mobile/e2e`, then the k6 smoke and the fuzzing | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
 | Components | every story in `packages/ui` | `bun run --cwd packages/ui test:stories`, `test:visual` | Chromium; Docker for `test:visual` |
 | Load | `load/api.ts` (k6) | `bun run test:load` | a running API, Docker |
+| Fuzzing | every operation in `apps/api/openapi.json` and `apps/ai/openapi.json` (Schemathesis, `schemathesis.toml`) | `bun run test:fuzz` | a running API and AI service, uv |
 | Evals | `apps/ai/evals` | `bun run --cwd apps/ai evals` | nothing with the local stand-ins |
 | Restore drill | `scripts/restore-drill.ts` | `bun run db:restore-drill` | the local Postgres container |
 
@@ -255,7 +256,8 @@ better-typed call can say it instead.
 2. starts the fake Stripe, those services, the AI service and its worker, the web app and
    the mobile web build, all with `NODE_ENV=test` (production refuses the local stand-ins
    the suite uses), logging to `logs/`;
-3. runs the web Playwright suite, the mobile one, then the k6 smoke;
+3. runs the web Playwright suite, the mobile one, then the k6 smoke and the
+   [fuzzing](#fuzzing);
 4. stops everything.
 
 Everything listens on this checkout's ports (its `.env`'s `*_PORT`, else
@@ -273,6 +275,7 @@ bun run test:e2e                                    # everything
 bun run test:e2e --app web e2e/assistant.spec.ts    # one app; the rest goes to Playwright
 bun run test:e2e --app mobile                       # the mobile screens, rendered for the web
 bun run test:e2e --app load                         # the k6 smoke on its own
+bun run test:e2e --app fuzz                         # the fuzzing on its own
 bun run --cwd apps/web test:e2e                     # against a stack you're already running (bun dev)
 ```
 
@@ -334,6 +337,39 @@ todos over `/api/v1`, which exercises the session, membership, row-level securit
 optimistic versions and the outbox. The thresholds in `load/api.ts` are the latency and
 error budget; the run fails when one does.
 
+## Fuzzing
+
+`bun run test:fuzz` (`scripts/fuzz.ts`) runs [Schemathesis](https://schemathesis.readthedocs.io)
+against the API and the AI service, from their OpenAPI documents: for every operation it
+sends requests generated from the schema, valid ones and invalid ones, and fails on a
+server error, or on a response whose status, content type or body the document doesn't
+declare. So the document has to say what the API really answers, and the API has to
+answer every request it can't serve with a declared 4xx. uvx runs the pinned version
+locally; nothing leaves the machine.
+
+```sh
+bun run test:fuzz                # against the stack you run: bun dev, and bun run --cwd apps/ai dev
+bun run test:e2e --app fuzz      # builds and starts the stack itself, then fuzzes it
+```
+
+- `schemathesis.toml` holds the checks, a fixed seed and at most 50 generated examples
+  per operation, so a run sends the same requests every time and takes a minute or two.
+  A failure prints the request as a `curl` command to reproduce it.
+- Each API operation is fuzzed on its own, as a signed-in user of its own (apps/api's
+  `load:users`): most writes share one per-user rate limit, which would otherwise answer
+  429 to nearly everything after the first few operations. Limits counted per hour (file
+  uploads, documents, phone codes) still answer 429 once spent, which the document
+  declares. The users are on the Free plan, so the webhook operations mostly answer 402.
+- The AI service is called the way the API calls it, with a short-lived token signed
+  with `AI_SERVICE_SECRET` for the first of those users.
+- What the API does on purpose that Schemathesis can't read is configured in
+  `schemathesis.toml`, each with a comment saying why: the assistant's answer streams
+  server-sent events whose data oRPC documents decoded, so its schema check is off. The
+  realtime stream never ends, so `scripts/fuzz.ts` leaves it out.
+
+CI runs it in the end-to-end job, on the second shard, against the stack that job
+already built and started.
+
 ## Python
 
 `bun run test` and `bun run test:integration` include `apps/ai`. The integration tests run
@@ -372,7 +408,7 @@ for those areas.
 | Unit tests | `bun run test` |
 | Components | the stories with coverage, `test:visual` |
 | Integration tests | migrations, the drift check, then every package's `coverage` except Python's and the stories', and the scripts' and hooks' |
-| End-to-end tests | `bun run test:e2e`, the bundle budget, the restore drill |
+| End-to-end tests | `bun run test:e2e` (the fuzzing on the second shard), the bundle budget, the restore drill |
 | Python service | ruff, basedpyright, pytest, the evals with stand-ins, then every test with coverage |
 | Coverage | the reports of the three jobs above merged: `bun scripts/coverage.ts`, then diff-cover at 100% against the base branch (pull requests) |
 | Generated code is committed | `bun run gen`, then no diff |

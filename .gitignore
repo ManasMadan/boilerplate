@@ -42,6 +42,8 @@ CLAUDE.local.md
 
 # Session cookies of the load-test users (apps/api/src/load-users.ts).
 load/.sessions.json
+# Schemathesis's record of the failures it found (scripts/fuzz.ts), for `st replay`.
+.schemathesis/
 
 # OpenTofu: providers, state and plans stay local (state lives in each env's backend).
 # Lock files are committed for the env roots only.

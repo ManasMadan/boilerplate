@@ -42,7 +42,7 @@ function stack(overrides: Partial<Stack> = {}) {
 }
 
 describe("the e2e run", () => {
-  it("builds, starts every service, runs web, mobile and the load smoke, then stops them", async () => {
+  it("builds, starts every service, runs web, mobile, the load smoke and the fuzzing, then stops them", async () => {
     const printed = captureOutput();
     const { given, calls, started, killed } = stack();
     expect(await e2e([], given)).toBe(0);
@@ -52,6 +52,7 @@ describe("the e2e run", () => {
       "bunx playwright test",
       "bunx playwright test",
       "bun run test:load",
+      "bun run test:fuzz",
     ]);
     expect(started).toHaveLength(9);
     expect(started[0]).toBe(`${join(ROOT, "packages/fake-stripe")} run start`);
@@ -66,17 +67,29 @@ describe("the e2e run", () => {
     expect(calls.slice(2)).toEqual(["bunx playwright test e2e/auth.spec.ts"]);
   });
 
-  it("leaves the load smoke to the first shard", async () => {
+  it("leaves the load smoke to the first shard and the fuzzing to the second", async () => {
     captureOutput();
     const first = stack();
     await e2e(["--shard=1/4"], first.given);
-    expect(first.calls.at(-1)).toBe("bun run test:load");
+    expect(first.calls.slice(4)).toEqual(["bun run test:load"]);
     const second = stack();
     await e2e(["--shard=2/4"], second.given);
     expect(second.calls.slice(2)).toEqual([
       "bunx playwright test --shard=2/4",
       "bunx playwright test --shard=2/4",
+      "bun run test:fuzz",
     ]);
+    const third = stack();
+    await e2e(["--shard=3/4"], third.given);
+    expect(third.calls.slice(4)).toEqual([]);
+  });
+
+  it("fuzzes from the root, with the stack's ports, as a test run", async () => {
+    captureOutput();
+    const { given, calls, ran } = stack();
+    expect(await e2e(["--app", "fuzz"], given)).toBe(0);
+    expect(calls.slice(2)).toEqual(["bun run test:fuzz"]);
+    expect(ran[2]).toMatchObject({ cwd: ROOT, env: { NODE_ENV: "test", API_PORT: "3001" } });
   });
 
   it("waits for a service until it answers", async () => {
@@ -175,7 +188,7 @@ describe("the e2e run", () => {
   it("refuses an unknown app, and stops when a build fails", async () => {
     const printed = captureOutput();
     expect(await e2e(["--app", "desktop"], stack().given)).toBe(1);
-    expect(printed()).toContain("--app is web, mobile or load");
+    expect(printed()).toContain("--app is web, mobile, load or fuzz");
     const broken = stack({ run: fakeRun(() => ({ status: 5 })).run });
     expect(await e2e([], broken.given)).toBe(5);
     expect(broken.started).toEqual([]);
