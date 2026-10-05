@@ -504,10 +504,13 @@ worker's queues from Valkey, and smoke-tests the routes (`bun run k8s:up`) when 
 CodeQL, a secret scan of the history, dependency review, OSV and a Trivy scan of the
 infrastructure configuration (`trivy.yaml`: any finding fails unless `.trivyignore.yaml`
 records why it doesn't apply; `bun scripts/misconfig.ts` runs the same scan locally).
-`bun scripts/image-scan.ts` scans the third-party images the charts, compose and the dev
-container run (each by its pinned digest, read from its registry, never pulled into
-Docker) for fixable critical or high vulnerabilities, as CI's Container images jobs scan
-ours; `bun scripts/image-scan.ts <ref>` scans one.
+`bun scripts/image-scan.ts` scans the third-party images the charts and compose run (each
+by its pinned digest, read from its registry, never pulled into Docker) and the dev
+container as it builds, for fixable critical or high vulnerabilities, as CI's Container
+images jobs scan ours; `bun scripts/image-scan.ts <ref>` scans one. A vulnerability no
+upstream image fixes yet goes in that image's file under `.trivyignores/` (named after
+its repository), with the package, why, and an expiry about a month out; when it passes,
+the scan fails until the image moves to a fixed release.
 
 ## Nightly and weekly
 

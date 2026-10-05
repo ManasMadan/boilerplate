@@ -1,6 +1,6 @@
-# Findings reviewed as not applying, for every Trivy scan here: the images' (CI's
-# Container images jobs and the third-party image scan, `vulnerabilities`) and the
-# infrastructure code's (trivy.yaml, `misconfigurations`).
+# Findings reviewed as not applying: our own images' (CI's Container images jobs,
+# `vulnerabilities`) and the infrastructure code's (trivy.yaml, `misconfigurations`).
+# Third-party images have a file each under .trivyignores/ (scripts/image-scan.ts).
 #
 # A vulnerability entry says why and expires: once it does, the scan fails again, so an
 # entry can't outlive its reason. The real fix is a rebuilt base image (Renovate brings
