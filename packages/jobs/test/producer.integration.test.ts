@@ -10,7 +10,7 @@ const url = new URL(process.env.REDIS_URL as string);
 url.pathname = "/19";
 const connection = new Redis(url.toString(), { maxRetriesPerRequest: null });
 const producer = createProducer("notifications-critical", connection);
-// Only the jobs this file added: the CLI's suite uses the same real queue at the same time.
+// Only the jobs this file added: the queue is the real one, and other runs may use it.
 const added: string[] = [];
 afterAll(async () => {
   await Promise.all(added.map(async (id) => (await producer.queue.getJob(id))?.remove()));

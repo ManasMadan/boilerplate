@@ -10,8 +10,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { jobs } from "../src/cli";
 import { queuePrefix, queues } from "../src/queues";
 
+// A database of its own (docs/testing.md): its worker fails every job on a real queue,
+// and would take and lock any job another suite added to that queue in the same one.
 const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
-url.pathname = "/19";
+url.pathname = "/20";
 const REDIS = url.toString();
 const NAME = Object.keys(queues)[0] as keyof typeof queues;
 const connection = new Redis(REDIS, { maxRetriesPerRequest: null });
