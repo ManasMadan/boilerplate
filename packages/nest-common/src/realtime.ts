@@ -17,6 +17,7 @@
  * don't change.
  */
 import { EventEmitter } from "node:events";
+import { required } from "@repo/contracts/objects";
 import type { Redis } from "ioredis";
 import type * as z from "zod";
 
@@ -42,7 +43,7 @@ function parseMessage<S extends z.ZodType>(schema: S, raw: string) {
 /** Fans Redis messages out to streams; one subscriber connection per hub. */
 class Hub<S extends z.ZodType> {
   private readonly subscriber: Redis;
-  private readonly local = new EventEmitter().setMaxListeners(0);
+  private readonly local = new EventEmitter<Record<string, [z.infer<S>]>>().setMaxListeners(0);
   private readonly refs = new Map<string, number>();
 
   /**
@@ -86,7 +87,11 @@ class Hub<S extends z.ZodType> {
           wake = resolve;
         });
         wake = undefined;
-        while (buffer.length > 0 && !signal.aborted) yield buffer.shift() as z.infer<S>;
+        while (!signal.aborted) {
+          const next = buffer.shift();
+          if (next === undefined) break;
+          yield next;
+        }
       }
     } finally {
       signal.removeEventListener("abort", onAbort);
@@ -103,7 +108,7 @@ class Hub<S extends z.ZodType> {
 
   private async release(channel: string) {
     // retain() counted it before its first await, so it's there.
-    const count = (this.refs.get(channel) as number) - 1;
+    const count = required(this.refs.get(channel), `${channel}'s subscriber count`) - 1;
     if (count > 0) {
       this.refs.set(channel, count);
       return;

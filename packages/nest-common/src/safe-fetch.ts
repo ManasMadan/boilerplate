@@ -21,10 +21,12 @@
  */
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
+import { fieldOf, required } from "@repo/contracts/objects";
 import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import ipaddr from "ipaddr.js";
 import { Agent, fetch as undiciFetch } from "undici";
-import { AppError } from "./errors";
+import { AppError, isAppError } from "./errors";
+import { asError } from "./job-processor";
 
 export interface SafeFetchOptions {
   method?: string;
@@ -51,11 +53,8 @@ export interface SafeFetchResponse {
 /** True only for addresses on the public internet. */
 export function isPublicAddress(address: string): boolean {
   if (!ipaddr.isValid(address)) return false;
-  let parsed = ipaddr.parse(address);
-  if (parsed.kind() === "ipv6" && (parsed as ipaddr.IPv6).isIPv4MappedAddress()) {
-    parsed = (parsed as ipaddr.IPv6).toIPv4Address();
-  }
-  return parsed.range() === "unicast";
+  // An IPv4-mapped IPv6 address (::ffff:10.0.0.1) is judged as the IPv4 address it is.
+  return ipaddr.process(address).range() === "unicast";
 }
 
 const permitted = (address: string, allowlist: readonly string[]) =>
@@ -88,11 +87,11 @@ export function guardedLookup(
   return (hostname, options, callback) => {
     resolvePermitted(hostname, allowlist, resolve)
       .then(([chosen]) => {
-        const { address, family } = chosen as { address: string; family: number };
+        const { address, family } = required(chosen, `an address for ${hostname}`);
         if (options.all) callback(null, [{ address, family }]);
         else callback(null, address, family);
       })
-      .catch((error: unknown) => callback(error as NodeJS.ErrnoException, "", 4));
+      .catch((error: unknown) => callback(asError(error), "", 4));
   };
 }
 
@@ -157,7 +156,8 @@ export async function safeFetch(
       }).catch((error: unknown) => {
         // A lookup refused above reaches here as undici's "fetch failed", with the
         // refusal as its cause: that's the answer, not a failure to connect.
-        throw (error as Error).cause instanceof AppError ? (error as Error).cause : error;
+        const cause = fieldOf(error, "cause");
+        throw isAppError(cause) ? cause : error;
       });
 
       const location = response.headers.get("location");

@@ -24,6 +24,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { fieldOf, required } from "@repo/contracts/objects";
 
 interface PresignedUpload {
   url: string;
@@ -140,9 +141,12 @@ export class S3Storage implements Storage {
         new HeadObjectCommand({ Bucket: this.options.bucket, Key: key }),
       );
       // S3 always sends Content-Length for an object; the SDK's types just allow none.
-      return { size: result.ContentLength as number, contentType: result.ContentType };
+      return {
+        size: required(result.ContentLength, "Content-Length"),
+        contentType: result.ContentType,
+      };
     } catch (error) {
-      if ((error as { name?: string }).name === "NotFound") return null;
+      if (fieldOf(error, "name") === "NotFound") return null;
       throw error;
     }
   }
@@ -151,10 +155,10 @@ export class S3Storage implements Storage {
     const result = await this.client.send(
       new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
     );
-    if ((result.ContentLength as number) > maxBytes)
+    if (required(result.ContentLength, "Content-Length") > maxBytes)
       throw new Error(`${key} is larger than ${maxBytes} bytes`);
     // A GetObject that succeeded always has a body (possibly empty).
-    const body = result.Body as NonNullable<typeof result.Body>;
+    const body = required(result.Body, `${key}'s body`);
     return Buffer.from(await body.transformToByteArray());
   }
 

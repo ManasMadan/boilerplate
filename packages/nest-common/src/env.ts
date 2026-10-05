@@ -75,14 +75,12 @@ const postgresUrl = z.url({ protocol: /^postgres(ql)?$/ });
  * only its own.
  */
 export function databaseEnv<const S extends string>(service: S) {
-  return {
+  return forService(service, {
     /** Pooled connection (PgBouncer in Kubernetes) used for all queries. */
-    [`${service}_DATABASE_URL`]: postgresUrl,
+    DATABASE_URL: postgresUrl,
     /** Connections this process may hold; the sum across replicas must stay under the server limit. */
-    [`${service}_DATABASE_POOL_MAX`]: z.coerce.number().int().positive().default(10),
-  } as { [K in `${S}_DATABASE_URL`]: typeof postgresUrl } & {
-    [K in `${S}_DATABASE_POOL_MAX`]: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
-  };
+    DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+  });
 }
 
 /**
@@ -90,9 +88,19 @@ export function databaseEnv<const S extends string>(service: S) {
  * silently drops. Only the worker's outbox relay needs it.
  */
 export function directDatabaseEnv<const S extends string>(service: S) {
-  return { [`${service}_DATABASE_DIRECT_URL`]: postgresUrl } as {
-    [K in `${S}_DATABASE_DIRECT_URL`]: typeof postgresUrl;
-  };
+  return forService(service, { DATABASE_DIRECT_URL: postgresUrl });
+}
+
+/** The variables, each named with the service in front (`API_` and `DATABASE_URL`). */
+function forService<const S extends string, V extends Record<string, z.ZodType>>(
+  service: S,
+  variables: V,
+) {
+  // TypeScript can't type a key built from a generic string, so this says what it is.
+  // type-coverage:ignore-next-line
+  return Object.fromEntries(
+    Object.entries(variables).map(([name, schema]) => [`${service}_${name}`, schema]),
+  ) as { [K in keyof V & string as `${S}_${K}`]: V[K] };
 }
 
 export const redisEnv = {

@@ -8,6 +8,11 @@ import { OnWorkerEvent, WorkerHost } from "@nestjs/bullmq";
 import { Logger } from "@nestjs/common";
 import type { Job } from "bullmq";
 
+/** Anything thrown, as an Error (a thrown string or object becomes one's message). */
+export function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 /** An error and its causes, as plain fields (undici puts the real reason in `cause`). */
 export function describeError(error: unknown, depth = 0): Record<string, unknown> {
   if (!(error instanceof Error)) return { message: String(error) };

@@ -108,7 +108,7 @@ function logRequests(app: NestFastifyApplication, options: Omit<BootstrapOptions
 
 /** Builds and configures the application without listening (used by tests and bootstrap). */
 export async function createServer(
-  module: Type,
+  module: Type<unknown>,
   options: Omit<BootstrapOptions, "port">,
 ): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
@@ -146,7 +146,7 @@ export async function createServer(
 
 /** Builds the application and starts listening on all interfaces. */
 export async function bootstrap(
-  module: Type,
+  module: Type<unknown>,
   options: BootstrapOptions,
 ): Promise<INestApplication> {
   const app = await createServer(module, options);

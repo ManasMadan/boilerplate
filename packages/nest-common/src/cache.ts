@@ -53,8 +53,9 @@ export class CacheService {
     const cached = await this.get(key, schema);
     if (cached !== undefined) return cached;
 
-    const pending = this.inflight.get(key) as Promise<T> | undefined;
-    if (pending !== undefined) return pending;
+    // Another call is loading this key: the same value it will cache, so the same parse.
+    const pending = this.inflight.get(key);
+    if (pending !== undefined) return schema.parse(await pending);
 
     const loading = load()
       .then(async (value) => {

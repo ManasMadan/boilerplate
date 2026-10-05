@@ -1,6 +1,8 @@
 /**
  * Helpers for integration tests (not part of the runtime surface).
  */
+
+import { required } from "@repo/contracts/objects";
 import type { Redis } from "ioredis";
 
 /**
@@ -10,7 +12,7 @@ import type { Redis } from "ioredis";
  */
 export function redisDatabase(index: number): string {
   // Always set in tests: every vitest config applies .env.example's values.
-  const url = new URL(process.env.REDIS_URL as string);
+  const url = new URL(required(process.env.REDIS_URL, "REDIS_URL"));
   url.pathname = `/${index}`;
   return url.toString();
 }

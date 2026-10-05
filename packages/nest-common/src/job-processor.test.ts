@@ -4,7 +4,7 @@
  */
 import { Logger } from "@nestjs/common";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { describeError, JobProcessor } from "./job-processor";
+import { asError, describeError, JobProcessor } from "./job-processor";
 
 class Processor extends JobProcessor {
   async process() {
@@ -13,6 +13,14 @@ class Processor extends JobProcessor {
 }
 const logged = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
 afterEach(() => logged.mockClear());
+
+describe("asError", () => {
+  it("keeps an Error, and wraps anything else thrown", () => {
+    const error = new TypeError("boom");
+    expect(asError(error)).toBe(error);
+    expect(asError("plain string").message).toBe("plain string");
+  });
+});
 
 describe("describeError", () => {
   it("describes anything thrown, and at most three causes deep", () => {

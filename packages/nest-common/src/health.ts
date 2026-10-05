@@ -20,6 +20,7 @@ import {
 import type { Database } from "@repo/db";
 import type { Redis } from "ioredis";
 import { DATABASE } from "./database";
+import { asError } from "./job-processor";
 import { REDIS } from "./redis";
 
 export type Dependency = "db" | "redis";
@@ -67,7 +68,7 @@ class HealthController {
       return status.up();
     } catch (error) {
       // Prisma, ioredis and the checks above all throw Errors.
-      return status.down({ message: (error as Error).message });
+      return status.down({ message: asError(error).message });
     }
   }
 }

@@ -29,6 +29,7 @@
  * `KeyProvider` to unwrap data keys with the KMS; ciphertext format and callers stay the same.
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { required } from "@repo/contracts/objects";
 
 export interface KeyProvider {
   /** The key new ciphertexts are written with. */
@@ -49,7 +50,7 @@ export function keysFromEnv(value: string): KeyProvider {
     return { id, key };
   });
   // split() always yields an entry, and each one was checked above.
-  const first = keys[0] as { id: string; key: Buffer };
+  const first = required(keys[0], "an encryption key");
   const byId = new Map(keys.map(({ id, key }) => [id, key]));
   return { active: () => first, get: (id) => byId.get(id) };
 }
