@@ -613,11 +613,19 @@ export async function schedule(
   }
   const waiting = steps.filter((step) => !skipped.has(step.name));
   const running: Started[] = [];
+  // A lane's steps start in their order: a later, smaller one never takes the lane from one
+  // still waiting for room (the coverage suites before the generators' check).
   const startWhatCan = () => {
+    const held = new Set<string>();
     for (const step of [...waiting]) {
+      if (step.lane && held.has(step.lane)) {
+        continue;
+      }
       if (startable(step, results, running, room)) {
         waiting.splice(waiting.indexOf(step), 1);
         running.push(begin(step, launch));
+      } else if (step.lane) {
+        held.add(step.lane);
       }
     }
   };
@@ -794,7 +802,8 @@ export async function prePush(given: Partial<typeof MACHINE> = {}): Promise<numb
   const docker = dockerMemory(run);
   const free = Number.isFinite(docker.free) ? Math.max(0, docker.free / GB) : 0;
   const room = { ...limits(env, cpus, memory), docker: free };
-  // ponytail: about one coverage suite per GB of Docker memory (they share its services).
+  // About one coverage suite per GB of Docker memory: they share its Postgres and Valkey, and
+  // two at a time is what a 2 GB Docker holds without timing-sensitive tests turning flaky.
   const suites = Math.max(1, Math.min(room.slots, Math.floor((docker.total || 0) / GB)));
   const touched = areas(push.files);
   const shared = { root, ...push, areas: touched, suites, clamd };

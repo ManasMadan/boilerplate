@@ -464,6 +464,17 @@ describe("the scheduler", () => {
       make("c"),
     ]);
     expect(lane.together.some((t) => t.includes("a") && t.includes("b"))).toBe(false);
+    const order = await run(
+      [
+        make("hog", { memory: 9 }),
+        make("big", { lane: "valkey", memory: 6 }),
+        make("small", { lane: "valkey" }),
+      ],
+      room,
+    );
+    expect(order.together.findIndex((t) => t.includes("big"))).toBeLessThan(
+      order.together.findIndex((t) => t.includes("small")),
+    );
     const serial = await run([make("a"), make("b"), make("c")], { ...room, slots: 1 });
     expect(serial.together.every((t) => t.length === 1)).toBe(true);
   });
