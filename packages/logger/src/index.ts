@@ -57,6 +57,11 @@ export function scrub(value: unknown, depth = 0): unknown {
   if (depth > MAX_DEPTH || value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((item) => scrub(item, depth + 1));
   if (value instanceof Error) return value;
+  return scrubFields(value, depth);
+}
+
+/** A copy of an object's fields, each sensitive one censored. */
+function scrubFields(value: object, depth: number): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const fields: [string, unknown][] = Object.entries(value);
   for (const [key, inner] of fields) {
@@ -80,7 +85,8 @@ export function loggerOptions({
       // sensitive key at any depth. It copies each object, which costs about 0.7µs on a
       // typical job line (1.6µs against 1.0µs, measured on an M-series laptop), far
       // below the write itself.
-      log: (object) => scrub(object) as Record<string, unknown>,
+      // pino hands this an object, never an Error (it puts an error under `err`).
+      log: (object) => scrubFields(object, 0),
     },
     redact: { paths: REDACT_PATHS, censor: CENSOR },
     ...(pretty && {
