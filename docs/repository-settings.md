@@ -17,12 +17,14 @@ REPO=owner/name
 # Public, and offered as a template for new projects (`gh repo create --template`).
 gh repo edit "$REPO" --visibility public --accept-visibility-change-consequences --template
 
-# Squash merges only, titled by the pull request; head branches deleted after merging.
+# Squash or rebase merges, chosen when merging: a squash makes one commit titled by the
+# pull request, a rebase keeps every commit; both keep master's history linear. Head
+# branches are deleted after merging.
 # Auto-merge: a pull request set to merge does so once the ruleset's checks pass (`gh pr
-# merge --auto --squash`, or the button). "Update branch" brings a behind one up to date.
+# merge --auto --squash` or `--rebase`, or the button). "Update branch" brings a behind one up to date.
 # No wiki or projects: the docs live in this repository, and work in issues.
 gh repo edit "$REPO" --enable-squash-merge --squash-merge-commit-message pr-title-description \
-  --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge \
+  --enable-rebase-merge --enable-merge-commit=false --delete-branch-on-merge \
   --enable-auto-merge --allow-update-branch --enable-wiki=false --enable-projects=false
 
 # Workflows get read-only tokens unless a job asks for more, and never approve pull requests.
@@ -59,7 +61,7 @@ for env in infra-staging-plan infra-production-plan; do
 JSON
 done
 
-# master: pull requests only, squash-merged, with each workflow's gate and CodeQL
+# master: pull requests only, squash- or rebase-merged, with each workflow's gate and CodeQL
 # passing. Only the gates are required: each needs every other job of its workflow and
 # always reports, so adding a job never needs a change here. APPROVALS is 0 for a single maintainer (GitHub doesn't let you approve your
 # own pull request); make it 1 and CODE_OWNERS true once there's a team.
@@ -72,7 +74,7 @@ gh api -X POST "repos/$REPO/rulesets" --input - <<JSON
   {"type": "pull_request", "parameters": {
     "required_approving_review_count": $APPROVALS, "require_code_owner_review": $CODE_OWNERS,
     "dismiss_stale_reviews_on_push": true, "require_last_push_approval": false,
-    "required_review_thread_resolution": true, "allowed_merge_methods": ["squash"]}},
+    "required_review_thread_resolution": true, "allowed_merge_methods": ["squash", "rebase"]}},
   {"type": "required_status_checks", "parameters": {"strict_required_status_checks_policy": false,
     "required_status_checks": [{"context": "CI passed"}, {"context": "Security passed"},
       {"context": "Kubernetes passed"}, {"context": "Infrastructure passed"}]}},
@@ -130,10 +132,12 @@ To check: `gh api "repos/$REPO/rulesets" --jq '.[].name'` prints `master` and
 
 **Settings → General → Pull Requests**
 
-- Allow **squash merging** only, with the default message set to **pull request title
-  and description** (`pr-title-description` in the command above): the title is checked
-  against Conventional Commits (the `pr-title` job), and it becomes the commit title the
-  release notes are built from; the description becomes its body.
+- Allow **squash merging** and **rebase merging**, and no merge commits, so master's
+  history stays linear; whoever merges picks. A squash makes one commit, with the default
+  message set to **pull request title and description** (`pr-title-description` in the
+  command above); a rebase keeps every commit. The `pr-title` job checks the title and
+  every commit against Conventional Commits, since either can become what the release
+  notes are built from.
 - Enable **Automatically delete head branches**.
 
 **Settings → Rules → Rulesets → New branch ruleset** for `master` (the default branch):

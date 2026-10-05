@@ -622,8 +622,9 @@ jobs:
             bun scripts/events-compat.ts "$BASE"
           fi
 
-  # Conventional pull-request titles: squash merges make them the commit on master, and
-  # the release notes are built from them (scripts/release.ts).
+  # Conventional Commits for whatever reaches master: the title (a squash merge makes it
+  # the commit) and every commit (a rebase merge puts each one there). The release notes
+  # are built from them (scripts/release.ts).
   pr-title:
     name: Pull request title
     if: github.event_name == 'pull_request'
@@ -647,13 +648,19 @@ jobs:
             nodejs.org:443
             registry.npmjs.org:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { persist-credentials: false, fetch-depth: 0 }
       - uses: ./.github/actions/setup
       # The same check as each commit's (commitlint.config.ts, whose scopes are the
-      # workspaces): squash merges make the title the commit on master.
+      # workspaces).
       - name: Conventional Commits title
         env: { TITLE: "${{ github.event.pull_request.title }}" }
         run: printf '%s\n' "$TITLE" | bunx commitlint
+      # The commit-msg hook checks these locally; --no-verify skips it.
+      - name: Conventional Commits messages
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bunx commitlint --from "$BASE" --to "$HEAD"
 
   # New migrations must be safe to run while the previous release is still serving.
   migrations:

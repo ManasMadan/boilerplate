@@ -40,7 +40,8 @@ fixes for what usually goes wrong.
    (`scripts/pre-push.ts`, see [docs/testing.md](docs/testing.md#before-a-push)). That can
    take a while for a change to shared code, and the end-to-end suite in it needs
    `bun dev` stopped; `git push --no-verify` skips it and leaves CI to decide.
-4. Open a pull request. Its title becomes the squashed commit, so it follows
+4. Open a pull request. A squash merge makes its title the commit, and a rebase merge
+   keeps every commit, so the title and each commit message follow
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:
    `feat(api): add todo sharing`, `fix(web): keep the draft on reload`. The scopes are in
    `commitlint.config.ts`. `feat` and `fix` end up in the changelog and the next version.

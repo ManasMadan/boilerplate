@@ -21,7 +21,8 @@ disable-model-invocation: true
    - `frontend-reviewer` and `i18n-checker` for `apps/web`, `apps/mobile`, `packages/ui`
      or new copy;
    - `docs-sync` when variables, ports, commands, seams or skills changed.
-4. **Title.** It becomes the squashed commit and the release notes: Conventional
+4. **Title.** A squash merge makes it the commit and the release notes (a rebase merge
+   keeps every commit, so each message counts too): Conventional
    Commits with a scope from `commitlint.config.ts`, in plain words, e.g.
    `feat(api): let members share a todo`. `!` before the colon for a breaking API change.
 5. **Description.** What changed and why, in plain prose; how it was checked (the verify
