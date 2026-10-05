@@ -11,6 +11,8 @@ paths:
 - `.claude/settings.json` and `.claude/hooks/` are guard rails: the edit guard asks the
   user before either changes. Don't weaken a check to get past it; if a hook is wrong,
   say how and let the user decide.
+- A new `lint:*` script (or `codeql`) goes in `settings.json`'s `allow` list twice, bare
+  and with ` *`, like the others: `scripts/claude-setup.test.ts` fails until it does.
 - Hooks are TypeScript run with Bun, one file per hook event plus shared code in
   `lib.ts`, `checks.ts`, `file-rules.ts`, `shell.ts` and `suppressions.ts`. Logic lives
   in those shared modules with a `*.test.ts` beside each. Each hook exports a handler

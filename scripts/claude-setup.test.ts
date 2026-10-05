@@ -159,6 +159,22 @@ describe("settings.json", () => {
     );
   });
 
+  it("lets Claude run every lint script and CodeQL without asking", () => {
+    const { permissions } = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8")) as {
+      permissions: { allow: string[] };
+    };
+    const { scripts } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const checks = Object.keys(scripts).filter(
+      (name) => name === "codeql" || name === "lint" || name.startsWith("lint:"),
+    );
+    const missing = checks
+      .flatMap((name) => [`Bash(bun run ${name})`, `Bash(bun run ${name} *)`])
+      .filter((rule) => !permissions.allow.includes(rule));
+    expect(missing).toEqual([]);
+  });
+
   it("drives a browser with Playwright's CLI, not its MCP server", () => {
     const { mcpServers } = JSON.parse(readFileSync(join(ROOT, ".mcp.json"), "utf8")) as {
       mcpServers: Record<string, unknown>;
