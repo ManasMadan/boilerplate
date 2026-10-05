@@ -135,3 +135,25 @@ describe("the backup drill", () => {
     expect(calls.at(-1)).toBe("kubectl delete cluster live-drill --ignore-not-found --wait=false");
   });
 });
+
+describe("where it runs", () => {
+  type Data = {
+    postgres?: { backups?: { enabled?: boolean }; drill?: { enabled?: boolean } };
+    offsite?: { endpoint?: string };
+  };
+  const values = (env: string) =>
+    Bun.YAML.parse(
+      readFileSync(join(import.meta.dir, `../deploy/environments/${env}/data.yaml`), "utf8"),
+    ) as Data;
+
+  it("drills every environment with backups, production from its offsite copy", () => {
+    for (const env of ["staging", "production"]) {
+      const { postgres } = values(env);
+      expect({ env, backups: postgres?.backups?.enabled, drill: postgres?.drill?.enabled }).toEqual(
+        { env, backups: true, drill: true },
+      );
+    }
+    // With an offsite endpoint the chart restores from that copy (its tests check how).
+    expect(values("production").offsite?.endpoint).toStartWith("https://");
+  });
+});

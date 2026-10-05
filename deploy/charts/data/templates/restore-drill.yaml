@@ -4,6 +4,10 @@ archived WAL, through the Barman Cloud plugin) into a scratch cluster beside the
 one, checks it against the live database and deletes it (files/restore-drill.sh). A
 failed run is a failed Job, which the cluster's alerts report. The scratch cluster takes
 as much disk as the live one while it runs, and archives nothing.
+
+Where there's an offsite copy (`offsite`), it restores from that copy instead of the
+backups server in the cluster: what a restore after losing the cluster would have, so
+the copy is known to be complete, current and restorable.
 */}}
 {{- $pg := .Values.postgres }}
 {{- if and $pg.drill.enabled (not $pg.backups.enabled) }}
@@ -13,6 +17,33 @@ as much disk as the live one while it runs, and archives nothing.
 {{- $cluster := include "data.postgres" . }}
 {{- $drill := printf "%s-drill" $cluster }}
 {{- $name := printf "%s-restore-drill" (include "data.name" .) }}
+{{- $store := include "data.objectStore" . }}
+{{- with .Values.offsite }}
+{{- if .endpoint }}
+{{- $store = printf "%s-offsite" $store }}
+---
+# The offsite copy of the backups bucket (templates/offsite.yaml), read only by the drill:
+# no cluster archives here, so nothing applies a retention policy to it.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $store }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+spec:
+  configuration:
+    destinationPath: {{ printf "s3://%s/%s/backups/" .bucket .prefix }}
+    endpointURL: {{ .endpoint }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ .secretName }}
+        key: accessKeyId
+      secretAccessKey:
+        name: {{ .secretName }}
+        key: secretAccessKey
+{{- end }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -51,13 +82,13 @@ data:
           owner: migrator
           secret:
             name: {{ include "data.roleSecret" (list . "migrator") }}
-      # Where the live cluster archives now.
+      # Where the live cluster archives now, or the offsite copy of it.
       externalClusters:
         - name: origin
           plugin:
             name: barman-cloud.cloudnative-pg.io
             parameters:
-              barmanObjectName: {{ include "data.objectStore" . }}
+              barmanObjectName: {{ $store }}
               serverName: {{ $pg.backups.serverName | default $cluster }}
       storage:
         size: {{ $pg.storage.size }}

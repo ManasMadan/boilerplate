@@ -34,11 +34,12 @@ misconfigurations:
       to create Secrets; it can do nothing else (no get, list, update or delete), and
       Kubernetes can't narrow create by name, since the object doesn't exist yet
   - id: KSV-0053
-    paths: ["deploy/.rendered/staging-data.yaml"]
+    paths: ["deploy/.rendered/staging-data.yaml", "deploy/.rendered/production-data.yaml"]
     statement: >-
       The restore drill runs psql in the live and the scratch database pods to compare
       them; CloudNativePG names those pods with a counter, so they can't be listed by
-      name. Its Role is in its own namespace and only staging turns the drill on
+      name. Its Role is in its environment's own namespace, and only the environments
+      that turn the drill on (staging, production) render it
   - id: KSV-0125
     paths: ["deploy/.rendered/local-stack.yaml"]
     statement: >-

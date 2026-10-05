@@ -359,6 +359,39 @@ tests:
     asserts:
       - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'serverName: demo-2026\n' }
 
+  - it: restores from the backups server in the cluster when there's no offsite copy
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'barmanObjectName: demo-backups\n' }
+        documentSelector: { path: kind, value: ConfigMap }
+      - hasDocuments: { count: 0 }
+        documentSelector: { path: kind, value: ObjectStore, skipEmptyTemplates: true }
+
+  - it: restores from the offsite copy where there is one, as after losing the cluster
+    template: restore-drill.yaml
+    set:
+      postgres.backups.enabled: true
+      postgres.drill.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'barmanObjectName: demo-backups-offsite\n' }
+        documentSelector: { path: kind, value: ConfigMap }
+      - equal:
+          path: spec.configuration
+          value:
+            # Where templates/offsite.yaml copies the backups bucket.
+            destinationPath: s3://copies/production/backups/
+            endpointURL: https://s3.elsewhere.example
+            s3Credentials:
+              accessKeyId: { name: offsite-storage, key: accessKeyId }
+              secretAccessKey: { name: offsite-storage, key: secretAccessKey }
+        documentSelector: { path: kind, value: ObjectStore }
+      - notExists: { path: spec.retentionPolicy }
+        documentSelector: { path: kind, value: ObjectStore }
+
   - it: runs the drill weekly, once at a time, never retried, with only what it needs
     template: restore-drill.yaml
     set: { postgres.backups.enabled: true, postgres.drill.enabled: true }

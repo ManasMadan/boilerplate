@@ -277,7 +277,9 @@ the copy (expire old objects with that bucket's lifecycle rules instead). Produc
 refuses to render without it (`offsite.required`). Its keys are the
 `offsite-storage` Secret, in `environments/<env>/secrets/`. After losing the cluster,
 copy the backups back into the new cluster's backups bucket before restoring (the
-same `rclone copy`, the other way), and the uploads into its uploads bucket.
+same `rclone copy`, the other way), and the uploads into its uploads bucket. That the
+copy restores is checked every week: where there is one, the backup drill below restores
+from it.
 
 Restoring (a mistake in the data, or a new cluster): CloudNativePG only bootstraps a
 cluster when it creates it, so restoring means a new cluster from the backups.
@@ -309,13 +311,19 @@ cluster when it creates it, so restoring means a new cluster from the backups.
    either way) and keep the new `backups.serverName`: it's where backups go now.
 
 The backups themselves are drilled every week where `postgres.drill.enabled` is on
-(staging; production once its node has the disk for a second copy of the database): a
-CronJob restores the latest base backup and the archived WAL into a scratch cluster,
+(staging and production, Sundays at 04:30 UTC, after the 03:00 base backup): a CronJob
+restores the latest base backup and the archived WAL into a scratch cluster,
 `<release>-postgres-drill`, the way the procedure above would, and checks it against the
 live database (the same tables, row-level security, policies, grants, functions and
 extensions, from the same query `bun run db:restore-drill` uses) and that its last
 transaction is under `maxAgeHours` old (WAL is reaching the backups). Then it deletes
-the scratch cluster. A failed drill is a failed Job:
+the scratch cluster. Where there's an offsite copy (production), it restores from that
+copy rather than the backups server in the cluster, so each week proves what a restore
+after losing the cluster would start from: the copy is complete, recent and restorable.
+While it runs, the scratch cluster takes as much disk as the live one (production's
+`postgres.storage.size`, on a node Postgres can run on), and the comparison reads every
+table of the live database once; if a node can't spare the disk, turn the drill off in
+`environments/<env>/data.yaml` until it can. A failed drill is a failed Job:
 `kubectl -n <env> logs job/<the latest <release>-restore-drill job>`; run one now with
 `kubectl -n <env> create job --from=cronjob/<release>-restore-drill drill-now`.
 

@@ -55,8 +55,9 @@ postgres:
   # backups.serverName, and optionally a point in time. Only for a new cluster: an
   # existing one ignores its bootstrap. deploy/README.md has the whole procedure.
   # The backup drill: every week, the latest backup restored into a scratch cluster and
-  # checked against the live database (templates/restore-drill.yaml). Needs backups, and
-  # free disk for a second copy of the database while it runs.
+  # checked against the live database (templates/restore-drill.yaml); from the offsite
+  # copy where there is one (`offsite`). Needs backups, and free disk for a second copy
+  # of the database while it runs.
   drill:
     enabled: false
     # Kubernetes' cron format (five fields): 04:30 on Sundays.
