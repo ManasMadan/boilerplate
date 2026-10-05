@@ -33,13 +33,15 @@ export function findEnvExample(from = process.cwd()): string {
  * (`process.env.S3_BUCKET ?? "uploads"`) then applies.
  */
 export function testEnvironment(example = findEnvExample()): Record<string, string> {
-  const values = parseEnv(readFileSync(example, "utf8")) as Record<string, string>;
+  const values = parseEnv(readFileSync(example, "utf8"));
   const stack = join(dirname(example), STACK_FILE);
   if (existsSync(stack)) Object.assign(values, parseEnv(readFileSync(stack, "utf8")));
   // The test runner sets NODE_ENV (test); the example's is for `bun dev`.
   delete values.NODE_ENV;
   return fillPlaceholders(
-    Object.fromEntries(Object.entries(values).filter(([, value]) => value !== "")),
+    Object.fromEntries(
+      Object.entries(values).filter((entry): entry is [string, string] => !!entry[1]),
+    ),
   );
 }
 
