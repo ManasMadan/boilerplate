@@ -95,7 +95,7 @@
     "test": "turbo run test",
     "test:integration": "bun scripts/services.ts up && turbo run test:integration",
     "test:integration:files": "bun scripts/services.ts up --files && turbo run test:integration:files",
-    "test:e2e": "bun scripts/e2e.ts",
+    "test:e2e": "bun --env-file=.env scripts/e2e.ts",
     "test:load": "bun run --cwd load test:load",
     "charts:check": "bun scripts/charts.ts",
     "infra:check": "bun scripts/infra.ts",
@@ -142,7 +142,8 @@
     "lint-staged": "^17.6.0",
     "turbo": "^2.11.5",
     "type-coverage": "2.29.7",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "zod": "catalog:"
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,cjs,json,jsonc,css}": "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true",

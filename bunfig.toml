@@ -1,5 +1,12 @@
 # Bun configuration shared by every workspace.
 
+# Never load .env on its own. Bun would read it into `bun <file>`, `bun run` and `bun test`,
+# and every process they start would inherit it, so a test could pass, or fail, only
+# because of what one checkout's .env says; the tests use .env.example's values
+# (@repo/testing/environment) instead. A script that needs the developer's settings loads
+# them by name: `bun --env-file=.env ...` (see package.json).
+env = false
+
 [install]
 # Hoisted layout (one root node_modules, like npm/yarn): bundled services inline only
 # our own @repo/* packages and resolve every npm dependency from the root at runtime,
@@ -25,3 +32,10 @@ minimumReleaseAge = 259200
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage/bun"
 coverageSkipTestFiles = true
+# This suite answers for scripts/ and the Claude Code hooks only. Some of their tests load
+# the services' code (env schemas, say), which their own suites cover: reported here, it
+# would show as a low number for a file this suite never meant to test.
+coveragePathIgnorePatterns = ["apps/**", "packages/**", "load/**"]
+# Every file it answers for at 100%, or `bun test --coverage` fails (Bun measures lines
+# and functions; scripts/coverage.ts checks branches too, on the merged reports).
+coverageThreshold = { lines = 1.0, functions = 1.0 }

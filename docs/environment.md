@@ -1,7 +1,10 @@
 # Environment variables
 
 Every service reads the one root `.env` locally (package scripts load it with
-`bun --env-file` or `node --env-file-if-exists`). In Kubernetes each service gets only its
+`bun --env-file` or `node --env-file-if-exists`). Nothing else does: `bunfig.toml` turns
+off Bun's habit of loading `.env` into every `bun` command, so tests and scripts never
+see a developer's settings unless they ask for them by name (`bun --env-file=.env`, as
+`bun run test:e2e` and `bun run jobs` do). In Kubernetes each service gets only its
 own variables, from the stack chart's values and its `<release>-<service>` Secret (see
 `deploy/README.md`).
 

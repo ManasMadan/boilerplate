@@ -35,7 +35,6 @@ describe("the Stop hook's checks", () => {
     expect(hooks.map((check) => check.command.join(" "))).toContain("bunx tsc -p .claude/hooks");
     expect(hooks.find((check) => check.command[0] === "bun")?.command).toEqual([
       "bun",
-      "--no-env-file",
       "scripts/unit-coverage.ts",
     ]);
   });

@@ -94,8 +94,8 @@ describe("image smoke", () => {
     "gives %s everything its configuration requires in production",
     (image, file) => {
       const spec = IMAGES[image];
-      // --no-env-file: a checkout's own .env would otherwise fill in what the image lacks.
-      const result = Bun.spawnSync(["bun", "--no-env-file", "-e", `await import("./${file}")`], {
+      // In the repository, so bunfig.toml keeps the checkout's .env out of it.
+      const result = Bun.spawnSync(["bun", "-e", `await import("./${file}")`], {
         cwd: `${import.meta.dir}/..`,
         env: {
           PATH: process.env.PATH,
