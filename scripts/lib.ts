@@ -1,7 +1,7 @@
 /** Small helpers shared by the repo scripts (setup, doctor, env:set). */
 import { type SpawnSyncOptions, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, constants, ftruncateSync, openSync, readFileSync, writeSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -21,8 +21,21 @@ export function parseEnv(text: string): Map<string, string> {
   return new Map(entries.filter((entry): entry is [string, string] => entry[1] !== undefined));
 }
 
-export const readEnv = (path: string) =>
-  existsSync(path) ? parseEnv(readFileSync(path, "utf8")) : new Map<string, string>();
+/** Whether `error` is the file system's `code` (ENOENT, EEXIST, ...). */
+export const errno = (error: unknown, code: string) =>
+  error instanceof Error && "code" in error && error.code === code;
+
+/** The file's variables; none when there's no file. */
+export function readEnv(path: string): Map<string, string> {
+  try {
+    return parseEnv(readFileSync(path, "utf8"));
+  } catch (error) {
+    if (errno(error, "ENOENT")) {
+      return new Map();
+    }
+    throw error;
+  }
+}
 
 /**
  * A value as a .env line spells it, so that Node's `--env-file` (the services) and Bun's
@@ -53,30 +66,52 @@ export function envLine(key: string, value: string): string {
 const keyLine = (key: string) =>
   new RegExp(`^\\s*(export\\s+)?${key.replace(/[^\w]/g, "\\$&")}\\s*=.*$\\n?`, "m");
 
+/**
+ * Rewrites the file through one open handle: read and written as the same file, never
+ * checked by path first and opened again (another process could swap it in between).
+ * `edit` returns the new text, or undefined to leave the file alone; returns whether it
+ * wrote. `flags` without O_CREAT throws ENOENT for a missing file.
+ */
+function editFile(path: string, flags: number, edit: (text: string) => string | undefined) {
+  const fd = openSync(path, flags, 0o600);
+  try {
+    const next = edit(readFileSync(fd, "utf8"));
+    if (next === undefined) {
+      return false;
+    }
+    ftruncateSync(fd);
+    writeSync(fd, next, 0);
+    return true;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /** Sets or appends one KEY=value line, preserving every other line and comment. */
 export function writeEnvValue(path: string, key: string, value: string) {
-  const text = existsSync(path) ? readFileSync(path, "utf8") : "";
   const line = envLine(key, value);
   const pattern = keyLine(key);
   // A function replacement: a string one would read `$&` and `$$` in the line as patterns.
-  const next = pattern.test(text)
-    ? text.replace(pattern, () => `${line}\n`)
-    : `${text.replace(/\n?$/, "\n")}${line}\n`;
-  writeFileSync(path, next);
+  editFile(path, constants.O_RDWR | constants.O_CREAT, (text) =>
+    pattern.test(text)
+      ? text.replace(pattern, () => `${line}\n`)
+      : `${text.replace(/\n?$/, "\n")}${line}\n`,
+  );
 }
 
 /** Removes KEY's line; returns whether there was one. */
 export function removeEnvValue(path: string, key: string): boolean {
-  if (!existsSync(path)) {
-    return false;
-  }
-  const text = readFileSync(path, "utf8");
   const pattern = keyLine(key);
-  if (!pattern.test(text)) {
-    return false;
+  try {
+    return editFile(path, constants.O_RDWR, (text) =>
+      pattern.test(text) ? text.replace(pattern, "") : undefined,
+    );
+  } catch (error) {
+    if (errno(error, "ENOENT")) {
+      return false;
+    }
+    throw error;
   }
-  writeFileSync(path, text.replace(pattern, ""));
-  return true;
 }
 
 export const ok = (message: string) => console.log(`  \x1b[32m✔\x1b[0m ${message}`);

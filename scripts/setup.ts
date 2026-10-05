@@ -13,7 +13,7 @@
  * and placeholders are replaced.
  */
 
-import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 // By path, not package name: setup writes .env before `bun install` has linked packages.
 import { fillPlaceholders } from "../packages/testing/src/secrets";
@@ -22,6 +22,7 @@ import {
   ENV_EXAMPLE_PATH,
   ENV_PATH,
   envLine,
+  errno,
   fail,
   ok,
   ROOT,
@@ -44,9 +45,15 @@ const STEPS: [string, string[]][] = [
  * placeholders into fresh secrets. Existing values stay.
  */
 export function syncEnv(envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH) {
-  if (!existsSync(envPath)) {
-    copyFileSync(examplePath, envPath);
+  // Copied only if there's none, in one step: a check first, then the copy, could
+  // overwrite a .env made in between.
+  try {
+    copyFileSync(examplePath, envPath, constants.COPYFILE_EXCL);
     ok("Created .env from .env.example");
+  } catch (error) {
+    if (!errno(error, "EEXIST")) {
+      throw error;
+    }
   }
   const env = readEnv(envPath);
   for (const [key, value] of readEnv(examplePath)) {

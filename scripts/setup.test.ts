@@ -38,6 +38,11 @@ describe("setup", () => {
     expect(printed()).toContain("Setup complete.");
   });
 
+  it("fails on an unreadable .env.example rather than leaving no .env", () => {
+    const paths = files();
+    expect(() => syncEnv(paths.envPath, `${paths.examplePath}.missing`)).toThrow(/ENOENT/);
+  });
+
   it("keeps existing values and adds only what's missing", () => {
     captureOutput();
     const paths = files("PORT=4000\nAUTH_SECRET=mine\n");

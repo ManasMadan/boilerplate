@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +9,7 @@ import {
   listening,
   ok,
   parseEnv,
+  readEnv,
   removeEnvValue,
   runMain,
   runSync,
@@ -71,6 +72,21 @@ describe(".env values", () => {
       ]),
     );
     expect(removeEnvValue(join(dir(), "missing"), "A")).toBe(false);
+  });
+
+  it("creates a missing file readable by its owner alone, and reads none as empty", () => {
+    const file = join(dir(), ".env");
+    expect(readEnv(file)).toEqual(new Map());
+    writeEnvValue(file, "A", "1");
+    expect(readFileSync(file, "utf8")).toBe("\nA=1\n");
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(readEnv(file)).toEqual(new Map([["A", "1"]]));
+  });
+
+  it("passes on what isn't a missing file", () => {
+    const folder = dir();
+    expect(() => readEnv(folder)).toThrow(/EISDIR/);
+    expect(() => removeEnvValue(folder, "A")).toThrow(/EISDIR/);
   });
 });
 
