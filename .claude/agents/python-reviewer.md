@@ -19,7 +19,8 @@ Then `git diff master...HEAD -- apps/ai packages/ai-client` and `git status --sh
 1. **Types.** Every signature and model field annotated. `# pyright: ignore[<rule>]`
    only for untyped third-party APIs or framework-registered callbacks, always naming the
    rule, never bare; `Any` only where a library forces it (`reportAny` is off, so the
-   checker won't catch it). No `cast` that hides a real mismatch.
+   checker won't catch it). No `typing.cast`: parse or narrow instead
+   (`lint:suppressions` refuses one docs/testing.md doesn't list).
 2. **Models.** Request and response models in `app/schemas.py`, every field constrained
    (`Field(min_length=..., max_length=..., ge=..., le=...)`, `Literal` for enums): they
    are the runtime validation and the OpenAPI document. The API's limits equal them

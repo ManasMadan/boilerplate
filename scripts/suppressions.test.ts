@@ -29,6 +29,7 @@ describe("suppressions", () => {
     ["x = f()  # pyright: ignore[reportAny]", "# pyright: ignore"],
     ["import os  # noqa: F401", "# noqa"],
     ["// type-coverage:ignore-next-line", "type-coverage:ignore"],
+    ["log = cast(Logger, get_logger())", "typing.cast()"],
     ["it.skip('x', () => {})", SKIPPED],
     ["test.skipIf(!env)('x', () => {})", SKIPPED],
     ["it.runIf(env)('x', () => {})", SKIPPED],
@@ -80,9 +81,9 @@ describe("suppressions", () => {
   });
 
   it("ignores ordinary code", () => {
-    expect(countSuppressions("const skip = items.skip; export function only() {}")).toEqual(
-      new Map(),
-    );
+    expect(
+      countSuppressions("const skip = items.skip; export function only() {} broadcast(x);"),
+    ).toEqual(new Map());
   });
 
   it("reports only what an edit adds", () => {

@@ -16,11 +16,12 @@ opening sentences of the text, for development and tests.
 
 import asyncio
 import re
-from typing import TypedDict, cast
+from typing import TypedDict
 
 # LangGraph ships without type stubs (and leaves some generics unknown); it's used only here.
 from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
+from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models import Model
@@ -54,6 +55,12 @@ def local_summarizer() -> Model:
         return ModelResponse(parts=[TextPart(" ".join(sentences[:keep]))])
 
     return FunctionModel(respond, model_name="local:extractive")
+
+
+class _Summary(BaseModel):
+    """What summarize reads of the graph's final state."""
+
+    summary: str
 
 
 class SummaryState(TypedDict):
@@ -108,8 +115,8 @@ async def summarize(
     once `limits` are reached)."""
     if not passages:
         return ""
-    final = await graph.ainvoke(  # pyright: ignore[reportUnknownMemberType]  # its config types are unknown
+    final: object = await graph.ainvoke(  # pyright: ignore[reportUnknownMemberType]  # its config types are unknown
         {"passages": passages, "summaries": [], "summary": "", "usage": usage, "limits": limits}
     )
     # ainvoke returns the final state as a plain dict of Any.
-    return cast(str, final["summary"])
+    return _Summary.model_validate(final).summary

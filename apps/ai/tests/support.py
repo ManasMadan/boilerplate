@@ -2,10 +2,9 @@
 written straight to the database (as the migrator), service tokens, and typed views of
 the service's responses."""
 
-import json
 import os
 from collections.abc import Awaitable, Callable
-from typing import LiteralString, cast
+from typing import LiteralString
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
@@ -13,7 +12,7 @@ import httpx2 as httpx
 import psycopg
 import redis
 from fastapi.testclient import TestClient
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from redis.client import PubSub
 
 from app.contracts.error_response import ErrorResponse
@@ -85,8 +84,11 @@ def index_all(client: TestClient, org: UUID) -> None:
 
 def body(response: httpx.Response) -> object:
     """The whole JSON body, to compare with what it should be."""
-    # httpx types a parsed body as Any; comparing it needs nothing more than object.
-    return cast(object, response.json())
+    return _JSON.validate_json(response.content)
+
+
+# Any JSON value: what a body or a message is compared with.
+_JSON = TypeAdapter(object)
 
 
 _DOCUMENTS = TypeAdapter(list[DocumentOut])
@@ -117,15 +119,26 @@ def subscribe(channel: str) -> PubSub:
 def stored_job(key: str) -> dict[bytes, bytes]:
     """A job's hash as BullMQ stored it."""
     # The sync client returns the hash itself; redis-py types it as maybe awaitable.
-    return cast(dict[bytes, bytes], redis_client().hgetall(key))  # pyright: ignore[reportUnknownMemberType]  # see above
+    return _HASH.validate_python(redis_client().hgetall(key))  # pyright: ignore[reportUnknownMemberType]  # see above
+
+
+_HASH = TypeAdapter(dict[bytes, bytes])
+
+
+class _Message(BaseModel):
+    """A pub/sub message as redis-py hands it over (a dict of unknowns)."""
+
+    type: str
+    data: object
+
+
+_MESSAGE: TypeAdapter[_Message | None] = TypeAdapter(_Message | None)
 
 
 def published(events: PubSub) -> list[object]:
     """The messages a subscription received so far (waiting a second for each)."""
     messages: list[object] = []
-    # redis-py types a message as a dict of unknowns.
-    while (message := cast(dict[str, object] | None, events.get_message(timeout=1))) is not None:
-        data = message["data"]
-        if message["type"] == "message" and isinstance(data, bytes):
-            messages.append(cast(object, json.loads(data)))
+    while (message := _MESSAGE.validate_python(events.get_message(timeout=1))) is not None:
+        if message.type == "message" and isinstance(message.data, bytes):
+            messages.append(_JSON.validate_json(message.data))
     return messages

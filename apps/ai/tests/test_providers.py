@@ -1,8 +1,6 @@
 """Model providers, against a local stand-in speaking OpenAI's protocol (tests/fakes.py):
 provider embeddings, and the fallback model taking over when the primary fails."""
 
-import json
-from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -12,7 +10,7 @@ from app.assistant import Deps, create_agent, create_model
 from app.db.models import EMBEDDING_DIMENSIONS
 from app.documents import Passage
 from app.embeddings import ProviderEmbedder, create_embedder
-from tests.fakes import openai_embeddings, openai_unavailable, serve
+from tests.fakes import EmbeddingsRequest, openai_embeddings, openai_unavailable, serve
 from tests.test_units import StubDocuments
 
 # Local HTTP servers, so these run with the integration tests.
@@ -37,7 +35,7 @@ async def test_a_provider_embeds_in_the_dimensions_the_index_has(
     assert [len(vector) for vector in vectors] == [EMBEDDING_DIMENSIONS] * 2
     [(path, body)] = fake.received
     assert path == "/v1/embeddings"
-    assert cast(object, json.loads(body)["input"]) == ["refunds", "shipping"]
+    assert EmbeddingsRequest.model_validate_json(body).input == ["refunds", "shipping"]
 
 
 async def test_the_fallback_model_answers_when_the_primary_is_down(

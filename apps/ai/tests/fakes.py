@@ -8,7 +8,8 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import cast
+
+from pydantic import BaseModel
 
 type Reply = tuple[int, dict[str, object]]
 
@@ -53,16 +54,24 @@ def serve(handlers: dict[str, Callable[[bytes], Reply]]) -> Generator[Fake]:
         server.shutdown()
 
 
+class EmbeddingsRequest(BaseModel):
+    """What OpenAI's /v1/embeddings is sent."""
+
+    model: str
+    input: list[str]
+    dimensions: int
+
+
 def openai_embeddings(dimensions: int) -> Callable[[bytes], Reply]:
     """OpenAI's /v1/embeddings: one vector per input, of the dimensions asked for."""
 
     def reply(body: bytes) -> Reply:
-        request = cast(dict[str, object], json.loads(body))
-        texts = cast(list[str], request["input"])
-        assert request["dimensions"] == dimensions
+        request = EmbeddingsRequest.model_validate_json(body)
+        texts = request.input
+        assert request.dimensions == dimensions
         return 200, {
             "object": "list",
-            "model": request["model"],
+            "model": request.model,
             "data": [
                 {"object": "embedding", "index": i, "embedding": [1.0 / (i + 1)] * dimensions}
                 for i in range(len(texts))

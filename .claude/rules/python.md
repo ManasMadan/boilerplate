@@ -10,9 +10,10 @@ paths:
   through turbo from the root (`bun run lint`, `bun run check-types`, `bun run test`),
   or directly as `uv run --project apps/ai ruff check apps/ai`.
 - basedpyright runs in strict mode with `reportAny` and `reportExplicitAny` on, tests
-  included. Type everything; where a library hands back `Any` (a parsed JSON body,
-  `get_args`), `cast` it to what it is, or validate it with a Pydantic model or
-  `TypeAdapter`. `# pyright: ignore[<rule>]` is only for untyped third-party APIs, always
+  included. Type everything; where a library hands back `Any` (a parsed JSON body, a
+  Redis reply), validate it with a Pydantic model or `TypeAdapter`, or narrow it with
+  `isinstance` (a `Protocol` can say what you use of an untyped client). `typing.cast`
+  checks nothing, so it counts as a suppression: refused unless docs/testing.md lists it. `# pyright: ignore[<rule>]` is only for untyped third-party APIs, always
   with the rule named and a reason after it (`# pyright: ignore[rule]  # why`); an ignore
   that no longer suppresses anything is an error. No file-level relaxations.
 - ruff adds async, FastAPI, timezone, pytest, bandit, blind-except, print and annotation

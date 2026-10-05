@@ -53,6 +53,8 @@ export const SUPPRESSIONS: Record<string, { pattern: RegExp; table?: Section }> 
   "# pyright: ignore": { pattern: /#\s*pyright:\s*ignore/g, table: SUPPRESSED },
   "# noqa": { pattern: /#\s*noqa\b/g, table: SUPPRESSED },
   "type-coverage:ignore": { pattern: /type-coverage:ignore/g, table: UNTYPED },
+  // Python's unchecked cast: parse it (Pydantic) or narrow it (isinstance) instead.
+  "typing.cast()": { pattern: /\bcast\(/g, table: SUPPRESSED },
   "-- squawk-ignore": { pattern: /--\s*squawk-ignore/g, table: SUPPRESSED },
   "# shellcheck disable": { pattern: /#\s*shellcheck\s+disable/g, table: SUPPRESSED },
   "# hadolint ignore": { pattern: /#\s*hadolint\s+ignore/g, table: SUPPRESSED },

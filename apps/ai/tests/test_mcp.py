@@ -16,16 +16,21 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 from jwt.algorithms import OKPAlgorithm
+from mcp.server.auth.middleware.auth_context import auth_context_var
+from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+from mcp.server.auth.provider import AccessToken
 from pydantic import BaseModel
 
 from app.documents import Documents
 from app.mcp_server import (
     ApiKeys,
     ApiTokenVerifier,
+    Caller,
     DocumentSummary,
     Jwks,
     PassageResult,
     current_caller,
+    within_limit,
 )
 from tests.support import error_of, headers, index_all, migrator, new_org
 
@@ -192,6 +197,34 @@ def test_tools_run_only_for_an_authenticated_caller() -> None:
     # one there is none, and a tool must not run.
     with pytest.raises(PermissionError):
         current_caller()
+
+
+def test_a_token_without_a_workspace_is_refused() -> None:
+    # verify_token always sets the claim; a caller without one must not reach a tool anyway.
+    token = AccessToken(
+        token=SigningKey("k").sign(), client_id="app", scopes=[], subject=str(uuid4()), claims={}
+    )
+    reset = auth_context_var.set(AuthenticatedUser(token))
+    try:
+        with pytest.raises(PermissionError):
+            current_caller()
+    finally:
+        auth_context_var.reset(reset)
+
+
+class Garbled:
+    """Redis answering INCR with something that isn't a count."""
+
+    async def incr(self, name: str) -> object:
+        return b"garbled"
+
+    async def expire(self, name: str, time: int) -> object:
+        return True
+
+
+async def test_a_reply_that_is_not_a_count_refuses_the_call() -> None:
+    caller = Caller(user_id=uuid4(), org_id=uuid4(), client_id="app")
+    assert not await within_limit(Garbled(), caller)
 
 
 # ------------------------------------------------------------------ the mounted server

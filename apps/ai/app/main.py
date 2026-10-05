@@ -9,10 +9,10 @@ which MCP clients reach through the gateway and which checks OAuth tokens itself
 Long work (indexing documents) runs in app/worker.py from the `ai-ingest` queue.
 """
 
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, cast
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Request, Response
@@ -177,10 +177,9 @@ async def dependencies() -> HealthResponse:
     """Postgres and Redis answer: for dashboards and start-up scripts."""
     async with engine().connect() as connection:
         await connection.execute(text("SELECT 1"))
-    # redis-py shares its command signatures between the sync and async clients, so ping
-    # is typed as "a bool or an awaitable of one"; on the async client it's the latter.
-    ping = services().redis.ping()  # pyright: ignore[reportUnknownMemberType]  # see above
-    await cast(Awaitable[bool], ping)
+    # Any reply will do, and an outage raises. ECHO rather than PING: redis-py types ping
+    # as "a bool or an awaitable of one", which can't be awaited without a cast.
+    await services().redis.echo("ready")  # pyright: ignore[reportUnknownMemberType]  # untyped options
     return HealthResponse(status="ok")
 
 

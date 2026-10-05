@@ -2,8 +2,10 @@
 what a newer TypeScript side may add during a rolling deploy."""
 
 import importlib
-from typing import TypeAliasType, cast, get_args
+from typing import TypeAliasType
 from uuid import uuid4
+
+from pydantic import BaseModel, Field, TypeAdapter
 
 from app.contracts.ai_ingest_ingest_job import AiIngestIngestJob
 from app.contracts.ai_ingest_job_name import AiIngestJobName
@@ -11,11 +13,17 @@ from app.contracts.shared_queue_name import SharedQueueName
 from app.queues import INGEST, SETTINGS, job_options
 
 
+class _Choices(BaseModel):
+    """A Literal's values, as its JSON Schema lists them (`const` when there's one)."""
+
+    const: str | None = None
+    enum: list[str] = Field(default_factory=list[str])
+
+
 def literal_values(alias: TypeAliasType) -> set[str]:
     """The values of a generated `type X = Annotated[Literal[...], ...]`."""
-    # typing's introspection is typed as Any all the way down.
-    literal = cast(object, get_args(cast(object, alias.__value__))[0])
-    return set(cast(tuple[str, ...], get_args(literal)))
+    choices = _Choices.model_validate(TypeAdapter(alias).json_schema())
+    return {*choices.enum, *([choices.const] if choices.const else [])}
 
 
 def test_every_queue_python_uses_is_exported_with_its_settings_and_jobs() -> None:

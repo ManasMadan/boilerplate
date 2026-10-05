@@ -222,10 +222,10 @@ file below 100%, or one no test loads.
   test that covers its behaviour another way. The same goes for skipped tests (`.skip`,
   `.skipIf`, `.runIf`, `.todo`, `.fixme`, `.fail`, `ctx.skip()`, pytest's `skip` and
   `xfail`), coverage pragmas, type-coverage ignores, and suppressions: `biome-ignore`,
-  `@ts-expect-error`, `# pyright: ignore`, `# noqa`, `-- squawk-ignore` in a migration,
-  `# shellcheck disable`, `# hadolint ignore`, `# zizmor: ignore`, `# tflint-ignore`,
-  and a rule turned off (or down to a warning) in `biome.jsonc` or another linter's
-  configuration. `bun scripts/suppressions.ts`, part of `bun run lint`, fails on any that
+  `@ts-expect-error`, `# pyright: ignore`, `# noqa`, Python's `typing.cast()` (it checks
+  nothing), `-- squawk-ignore` in a migration, `# shellcheck disable`,
+  `# hadolint ignore`, `# zizmor: ignore`, `# tflint-ignore`, and a rule turned off (or
+  down to a warning) in `biome.jsonc` or another linter's configuration. `bun scripts/suppressions.ts`, part of `bun run lint`, fails on any that
   no row allows, and a Claude Code hook refuses a new one as it's written. A row allows
   one kind in one file: a skipped test needs its file under Skipped tests, a coverage
   pragma under Coverage exceptions, a type-coverage ignore under Type-coverage
@@ -275,6 +275,7 @@ file below 100%, or one no test loads.
 | `apps/ai/app/worker.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/app/realtime.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/app/settings.py` | `# pyright: ignore[reportCallIssue]` | pydantic-settings fills the fields from the environment |
+| `apps/ai/app/log.py` | `typing.cast()` | structlog's `get_logger()` is typed `Any` and hands back a lazy proxy that takes its class from `configure_logging`, which runs later; there is nothing to check at import, and checking the proxy would bind it before it's configured |
 | `apps/ai/app/telemetry.py` | `# pyright: ignore[reportUnknownMemberType]` | the Redis instrumentor's `instrument()` is untyped |
 | `apps/ai/evals/__main__.py` | `# pyright: ignore[reportAssignmentType]` | pydantic-evals' report type is wider than what it returns |
 | `apps/ai/tests/conftest.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |

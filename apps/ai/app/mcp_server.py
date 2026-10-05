@@ -15,7 +15,7 @@ packages/contracts/src/mcp.ts (and the api's resource policy in auth.ts), regist
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Protocol
 from uuid import UUID, uuid4
 
 import httpx
@@ -180,18 +180,28 @@ def current_caller() -> Caller:
     if token is None or token.subject is None or token.claims is None:
         raise PermissionError("no authenticated MCP caller")
     # The claims are the ones verify_token set: {ORG_CLAIM: <the workspace id>}.
-    org_id = cast(str, token.claims[ORG_CLAIM])
+    org_id: object = token.claims.get(ORG_CLAIM)
+    if not isinstance(org_id, str):
+        raise PermissionError("the MCP caller's token names no workspace")
     return Caller(user_id=UUID(token.subject), org_id=UUID(org_id), client_id=token.client_id)
 
 
-async def within_limit(redis: Redis, caller: Caller) -> bool:
-    """A fixed one-minute window per app and user."""
+class Counters(Protocol):
+    """What the rate limit needs of Redis. redis-py types the async client's replies as
+    Any; this says only that each is awaited, and within_limit checks what it gets."""
+
+    def incr(self, name: str) -> Awaitable[object]: ...
+
+    def expire(self, name: str, time: int) -> Awaitable[object]: ...
+
+
+async def within_limit(redis: Counters, caller: Caller) -> bool:
+    """A fixed one-minute window per app and user. A reply that isn't a count refuses."""
     key = f"{{rl:ai-mcp}}:{caller.client_id}:{caller.user_id}:{int(time.time() // 60)}"
-    # redis-py types the async client's commands as "a value or an awaitable of one".
-    calls = cast(int, await redis.incr(key))
+    calls = await redis.incr(key)
     if calls == 1:
         await redis.expire(key, 60)
-    return calls <= CALLS_PER_MINUTE
+    return isinstance(calls, int) and calls <= CALLS_PER_MINUTE
 
 
 def create_mcp_server(

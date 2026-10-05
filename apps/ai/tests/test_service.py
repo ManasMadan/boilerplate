@@ -5,18 +5,17 @@ Uses the database in AI_DATABASE_URL (migrated), with fresh organizations per te
 and its own Redis database; fixtures are written as the migrator.
 """
 
-import json
 import os
 import subprocess
 import sys
 import time
-from typing import cast
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.assistant import AssistantEvent, DoneEvent, SourcesEvent, TextEvent
+from app.contracts.ai_ingest_ingest_job import AiIngestIngestJob
 from app.heartbeat import alive
 from app.settings import get_settings
 from tests.fakes import otlp_collector, serve
@@ -112,10 +111,8 @@ def test_adding_a_document_queues_it_and_indexing_makes_it_searchable(client: Te
 
     # Queued once, under the shared queue's prefix, with the document id as the job id.
     job = stored_job(f"{{ai-ingest}}:ai-ingest:{document.id}")
-    assert cast(object, json.loads(job[b"data"])["payload"]) == {
-        "documentId": str(document.id),
-        "orgId": str(org),
-    }
+    payload = AiIngestIngestJob.model_validate_json(job[b"data"]).payload
+    assert (payload.documentId, payload.orgId) == (document.id, org)
 
     index_all(client, org)
     [listed] = documents_of(client.get("/v1/documents", headers=headers(org, user)))
