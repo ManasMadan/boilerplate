@@ -38,6 +38,14 @@ a real cluster or cloud account. The checks below are offline.
   `# renovate: datasource=<docker|helm|github-releases|npm> depName=<name>` (see
   `infra/tofu/modules/bootstrap/variables.tf` and `.github/workflows/ci.yml`). A new
   file pattern needs a custom manager in `renovate.json5`.
+- `bun scripts/misconfig.ts` (Trivy's `config` scan with `trivy.yaml`, as the Security
+  workflow and the pre-commit hook run it) fails on any finding in the Dockerfiles,
+  manifests, platform charts and OpenTofu: containers run as a UID and GID above 10000
+  with CPU and memory limits, a chart's resources name `{{ .Release.Namespace }}`,
+  images come from a registry in `deploy/trivy/registries.yaml`, and a long-running image
+  has a HEALTHCHECK. A finding that doesn't apply goes under `misconfigurations` in
+  `.trivyignore.yaml`, with its reason, for that one file. Trivy skips the stack and data
+  charts (they need values it doesn't pass); `charts:check` validates those.
 - Secrets never go in values files or tfvars. They're SOPS-encrypted Secrets in
   `deploy/environments/<env>/secrets/` and `deploy/platform/secrets/<env>/`, or generated
   in the cluster by the data chart; never decrypt one (rotate-secrets skill).

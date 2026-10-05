@@ -429,7 +429,8 @@ for those areas.
 Elsewhere: `kind.yml` deploys the stack to a kind cluster, waits for KEDA to read the
 worker's queues from Valkey, and smoke-tests the routes (`bun run k8s:up`) when the images, charts or migrations change; `security.yml` runs
 CodeQL, a secret scan of the history, dependency review, OSV and a Trivy scan of the
-infrastructure configuration.
+infrastructure configuration (`trivy.yaml`: any finding fails unless `.trivyignore.yaml`
+records why it doesn't apply; `bun scripts/misconfig.ts` runs the same scan locally).
 
 ## Nightly and weekly
 

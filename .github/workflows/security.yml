@@ -1,7 +1,8 @@
 # Security checks: on every change, and weekly, because new vulnerabilities are
 # published for code that hasn't changed. Findings go to the repository's Security tab
 # (code scanning); the ones that block a merge are secrets, new vulnerable or
-# disallowed-license dependencies, and CodeQL alerts (through branch protection).
+# disallowed-license dependencies, known vulnerabilities in the lockfiles, infrastructure
+# misconfigurations, and CodeQL alerts (through branch protection).
 name: Security
 
 # The merge queue too: its required checks (the secrets scan, dependency review, OSV)
@@ -119,8 +120,11 @@ jobs:
           sarif_file: osv.sarif
           category: osv
 
-  # Misconfigurations in the infrastructure code (Dockerfiles, OpenTofu), reported to the
-  # Security tab for review rather than blocking: some are deliberate and documented.
+  # Misconfigurations in the infrastructure code (Dockerfiles, Kubernetes manifests, Helm
+  # charts, OpenTofu), with trivy.yaml's settings, which the pre-commit hook uses too
+  # (scripts/misconfig.ts). Any finding fails, unless .trivyignore.yaml records why it
+  # doesn't apply. The checks are the ones built into the pinned Trivy, so the weekly run
+  # finds what the pull request did.
   misconfig:
     name: Infrastructure misconfigurations
     runs-on: ubuntu-24.04
@@ -135,12 +139,14 @@ jobs:
         with:
           scan-type: config
           scan-ref: .
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
           version: v0.74.0
+          trivy-config: trivy.yaml
           format: sarif
           output: trivy-config.sarif
-          exit-code: "0"
-          skip-dirs: node_modules,apps/mobile
+      # The findings reach the Security tab whether the scan passed or not.
       - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        if: always()
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config

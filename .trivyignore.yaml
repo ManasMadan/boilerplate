@@ -1,7 +1,10 @@
-# Image vulnerabilities reviewed as not reaching the services, for the Trivy scan of every
-# built image (CI's Container images jobs). Each entry says why and expires: once it does,
-# the scan fails again, so an entry can't outlive its reason. The real fix is a rebuilt
-# base image (Renovate brings those in); an entry only covers the days until then.
+# Findings reviewed as not applying, for every Trivy scan here: the built images' (CI's
+# Container images jobs, `vulnerabilities`) and the infrastructure code's (trivy.yaml,
+# `misconfigurations`).
+#
+# A vulnerability entry says why and expires: once it does, the scan fails again, so an
+# entry can't outlive its reason. The real fix is a rebuilt base image (Renovate brings
+# those in); an entry only covers the days until then.
 vulnerabilities:
   # Debian fixed both in libssl3t64 3.5.7-1~deb13u3 before distroless rebuilt its images.
   # Node in distroless doesn't load the system libssl (it's built with its own OpenSSL,
@@ -16,3 +19,20 @@ vulnerabilities:
     purls: ["pkg:deb/debian/libssl3t64"]
     statement: Node in the distroless images uses its own OpenSSL; no DTLS here
     expired_at: 2026-10-14
+
+# A misconfiguration entry is a design decision rather than a wait for a fix, so it
+# doesn't expire; it names the one file it applies to, never a whole check.
+misconfigurations:
+  # DS-0026: a HEALTHCHECK, for images where plain Docker can't use one. The service
+  # images have theirs; Kubernetes ignores them all and runs the stack chart's probes.
+  - id: DS-0026
+    paths: ["deploy/docker/migrate.Dockerfile"]
+    statement: One-shot (migrates and exits); there's no running service to check
+  - id: DS-0026
+    paths: ["deploy/docker/ai.Dockerfile"]
+    statement: >-
+      The image runs as the HTTP service and as the queue worker (no port; a heartbeat
+      file), so no one check fits both; the stack chart probes each its own way
+  - id: DS-0026
+    paths: [".devcontainer/Dockerfile"]
+    statement: A development container; nothing in it runs until a developer starts it

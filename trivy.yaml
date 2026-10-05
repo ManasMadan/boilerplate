@@ -1,0 +1,18 @@
+# How `trivy config` checks the infrastructure code (Dockerfiles, Kubernetes manifests,
+# Helm charts, OpenTofu). The Security workflow's "Infrastructure misconfigurations" job
+# and the pre-commit hook (scripts/misconfig.ts) both read this file, so a change the
+# hook passes passes CI. Any finding fails, whatever its severity: fix it, or record why
+# it doesn't apply in .trivyignore.yaml.
+exit-code: 1
+ignorefile: .trivyignore.yaml
+scan:
+  skip-dirs: [node_modules, "**/node_modules", apps/mobile]
+  # No calls home: it asks GitHub for a newer release and sends usage counts otherwise.
+  skip-version-check: true
+  disable-telemetry: true
+rego:
+  # The checks built into this Trivy version, not the latest bundle from the registry:
+  # the same Trivy finds the same things locally and in CI, and a check published
+  # upstream reaches us with a reviewed Trivy upgrade.
+  skip-check-update: true
+  data: [deploy/trivy]
