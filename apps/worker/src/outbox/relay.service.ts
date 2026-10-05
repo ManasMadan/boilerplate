@@ -25,7 +25,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
-import { type EventEnvelope, eventEnvelope } from "@repo/contracts/events";
+import { eventEnvelope } from "@repo/contracts/events";
 import { Prisma } from "@repo/db";
 import {
   type Database,
@@ -205,7 +205,8 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
   }
 }
 
-function toEnvelope(row: OutboxRow, source: OutboxSource): EventEnvelope {
+/** The envelope a row would be, still to be checked against the contract (drainBatch). */
+function toEnvelope(row: OutboxRow, source: OutboxSource): z.input<typeof eventEnvelope> {
   return {
     id: row.id,
     name: row.name,

@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { fileIdSchema } from "@repo/contracts/ids";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { queuePrefix } from "@repo/jobs";
 import {
@@ -670,7 +671,7 @@ describe("uploads", { tags: ["files"] }, () => {
   /** An upload as the browser leaves it: a pending row and the bytes in quarantine. */
   async function upload(bytes: Buffer, declaredType = "image/png", declaredSize = bytes.length) {
     const userId = await newUser();
-    const fileId = randomUUID();
+    const fileId = fileIdSchema.parse(randomUUID());
     await asRole("postgres", (client) =>
       client.query(
         `INSERT INTO files.file (id, user_id, purpose, filename, declared_type, declared_size, updated_at)
@@ -845,7 +846,7 @@ describe("uploads", { tags: ["files"] }, () => {
   });
 
   it("forgets an upload whose row is gone, and refuses to check files when they're off", async () => {
-    await files.check(randomUUID());
+    await files.check(fileIdSchema.parse(randomUUID()));
     const { FilesProcessor } = await import("../src/files/files.processor");
     const redis = createRedis(process.env.REDIS_URL as string);
     const off = new FilesProcessor(
@@ -855,7 +856,7 @@ describe("uploads", { tags: ["files"] }, () => {
       redis,
       { info: () => undefined, warn: () => undefined } as unknown as PinoLogger,
     );
-    await expect(off.check(randomUUID())).rejects.toThrow(/files are off/);
+    await expect(off.check(fileIdSchema.parse(randomUUID()))).rejects.toThrow(/files are off/);
     await redis.quit();
   });
 

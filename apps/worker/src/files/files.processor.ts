@@ -23,6 +23,7 @@ import {
   uploadPurposeNames,
   uploadPurposes,
 } from "@repo/contracts/files";
+import { type FileId, userIdSchema } from "@repo/contracts/ids";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { parseJob, queuePrefix, type UncheckedJob } from "@repo/jobs";
 import {
@@ -73,7 +74,7 @@ export class FilesProcessor extends JobProcessor {
     await runJob(meta, `job:${job.id}`, () => this.check(payload.fileId));
   }
 
-  async check(fileId: string) {
+  async check(fileId: FileId) {
     if (!this.storage) throw new Error("files are off (no S3_BUCKET) but a file was queued");
     const db = this.database.write;
     const file = await db.file.findUnique({ where: { id: fileId } });
@@ -119,7 +120,8 @@ export class FilesProcessor extends JobProcessor {
       await this.storage.delete(quarantine);
       this.log.warn({ fileId, purpose: file.purpose, reason: error.reason }, "upload rejected");
     }
-    await publishRealtime(this.redis, realtimeChannel.user(file.userId), { type: "files.changed" });
+    const owner = userIdSchema.parse(file.userId);
+    await publishRealtime(this.redis, realtimeChannel.user(owner), { type: "files.changed" });
   }
 
   private async inspect(
