@@ -44,8 +44,10 @@ function movedPorts(
 
 /** A local URL with any port that moved pointed at its new one. */
 const repointed = (value: string, moved: Map<string, string>) =>
-  value.replace(/\b(localhost|127\.0\.0\.1):(\d+)\b/g, (match, host, port) =>
-    moved.has(port) ? `${host}:${moved.get(port)}` : match,
+  value.replace(
+    /\b(localhost|127\.0\.0\.1):(\d+)\b/g,
+    (match: string, host: string, port: string) =>
+      moved.has(port) ? `${host}:${moved.get(port)}` : match,
   );
 
 /**
