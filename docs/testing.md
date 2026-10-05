@@ -96,9 +96,11 @@ end-to-end step builds and starts the whole stack on its usual ports, so it fail
 `bun dev` runs. Each database step gets a database of its own, dropped afterwards.
 
 A push that changes only documentation or a script takes a minute or two. One that changes
-the app runs every suite of what it affects plus the end-to-end suite, which takes much
-longer, up to most of an hour on a laptop. When you need to push now, `git push --no-verify` skips the hook
-and leaves CI to decide.
+the app runs every suite of what it affects and the end-to-end suite: a push touching
+everything took 12 to 16 minutes on a 10-core laptop with turbo's cache warm (the coverage
+suites, the end-to-end run and the generators' check are most of it), and longer from a
+cold cache. When you need to push now, `git push --no-verify` skips the hook and leaves CI
+to decide.
 
 What only CI checks, with the reason, is the `CI_ONLY` list in `scripts/pre-push.ts`,
 printed after the summary: the container images and their smoke test (more than a 2 GB
