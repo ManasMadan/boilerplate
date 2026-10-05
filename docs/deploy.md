@@ -109,7 +109,11 @@ master reaches production only this way (deploy/README.md, "GitOps").
 
 The mobile app follows the same events on EAS (`mobile.yml`, see
 [web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)): updates once
-CI has passed on master, store builds once a release has.
+CI has passed on master, store builds once a release has. The store builds' run waits
+for EAS to build and submit both apps, so a failed build or submission fails it. Before
+any of that, CI's lint job runs `expo-doctor` and `expo install --check` (the mobile
+app's `lint`), so a native dependency that doesn't match the Expo SDK fails the pull
+request rather than the store build.
 
 ## Rollback
 

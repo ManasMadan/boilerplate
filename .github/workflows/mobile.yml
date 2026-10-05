@@ -48,7 +48,8 @@ jobs:
           && (github.event.workflow_run.name == 'Release'
             || github.event.workflow_run.head_branch == 'master')))
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Store builds wait for EAS to build and submit both apps, queue included.
+    timeout-minutes: ${{ github.event.workflow_run.name == 'Release' && 150 || 30 }}
     permissions: { contents: read }
     env:
       EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
@@ -84,9 +85,10 @@ jobs:
           eas-version: 24.8.0
           packager: bun
           token: ${{ secrets.EXPO_TOKEN }}
+      # Waits for both builds and their submissions, so a failed one fails this run.
       - name: Store builds, submitted for review
         if: env.STORE == 'true'
-        run: eas build --platform all --profile production --auto-submit --non-interactive --no-wait
+        run: eas build --platform all --profile production --auto-submit --non-interactive --wait
       - name: Over-the-air update
         if: env.STORE != 'true' && steps.changed.outputs.app != 'false'
         env:

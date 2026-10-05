@@ -138,6 +138,7 @@ screenshots are identical on every machine and in CI.
 | `test` | Jest (React Native Testing Library) |
 | `test:e2e` | Playwright against the web build |
 | `doctor` | expo-doctor |
+| `lint` | expo-doctor, then `expo install --check` (every native dependency at the version the Expo SDK expects); part of `bun run lint`, so CI's lint job runs it |
 
 ### EAS builds and over-the-air updates
 

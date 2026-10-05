@@ -726,6 +726,31 @@ describe("ci.yml's images job", () => {
   });
 });
 
+describe("the mobile app's release", () => {
+  const { jobs } = workflow("mobile.yml");
+  const eas = jobs.eas as Job;
+
+  it("checks the native dependencies against the Expo SDK in lint, which CI's lint job runs", async () => {
+    const mobile = JSON.parse(readFileSync(join(ROOT, "apps/mobile/package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(mobile.scripts.lint).toBe("expo-doctor && expo install --check");
+    const { STEPS } = await import("./lint");
+    expect(STEPS).toContainEqual(["bunx", "turbo", "run", "lint"]);
+    expect(workflow("ci.yml").jobs.lint?.steps?.map((s) => s.run)).toContain("bun run lint");
+  });
+
+  it("waits for the store builds and their submissions, so a failed one fails the run", () => {
+    const store = eas.steps?.find((s) => s.name === "Store builds, submitted for review");
+    expect(store?.run).toContain("eas build ");
+    expect(store?.run).toContain(" --wait");
+    expect(store?.run).not.toContain("--no-wait");
+    expect(String(eas["timeout-minutes"])).toBe(
+      `\${{ github.event.workflow_run.name == 'Release' && 150 || 30 }}`,
+    );
+  });
+});
+
 describe("stripe.yml", () => {
   const { on, jobs } = workflow("stripe.yml");
   const steps = jobs.contract?.steps ?? [];

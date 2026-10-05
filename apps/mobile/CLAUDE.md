@@ -10,7 +10,8 @@ Expo (expo-router, React Native, Uniwind). Uses the same `@repo/client` hooks an
 - Types: `bun run --filter @repo/mobile check-types`
 - E2E on the react-native-web build: `bun run test:e2e --app mobile`
 - Native flows (dev build on a simulator): `maestro test apps/mobile/maestro`
-- Dependency health after an Expo upgrade: `bun run --filter @repo/mobile doctor`
+- Dependency health (expo-doctor and `expo install --check`, part of `bun run lint`):
+  `bun run --filter @repo/mobile lint`
 
 ## Where things are
 
