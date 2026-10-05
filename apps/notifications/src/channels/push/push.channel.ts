@@ -3,6 +3,7 @@
  * (uninstalled apps, expired browser subscriptions) are deleted when a provider says so.
  */
 import { Inject, Injectable } from "@nestjs/common";
+import type { UserId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { withUser } from "@repo/db";
 import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
@@ -29,7 +30,7 @@ export class PushChannel {
   ) {}
 
   /** The user's devices this service can reach (platforms that are configured). */
-  async devices(userId: string): Promise<PushDevice[]> {
+  async devices(userId: UserId): Promise<PushDevice[]> {
     const rows = await withUser(this.database.read, userId).notificationDevice.findMany({
       where: { userId },
       select: { id: true, platform: true, token: true },
@@ -37,7 +38,7 @@ export class PushChannel {
     return rows.filter((row): row is PushDevice => row.platform in this.transports);
   }
 
-  async send(userId: string, device: PushDevice, message: PushMessage): Promise<PushResult> {
+  async send(userId: UserId, device: PushDevice, message: PushMessage): Promise<PushResult> {
     // devices() only returns devices on platforms that have a transport.
     const transport = required(this.transports[device.platform], `a ${device.platform} transport`);
     const result = await transport.send(device.token, message);

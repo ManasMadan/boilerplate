@@ -18,6 +18,7 @@
 
 import { createHash } from "node:crypto";
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
+import type { UserId } from "@repo/contracts/ids";
 import { type NotificationChannel, notificationCategories } from "@repo/contracts/notifications";
 import { required } from "@repo/contracts/objects";
 import { withUser } from "@repo/db";
@@ -270,7 +271,7 @@ export class Dispatcher implements OnApplicationShutdown {
 
   /** One device's push, recorded under `deviceKey`; the failure to retry, if any. */
   private async pushTo(
-    userId: string,
+    userId: UserId,
     device: Parameters<typeof this.push.send>[1],
     message: Parameters<typeof this.push.send>[2],
     deviceKey: string,
@@ -303,7 +304,7 @@ export class Dispatcher implements OnApplicationShutdown {
   private async defer(
     payload: NotificationPayload,
     channel: "push",
-    userId: string,
+    userId: UserId,
     key: string,
     delay: number,
   ) {
@@ -323,7 +324,7 @@ export class Dispatcher implements OnApplicationShutdown {
     payload: NotificationPayload,
     // Push is the only channel that waits (for quiet hours) today.
     _channel: "push",
-    userId: string,
+    userId: UserId,
     key: string,
   ) {
     const [recipient] = await this.recipients.resolve({ userId });
@@ -345,18 +346,18 @@ export class Dispatcher implements OnApplicationShutdown {
       throw new AggregateError(failures, "deferred delivery failed; retrying");
   }
 
-  private unsubscribeToken(userId: string, category: string) {
+  private unsubscribeToken(userId: UserId, category: string) {
     return this.tokens.sign("unsubscribe", [userId, category]);
   }
 
-  private unsubscribeUrl(userId: string, category: string) {
+  private unsubscribeUrl(userId: UserId, category: string) {
     const url = new URL("/unsubscribe", env.WEB_URL);
     url.searchParams.set("token", this.unsubscribeToken(userId, category));
     return url.toString();
   }
 
   /** RFC 8058 one-click unsubscribe: mail clients POST to the URL, no page, no sign-in. */
-  private listUnsubscribeHeaders(userId: string, category: string) {
+  private listUnsubscribeHeaders(userId: UserId, category: string) {
     const url = new URL("/api/v1/notifications/unsubscribe", env.WEB_URL);
     url.searchParams.set("token", this.unsubscribeToken(userId, category));
     return {
@@ -376,7 +377,7 @@ interface Delivery {
 }
 
 interface PushDelivery extends Delivery {
-  userId: string;
+  userId: UserId;
   /** Already waited out the user's quiet hours: send now. */
   deferred: boolean;
 }

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { type UserId, userIdSchema } from "@repo/contracts/ids";
 import { type Locale, localeOrDefault, timeZoneOrUtc } from "@repo/i18n";
 import type { NotificationPayload } from "@repo/jobs";
 import { type Database, InjectDatabase, rows } from "@repo/nest-common";
@@ -6,7 +7,7 @@ import * as z from "zod";
 
 export interface Recipient {
   /** Null for an address without an account (an invitee, a number being verified). */
-  userId: string | null;
+  userId: UserId | null;
   /** Null for a phone number being verified: text only. */
   email: string | null;
   /** A verified number to text, when the job names one. */
@@ -17,7 +18,7 @@ export interface Recipient {
 }
 
 const userRow = z.object({
-  id: z.uuid(),
+  id: userIdSchema,
   email: z.string(),
   name: z.string(),
   locale: z.string().nullable(),
@@ -66,7 +67,7 @@ export class RecipientResolver {
         where: { id: to.userId },
         select: { id: true, email: true, name: true, locale: true, timezone: true },
       });
-      return user ? [toRecipient(user)] : [];
+      return user ? [toRecipient({ ...user, id: to.userId })] : [];
     }
     // Only these member columns are granted to this service (see the migration).
     const users = await rows(

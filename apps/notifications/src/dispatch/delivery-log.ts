@@ -8,6 +8,7 @@
  * after the provider accepted a message but before `finish`: that message may go twice.
  */
 import { Injectable } from "@nestjs/common";
+import type { UserId } from "@repo/contracts/ids";
 import { type Database, InjectDatabase, rows } from "@repo/nest-common";
 import * as z from "zod";
 
@@ -25,7 +26,7 @@ export class DeliveryLog {
     key: string,
     channel: string,
     template: string,
-    userId: string | null,
+    userId: UserId | null,
   ): Promise<boolean> {
     const claimed = await rows(
       z.object({ id: z.uuid() }),

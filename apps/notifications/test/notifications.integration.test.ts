@@ -8,6 +8,15 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import {
+  apiKeyIdSchema,
+  type OrgId,
+  orgIdSchema,
+  todoIdSchema,
+  type UserId,
+  userIdSchema,
+  webhookEndpointIdSchema,
+} from "@repo/contracts/ids";
 import { createDb } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer, type Producer, parseJob, queuePrefix } from "@repo/jobs";
@@ -119,7 +128,9 @@ describe("notifications service", () => {
     const email = `user-${randomUUID()}@test.dev`;
     // Users are created by the api service, which owns the auth schema.
     const api = createDb({ url: testDb.urlFor("app_api"), poolMax: 1, service: "test" });
-    const user = await api.user.create({ data: { name: "Lucía", email, locale: "es" } });
+    const user = await api.user
+      .create({ data: { name: "Lucía", email, locale: "es" } })
+      .then((row) => ({ ...row, id: userIdSchema.parse(row.id) }));
     await api.$disconnect();
 
     await bulk.add(
@@ -127,7 +138,7 @@ describe("notifications service", () => {
       {
         template: "todo.reminder",
         to: { userId: user.id },
-        data: { todoId: randomUUID(), title: "Llamar al banco" },
+        data: { todoId: todoIdSchema.parse(randomUUID()), title: "Llamar al banco" },
       },
       { jobId: randomUUID() },
     );
@@ -179,7 +190,7 @@ describe("notifications service", () => {
     const api = createDb({ url: testDb.urlFor("app_api"), poolMax: 1, service: "test" });
     const user = await api.user.create({ data: { name, email, locale: "en" } });
     await api.$disconnect();
-    return user;
+    return { ...user, id: userIdSchema.parse(user.id) };
   }
 
   async function sql<T = Record<string, unknown>>(query: string, params: unknown[] = []) {
@@ -192,13 +203,13 @@ describe("notifications service", () => {
     }
   }
 
-  async function reminder(userId: string, jobId = randomUUID()) {
+  async function reminder(userId: UserId, jobId = randomUUID()) {
     await bulk.add(
       "send",
       {
         template: "todo.reminder",
         to: { userId },
-        data: { todoId: randomUUID(), title: "Water the plants" },
+        data: { todoId: todoIdSchema.parse(randomUUID()), title: "Water the plants" },
       },
       { jobId },
     );
@@ -249,7 +260,7 @@ describe("notifications service", () => {
     const payload = {
       template: "todo.reminder" as const,
       to: { userId: user.id },
-      data: { todoId: randomUUID(), title: "Only once" },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title: "Only once" },
     };
     const key = randomUUID();
     // As when a job is retried or an event is redelivered.
@@ -369,7 +380,7 @@ describe("notifications service", () => {
     const owner = await newUser("Owner");
     const admin = await newUser("Admin");
     const member = await newUser("Member");
-    const orgId = randomUUID();
+    const orgId = orgIdSchema.parse(randomUUID());
     await sql("INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)", [
       orgId,
     ]);
@@ -388,7 +399,7 @@ describe("notifications service", () => {
       "events-notifications",
       createRedis(process.env.REDIS_URL as string),
     );
-    const endpointId = randomUUID();
+    const endpointId = webhookEndpointIdSchema.parse(randomUUID());
     const eventId = randomUUID();
     await events.add(
       "event",
@@ -423,7 +434,7 @@ describe("notifications service", () => {
       await newUser("Admin"),
       await newUser("Member"),
     ];
-    const orgId = randomUUID();
+    const orgId = orgIdSchema.parse(randomUUID());
     await sql("INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)", [
       orgId,
     ]);
@@ -445,11 +456,14 @@ describe("notifications service", () => {
     const created = [
       {
         name: "org.api_key_created.v1",
-        payload: { apiKeyId: randomUUID(), name: "CI", scopes: [] },
+        payload: { apiKeyId: apiKeyIdSchema.parse(randomUUID()), name: "CI", scopes: [] },
       },
       {
         name: "webhook.endpoint_created.v1",
-        payload: { endpointId: randomUUID(), url: "https://example.com/in" },
+        payload: {
+          endpointId: webhookEndpointIdSchema.parse(randomUUID()),
+          url: "https://example.com/in",
+        },
       },
     ];
     const ids: string[] = [];
@@ -646,7 +660,7 @@ describe("notifications service", () => {
         {
           template: "todo.reminder",
           to: { userId: user.id },
-          data: { todoId: randomUUID(), title: "Still" },
+          data: { todoId: todoIdSchema.parse(randomUUID()), title: "Still" },
         },
         key,
       ),
@@ -668,7 +682,7 @@ describe("notifications service", () => {
     const payload = {
       template: "todo.reminder" as const,
       to: { userId: user.id },
-      data: { todoId: randomUUID(), title: "Try again" },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title: "Try again" },
     };
     const key = randomUUID();
 
@@ -913,7 +927,7 @@ describe("notifications service", () => {
             {
               template: "todo.reminder",
               to: { userId: user.id },
-              data: { todoId: randomUUID(), title },
+              data: { todoId: todoIdSchema.parse(randomUUID()), title },
             },
             { jobId: randomUUID() },
           )
@@ -1019,7 +1033,7 @@ describe("notifications service", () => {
     const admin = await newUser("Admin");
     const member = await newUser("Member");
     await sql(`UPDATE auth."user" SET locale = 'es' WHERE id = $1`, [admin.id]);
-    const orgId = randomUUID();
+    const orgId = orgIdSchema.parse(randomUUID());
     await sql(
       "INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Acme', $1::text)",
       [orgId],
@@ -1083,7 +1097,7 @@ describe("notifications service", () => {
 
   /** An organization with these members, created the way apps/api does. */
   async function workspace(members: [{ id: string }, string][]) {
-    const orgId = randomUUID();
+    const orgId = orgIdSchema.parse(randomUUID());
     await sql("INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)", [
       orgId,
     ]);
@@ -1117,8 +1131,8 @@ describe("notifications service", () => {
     await (await dispatcher()).dispatch(
       {
         template: "todo.reminder",
-        to: { userId: randomUUID() },
-        data: { todoId: randomUUID(), title: "Nobody" },
+        to: { userId: userIdSchema.parse(randomUUID()) },
+        data: { todoId: todoIdSchema.parse(randomUUID()), title: "Nobody" },
       },
       key,
     );
@@ -1177,7 +1191,7 @@ describe("notifications service", () => {
         `${key}:push:%`,
       ]);
     };
-    const endpointId = randomUUID();
+    const endpointId = webhookEndpointIdSchema.parse(randomUUID());
     await expect(
       (await dispatcher()).dispatch(
         {
@@ -1200,12 +1214,12 @@ describe("notifications service", () => {
   });
 
   it("drops a deferred push for a user deleted meanwhile, and retries one that fails", async () => {
-    const payload = (userId: string) => ({
+    const payload = (userId: UserId) => ({
       template: "todo.reminder" as const,
       to: { userId },
-      data: { todoId: randomUUID(), title: "Later" },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title: "Later" },
     });
-    const gone = randomUUID();
+    const gone = userIdSchema.parse(randomUUID());
     await (await dispatcher()).deliverDeferred(payload(gone), "push", gone, randomUUID());
 
     const user = await newUser();
@@ -1276,7 +1290,7 @@ describe("notifications service", () => {
       "events-notifications",
       createRedis(process.env.REDIS_URL as string),
     );
-    const event = (name: string, payload: unknown, orgId: string | null) => ({
+    const event = (name: string, payload: unknown, orgId: OrgId | null) => ({
       id: randomUUID(),
       name,
       key: randomUUID(),
@@ -1289,14 +1303,26 @@ describe("notifications service", () => {
     });
     const quiet = [
       // Not an event this service maps to anything.
-      event("todo.created.v1", { todoId: randomUUID(), title: "t" }, randomUUID()),
+      event(
+        "todo.created.v1",
+        { todoId: todoIdSchema.parse(randomUUID()), title: "t" },
+        orgIdSchema.parse(randomUUID()),
+      ),
       // Workspace events without a workspace have nobody to tell.
       event(
         "webhook.endpoint_disabled.v1",
-        { endpointId: randomUUID(), url: "https://example.com", reason: "failing" },
+        {
+          endpointId: webhookEndpointIdSchema.parse(randomUUID()),
+          url: "https://example.com",
+          reason: "failing",
+        },
         null,
       ),
-      event("org.api_key_created.v1", { apiKeyId: randomUUID(), name: "CI", scopes: [] }, null),
+      event(
+        "org.api_key_created.v1",
+        { apiKeyId: apiKeyIdSchema.parse(randomUUID()), name: "CI", scopes: [] },
+        null,
+      ),
     ];
     for (const item of quiet) await events.add("event", item, { jobId: item.id });
     for (const item of quiet) expect(await finished(events.queue, item.id)).toBe("completed");
@@ -1313,7 +1339,7 @@ describe("notifications service", () => {
   it("skips a digest with nothing in it, or for a user who's gone", async () => {
     const user = await digestUser("UTC");
     const date = new Date().toISOString().slice(0, 10);
-    const gone = randomUUID();
+    const gone = userIdSchema.parse(randomUUID());
     for (const userId of [user.id, gone]) await (await digests()).send(userId, date);
     expect(
       await sql(

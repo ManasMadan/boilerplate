@@ -15,6 +15,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
+import { type UserId, userIdSchema } from "@repo/contracts/ids";
 import { withUser } from "@repo/db";
 import { DigestEmail, digestSubject, renderEmail } from "@repo/email";
 import { loosely } from "@repo/i18n";
@@ -86,7 +87,7 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
     });
     const due = users.flatMap((user) => {
       const { hour, date } = wallClock(user.timezone, now);
-      return hour >= env.DIGEST_HOUR ? [{ userId: user.id, date }] : [];
+      return hour >= env.DIGEST_HOUR ? [{ userId: userIdSchema.parse(user.id), date }] : [];
     });
     // Nothing due is an empty bulk add, which writes nothing.
     await this.producer.addBulk(
@@ -101,7 +102,7 @@ export class DigestService implements OnApplicationBootstrap, OnApplicationShutd
   }
 
   /** Sends one user's digest for `date` (their local date), at most once. */
-  async send(userId: string, date: string) {
+  async send(userId: UserId, date: string) {
     const key = `digest:${userId}:${date}`;
     if (!(await this.log.claim(key, "email", "digest", userId))) return;
     const [recipient] = await this.recipients.resolve({ userId });

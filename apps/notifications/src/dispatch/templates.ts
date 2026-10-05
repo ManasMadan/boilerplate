@@ -13,6 +13,7 @@
  * entry below. The `satisfies` clause makes a missing template a compile error.
  */
 import { Injectable } from "@nestjs/common";
+import type { OrgId } from "@repo/contracts/ids";
 import { formatMoney } from "@repo/contracts/money";
 import type { InAppNotificationType, NotificationCategory } from "@repo/contracts/notifications";
 import {
@@ -53,7 +54,7 @@ export interface InAppMessage {
   data: Record<string, string>;
   /** A path on the web app. */
   link: string;
-  orgId?: string;
+  orgId?: OrgId;
 }
 
 interface TemplateDefinition<T extends NotificationTemplate> {

@@ -4,6 +4,7 @@
  * or unsubscribed). Transactional categories ignore preferences.
  */
 import { Injectable } from "@nestjs/common";
+import type { UserId } from "@repo/contracts/ids";
 import {
   type NotificationCategory,
   type NotificationChannel,
@@ -24,7 +25,7 @@ export type SuppressionReason = "bounce" | "complaint" | "unsubscribe" | "invali
 export class DeliveryPolicy {
   constructor(@InjectDatabase() private readonly database: Database) {}
 
-  async forUser(userId: string): Promise<UserPolicy> {
+  async forUser(userId: UserId): Promise<UserPolicy> {
     const scoped = withUser(this.database.read, userId);
     const [preferences, settings] = await Promise.all([
       scoped.notificationPreference.findMany({
