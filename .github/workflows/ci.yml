@@ -396,12 +396,10 @@ jobs:
             echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
             echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
             echo "AI_SERVICE_SECRET=$(openssl rand -base64 32)"
-            # Browser push (VAPID key pair) and its contact. The JavaScript is in single
-            # quotes on purpose: its ${…} are template literals, not shell expansions.
-            # shellcheck disable=SC2016
+            # Browser push (VAPID key pair) and its contact.
             node -e 'const e = require("node:crypto").createECDH("prime256v1"); e.generateKeys();
-              console.log(`VAPID_PUBLIC_KEY=${e.getPublicKey("base64url")}`);
-              console.log(`VAPID_PRIVATE_KEY=${Buffer.from(e.getPrivateKey("hex").padStart(64, "0"), "hex").toString("base64url")}`);'
+              console.log("VAPID_PUBLIC_KEY=" + e.getPublicKey("base64url"));
+              console.log("VAPID_PRIVATE_KEY=" + Buffer.from(e.getPrivateKey("hex").padStart(64, "0"), "hex").toString("base64url"));'
             echo "VAPID_SUBJECT=mailto:ci@example.com"
           } >> "$GITHUB_ENV"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

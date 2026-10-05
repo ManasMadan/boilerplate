@@ -2,6 +2,7 @@
  * Which fast checks a set of changed files needs (the Stop hook runs them, verify-turn.ts).
  * Pure, so it's tested without git or a turn (checks.test.ts).
  */
+import { CODE } from "../../scripts/suppressions";
 
 export interface Check {
   label: string;
@@ -61,8 +62,9 @@ export function checksFor(changed: string[]): Check[] {
       command: ["bun", "scripts/unit-coverage.ts"],
     });
   }
-  // The edit hook sees only Edit and Write; this catches a suppression a shell command wrote.
-  if (changed.some((file) => /\.(ts|tsx|js|mjs|cjs|py)$/.test(file))) {
+  // The edit hook sees only Edit and Write; this catches a suppression a shell command
+  // wrote, and one a change to docs/testing.md no longer allows.
+  if (changed.some((file) => CODE.test(file) || file === "docs/testing.md")) {
     checks.push({ label: "suppressions", command: ["bun", "scripts/suppressions.ts"] });
   }
   // Unused files, exports and dependencies: whenever code or a manifest changed.

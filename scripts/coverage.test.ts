@@ -152,6 +152,17 @@ describe("the check", () => {
     expect(merged).not.toContain("full.test.ts");
   });
 
+  it("holds a file another exceptions table lists to 100% all the same", async () => {
+    const root = await repo({
+      "scripts/suppressed.ts": "",
+      "docs/testing.md": "## Suppressions\n| `scripts/suppressed.ts` | a lint rule | why |\n",
+      "coverage/bun/lcov.info": report("scripts/suppressed.ts", ["DA:1,0"]),
+    });
+    const { code, printed } = run(["scripts"], root);
+    expect(code).toBe(1);
+    expect(printed).toContain("scripts/suppressed.ts: lines 1");
+  });
+
   it("judges a package's file by vitest's view of it, not by what bun saw of it", async () => {
     // Bun counts a function's first line as a line of code and v8 doesn't: a package file
     // a script imports would miss that line in the merge, though its own suite ran it.

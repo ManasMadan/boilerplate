@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { runMain } from "./lib";
-import { listedFiles } from "./suppressions";
+import { coverageExceptions } from "./suppressions";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -198,7 +198,7 @@ export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): numb
   const tracked = Bun.spawnSync(["git", "ls-files"], { cwd: root }).stdout.toString().split("\n");
   const unloaded = tracked.filter((path) => isSource(path) && inScope(path) && !measured.has(path));
 
-  const exceptions = listedFiles(root);
+  const exceptions = coverageExceptions(root);
   for (const path of unloaded.filter((path) => !exceptions.has(path))) {
     console.error(`  \x1b[31m✖\x1b[0m ${path}: no test loads it`);
   }

@@ -39,8 +39,19 @@ describe("the Stop hook's checks", () => {
     ]);
   });
 
+  it("check suppressions wherever one can be written, and when the list allowing them changes", () => {
+    for (const file of [
+      ".github/workflows/ci.yml",
+      "biome.jsonc",
+      ".husky/pre-commit",
+      "docs/testing.md",
+    ]) {
+      expect(labels([file])).toContain("suppressions");
+    }
+  });
+
   it("run nothing for a change no check covers", () => {
-    expect(labels(["docs/testing.md"])).toEqual([]);
+    expect(labels(["docs/deploy.md"])).toEqual([]);
   });
 
   it("know which changes every package depends on", () => {

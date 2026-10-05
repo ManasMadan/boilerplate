@@ -45,6 +45,32 @@ describe("the suppressions hook", () => {
     expect(suppressions(same)).toBeUndefined();
   });
 
+  it("allows a kind docs/testing.md lists for that file, and no other", () => {
+    // Listed for a biome-ignore, so a new one passes and a new type suppression doesn't.
+    const listed = "apps/web/src/lib/cookies.ts";
+    const ignore = `// biome-${"ignore"} lint/x: y\na`;
+    expect(suppressions(edit(listed, { old_string: "a", new_string: ignore }))).toBeUndefined();
+    expect(
+      suppressions(edit(listed, { old_string: "a", new_string: `// ${IGNORE}\na` })),
+    ).toMatchObject({ decision: "block" });
+  });
+
+  it("reads a workflow and Biome's configuration too", () => {
+    const disable = `# shellcheck ${"disable"}=SC2086\n`;
+    expect(
+      suppressions(edit(".github/workflows/ci.yml", { old_string: "", new_string: disable })),
+    ).toMatchObject({ decision: "block" });
+    const off = '"noExplicitAny": "off"';
+    expect(
+      suppressions(
+        edit("biome.jsonc", { old_string: '"noExplicitAny": "error"', new_string: off }),
+      ),
+    ).toEqual({
+      decision: "block",
+      reason: expect.stringContaining("biome.jsonc now has noExplicitAny off in biome.jsonc"),
+    });
+  });
+
   it("leaves prose, the files that define the patterns, and calls without a file alone", () => {
     expect(suppressions(edit("docs/x.md", { new_string: IGNORE }))).toBeUndefined();
     expect(suppressions(edit("scripts/suppressions.ts", { new_string: IGNORE }))).toBeUndefined();

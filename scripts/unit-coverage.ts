@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type FileCoverage, isSource, mergeLcov } from "./coverage";
 import { fail, ok, ROOT, runMain } from "./lib";
-import { listedFiles } from "./suppressions";
+import { coverageExceptions } from "./suppressions";
 
 /** The line numbers a `@@ -a,b +c,d @@` hunk header adds, or none for another line. */
 function hunkLines(line: string): number[] {
@@ -207,7 +207,7 @@ export async function unitCoverage(
   argv = process.argv.slice(2),
   { root = ROOT, changed = changedLines(argv.includes("--branch")), run = runSuite } = {},
 ): Promise<number> {
-  const exceptions = listedFiles(root);
+  const exceptions = coverageExceptions(root);
   const inScope = [...changed.keys()].filter(
     (path) => unitCovered(path, root) && !exceptions.has(path),
   );

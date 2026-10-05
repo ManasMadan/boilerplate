@@ -217,11 +217,19 @@ file below 100%, or one no test loads.
   branch at 100%, so a pull request can't add or change a line without covering it, and
   the pre-push hook refuses a push that leaves any file it affects below 100%.
 - A file may be below 100% only if the table below lists it, with the reason and the
-  test that covers its behaviour another way. The same goes for skipped tests and for
-  lint or type suppressions (`biome-ignore`, `@ts-expect-error`, `# pyright: ignore`,
-  `# noqa`, a type-coverage ignore, coverage pragmas): `bun scripts/suppressions.ts`,
-  part of `bun run lint`, fails on any in a file these tables don't list, and a Claude
-  Code hook refuses a new one as it's written. Listing a file here is a decision for review, never a way round.
+  test that covers its behaviour another way. The same goes for skipped tests (`.skip`,
+  `.skipIf`, `.runIf`, `.todo`, `.fixme`, `.fail`, `ctx.skip()`, pytest's `skip` and
+  `xfail`), coverage pragmas, type-coverage ignores, and suppressions: `biome-ignore`,
+  `@ts-expect-error`, `# pyright: ignore`, `# noqa`, `-- squawk-ignore` in a migration,
+  `# shellcheck disable`, `# hadolint ignore`, `# zizmor: ignore`, `# tflint-ignore`,
+  and a rule turned off (or down to a warning) in `biome.jsonc` or another linter's
+  configuration. `bun scripts/suppressions.ts`, part of `bun run lint`, fails on any that
+  no row allows, and a Claude Code hook refuses a new one as it's written. A row allows
+  one kind in one file: a skipped test needs its file under Skipped tests, a coverage
+  pragma under Coverage exceptions, a type-coverage ignore under Type-coverage
+  exceptions, and a suppression a row under Suppressions that names it (a rule turned
+  off is named by the rule). A focused test (`.only`) is never allowed. Listing a file
+  here is a decision for review, never a way round.
 
 ## Coverage exceptions
 
@@ -248,6 +256,11 @@ file below 100%, or one no test loads.
 | `packages/ui/src/components/label.tsx` | `biome-ignore lint/a11y/noLabelWithoutControl` | `Label` is a wrapper: the caller ties it to its control (`htmlFor`, or the control inside it) through props the rule can't see |
 | `scripts/restore-drill.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | the rule asks turbo.json to declare what a task reads, and turbo never runs this script |
 | `.claude/hooks/lib.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | Claude Code sets `CLAUDE_PROJECT_DIR` for its hooks, which turbo never runs |
+| `biome.jsonc` | `noExcessiveLinesPerFunction` off in tests, end-to-end specs and stories | a `describe` block is as long as its list of cases |
+| `biome.jsonc` | `noSkippedTests` off in `apps/web/e2e/captcha.spec.ts` and `apps/web/e2e/google.spec.ts` | Playwright's conditional skip, for the two browser tests that need real credentials (both under Skipped tests) |
+| `biome.jsonc` | `noDuplicateCustomProperties` off in `packages/ui/src/styles/theme.css` | the theme sets each variable once per variant (light, dark), and Biome reads the blocks as one rule |
+| `biome.jsonc` | `useImportType` and `noStaticOnlyClass` off in the Nest services and `packages/nest-common` | Nest's dependency injection needs the imported class at run time, which `import type` erases; a module is a class with only a decorator and static members |
+| `biome.jsonc` | `noConsole` off in `scripts/`, the hooks, config files and the API's command-line scripts | they talk to whoever runs them through the console |
 | `apps/ai/app/embeddings.py` | `# noqa: SIM905` | a stop-word list reads as prose on one line |
 | `apps/ai/app/documents.py` | `# pyright: ignore[reportMissingTypeStubs]` | langgraph ships no stubs |
 | `apps/ai/app/summaries.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType]` | langgraph ships no stubs, and its graph, config and checkpointer types are unknown |
