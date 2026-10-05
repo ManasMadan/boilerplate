@@ -33,6 +33,9 @@ export function coverage(): CoverageOptions {
       "**/generated/**",
       "**/*.gen.ts",
       "**/*.config.{ts,mts}",
+      // Data, not code: v8 would try to parse an imported JSON file (the i18n messages)
+      // as JavaScript and log an error for each one.
+      "**/*.json",
     ],
     // LCOV only: a run's own summary counts every file its tests load from other packages,
     // so it reads below 100% for a package whose files are all covered. scripts/coverage.ts

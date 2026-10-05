@@ -213,7 +213,8 @@ file below 100%, or one no test loads.
   rule narrows to a list of folders again.
 - Every suite writes LCOV: each vitest package (`coverage()` in `packages/vitest-config`
   reports every workspace file its tests load, so a shared package gets credit from the
-  apps that exercise it), mobile's jest (`src/**`), bun (`bunfig.toml`), and the
+  apps that exercise it; code only, not an imported JSON file such as the i18n
+  messages), mobile's jest (`src/**`), bun (`bunfig.toml`), and the
   Python service and its evals (`fail_under = 100`, branches included, in
   `apps/ai/pyproject.toml`). Bun's runner answers for every source file no other suite
   owns (`BUN_OWNS` in `scripts/coverage.ts`): `scripts/`, `.claude/hooks/`, and the

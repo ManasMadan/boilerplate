@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { $ } from "bun";
+import { coverage } from "../packages/vitest-config";
 import { checkCoverage, type FileCoverage, isSource, mergeLcov, misses, toLcov } from "./coverage";
 import { captureOutput } from "./stand-ins";
 
@@ -234,5 +235,16 @@ describe("the check", () => {
       printed: "1 source files, 2 reports: 0 below 100%.",
     });
     expect(run([], root).code).toBe(1);
+  });
+});
+
+describe("vitest's coverage settings", () => {
+  // v8 parses every file a test imports as JavaScript; an imported JSON file (the i18n
+  // messages) fails to parse and logs an error for each run that loads it.
+  it("leave data files out, so only code is measured", () => {
+    const excluded = (path: string) =>
+      (coverage().exclude ?? []).some((pattern) => new Bun.Glob(pattern).match(path));
+    expect(excluded("packages/i18n/messages/en.json")).toBe(true);
+    expect(excluded("packages/i18n/src/index.ts")).toBe(false);
   });
 });
