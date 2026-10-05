@@ -80,6 +80,22 @@ describe("the session's environment check", () => {
   });
 });
 
+describe("the shell's PATH", () => {
+  it("has the playwright-cli command Playwright's official skill runs", async () => {
+    const envFile = cacheFile();
+    await sessionStart(start(), { doctor: doctor().run, cache: cacheFile(), envFile });
+    const shell = Bun.spawnSync(
+      ["sh", "-c", `. "${envFile}" && command -v playwright-cli && playwright-cli --version`],
+      { cwd: ROOT },
+    );
+    expect(shell.stdout.toString()).toBe(
+      `${join(ROOT, ".claude/bin/playwright-cli")}\n${
+        (await Bun.file(join(ROOT, "node_modules/playwright-core/package.json")).json()).version
+      }\n`,
+    );
+  });
+});
+
 describe("running the doctor", () => {
   it("returns its exit code and output, or null when it runs out of time", async () => {
     expect(await runDoctor(["sh", "-c", "echo ok; exit 3"])).toEqual({

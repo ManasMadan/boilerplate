@@ -71,6 +71,16 @@ paths:
     so nothing runs twice. To turn parts off on your machine, set `ENABLE_STOP_REVIEW=0`,
     `ENABLE_COMMIT_REVIEW=0` or `SECURITY_GUIDANCE_DISABLE=1` in the `env` of
     `.claude/settings.local.json`.
+  - Not the `playwright` plugin: it is Playwright's MCP server. Claude drives a browser
+    with Playwright's CLI instead, through Playwright's own skills below.
+- Vendor skills: `.claude/skills/playwright-cli` and `playwright-trace` are Playwright's,
+  copied in by its own installers from the root `playwright-core`; never edit them.
+  `scripts/playwright.test.ts` fails when they differ from the installed version's and
+  prints the command that reinstalls them. The `playwright-cli` skill runs a bare
+  `playwright-cli`: `.claude/bin/playwright-cli` starts the CLI from the project's
+  `playwright-core`, and `session-start.ts` puts `.claude/bin` on the PATH of Claude's
+  shell (through `CLAUDE_ENV_FILE`). `settings.json` allows `playwright-cli` and
+  `npx playwright trace`.
 - Keep in sync in the same change: a new skill goes in `docs/README.md`'s runbook list;
   a new agent, rule area or MCP server in `CLAUDE.md`'s "Claude Code setup"; a new
   command in `CLAUDE.md`'s table. Every app and `packages/db` has a `CLAUDE.md` with its

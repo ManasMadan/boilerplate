@@ -90,6 +90,8 @@
       "Bash(bunx tsc *)",
       "Bash(bunx vitest *)",
       "Bash(bunx playwright *)",
+      "Bash(playwright-cli *)",
+      "Bash(npx playwright trace *)",
       "Bash(bunx prisma *)",
       "Bash(bunx depcruise *)",
       "Bash(bunx knip*)",

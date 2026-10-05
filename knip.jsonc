@@ -16,8 +16,9 @@
       // (deploy/docker/*.Dockerfile) and the repo scripts.
       "entry": [".claude/hooks/*.ts", "deploy/docker/check-peers.mjs", "scripts/*.ts"],
       // Run through bunx by scripts/type-coverage.ts and scripts/pre-commit.ts, which knip
-      // doesn't read as commands.
-      "ignoreDependencies": ["type-coverage", "lint-staged"]
+      // doesn't read as commands; playwright-core by .claude/bin/playwright-cli, which
+      // knip doesn't read.
+      "ignoreDependencies": ["type-coverage", "lint-staged", "playwright-core"]
     },
     "apps/api": {
       // The better-auth CLI's config (the auth:schema script).

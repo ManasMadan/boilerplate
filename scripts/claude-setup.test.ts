@@ -58,7 +58,7 @@ const CLAUDE = join(ROOT, ".claude");
  * The plugins from Anthropic's marketplace that settings.json enables and the template's
  * plugin depends on: code intelligence for TypeScript and the AI service, Expo, Stripe,
  * Redis (Valkey), Terraform (OpenTofu) and the security review. Playwright is driven
- * through its CLI (the browser skill), not the playwright plugin's MCP server.
+ * through its CLI (Playwright's official skills), not the playwright plugin's MCP server.
  */
 const OFFICIAL_PLUGINS = [
   "typescript-lsp",
@@ -156,6 +156,15 @@ describe("settings.json", () => {
       Object.fromEntries(
         ["worktrunk@worktrunk", ...OFFICIAL_PLUGINS].map((plugin) => [plugin, true]),
       ),
+    );
+  });
+
+  it("lets Playwright's official skills run their commands", () => {
+    const { permissions } = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8")) as {
+      permissions: { allow: string[] };
+    };
+    expect(permissions.allow).toEqual(
+      expect.arrayContaining(["Bash(playwright-cli *)", "Bash(npx playwright trace *)"]),
     );
   });
 
