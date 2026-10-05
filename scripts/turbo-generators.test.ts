@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PlopTypes } from "@turbo/gen";
-import generator from "../turbo/generators/config";
+import generator, { setUp } from "../turbo/generators/config";
 
 /** Plop's case helpers, enough of them for kebab-case input. */
 const HELPERS: Record<string, (value: string) => string> = {
@@ -29,7 +29,7 @@ function generators(root = mkdtempSync(join(tmpdir(), "generators-"))) {
     getHelper: (name: string) => HELPERS[name],
   } as unknown as PlopTypes.NodePlopAPI;
   const ran: string[] = [];
-  generator(plop, (command, args) => ran.push([command, ...args].join(" ")));
+  setUp(plop, (command, args) => ran.push([command, ...args].join(" ")));
   const prompt = (generator: string, name: string) => {
     const prompts = set[generator]?.prompts as PlopTypes.PromptQuestion[];
     return prompts.find((question) => question.name === name) as {
@@ -160,5 +160,21 @@ describe("the package generator", () => {
     ) as PlopTypes.CustomActionFunction;
     expect(install({}, {} as never, {} as never)).toBe("bun install");
     expect(readFileSync(join(root, "bun.lock"), "utf8")).toContain('"name": "scratch"');
+  });
+});
+
+describe("what plop loads", () => {
+  // plop calls it with a second argument of its own: a runner parameter there broke
+  // `bun run gen:new` ("run is not a function").
+  it("takes plop alone, and sets up every generator with plop's own arguments", () => {
+    expect(generator.length).toBe(1);
+    const names: string[] = [];
+    const plop = {
+      getDestBasePath: () => tmpdir(),
+      setGenerator: (name: string) => names.push(name),
+      getHelper: (name: string) => HELPERS[name],
+    } as unknown as PlopTypes.NodePlopAPI;
+    (generator as (...args: unknown[]) => void)(plop, { force: false });
+    expect(names.sort()).toEqual(["api-feature", "package"]);
   });
 });

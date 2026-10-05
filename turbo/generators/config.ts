@@ -305,9 +305,10 @@ const runIn = (root: string) => (command: string, args: string[]) => {
   execFileSync(command, args, { cwd: root, stdio: "inherit" });
 };
 
-export default function generator(
+/** Sets up every generator on `plop`, running commands through `run`. */
+export function setUp(
   plop: PlopTypes.NodePlopAPI,
-  run = runIn(plop.getDestBasePath()),
+  run: (command: string, args: string[]) => void,
 ): void {
   const root = plop.getDestBasePath();
 
@@ -321,4 +322,12 @@ export default function generator(
 
   apiFeature(plop, root, format);
   packageGenerator(plop, root, format, run);
+}
+
+/**
+ * What plop loads. It takes `plop` alone: plop calls it with a second argument of its own,
+ * which would otherwise land where `setUp` takes its command runner.
+ */
+export default function generator(plop: PlopTypes.NodePlopAPI): void {
+  setUp(plop, runIn(plop.getDestBasePath()));
 }
