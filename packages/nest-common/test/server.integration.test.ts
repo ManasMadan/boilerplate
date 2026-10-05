@@ -3,7 +3,7 @@
  * against the docker compose Postgres and Valkey, request ids, CORS, load shedding, and
  * errors in the contract's shape.
  */
-import type { AddressInfo } from "node:net";
+import { type AddressInfo, connect } from "node:net";
 import { Controller, Get, type INestApplication, Module, type Type } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { eventually } from "@repo/testing/eventually";
@@ -106,6 +106,24 @@ describe("bootstrap", () => {
     expect(await cors.json()).toEqual({ ok: true });
     expect(cors.headers.get("access-control-allow-origin")).toBe("https://app.example");
     expect(cors.headers.get("access-control-expose-headers")).toBe("x-request-id");
+  });
+});
+
+describe("shutting down", () => {
+  it("hangs up a connection that never sent a request, instead of waiting for it", async () => {
+    // A browser's preconnect, or an HTTP client reconnecting for a request it then dropped.
+    const app = await bootstrap(UnregisteredModule, { ...options, port: 0 });
+    const { port } = app.getHttpServer().address() as AddressInfo;
+    // Hung up on, it may see a reset: expected.
+    const unused = connect(port, "127.0.0.1")
+      .resume()
+      .on("error", () => undefined);
+    await new Promise((resolve) => unused.once("connect", resolve));
+    await app.close();
+    await eventually(
+      () => unused.closed,
+      (closed) => closed,
+    );
   });
 });
 

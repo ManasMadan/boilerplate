@@ -3,6 +3,8 @@
  * `main.ts` is a single call to this, so the behaviour below is identical everywhere.
  */
 import "reflect-metadata";
+import type { IncomingMessage } from "node:http";
+import type { Socket } from "node:net";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import underPressure from "@fastify/under-pressure";
@@ -106,6 +108,25 @@ function logRequests(app: NestFastifyApplication, options: Omit<BootstrapOptions
     });
 }
 
+/**
+ * Hangs up, at shutdown, on connections that haven't sent a request. Node's server.close()
+ * ends idle keep-alive connections but waits for one that never sent anything (a
+ * browser's preconnect, or an HTTP client reconnecting for a request it then dropped)
+ * until headersTimeout reaps it, a minute or more later, and shutdown waits with it.
+ */
+function closeUnusedConnections(app: NestFastifyApplication) {
+  const fastify = app.getHttpAdapter().getInstance();
+  const unused = new Set<Socket>();
+  fastify.server.on("connection", (socket: Socket) => {
+    unused.add(socket);
+    socket.once("close", () => unused.delete(socket));
+  });
+  fastify.server.on("request", (request: IncomingMessage) => unused.delete(request.socket));
+  fastify.addHook("preClose", async () => {
+    for (const socket of unused) socket.destroy();
+  });
+}
+
 /** Builds and configures the application without listening (used by tests and bootstrap). */
 export async function createServer(
   module: Type<unknown>,
@@ -139,6 +160,7 @@ export async function createServer(
   // SIGTERM (Kubernetes) → stop accepting connections, finish in-flight requests, run
   // every provider's onApplicationShutdown (close DB/Redis/queues), then exit.
   app.enableShutdownHooks();
+  closeUnusedConnections(app);
 
   await options.configure?.(app);
   return app;
