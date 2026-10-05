@@ -42,6 +42,23 @@ function bytes(text: string) {
   return match ? Number(match[1]) * (UNITS[match[2]?.toUpperCase() ?? ""] ?? 0) : 0;
 }
 
+/**
+ * Docker's memory, in bytes: in total, in use by every running container (other
+ * projects' too), and free once the headroom is kept back.
+ */
+export function dockerMemory(run: Run) {
+  const docker = (args: string[]) => run("docker", args, { cwd: ROOT });
+  const total = Number(docker(["info", "--format", "{{.MemTotal}}"]).stdout.trim());
+  const inUse = docker(["stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"])
+    .stdout.split("\n")
+    .filter(Boolean)
+    .reduce((sum, line) => {
+      const [, usage = ""] = line.split("\t");
+      return sum + bytes(usage.split("/")[0] ?? "");
+    }, 0);
+  return { total, inUse, free: total - inUse - HEADROOM };
+}
+
 /** What starting the profile needs and what Docker has; null (said why) when unknown. */
 /** What the budget reads of `docker compose config`. */
 const composeConfig = z.object({
@@ -77,16 +94,7 @@ function budget(run: Run, profileArgs: string[]) {
   // Compose reports limits in bytes, as a number or a numeric string.
   const needed = toStart.reduce((sum, [, service]) => sum + Number(service.mem_limit ?? 0), 0);
 
-  const total = Number(docker(["info", "--format", "{{.MemTotal}}"]).stdout.trim());
-  // What everything else uses right now (other projects' containers, and ours already up).
-  const inUse = docker(["stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"])
-    .stdout.split("\n")
-    .filter(Boolean)
-    .reduce((sum, line) => {
-      const [, usage = ""] = line.split("\t");
-      return sum + bytes(usage.split("/")[0] ?? "");
-    }, 0);
-  const free = total - inUse - HEADROOM;
+  const { total, inUse, free } = dockerMemory(run);
   // Setup steps (s3-init, stalwart-init) run once and exit, marked `restart: "no"`.
   const all = Object.entries(services);
   const oneShots = all.filter(([, service]) => service.restart === "no").map(([name]) => name);

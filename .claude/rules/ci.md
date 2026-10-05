@@ -41,6 +41,11 @@ paths:
   `scripts/changes.ts`), with the same areas in `ci-ok`'s `$gates`
   (`scripts/workflows.test.ts` fails when the two disagree). Jobs run the same commands a developer runs locally
   (`bun run lint`, `bun run test:integration`, …), never a CI-only variant.
+- The pre-push hook (`scripts/pre-push.ts`) runs the same checks before a push, gated on
+  the same areas. A new job in a workflow that can block a pull request gets a step there
+  running its commands, or an entry in its `CI_ONLY` list saying why it can't run on a
+  developer's machine (`scripts/pre-push.test.ts` fails otherwise); a job's new command
+  goes into its step too.
 - Commit and pull request title scopes are the workspace folder names plus a few
   cross-cutting ones, all in `commitlint.config.ts`; CI checks titles with that config,
   so there's no second list to keep in step.

@@ -42,17 +42,70 @@ Advanced Security to run it; without that, remove its use deliberately rather th
 looking for a switch to skip it, as there is none.
 
 Before pushing: `bun run lint`, `bun run check-types`, `bun run test`, and for anything
-touching the database, queues or HTTP, `bun run test:integration`. The pre-push hook
-(`.husky/pre-push`) holds the push to the same rule as CI: it type-checks, then
-`bun scripts/push-coverage.ts` runs every suite (unit, integration, browser, mobile,
-Python) of the packages the push changes and of every package depending on them,
-measured from the branch's upstream, runs the scripts' and hooks' suite, and refuses the
-push unless every file under those folders is at 100% (`scripts/coverage.ts`). It needs
-Docker running and starts the core services and RustFS itself; ClamAV comes from the
-stand-in in `@repo/testing/fake-clamd` when it isn't running (CI runs the real one). A
-push that changes shared code runs most suites, so it takes a while. The Stop hook stays
-quick: it checks only the unit coverage of the lines a turn changed
-(`bun scripts/unit-coverage.ts`).
+touching the database, queues or HTTP, `bun run test:integration`. The pre-push hook then
+runs what CI would (below). The Stop hook stays quick: it checks only the unit coverage
+of the lines a turn changed (`bun scripts/unit-coverage.ts`).
+
+## Before a push
+
+The pre-push hook (`.husky/pre-push`, `bun scripts/pre-push.ts`) runs every check CI runs
+on a pull request that can run on a developer's machine, so a push that passes it passes
+CI. It takes the files the push changes (since the branch's upstream, or the default
+branch for a branch never pushed), sorts them into areas with `scripts/changes.ts`, the
+same rules CI's `changes` job uses, and runs each step exactly when CI would run its job,
+with the job's own commands:
+
+| Step | CI job | Runs for |
+|---|---|---|
+| `uv sync --locked`, then `bun run gen` and nothing changed or added | setup, codegen | every push; codegen for the app |
+| `bun run lint` | lint | every push |
+| `bun run check-types`, `bun run type-coverage` | types | the app |
+| `bun scripts/push-coverage.ts`: every suite of the affected packages (unit, integration, browser, mobile, Python), the scripts' and hooks', every file under them at 100%, then diff-cover on the changed lines | unit, components, integration, python, coverage | the app or the scripts |
+| `bun run --cwd packages/ui test:visual` (the screenshots) | components | the app |
+| the migrations applied to an empty database, then `bun run --cwd packages/db drift` | integration | the app |
+| `uv run python -m evals` in `apps/ai`, with the local stand-ins | python | the app |
+| oasdiff (CI's image) on `apps/api` and `apps/ai`'s `openapi.json` against the push's base, and `scripts/events-compat.ts` | api-compat | the app |
+| `bun run db:lint` | migrations | the app |
+| `bun run charts:check` | charts | the charts |
+| `bun run infra:check` (needs `tofu`) | infra | the infrastructure |
+| `bun scripts/generators.ts` | generators | the app |
+| `bun scripts/e2e.ts` with CI's e2e environment, then the bundle budget and the restore drill | e2e | the app |
+| `bun run codeql --languages …` | CodeQL | the languages the push changes |
+| OSV (CI's image) on `bun.lock` and `apps/ai/uv.lock` | OSV | every push |
+| the licenses of the npm packages the push adds or upgrades, against `security.yml`'s list | dependency review | a `bun.lock` change |
+| gitleaks over the pushed commits | secrets | every push |
+
+CI accepts a breaking API change when the pull request's title declares it (`feat(api)!:`);
+here a commit in the push whose header declares one does the same, and the step says so.
+
+Steps that don't depend on each other run side by side: as many as the machine has cores,
+less one, and as much as its memory holds, less 2 GB (`PRE_PUSH_CONCURRENCY` and
+`PRE_PUSH_MEMORY_GB` override both); Docker's free memory decides which steps that start
+containers run together. The coverage suites and the generators' check share Valkey's
+database numbers, so they take turns. Each step's output is kept and printed when it
+fails; the first failure stops the other steps, and the summary names it, with every
+step's time. A step can be left out with `PRE_PUSH_SKIP=<step>,<step>` (the summary says
+so; CI still runs it).
+
+What needs Docker: the core services and RustFS, which it starts itself (ClamAV comes from
+the stand-in in `@repo/testing/fake-clamd` when it isn't running; CI runs the real one), and
+the screenshots, whose browser container needs 1.5 GB of Docker's memory free. The
+end-to-end step builds and starts the whole stack on its usual ports, so it fails while
+`bun dev` runs. Each database step gets a database of its own, dropped afterwards.
+
+A push that changes only documentation or a script takes a minute or two. One that changes
+the app runs every suite of what it affects plus the end-to-end suite, which takes much
+longer, up to most of an hour on a laptop. When you need to push now, `git push --no-verify` skips the hook
+and leaves CI to decide.
+
+What only CI checks, with the reason, is the `CI_ONLY` list in `scripts/pre-push.ts`,
+printed after the summary: the container images and their smoke test (more than a 2 GB
+Docker VM holds), the kind deploy (8 GB of Docker memory), the OpenTofu plans (the cloud
+accounts' secrets), the pull request title (the commit-msg hook checks every commit's
+header), the nightly evals against a real model, the misconfiguration scan (it only
+reports), the Claude review and the preview environments. `scripts/pre-push.test.ts`
+fails when a workflow that can block a pull request gains a job that is neither run by a
+step nor listed there.
 
 ## Unit
 
@@ -233,7 +286,8 @@ file below 100%, or one no test loads.
   it away so coverage counts only the code that was written.
 - The merged report is `coverage/merged.lcov`. CI runs diff-cover on it against the base
   branch at 100%, so a pull request can't add or change a line without covering it, and
-  the pre-push hook refuses a push that leaves any file it affects below 100%.
+  the pre-push hook refuses a push that leaves any file it affects below 100%, then runs
+  the same diff-cover check on its changed lines.
 - A file may be below 100% only if the table below lists it, with the reason and the
   test that covers its behaviour another way. The same goes for skipped tests (`.skip`,
   `.skipIf`, `.runIf`, `.todo`, `.fixme`, `.fail`, `ctx.skip()`, pytest's `skip` and

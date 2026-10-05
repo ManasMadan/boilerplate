@@ -35,8 +35,11 @@ fixes for what usually goes wrong.
    hooks help: on commit they format and lint the staged files (Biome, ruff, Prisma,
    `tofu fmt`, Squawk on migrations), scan them for secrets with gitleaks, and run CI's
    Trivy and OSV scans when you stage infrastructure code or a lockfile (each tool
-   installed at CI's version, or through Docker); on push they run types and unit tests for the packages you
-   changed and the repo's scripts and Claude Code hooks.
+   installed at CI's version, or through Docker); on push they run every check CI would
+   run on the pull request that can run on your machine, for the areas you changed
+   (`scripts/pre-push.ts`, see [docs/testing.md](docs/testing.md#before-a-push)). That can
+   take a while for a change to shared code, and the end-to-end suite in it needs
+   `bun dev` stopped; `git push --no-verify` skips it and leaves CI to decide.
 4. Open a pull request. Its title becomes the squashed commit, so it follows
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:
    `feat(api): add todo sharing`, `fix(web): keep the draft on reload`. The scopes are in

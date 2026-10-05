@@ -1,10 +1,4 @@
-# Before anything leaves the machine: types, then every suite of what the push changes
-# (and of everything depending on it) with every file at 100%, as CI checks on the pull
-# request, then knip. It needs Docker running: it starts the services itself.
-bunx turbo run check-types --affected --output-logs=errors-only
-bunx tsc -p scripts
-bunx tsc -p .claude/hooks
-bunx tsc -p turbo/generators
-bun scripts/push-coverage.ts
-# Unused files, exports and dependencies (knip): quick, and CI fails on them.
-bun run lint:unused
+# Before anything leaves the machine: every check CI runs on the pull request that can run
+# here, for the areas the push changes, side by side (scripts/pre-push.ts). It needs
+# Docker running: it starts the services itself. `git push --no-verify` skips it.
+bun scripts/pre-push.ts
