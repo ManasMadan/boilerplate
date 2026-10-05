@@ -5,6 +5,7 @@
 import "reflect-metadata";
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
+import { totalmem } from "node:os";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import underPressure from "@fastify/under-pressure";
@@ -138,10 +139,12 @@ function closeUnusedConnections(app: NestFastifyApplication) {
 
 /**
  * The heap size past which a service sheds load: 90% of its container's memory limit, or
- * of 2 GB where it runs without one (0 from `constrainedMemory` means no limit).
+ * of 2 GB where it runs without one. Without a limit, `constrainedMemory` reports 0 on some
+ * platforms and a cgroup's "max" (about 2^64) on Linux, so a limit above the machine's
+ * memory counts as none.
  */
-export function maxHeapBytes(constrained = process.constrainedMemory?.()) {
-  return 0.9 * (constrained || 2 * 1024 ** 3);
+export function maxHeapBytes(constrained = process.constrainedMemory?.(), machine = totalmem()) {
+  return 0.9 * (constrained && constrained <= machine ? constrained : 2 * 1024 ** 3);
 }
 
 /** Builds and configures the application without listening (used by tests and bootstrap). */
