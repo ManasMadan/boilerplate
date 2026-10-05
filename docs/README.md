@@ -23,6 +23,7 @@ production release. `CLAUDE.md` is the same material condensed for Claude Code.
 | [deploy.md](deploy.md) | images, environments, staging and production releases, rollback, previews |
 | [new-project.md](new-project.md) | everything a new app made from this boilerplate needs once, in order |
 | [repository-settings.md](repository-settings.md) | the GitHub settings (and the `gh` commands that apply them), App, environments and secrets the workflows need |
+| [enhancements.md](enhancements.md) | what the template could do but doesn't yet, why, and what each would take |
 
 Elsewhere: [deploy/README.md](../deploy/README.md) (charts and GitOps),
 [infra/tofu/README.md](../infra/tofu/README.md) (k3s on your machines, Cloudflare),
