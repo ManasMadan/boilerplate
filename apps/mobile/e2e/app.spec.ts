@@ -36,11 +36,11 @@ test("sign out, then sign in again", async ({ page }) => {
 
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill("wrong-password");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("That email and password don't match.");
 
   await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
 });
 
@@ -52,7 +52,7 @@ test("reset a forgotten password and sign in with the new one", async ({ page })
   await expect(page.getByText("Reset your password")).toBeVisible();
 
   const sent = new Date();
-  await page.getByLabel("Email").fill(user.email);
+  await page.getByLabel("Email").filter({ visible: true }).fill(user.email);
   await page.getByRole("button", { name: "Send code" }).click();
   await expect(page.getByText("Choose a new password")).toBeVisible();
   const password = newUser().password;
@@ -61,13 +61,20 @@ test("reset a forgotten password and sign in with the new one", async ({ page })
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Password updated. Sign in with your new password.")).toBeVisible();
 
-  // The old password no longer works; the new one does.
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  // The old password no longer works; the new one does. On the web the screens passed
+  // through stay mounted (hidden), so the fields are the visible ones.
+  await page.getByLabel("Email").filter({ visible: true }).fill(user.email);
+  await page.getByLabel("Password").filter({ visible: true }).fill(user.password);
+  await page
+    .getByRole("button", { name: "Sign in", exact: true })
+    .filter({ visible: true })
+    .click();
   await expect(page.getByRole("alert")).toHaveText("That email and password don't match.");
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("Password").filter({ visible: true }).fill(password);
+  await page
+    .getByRole("button", { name: "Sign in", exact: true })
+    .filter({ visible: true })
+    .click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
 });
 
@@ -100,7 +107,7 @@ test("an unverified user signing in is asked for the emailed code", async ({ pag
   await page.goto("/sign-in");
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Check your email")).toBeVisible();
 });
 
@@ -211,7 +218,7 @@ test("a user with two-step verification signs in with an authenticator code", as
 
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Two-step verification")).toBeVisible();
   await page.getByLabel("Verification code").fill("000000");
   await page.getByRole("button", { name: "Continue" }).click();
