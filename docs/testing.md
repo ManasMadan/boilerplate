@@ -243,9 +243,9 @@ file below 100%, or one no test loads.
 | File | Skipped when | Where it runs |
 |---|---|---|
 | `apps/api/test/oauth.integration.test.ts` | `E2E_CIMD_CLIENT_ID` is unset: the client metadata document must be served over public HTTPS | by hand, against a deployed environment |
-| `apps/notifications/test/stalwart.integration.test.ts` | `SMTP_URL` (Stalwart) is unset: Stalwart isn't in the default profile | CI's integration job, with the `mail` profile |
+| `apps/notifications/test/stalwart.integration.test.ts` | `STALWART_SMTP_URL` is unset: Stalwart isn't in the default profile | CI's integration job, with the `mail` profile |
 | `apps/webhooks/test/stalwart.integration.test.ts` | `STALWART_URL` is unset, as above | CI's integration job, with the `mail` profile |
-| `apps/web/e2e/captcha.spec.ts` | the real Turnstile keys are unset (the test keys always pass) | by hand, with real keys |
+| `apps/web/e2e/captcha.spec.ts` | the API has no Turnstile keys (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`), so the captcha is off | CI's e2e job, with Cloudflare's always-pass test keys: the real widget and token flow, reaching challenges.cloudflare.com; a real site's keys only by hand |
 | `apps/web/e2e/google.spec.ts` | `E2E_GOOGLE_EMAIL` and `E2E_GOOGLE_PASSWORD` are unset | by hand, with a test Google account |
 
 ## Suppressions
