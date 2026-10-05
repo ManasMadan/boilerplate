@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Ran } from "./lib";
-import { affected, pushCoverage } from "./push-coverage";
+import { affected, diffCover, pushCoverage } from "./push-coverage";
 import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -27,7 +30,7 @@ describe("the push's coverage", () => {
     const { run, calls } = machine((line) =>
       line.startsWith("bunx turbo ls") ? { stdout: listing("apps/api", "packages/db") } : undefined,
     );
-    expect(pushCoverage({ run, root: "/repo" })).toBe(0);
+    expect(pushCoverage({ run, argv: [] })).toBe(0);
     expect(calls.filter((line) => !line.startsWith("git "))).toEqual([
       "bunx turbo ls --filter=...[abc] --output=json",
       "docker info",
@@ -36,6 +39,7 @@ describe("the push's coverage", () => {
       "bunx turbo run coverage --filter=...[abc] --concurrency=2",
       "bun test --coverage ./scripts/ ./.claude/hooks/",
       "bun scripts/coverage.ts apps/api packages/db --bun",
+      `uvx ${diffCover()} coverage/merged.lcov --compare-branch abc --fail-under 100`,
     ]);
     expect(output()).toContain("every file in 2 package(s) and the repo's tooling at 100%");
   });
@@ -45,8 +49,8 @@ describe("the push's coverage", () => {
     const { run, calls } = machine((line) =>
       line.startsWith("bunx turbo ls") ? { stdout: listing() } : undefined,
     );
-    expect(pushCoverage({ run, root: "/repo" })).toBe(0);
-    expect(calls.some((line) => line.startsWith("docker"))).toBe(false);
+    expect(pushCoverage({ run, argv: ["--concurrency=6"] })).toBe(0);
+    expect(calls.some((line) => line.startsWith("docker") || line.startsWith("uvx"))).toBe(false);
     expect(calls.at(-1)).toBe("bun scripts/coverage.ts --bun");
   });
 
@@ -65,6 +69,25 @@ describe("the push's coverage", () => {
     expect(pushCoverage({ run: failing("bun test").run })).toBe(1);
     expect(output()).toContain("left a file below 100%");
     expect(pushCoverage({ run: failing("bun scripts/coverage.ts").run })).toBe(1);
+    expect(pushCoverage({ run: failing("uvx").run })).toBe(1);
+    expect(output()).toContain("isn't covered (diff-cover above)");
+  });
+
+  it("runs as many suites at once as it's told", () => {
+    captureOutput();
+    const { run, calls } = machine((line) =>
+      line.startsWith("bunx turbo ls") ? { stdout: listing("apps/api") } : undefined,
+    );
+    expect(pushCoverage({ run, argv: ["--concurrency=6"] })).toBe(0);
+    expect(calls).toContain("bunx turbo run coverage --filter=...[abc] --concurrency=6");
+  });
+
+  it("takes diff-cover's version from CI's coverage job, and says when it can't", () => {
+    expect(diffCover()).toMatch(/^diff-cover@\d+\.\d+\.\d+$/);
+    const root = mkdtempSync(join(tmpdir(), "push-coverage-"));
+    mkdirSync(join(root, ".github/workflows"), { recursive: true });
+    writeFileSync(join(root, ".github/workflows/ci.yml"), "jobs: {}\n");
+    expect(() => diffCover(root)).toThrow("no longer runs `uvx diff-cover@<version>`");
   });
 
   it("stops when turbo can't list the packages", () => {
