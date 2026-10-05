@@ -33,3 +33,8 @@ extraArgs:
   - --annotation-filter=boilerplate.dev/external-dns=true
   - --cloudflare-proxied
   - --cloudflare-dns-records-per-page=5000
+# CPU and memory requested and limited, as for every container here (the
+# misconfiguration scan, scripts/misconfig.ts, fails without).
+resources:
+  requests: { cpu: 10m, memory: 64Mi }
+  limits: { cpu: 100m, memory: 128Mi }

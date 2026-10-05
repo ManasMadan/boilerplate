@@ -9,3 +9,5 @@ ksv0125:
     - docker.io # Docker Hub's official and project images (Valkey, Jaeger, Mailpit, ...)
     - quay.io # SOPS, for Argo CD
     - gcr.io # distroless
+    - registry.k8s.io # the Kubernetes project's (external-dns, kube-state-metrics)
+    - reg.kyverno.io # Kyverno's
