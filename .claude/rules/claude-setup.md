@@ -77,8 +77,11 @@ paths:
     with Playwright's CLI instead, through Playwright's own skills below.
 - Vendor skills: `.claude/skills/playwright-cli` and `playwright-trace` are Playwright's,
   copied in by its own installers from the root `playwright-core`; never edit them.
-  `scripts/playwright.test.ts` fails when they differ from the installed version's and
-  prints the command that reinstalls them. The `playwright-cli` skill runs a bare
+  Renovate's Playwright group reinstalls them on each update (`postUpgradeTasks` in
+  `renovate.json5`, allowed one by one in `renovate.yml`), and `scripts/playwright.test.ts`
+  fails when they differ from the installed version's and prints those commands.
+  Playwright's third skill, `playwright-component-testing`, stays out: it builds a story
+  gallery, and components here are tested with Storybook's `play` functions. The `playwright-cli` skill runs a bare
   `playwright-cli`: `.claude/bin/playwright-cli` starts the CLI from the project's
   `playwright-core`, and `session-start.ts` puts `.claude/bin` on the PATH of Claude's
   shell (through `CLAUDE_ENV_FILE`). `settings.json` allows `playwright-cli` and

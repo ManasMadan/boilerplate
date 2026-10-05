@@ -147,8 +147,8 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
 - Browser: Playwright's own skills, `playwright-cli` (drive a browser from the shell)
   and `playwright-trace` (read a failed e2e test's trace), installed by Playwright's
   commands from the root `playwright-core`, the e2e suites' version. Never edit them:
-  after a Playwright upgrade `scripts/playwright.test.ts` fails and prints the command
-  that reinstalls them. The session-start hook puts `.claude/bin` on the shell's PATH
+  Renovate's Playwright updates reinstall them, and `scripts/playwright.test.ts` fails
+  and prints the commands if they drift. The session-start hook puts `.claude/bin` on the shell's PATH
   for the `playwright-cli` command. Here, name the session after the task
   (`-s=<task>`) so two agents never share a browser, pass `--browser=chromium` for the
   e2e suites' Chromium, and sign in as a seeded user (docs/database.md). Snapshots go

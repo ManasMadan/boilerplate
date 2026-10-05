@@ -35,6 +35,10 @@ digest, Helm charts, OpenTofu providers, and versions marked with a `# renovate:
   (expo-doctor). React is in the catalog, so web moves with it: if `expo install`
   writes a version over a `"catalog:"` entry in `apps/mobile/package.json`, put that
   version in the root catalog and restore `"catalog:"`.
+- **Playwright.** `@playwright/test`, `playwright` and the root `playwright-core` are
+  one group, and Renovate reinstalls Playwright's skills in `.claude/skills` from the
+  new version on that branch. By hand: run the commands `scripts/playwright.test.ts`
+  prints when they don't match.
 - **kind.** Its PR notes say it: update `SHA256` in `.github/workflows/kind.yml` to the
   release's `kind-linux-amd64.sha256sum` before merging.
 - **Postgres majors** are disabled: a major needs a dump and restore or pg_upgrade,
