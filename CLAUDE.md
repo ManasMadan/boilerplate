@@ -128,6 +128,12 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   for the next.
 - `.claude-plugin/`: the same skills, agents and hooks as a plugin, for apps made from
   this template (`docs/new-project.md`); a new agent or hook goes in `plugin.json` too.
+- Plugins (`enabledPlugins`): Worktrunk, and from Anthropic's marketplace
+  `typescript-lsp` and `pyright-lsp` (code intelligence), `expo`, `stripe`,
+  `redis-development`, `terraform` and `security-guidance` (edit warnings and a
+  background review of each turn and commit). `.claude/rules/claude-setup.md` says what
+  each needs; none needs an account here. Install each once with
+  `claude plugin install <name>@claude-plugins-official --scope project`.
 - Worktrees: parallel branches and agents use Worktrunk (`wt`, `.config/wt.toml`), whose
   Claude Code plugin settings.json enables: an agent started with `isolation: worktree`
   gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),

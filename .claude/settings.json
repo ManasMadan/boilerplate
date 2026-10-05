@@ -296,6 +296,13 @@
     }
   },
   "enabledPlugins": {
-    "worktrunk@worktrunk": true
+    "worktrunk@worktrunk": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "expo@claude-plugins-official": true,
+    "stripe@claude-plugins-official": true,
+    "redis-development@claude-plugins-official": true,
+    "terraform@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true
   }
 }

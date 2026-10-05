@@ -26,20 +26,23 @@ beforeEach(() => {
 });
 
 const healthy = "postgres healthy running\nvalkey healthy running\nmailpit  running\n";
+/** What each tool prints for `--version` on a machine that has it. */
+const versions: Record<string, string> = {
+  "node --version": `v${node}.1.0\n`,
+  "uv --version": "uv 0.12.0\n",
+  "wt --version": "wt 0.57.0\n",
+  "typescript-language-server --version": "5.1.3\n",
+  "pyright --version": "pyright 1.1.414\n",
+};
+
 /** A machine with every tool, services as `ps` says, and some answers overridden. */
 function machine(answers: Record<string, Partial<Ran>> = {}, ps = healthy) {
   return fakeRun((line) => {
     if (line in answers) {
       return answers[line];
     }
-    if (line === "node --version") {
-      return { stdout: `v${node}.1.0\n` };
-    }
-    if (line === "uv --version") {
-      return { stdout: "uv 0.12.0\n" };
-    }
-    if (line === "wt --version") {
-      return { stdout: "wt 0.57.0\n" };
+    if (line in versions) {
+      return { stdout: versions[line] };
     }
     if (line.startsWith("docker info")) {
       return { stdout: "29.0.0\n" };
@@ -64,6 +67,7 @@ describe("doctor", () => {
     expect(output).toContain(`Bun ${pinnedBun}`);
     expect(output).toContain("uv 0.12.0");
     expect(output).toContain("wt 0.57.0");
+    expect(output).toContain("typescript-language-server and pyright, for Claude Code");
     expect(output).toContain("Docker 29.0.0");
     expect(output).toContain("2 variables, in sync with .env.example");
     expect(output).toContain("mailpit running");
@@ -80,6 +84,9 @@ describe("doctor", () => {
     expect(output).toContain("Bun 1.0.0 found");
     expect(output).toContain("uv is not installed");
     expect(output).toContain("Worktrunk isn't installed (optional");
+    expect(output).toContain(
+      "needs typescript-language-server and pyright (optional): `bun add -g typescript-language-server pyright`.",
+    );
     expect(output).toContain("Docker is not running");
     expect(output).toContain("No .env yet. Run `bun run setup`.");
     expect(output).not.toContain("Local services");

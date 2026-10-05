@@ -20,6 +20,15 @@
     "./.claude/agents/verifier.md"
   ],
   "outputStyles": "./.claude/output-styles/",
+  "dependencies": [
+    "typescript-lsp@claude-plugins-official",
+    "pyright-lsp@claude-plugins-official",
+    "expo@claude-plugins-official",
+    "stripe@claude-plugins-official",
+    "redis-development@claude-plugins-official",
+    "terraform@claude-plugins-official",
+    "security-guidance@claude-plugins-official"
+  ],
   "hooks": {
     "SessionStart": [
       {

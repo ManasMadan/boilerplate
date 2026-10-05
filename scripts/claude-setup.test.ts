@@ -54,6 +54,22 @@ const AGENT_FIELDS = new Set([
 
 const CLAUDE = join(ROOT, ".claude");
 
+/**
+ * The plugins from Anthropic's marketplace that settings.json enables and the template's
+ * plugin depends on: code intelligence for TypeScript and the AI service, Expo, Stripe,
+ * Redis (Valkey), Terraform (OpenTofu) and the security review. Playwright is driven
+ * through its CLI (the browser skill), not the playwright plugin's MCP server.
+ */
+const OFFICIAL_PLUGINS = [
+  "typescript-lsp",
+  "pyright-lsp",
+  "expo",
+  "stripe",
+  "redis-development",
+  "terraform",
+  "security-guidance",
+].map((name) => `${name}@claude-plugins-official`);
+
 function frontmatter(path: string): Record<string, unknown> {
   const text = readFileSync(path, "utf8");
   if (!text.startsWith("---\n")) {
@@ -132,6 +148,25 @@ describe("settings.json", () => {
     expect([...new Set(wired)].sort()).toEqual(entryPoints.sort());
   });
 
+  it("enables the plugins this repository is set up for", () => {
+    const { enabledPlugins } = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8")) as {
+      enabledPlugins: Record<string, boolean>;
+    };
+    expect(enabledPlugins).toMatchObject(
+      Object.fromEntries(
+        ["worktrunk@worktrunk", ...OFFICIAL_PLUGINS].map((plugin) => [plugin, true]),
+      ),
+    );
+  });
+
+  it("points a pyright language server at the AI service's code and environment", () => {
+    const { tool } = Bun.TOML.parse(readFileSync(join(ROOT, "pyproject.toml"), "utf8")) as {
+      tool: { pyright: { executionEnvironments: { root: string }[]; venvPath: string } };
+    };
+    expect(tool.pyright.executionEnvironments).toEqual([{ root: "apps/ai" }]);
+    expect(tool.pyright.venvPath).toBe("apps/ai");
+  });
+
   it("blocks a tool call when Bun is missing, instead of skipping the guard", () => {
     for (const command of commands({ PreToolUse: settings.hooks.PreToolUse ?? [] })) {
       expect(command).toStartWith("command -v bun >/dev/null 2>&1 || {");
@@ -149,6 +184,7 @@ describe("the plugin", () => {
     skills: string[];
     agents: string[];
     outputStyles: string;
+    dependencies: string[];
     hooks: unknown;
   };
 
@@ -171,9 +207,15 @@ describe("the plugin", () => {
   it("is the marketplace's one plugin, at the repository's root", () => {
     const marketplace = read(".claude-plugin/marketplace.json") as {
       plugins: { name: string; source: string }[];
+      allowCrossMarketplaceDependenciesOn: string[];
     };
     expect(marketplace.plugins).toEqual([
       expect.objectContaining({ name: plugin.name, source: "./" }),
     ]);
+    expect(marketplace.allowCrossMarketplaceDependenciesOn).toEqual(["claude-plugins-official"]);
+  });
+
+  it("installs the official plugins the project enables", () => {
+    expect(plugin.dependencies).toEqual(OFFICIAL_PLUGINS);
   });
 });

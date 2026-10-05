@@ -38,6 +38,39 @@ paths:
   the plugin's own copy (`${CLAUDE_PLUGIN_ROOT}` for `$CLAUDE_PROJECT_DIR`).
   `scripts/claude-setup.test.ts` fails when they drift; `claude plugin validate .`
   checks the manifests.
+- Plugins: `enabledPlugins` in `settings.json` turns on Worktrunk and, from Anthropic's
+  marketplace (`claude-plugins-official`, which Claude Code adds by itself, so it isn't
+  in `extraKnownMarketplaces`), the ones below. The template's plugin lists the same
+  ones as `dependencies`, and `scripts/claude-setup.test.ts` fails when either list
+  loses one. The project's settings turn a plugin on but don't download it: each person
+  runs `claude plugin install <name>@claude-plugins-official --scope project` once per
+  plugin. None needs an account or a paid service here, and each fails soft without what
+  it needs:
+  - `typescript-lsp` and `pyright-lsp`: go to definition, references and diagnostics
+    after each edit. They start `typescript-language-server` and `pyright-langserver`
+    from PATH (`bun add -g typescript-language-server pyright`; `bun run doctor` says
+    when they're missing). The root `pyproject.toml` only points pyright at `apps/ai`
+    and its `.venv`; the type check that counts is still basedpyright's strict one.
+  - `expo`, `stripe` and `redis-development`: skills. The Expo and Stripe plugins also
+    bring remote MCP servers (mcp.expo.dev, mcp.stripe.com) that stay unconnected until
+    someone signs in from `/mcp`; nothing here needs them. Local billing is the fake
+    Stripe (`bun run stripe:fake`), so ignore the Stripe plugin's start-of-session hint
+    to install its CLI and `stripe login`. The Redis skills fit Valkey for what this
+    repo does (BullMQ, cache, rate limits); the search, vector and semantic-cache ones
+    are for Redis-only modules it doesn't run.
+  - `terraform`: HashiCorp's MCP server, run with `docker run`, for provider and module
+    docs from the public registry (OpenTofu uses the same providers). It needs Docker
+    and the network but no account: `TFE_TOKEN` stays unset, and its HCP Terraform
+    tools are unused.
+  - `security-guidance`: hooks only. A warning after an edit that matches a risky
+    pattern, and a model review of the diff when a turn or subagent ends and of each
+    commit, with the session's own Claude credentials. It needs Python 3.10 or later,
+    and installs the Agent SDK into `~/.claude/security/` at session start. Its review
+    hooks run in the background (`asyncRewake`) and come back as a follow-up message,
+    so they never block a stop the way `verify-turn.ts` does, and it doesn't format,
+    so nothing runs twice. To turn parts off on your machine, set `ENABLE_STOP_REVIEW=0`,
+    `ENABLE_COMMIT_REVIEW=0` or `SECURITY_GUIDANCE_DISABLE=1` in the `env` of
+    `.claude/settings.local.json`.
 - Keep in sync in the same change: a new skill goes in `docs/README.md`'s runbook list;
   a new agent, rule area or MCP server in `CLAUDE.md`'s "Claude Code setup"; a new
   command in `CLAUDE.md`'s table. Every app and `packages/db` has a `CLAUDE.md` with its

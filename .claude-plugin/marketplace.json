@@ -4,6 +4,7 @@
   "owner": {
     "name": "Manas Madan"
   },
+  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
   "plugins": [
     {
       "name": "boilerplate",
