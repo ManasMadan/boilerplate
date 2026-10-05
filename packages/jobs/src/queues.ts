@@ -21,6 +21,15 @@ import {
   unauditedEvents,
   webhookEvents,
 } from "@repo/contracts/events";
+import {
+  documentIdSchema,
+  fileIdSchema,
+  orgIdSchema,
+  todoIdSchema,
+  userIdSchema,
+  webhookDeliveryIdSchema,
+  webhookEndpointIdSchema,
+} from "@repo/contracts/ids";
 import { DAY_S, HOUR_MS, HOUR_S, MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import { locales } from "@repo/i18n";
 import type { JobsOptions } from "bullmq";
@@ -117,7 +126,10 @@ export const notificationPayload = z.discriminatedUnion("template", [
     // Someone created a way into the workspace that outlives their session: its owners
     // and admins hear about it, so a stolen session can't leave one behind unseen.
     template: z.literal("workspace.access-created"),
-    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
+    to: z.object({
+      orgId: orgIdSchema,
+      roles: z.array(z.enum(["owner", "admin", "member"])).min(1),
+    }),
     data: z.object({
       kind: z.enum(["api-key", "webhook-endpoint"]),
       /** The key's name or the endpoint's URL. */
@@ -127,12 +139,18 @@ export const notificationPayload = z.discriminatedUnion("template", [
   z.object({
     template: z.literal("webhooks.endpoint-disabled"),
     // Everyone in the organization with one of these roles.
-    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
-    data: z.object({ endpointId: z.uuid(), url: z.string() }),
+    to: z.object({
+      orgId: orgIdSchema,
+      roles: z.array(z.enum(["owner", "admin", "member"])).min(1),
+    }),
+    data: z.object({ endpointId: webhookEndpointIdSchema, url: z.string() }),
   }),
   z.object({
     template: z.literal("billing.payment-failed"),
-    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
+    to: z.object({
+      orgId: orgIdSchema,
+      roles: z.array(z.enum(["owner", "admin", "member"])).min(1),
+    }),
     data: z.object({
       organizationName: z.string(),
       /** Minor units (cents), and an ISO 4217 code. */
@@ -143,8 +161,8 @@ export const notificationPayload = z.discriminatedUnion("template", [
   }),
   z.object({
     template: z.literal("todo.reminder"),
-    to: z.object({ userId: z.string() }),
-    data: z.object({ todoId: z.string(), title: z.string() }),
+    to: z.object({ userId: userIdSchema }),
+    data: z.object({ todoId: todoIdSchema, title: z.string() }),
   }),
 ]);
 export type NotificationPayload = z.infer<typeof notificationPayload>;
@@ -157,7 +175,7 @@ const deferredDelivery = z.object({
   payload: notificationPayload,
   // Only push waits for quiet hours today: texts are security messages, which never wait.
   channel: z.enum(["push"]),
-  userId: z.uuid(),
+  userId: userIdSchema,
   key: z.string(),
 });
 export type NotificationTemplate = NotificationPayload["template"];
@@ -176,7 +194,7 @@ export const WEBHOOK_RETRY_DELAYS_MS = [
   10 * HOUR_MS,
 ];
 
-const aiDocumentJob = z.object({ documentId: z.uuid(), orgId: z.uuid() });
+const aiDocumentJob = z.object({ documentId: documentIdSchema, orgId: orgIdSchema });
 
 /**
  * Retries with exponential backoff; the defaults every queue starts from. The jitter
@@ -206,7 +224,7 @@ export const queues = {
       /** Hourly: queues a `digest` for each user whose digest time has come today. */
       digests: z.object({}),
       /** One user's daily digest email, for one local date (YYYY-MM-DD). */
-      digest: z.object({ userId: z.uuid(), date: z.iso.date() }),
+      digest: z.object({ userId: userIdSchema, date: z.iso.date() }),
     },
     options: {
       ...retrying,
@@ -254,11 +272,11 @@ export const queues = {
    */
   "webhook-deliveries": {
     jobs: {
-      deliver: z.object({ deliveryId: z.uuid(), orgId: z.uuid() }),
+      deliver: z.object({ deliveryId: webhookDeliveryIdSchema, orgId: orgIdSchema }),
       /** Send an existing delivery again (admin replay from the delivery log). */
-      redeliver: z.object({ deliveryId: z.uuid(), orgId: z.uuid() }),
+      redeliver: z.object({ deliveryId: webhookDeliveryIdSchema, orgId: orgIdSchema }),
       /** A test event to one endpoint, from its settings page. */
-      "send-test": z.object({ endpointId: z.uuid(), orgId: z.uuid() }),
+      "send-test": z.object({ endpointId: webhookEndpointIdSchema, orgId: orgIdSchema }),
     },
     options: {
       attempts: 8,
@@ -273,7 +291,7 @@ export const queues = {
    * id is the file id, so completing an upload twice checks it once.
    */
   files: {
-    jobs: { process: z.object({ fileId: z.uuid() }) },
+    jobs: { process: z.object({ fileId: fileIdSchema }) },
     options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
   },
   /**

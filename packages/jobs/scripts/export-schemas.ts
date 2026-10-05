@@ -143,5 +143,5 @@ writeFileSync(join(out, "..", "events.json"), `${JSON.stringify(catalog, null, 2
 // the organization's id goes.
 writeFileSync(
   join(out, "..", "realtime-channels.json"),
-  `${JSON.stringify({ org: REALTIME_REDIS_PREFIX + realtimeChannel.org("{id}") }, null, 2)}\n`,
+  `${JSON.stringify({ org: REALTIME_REDIS_PREFIX + realtimeChannel.orgTemplate }, null, 2)}\n`,
 );
