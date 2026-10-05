@@ -7698,21 +7698,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -10833,21 +10819,7 @@
         ],
         "responses": {
           "204": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -14989,21 +14961,7 @@
         ],
         "responses": {
           "204": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -19440,21 +19398,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -26618,21 +26562,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -28990,21 +28920,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -31476,21 +31392,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -35595,21 +35497,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -36503,21 +36391,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",
@@ -40558,21 +40432,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "not": {}
-                    },
-                    {
-                      "not": {}
-                    }
-                  ]
-                }
-              }
-            }
+            "description": "OK"
           },
           "400": {
             "description": "400",

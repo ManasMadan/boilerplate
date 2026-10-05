@@ -33,8 +33,35 @@ export async function openApiDocument({
     },
   });
   markApiKeyOperations(spec, contract);
+  dropBodiesNeverSent(spec);
   addWebhooks(spec, converter);
   return spec;
+}
+
+/**
+ * A schema no value matches. oRPC writes a procedure that answers nothing (`z.void()`)
+ * as `{ anyOf: [{ not: {} }, { not: {} }] }`, and still documents it as a JSON body.
+ */
+const nothing: z.ZodType = z.lazy(() =>
+  z.union([z.object({ not: z.strictObject({}) }), z.object({ anyOf: z.array(nothing).min(1) })]),
+);
+
+/**
+ * Drops the JSON body documented for a response that has none: the API answers those
+ * with no body and no content type, so a client generated from the document would try
+ * to parse JSON that never comes.
+ */
+export function dropBodiesNeverSent(spec: Spec) {
+  const operations = Object.values(spec.paths ?? {}).flatMap((item) =>
+    Object.values(METHODS).map((method) => item?.[method]),
+  );
+  for (const operation of operations) {
+    for (const response of Object.values(operation?.responses ?? {})) {
+      if (!("content" in response)) continue;
+      if (nothing.safeParse(response.content?.["application/json"]?.schema).success)
+        delete response.content;
+    }
+  }
 }
 
 /**

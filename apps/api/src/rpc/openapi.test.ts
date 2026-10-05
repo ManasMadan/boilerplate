@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import { webhookEvents } from "@repo/contracts/events";
 import { describe, expect, it } from "vitest";
-import { markApiKeyOperations, openApiDocument } from "./openapi";
+import { dropBodiesNeverSent, markApiKeyOperations, openApiDocument } from "./openapi";
 
 describe("the REST document", () => {
   it("says which operations take an API key, and with which scope", async () => {
@@ -26,6 +26,43 @@ describe("the REST document", () => {
     expect(paths["/a"].get).toEqual({
       description: "Lists things.\n\nAPI keys need the `todos:read` scope.",
       security: [{ session: [] }, { apiKey: [] }],
+    });
+  });
+
+  it("documents no body for a procedure that answers none, and keeps the others'", async () => {
+    const spec = await openApiDocument({ version: "1", serverUrl: "/api/v1" });
+    expect(spec.paths?.["/todos/{id}"]?.delete?.responses?.["204"]).toEqual({ description: "OK" });
+    expect(spec.paths?.["/notifications/read-all"]?.post?.responses?.["200"]).toEqual({
+      description: "OK",
+    });
+    expect(spec.paths?.["/todos"]?.post?.responses?.["201"]).toHaveProperty([
+      "content",
+      "application/json",
+    ]);
+  });
+
+  it("leaves alone what isn't a body that never comes", () => {
+    const never = { anyOf: [{ not: {} }, { not: {} }] };
+    const paths = {
+      "/a": {
+        get: {
+          responses: {
+            "200": { description: "OK", content: { "application/json": { schema: never } } },
+          },
+        },
+        post: { responses: { "200": { $ref: "#/components/responses/Shared" } } },
+        put: { responses: { "200": { description: "OK", content: { "text/event-stream": {} } } } },
+        patch: {},
+      },
+    };
+    const spec = { openapi: "3.1.1", info: { title: "t", version: "1" } };
+    dropBodiesNeverSent(spec as never);
+    dropBodiesNeverSent({ ...spec, paths } as never);
+    expect(paths["/a"]).toEqual({
+      get: { responses: { "200": { description: "OK" } } },
+      post: { responses: { "200": { $ref: "#/components/responses/Shared" } } },
+      put: { responses: { "200": { description: "OK", content: { "text/event-stream": {} } } } },
+      patch: {},
     });
   });
 
