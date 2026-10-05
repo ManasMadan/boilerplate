@@ -94,7 +94,8 @@ function forgetSession(queryClient: QueryClient, failed?: Query<unknown, unknown
       query.reset();
     }
   }
-  queryClient.getMutationCache().clear();
+  // Mutations stay: one that failed this way still owes its caller the error, to show
+  // ("Please sign in to continue"), and none of them fetches again on its own.
 }
 
 /** The typed client and query utilities. Hooks in `api/*` use this; apps rarely need it. */
