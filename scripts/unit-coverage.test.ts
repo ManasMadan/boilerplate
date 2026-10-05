@@ -91,6 +91,11 @@ describe("which files unit tests must cover", () => {
     "apps/mobile/package.json": JSON.stringify({ scripts: { test: "jest" } }),
     "apps/mobile/src/a.ts": "",
     "apps/mobile/src/a.test.ts": "",
+    "apps/api/package.json": JSON.stringify({
+      scripts: { test: "vitest run --project unit", "test:integration": "vitest run" },
+    }),
+    "apps/api/src/auth.ts": "",
+    "apps/api/src/auth.test.ts": "",
   });
 
   it("are scripts/, the hooks, and package files with a vitest unit test beside them", () => {
@@ -100,6 +105,8 @@ describe("which files unit tests must cover", () => {
     expect(unitCovered("packages/p/src/view.tsx", root)).toBe(true);
     expect(unitCovered("packages/p/src/service.ts", root)).toBe(false);
     expect(unitCovered("apps/mobile/src/a.ts", root)).toBe(false);
+    // Its integration tests reach what the unit tests don't: CI's diff-cover judges it.
+    expect(unitCovered("apps/api/src/auth.ts", root)).toBe(false);
     expect(unitCovered("packages/gone/src/a.ts", root)).toBe(false);
     expect(unitCovered("packages/p/src/pure.test.ts", root)).toBe(false);
     expect(unitCovered("docs/testing.md", root)).toBe(false);
@@ -107,7 +114,13 @@ describe("which files unit tests must cover", () => {
 
   it("run Bun's suite for scripts/ and the hooks, and each package's vitest unit run", () => {
     const suites = suitesFor(
-      ["scripts/lib.test.ts", "packages/p/src/service.ts", "apps/mobile/src/a.ts", "README.md"],
+      [
+        "scripts/lib.test.ts",
+        "packages/p/src/service.ts",
+        "apps/mobile/src/a.ts",
+        "apps/api/src/auth.ts",
+        "README.md",
+      ],
       root,
     );
     expect(suites.map((suite) => [suite.cwd, suite.command.join(" "), suite.lcov])).toEqual([

@@ -9,10 +9,11 @@
  *                                           merge base with the default branch)
  *
  * Only the files unit tests are meant to cover count: scripts/ and the Claude Code hooks
- * (Bun's runner is their only suite), and a package's source file with a unit test beside
- * it (`src/x.test.ts` for `src/x.ts`) that its unit tests cover completely apart from the
- * change. A file whose unchanged lines they miss too leans on integration tests, which
- * need Docker: CI's diff-cover over every suite merged checks those, and every other file.
+ * (Bun's runner is their only suite), and, in a package with no integration suite, a
+ * source file with a unit test beside it (`src/x.test.ts` for `src/x.ts`). A package
+ * with integration tests (`test:integration`) leans on them, which need Docker, for lines
+ * no unit test reaches: CI's diff-cover over every suite merged checks those packages,
+ * and every other file.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -79,8 +80,9 @@ export interface Suite {
 }
 
 /**
- * The package whose unit suite is a vitest run (`"test": "vitest run ..."`), or null:
- * mobile's Jest and the Python service are left to CI.
+ * The package whose unit suite is a vitest run (`"test": "vitest run ..."`) and is its
+ * only suite, or null: a package with integration tests, mobile's Jest and the Python
+ * service are left to CI.
  */
 function vitestPackage(dir: string, root: string) {
   const manifest = join(root, dir, "package.json");
@@ -88,6 +90,7 @@ function vitestPackage(dir: string, root: string) {
   const { scripts } = JSON.parse(readFileSync(manifest, "utf8")) as {
     scripts?: Record<string, string>;
   };
+  if (scripts?.["test:integration"]) return null;
   return scripts?.test?.startsWith("vitest run") ? dir : null;
 }
 

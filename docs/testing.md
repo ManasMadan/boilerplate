@@ -17,9 +17,9 @@ touching the database, queues or HTTP, `bun run test:integration`. The pre-push 
 (`.husky/pre-push`) runs types and unit tests for the affected packages, the scripts'
 and hooks' types and tests, the unit coverage of every line the branch changes
 (`bun scripts/unit-coverage.ts --branch`), and knip; the rest is yours to run, and CI
-runs it all. The unit coverage check counts scripts/, the hooks, and a package's file
-with a unit test beside it that its unit tests otherwise cover completely; a file that
-leans on integration tests is left to CI's diff-cover, which merges every suite.
+runs it all. The unit coverage check counts scripts/, the hooks, and, in a package with
+no integration suite, a file with a unit test beside it; a package with integration
+tests (`test:integration`) is left to CI's diff-cover, which merges every suite.
 
 ## Unit
 
