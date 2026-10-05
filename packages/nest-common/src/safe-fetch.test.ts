@@ -32,27 +32,37 @@ describe("safeFetch", () => {
   let hitElsewhere = 0;
 
   beforeAll(async () => {
-    const routes: Record<string, (req: IncomingMessage, res: ServerResponse) => void> = {
-      "/redirect-internal": (_, res) =>
-        res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data" }).end(),
-      "/redirect-home": (_, res) => res.writeHead(307, { location: "/elsewhere" }).end(),
-      "/elsewhere": (_, res) => {
-        hitElsewhere++;
-        res.end("followed");
-      },
-      "/echo": (req, res) => {
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk;
-        });
-        req.on("end", () => res.end(`${req.method} ${req.headers["x-test"]} ${body}`));
-      },
-      "/loop": (_, res) => res.writeHead(302, { location: "/loop" }).end(),
-      "/big": (_, res) => res.end("x".repeat(2_000)),
-    };
+    // A Map, and only a function called: a request for `constructor` must find nothing.
+    const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => void>([
+      [
+        "/redirect-internal",
+        (_, res) =>
+          res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data" }).end(),
+      ],
+      ["/redirect-home", (_, res) => res.writeHead(307, { location: "/elsewhere" }).end()],
+      [
+        "/elsewhere",
+        (_, res) => {
+          hitElsewhere++;
+          res.end("followed");
+        },
+      ],
+      [
+        "/echo",
+        (req, res) => {
+          let body = "";
+          req.on("data", (chunk) => {
+            body += chunk;
+          });
+          req.on("end", () => res.end(`${req.method} ${req.headers["x-test"]} ${body}`));
+        },
+      ],
+      ["/loop", (_, res) => res.writeHead(302, { location: "/loop" }).end()],
+      ["/big", (_, res) => res.end("x".repeat(2_000))],
+    ]);
     server = createServer((req, res) => {
-      const route = routes[req.url ?? ""];
-      if (route) {
+      const route = routes.get(req.url ?? "");
+      if (typeof route === "function") {
         route(req, res);
       } else {
         res.end("ok");
