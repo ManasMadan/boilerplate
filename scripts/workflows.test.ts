@@ -136,6 +136,30 @@ describe("every workflow", () => {
     expect(unpinned).toEqual([]);
   });
 
+  it("checks out a workflow_run's commit only for this repository's own pushes", () => {
+    // workflow_run runs with secrets whatever triggered the run it follows, a fork's pull
+    // request included: checking that run's commit out must be limited to ours.
+    const guard = [
+      "github.event.workflow_run.event == 'push'",
+      "github.event.workflow_run.head_repository.full_name == github.repository",
+    ];
+    const unguarded = files
+      .filter((file) => "workflow_run" in workflow(file).on)
+      .flatMap((file) =>
+        Object.entries(workflow(file).jobs)
+          .filter(([, job]) =>
+            job.steps?.some(
+              (step) =>
+                step.uses?.startsWith("actions/checkout@") &&
+                /\$\{\{/.test(String(step.with?.ref ?? "")),
+            ),
+          )
+          .filter(([, job]) => !guard.every((check) => job.if?.includes(check)))
+          .map(([name]) => `${file}: ${name}`),
+      );
+    expect(unguarded).toEqual([]);
+  });
+
   it("gives every job a timeout, so a hung one doesn't burn six hours", () => {
     const missing = files.flatMap((file) =>
       Object.entries(workflow(file).jobs)

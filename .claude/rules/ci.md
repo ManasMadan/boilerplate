@@ -41,7 +41,11 @@ paths:
   so there's no second list to keep in step.
 - Secrets reach only the steps that need them, as `env` on the step, and are never
   echoed. Code from a fork's pull request never runs with secrets: no
-  `pull_request_target` job that checks out the pull request's head.
+  `pull_request_target` job that checks out the pull request's head, and a
+  `workflow_run` job that checks out the run's commit runs only when that run was this
+  repository's own push (`workflow_run.event == 'push'` and
+  `workflow_run.head_repository.full_name == github.repository` in its `if`;
+  `scripts/workflows.test.ts` checks).
 - Pinned tool versions in workflows carry a `# renovate:` comment on the line above.
 - Changing a workflow changes how everything ships: say what it changes and why, and
   let the user decide.

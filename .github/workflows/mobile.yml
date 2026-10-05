@@ -35,13 +35,16 @@ permissions: {}
 jobs:
   eas:
     name: ${{ github.event.workflow_run.name == 'Release' && 'Store builds' || 'Over-the-air update' }}
+    # Only a run of this repository's own pushes (master, or a release tag), never a fork's:
+    # this job checks that commit out and builds it with the Expo token.
     if: >-
       vars.EAS_PROJECT_ID != ''
       && (github.event_name == 'workflow_dispatch'
         || (github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.head_repository.full_name == github.repository
           && (github.event.workflow_run.name == 'Release'
-            || (github.event.workflow_run.event == 'push'
-              && github.event.workflow_run.head_branch == 'master'))))
+            || github.event.workflow_run.head_branch == 'master')))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: { contents: read }

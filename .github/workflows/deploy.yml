@@ -34,7 +34,13 @@ jobs:
   # One job per image and architecture: all seven on one runner ran it out of disk.
   build:
     name: Image ${{ matrix.image }} (${{ matrix.arch }})
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # Only this repository's own pushes to master, never a fork's: this job checks that
+    # commit out and pushes its images.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions: { contents: read, packages: write }
