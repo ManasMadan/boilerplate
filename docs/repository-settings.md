@@ -34,8 +34,9 @@ gh api -X PATCH "repos/$REPO" --input - <<'JSON'
   "secret_scanning_push_protection": {"status": "enabled"}}}
 JSON
 
-# Environments, deployable from master only.
-for env in staging infra-staging infra-production; do
+# Environments, deployable from master only. The drift ones hold the nightly plan's
+# read-only credentials and need no approval: they only ever run master's code.
+for env in staging infra-staging infra-production infra-staging-drift infra-production-drift; do
   gh api -X PUT "repos/$REPO/environments/$env" --input - <<'JSON'
 {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
@@ -190,6 +191,7 @@ warning, and Renovate doesn't run.
 | `staging` | `deploy.yml` (the staging bump) | deployment branch `master` |
 | `infra-staging`, `infra-production` | `infra.yml` (apply, and plans run by hand) | required reviewers on production; deployment branch `master` |
 | `infra-staging-plan`, `infra-production-plan` | `infra.yml` (plans on pull requests) | required reviewers; any branch |
+| `infra-staging-drift`, `infra-production-drift` | `infra.yml` (the nightly drift check) | deployment branch `master`; no reviewers |
 
 Production itself has no GitHub environment: it changes only by merging the promotion
 pull request, which the ruleset already gates.
@@ -209,7 +211,7 @@ skipped until its values exist.
 | `LOAD_TARGET_RPS` | variable | the nightly load test's target (default 50 requests a second) |
 | `STRIPE_CONTRACT_SECRET_KEY` | secret | the weekly check of the fake Stripe against Stripe's test mode (`stripe.yml`): a test-mode key (`sk_test_…`) of an account whose test-mode billing portal settings have been saved once (Dashboard → Settings → Billing → Customer portal); each run makes a customer with a trial subscription, then deletes it |
 | `COSIGN_PRIVATE_KEY`, `COSIGN_PASSWORD` | secrets | signing images with a key pair instead of keyless, so production's admission doesn't depend on Sigstore's public services (docs/deploy.md) |
-| `TOFU_TARGETS` | variable | which environments get a plan on infrastructure pull requests, e.g. `["staging", "production"]` |
+| `TOFU_TARGETS` | variable | which environments get a plan on infrastructure pull requests and the nightly drift check, e.g. `["staging", "production"]` |
 
 Per `infra-<env>` environment, for `infra.yml` (see the header of that workflow and
 `infra/tofu/README.md`), all secrets:
@@ -232,6 +234,13 @@ and a `CLOUDFLARE_API_TOKEN` with the read permissions of the ones listed in
 them. The passphrase still decrypts the state, which holds the cluster's admin key,
 which is why each plan waits for a reviewer: read the pull request's changes to
 `infra/tofu` before approving it. Pull requests from forks get no plan.
+
+The nightly drift check plans master's code against each environment and opens the
+issue "Infrastructure drift: <env>" when the plan has changes (closing it once a plan
+is clean). Its environment, `infra-<env>-drift`, holds the same four secrets as the
+plan environment, with the same read-only credentials, but only master deploys to it,
+so it needs no reviewer and runs unattended. Without it, the drift check can't plan
+and fails each night.
 
 The runner connects to the machines over SSH and to the Kubernetes API (ports 22 and
 6443): allow GitHub's runner addresses in the machines' firewall, or give the

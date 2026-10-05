@@ -61,6 +61,63 @@ describe("infra.yml", () => {
     const step = plan.steps?.find((s) => s.name === "Plan");
     expect(step?.run).toContain("-lock=false");
   });
+
+  describe("the nightly drift check", () => {
+    const { on } = workflow("infra.yml");
+    const drift = jobs.drift as Job & { permissions?: Record<string, string> };
+    const step = drift?.steps?.find((s) => s.name === "Plan");
+
+    /** The Plan step's outputs when `tofu plan` prints `printed` and exits `code`. */
+    function planned(printed: string, code: number) {
+      const dir = mkdtempSync(join(tmpdir(), "drift-"));
+      mkdirSync(join(dir, "bin"));
+      writeFileSync(join(dir, "bin/tofu"), `#!/bin/sh\nprintf '${printed}'\nexit ${code}\n`, {
+        mode: 0o755,
+      });
+      const output = join(dir, "output");
+      writeFileSync(output, "");
+      Bun.spawnSync(["bash", "-eo", "pipefail", "-c", step?.run ?? ""], {
+        cwd: dir,
+        env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, GITHUB_OUTPUT: output },
+      });
+      return readFileSync(output, "utf8");
+    }
+
+    it("runs every night, and only then, in an environment without reviewers or apply keys", () => {
+      expect(on.schedule).toEqual([{ cron: "17 3 * * *" }]);
+      expect(drift?.if).toBe(
+        "github.event_name == 'schedule' && needs.targets.outputs.matrix != '[]'",
+      );
+      expect(drift?.environment).toBe(`infra-\${{ matrix.env }}-drift`);
+      expect(drift?.permissions).toEqual({ contents: "read", issues: "write" });
+      const text = JSON.stringify(drift);
+      for (const secret of ["SSH_PRIVATE_KEY", "SOPS_AGE_KEY", "SOPS_PREVIEW_AGE_KEY"]) {
+        expect(text).not.toContain(`secrets.${secret}`);
+      }
+      expect(step?.run).toContain("-lock=false -detailed-exitcode");
+    });
+
+    it("tells drift (2) from a clean plan (0) and a failed one, with the plan's summary", () => {
+      expect(planned("Plan: 1 to add, 0 to change, 0 to destroy.\\n", 2)).toBe(
+        "status=2\nsummary=Plan: 1 to add, 0 to change, 0 to destroy.\n",
+      );
+      expect(planned("No changes.\\n", 0)).toBe("status=0\nsummary=\n");
+      expect(planned("Error: no state\\n", 1)).toStartWith("status=1\n");
+    });
+
+    it("keeps an issue open while it drifts, closes it once a plan is clean, and fails on drift", () => {
+      const issue = drift?.steps?.find((s) => s.uses === "./.github/actions/issue");
+      expect(issue?.if).toBe(
+        "steps.plan.outputs.status == '0' || steps.plan.outputs.status == '2'",
+      );
+      expect(issue?.with?.title).toBe(`Infrastructure drift: \${{ matrix.env }}`);
+      expect(issue?.with?.body).toContain("steps.plan.outputs.status == '2' && format(");
+      expect(drift?.steps?.at(-1)).toMatchObject({
+        if: "steps.plan.outputs.status != '0'",
+        run: "exit 1",
+      });
+    });
+  });
 });
 
 describe("every workflow", () => {

@@ -1,7 +1,10 @@
 # Infrastructure changes (infra/tofu). Pull requests get a `tofu plan` for every
 # environment listed in the TOFU_TARGETS repository variable, posted on the pull
 # request. Applying is manual (Run workflow → environment, apply) and waits for the
-# GitHub environment's required reviewers.
+# GitHub environment's required reviewers. Every night, master's code is planned against
+# each environment too: a plan with changes means the infrastructure drifted from git
+# (something changed by hand, or outside OpenTofu), and opens the issue
+# "Infrastructure drift: <env>" with the plan's summary, closed once a plan is clean.
 #
 # A pull request's plan runs the pull request's own OpenTofu code, so it runs in an
 # environment of its own, infra-<env>-plan, that holds only what a plan needs: no SSH
@@ -23,6 +26,8 @@
 #     CLOUDFLARE_API_TOKEN (secret)     see infra/tofu/modules/cloudflare; its read
 #                                       permissions only in the plan environment
 #     TF_VAR_state_passphrase (secret)  encrypts state and plans
+#   in infra-<env>-drift (the nightly plan, master only, no reviewers): the plan
+#     environment's four secrets, with the same read-only credentials
 #   in infra-<env> only:
 #     SSH_PRIVATE_KEY (secret)          the key the nodes accept
 #     SOPS_AGE_KEY (secret)             the environment's age private key
@@ -32,6 +37,9 @@ name: Infrastructure
 on:
   pull_request:
   merge_group:
+  # Nightly: the drift check.
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       env:
@@ -161,6 +169,64 @@ jobs:
               await github.rest.issues.createComment({ ...context.repo, issue_number: number, body });
             }
 
+  # The nightly drift check: master's code planned against each environment, in an
+  # environment of its own (read-only credentials like the plan's, but master only and
+  # without reviewers, so nothing waits for an approval at night).
+  drift:
+    name: drift ${{ matrix.env }}
+    needs: targets
+    if: github.event_name == 'schedule' && needs.targets.outputs.matrix != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: infra-${{ matrix.env }}-drift
+    permissions: { contents: read, issues: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: infra/tofu/envs/k3s
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_state_passphrase: ${{ secrets.TF_VAR_state_passphrase }}
+      TF_IN_AUTOMATION: "1"
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with: { tofu_version: 1.11.6, tofu_wrapper: false }
+      - name: Environment files
+        env:
+          BACKEND: ${{ secrets.TOFU_BACKEND }}
+          TFVARS: ${{ secrets.TOFU_TFVARS }}
+        run: |
+          umask 077
+          printf '%s\n' "$BACKEND" > backend.hcl
+          printf '%s\n' "$TFVARS" > env.tfvars
+      - run: tofu init -input=false -backend-config=backend.hcl
+      # -detailed-exitcode: 0 is no changes, 2 is changes (drift), 1 is an error. Only the
+      # summary line goes in the issue; the plan itself stays in the run's log.
+      - name: Plan
+        id: plan
+        run: |
+          set +e -o pipefail
+          tofu plan -input=false -no-color -lock=false -detailed-exitcode -var-file=env.tfvars | tee plan.txt
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "summary=$(grep -m1 -E '^Plan:' plan.txt)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/issue
+        if: steps.plan.outputs.status == '0' || steps.plan.outputs.status == '2'
+        with:
+          title: "Infrastructure drift: ${{ matrix.env }}"
+          body: >-
+            ${{ steps.plan.outputs.status == '2' && format('{0} differs from infra/tofu on master: {1} Plan it (Run workflow) to see the changes, then apply master or change the code to match.', matrix.env, steps.plan.outputs.summary) || '' }}
+      - name: Fail on drift or a failed plan
+        if: steps.plan.outputs.status != '0'
+        run: exit 1
+
   apply:
     name: ${{ matrix.env }}
     needs: targets
@@ -213,7 +279,7 @@ jobs:
   infra-ok:
     name: Infrastructure passed
     if: always()
-    needs: [changes, targets, plan, apply]
+    needs: [changes, targets, plan, drift, apply]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
@@ -236,5 +302,5 @@ jobs:
       - name: Require every job to succeed
         env:
           NEEDS: ${{ toJSON(needs) }}
-        # Each job succeeded, or had nothing to do (no infra/tofu change, no targets, not an apply).
+        # Each job succeeded, or had nothing to do (no infra/tofu change, no targets, not an apply, not the night).
         run: echo "$NEEDS" | jq -e '.changes.result == "success" and (del(.changes) | to_entries | all(.value.result == "success" or .value.result == "skipped"))' > /dev/null
