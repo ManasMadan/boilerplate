@@ -116,9 +116,19 @@ export function identityFrom(argv: string[]): Identity {
   return { name, owner: values.owner, product, bundleId };
 }
 
-/** Old identifiers still in `files` (path: line), after a rename. */
-export function leftovers(files: Map<string, string>) {
-  const old = new RegExp(`${OLD.name}|${OLD.owner}`, "i");
+/**
+ * Old identifiers still in `files` (path: line), after a rename to `identity`. One the
+ * new identity also holds (the same owner, renaming only the project) isn't a leftover.
+ */
+export function leftovers(files: Map<string, string>, identity?: Identity) {
+  const kept = Object.values(identity ?? {})
+    .join(" ")
+    .toLowerCase();
+  const ids = [OLD.name, OLD.owner].filter((id) => !kept.includes(id.toLowerCase()));
+  if (ids.length === 0) {
+    return [];
+  }
+  const old = new RegExp(ids.join("|"), "i");
   return [...files].flatMap(([path, text]) =>
     text
       .split("\n")
@@ -157,7 +167,7 @@ export function rename(root: string, identity: Identity) {
     writeFileSync(self, text);
     changed.push("scripts/rename.ts");
   }
-  return { changed, left: leftovers(files) };
+  return { changed, left: leftovers(files, identity) };
 }
 
 /** The command: renames the checkout at `root`; the exit code. */

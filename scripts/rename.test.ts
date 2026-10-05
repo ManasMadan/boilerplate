@@ -49,7 +49,6 @@ describe("renaming the project", () => {
     expect(rewrite(`ghcr.io/${owner}/${OLD.name}/api and @${OLD.owner}`, lower)).toBe(
       "ghcr.io/acme-co/shop/api and @Acme-Co",
     );
-    expect(rewrite("ghcr.io/acme-co/shop", lower)).toBe("ghcr.io/acme-co/shop");
   });
 
   it("writes the product as given, `$` and all", () => {
@@ -85,6 +84,11 @@ describe("renaming the project", () => {
       ["b.ts", `// ${owner}`],
     ]);
     expect(leftovers(files)).toEqual([`a.md:2: see ${token}`, `b.ts:1: // ${owner}`]);
+    // Renaming only the project keeps the owner: its name in the new URLs isn't left over.
+    const sameOwner = identityFrom(["shop", "--owner", OLD.owner]);
+    expect(leftovers(files, sameOwner)).toEqual([`a.md:2: see ${token}`]);
+    const sameEverything = { ...sameOwner, name: OLD.name.toUpperCase() };
+    expect(leftovers(files, sameEverything)).toEqual([]);
   });
 
   it("leaves nothing of the template in a copy of this repository", () => {
