@@ -42,7 +42,7 @@ COPY --from=prune /pruned/full/ .
 # that check (pages that use the origin render per request, from the runtime value).
 RUN WEB_URL=http://build.invalid bunx turbo@${TURBO_VERSION} run build --filter=@repo/web --only
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e
 ARG RELEASE=dev
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

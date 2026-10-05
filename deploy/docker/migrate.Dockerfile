@@ -35,7 +35,7 @@ RUN rm -rf node_modules/@repo
 WORKDIR /repo/node_modules/@prisma/engines
 RUN bun scripts/postinstall.js && ls schema-engine-*
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e
 COPY --from=build /repo/node_modules /app/node_modules
 COPY --from=build /repo/packages/db/prisma /app/packages/db/prisma
 COPY --from=build /repo/packages/db/prisma.config.ts /app/packages/db/prisma.config.ts
