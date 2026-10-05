@@ -419,6 +419,7 @@
       "dependencies": {
         "@repo/contracts": "workspace:*",
         "stripe": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@repo/typescript-config": "workspace:*",

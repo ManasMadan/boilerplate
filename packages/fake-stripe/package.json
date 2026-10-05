@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@repo/contracts": "workspace:*",
-    "stripe": "catalog:"
+    "stripe": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

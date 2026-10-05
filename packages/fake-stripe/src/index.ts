@@ -16,9 +16,10 @@
  */
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { fieldOf, required } from "@repo/contracts/objects";
 import { DAY_S } from "@repo/contracts/time";
 import Stripe from "stripe";
+import * as z from "zod";
 
 export interface FakeStripeOptions {
   secretKey: string;
@@ -49,7 +50,8 @@ interface Subscription
   > {
   customer: string;
   status: Stripe.Subscription.Status;
-  items: { object: "list"; data: SubscriptionItem[] };
+  // The app's subscriptions have one item: the seats.
+  items: { object: "list"; data: [SubscriptionItem] };
 }
 
 interface SubscriptionItem
@@ -96,24 +98,53 @@ interface PaymentMethod extends Pick<Stripe.PaymentMethod, "id" | "object"> {
 const now = () => Math.floor(Date.now() / 1000);
 const id = (prefix: string) => `${prefix}_${randomBytes(12).toString("hex")}`;
 
+/** A form, or a nested part of one (`metadata[a]`, `line_items[0]`): an object or an array. */
+type FormPart = Form | unknown[];
+const isFormPart = (value: unknown): value is FormPart =>
+  typeof value === "object" && value !== null;
+const fieldIn = (node: FormPart, name: string) =>
+  Array.isArray(node) ? node[Number(name)] : node[name];
+
 /** Stripe's form encoding (`a[b][0][c]=x`) into nested objects and arrays. */
 export function parseForm(body: string): Form {
   const root: Form = {};
   for (const [key, value] of new URLSearchParams(body)) {
-    const path = key.replaceAll("]", "").split("[");
-    let node: Record<string, unknown> = root;
-    path.forEach((part, index) => {
-      if (index === path.length - 1) {
-        node[part] = value;
-        return;
+    let node: FormPart = root;
+    let name = "";
+    for (const [index, part] of key.replaceAll("]", "").split("[").entries()) {
+      // Each part after the first is a field of the one before: an array's when it's a number.
+      if (index > 0) {
+        const inner = fieldIn(node, name);
+        node = isFormPart(inner) ? inner : setField(node, name, /^\d+$/.test(part) ? [] : {});
       }
-      const next = path[index + 1] as string;
-      node[part] ??= /^\d+$/.test(next) ? [] : {};
-      node = node[part] as Record<string, unknown>;
-    });
+      name = part;
+    }
+    setField(node, name, value);
   }
   return root;
 }
+
+/** Sets a field of a form part; the value set. */
+function setField<V>(node: FormPart, name: string, value: V): V {
+  if (Array.isArray(node)) node[Number(name)] = value;
+  else node[name] = value;
+  return value;
+}
+
+// The parts of a form the fake reads. It stays as lenient as it always was: a field the
+// app always sends is checked where it's used, so a test can leave out what it doesn't need.
+const metadata = z.record(z.string(), z.string());
+const subscriptionData = z.object({
+  metadata: metadata.optional(),
+  trial_period_days: z.string().optional(),
+});
+const lineItems = z.array(z.object({ id: z.string(), quantity: z.string().optional() }));
+const withFirstLine = z.object({
+  line_items: z.tuple(
+    [z.object({ price: z.string(), quantity: z.string().optional() })],
+    z.unknown(),
+  ),
+});
 
 const page = (title: string, body: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head>` +
@@ -133,8 +164,14 @@ function answerFor(result: unknown): { status: number; body: unknown } {
       body: { error: { type: "invalid_request_error", message: "Unrecognized request URL" } },
     };
   }
-  if (typeof result === "object" && result !== null && "status" in result && "body" in result) {
-    return result as { status: number; body: unknown };
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "status" in result &&
+    "body" in result &&
+    typeof result.status === "number"
+  ) {
+    return { status: result.status, body: result.body };
   }
   return { status: 200, body: result };
 }
@@ -145,8 +182,7 @@ const notFound = (what: string) => ({
 });
 
 type Customer = { id: string; object: "customer"; metadata: Record<string, string> };
-type CheckoutSession = Form & { id: string };
-type Line = { price: string; quantity: string };
+type CheckoutSession = Form & { id: string; customer: string };
 
 /** A Stripe API route: the method, the path, and what it answers (undefined is a 404). */
 type Route = [
@@ -159,7 +195,7 @@ type Route = [
 class Fake {
   readonly customers = new Map<string, Customer>();
   readonly sessions = new Map<string, CheckoutSession>();
-  readonly portals = new Map<string, { customer: string; return_url: string }>();
+  readonly portals = new Map<string, { customer: string; return_url: unknown }>();
   readonly subscriptions = new Map<string, Subscription>();
   readonly invoices: Invoice[] = [];
   readonly paymentMethods = new Map<string, PaymentMethod>();
@@ -196,7 +232,7 @@ class Fake {
   }
 
   invoiceFor(subscription: Subscription, status: string) {
-    const item = subscription.items.data[0] as SubscriptionItem;
+    const [item] = subscription.items.data;
     const draft = status === "draft";
     const invoice: Invoice = {
       id: id("in"),
@@ -219,13 +255,10 @@ class Fake {
 
   /** The subscription a completed Checkout session starts. */
   subscribe(session: CheckoutSession, paymentMethod: string | null) {
-    const line = (session.line_items as Line[])[0] as Line;
+    const [line] = withFirstLine.parse(session).line_items;
     const price = this.options.prices[line.price];
     if (!price) throw new Error(`unknown price ${line.price}`);
-    const data = (session.subscription_data ?? {}) as {
-      metadata?: Record<string, string>;
-      trial_period_days?: string;
-    };
+    const data = subscriptionData.parse(session.subscription_data ?? {});
     const trialDays = Number(data.trial_period_days ?? 0);
     const start = now();
     const item: SubscriptionItem = {
@@ -244,7 +277,7 @@ class Fake {
     const subscription: Subscription = {
       id: id("sub"),
       object: "subscription",
-      customer: session.customer as string,
+      customer: session.customer,
       status: trialDays > 0 ? "trialing" : "active",
       metadata: data.metadata ?? {},
       cancel_at_period_end: false,
@@ -265,8 +298,7 @@ class Fake {
    * "if_required"` takes none, as Stripe's does.
    */
   takeCard(session: CheckoutSession, form: Form) {
-    const trial = (session.subscription_data as { trial_period_days?: string } | undefined)
-      ?.trial_period_days;
+    const trial = subscriptionData.optional().parse(session.subscription_data)?.trial_period_days;
     if (session.payment_method_collection === "if_required" && trial) return null;
     const card = typeof form.card === "string" ? form.card : "4242";
     const paymentMethod: PaymentMethod =
@@ -311,15 +343,19 @@ class Fake {
   }
 
   private createCustomer(form: Form) {
-    const metadata = (form.metadata ?? {}) as Record<string, string>;
-    const customer: Customer = { id: id("cus"), object: "customer", metadata };
+    const customer: Customer = {
+      id: id("cus"),
+      object: "customer",
+      metadata: metadata.parse(form.metadata ?? {}),
+    };
     this.customers.set(customer.id, customer);
     return customer;
   }
 
   private createCheckout(form: Form) {
-    if (!this.customers.has(form.customer as string)) return notFound("customer");
-    const session = { ...form, id: id("cs"), object: "checkout.session", status: "open" };
+    const { customer } = form;
+    if (typeof customer !== "string" || !this.customers.has(customer)) return notFound("customer");
+    const session = { ...form, customer, id: id("cs"), object: "checkout.session", status: "open" };
     this.sessions.set(session.id, session);
     return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
   }
@@ -353,12 +389,10 @@ class Fake {
   }
 
   private createPortal(form: Form) {
-    if (!this.customers.has(form.customer as string)) return notFound("customer");
+    const { customer } = form;
+    if (typeof customer !== "string" || !this.customers.has(customer)) return notFound("customer");
     const portal = id("bps");
-    this.portals.set(portal, {
-      customer: form.customer as string,
-      return_url: form.return_url as string,
-    });
+    this.portals.set(portal, { customer, return_url: form.return_url });
     return {
       id: portal,
       object: "billing_portal.session",
@@ -384,8 +418,7 @@ class Fake {
   }
 
   private async update(subscription: Subscription, form: Form) {
-    const items = (form.items ?? []) as { id: string; quantity?: string }[];
-    for (const change of items) {
+    for (const change of lineItems.parse(form.items ?? [])) {
       const item = subscription.items.data.find((existing) => existing.id === change.id);
       if (!item) return notFound("subscription item");
       if (change.quantity !== undefined) item.quantity = Number(change.quantity);
@@ -420,13 +453,14 @@ class Fake {
   /** The hosted pages: Checkout and the billing portal. */
   async hosted(method: string, path: string, form: Form): Promise<Page> {
     const checkout = /^\/checkout\/(cs_\w+)(\/pay)?$/.exec(path);
-    if (checkout) return this.checkoutPage(method, checkout[1] as string, !!checkout[2], form);
+    if (checkout) return this.checkoutPage(method, checkout[1], !!checkout[2], form);
     const portal = /^\/portal\/(bps_\w+)(\/cancel|\/resume)?$/.exec(path);
-    if (portal) return this.portalPage(method, portal[1] as string, portal[2]);
+    if (portal) return this.portalPage(method, portal[1], portal[2]);
     return { status: 404, html: page("Not found", "") };
   }
 
-  private async checkoutPage(method: string, sessionId: string, pay: boolean, form: Form) {
+  // The page's path always has the session's id (the regex requires it).
+  private async checkoutPage(method: string, sessionId = "", pay: boolean, form: Form) {
     const session = this.sessions.get(sessionId);
     if (!session) return { status: 404, html: page("Not found", "") };
     if (session.status === "expired") {
@@ -436,7 +470,7 @@ class Fake {
       };
     }
     if (method === "POST" && pay) return this.pay(session, form);
-    const line = (session.line_items as Line[])[0];
+    const line = withFirstLine.safeParse(session).data?.line_items[0];
     const price = this.options.prices[line?.price ?? ""];
     return {
       status: 200,
@@ -445,7 +479,7 @@ class Fake {
         `<p>${line?.quantity ?? 1} × ${((price?.unitAmount ?? 0) / 100).toFixed(2)} USD / ${price?.interval}</p>` +
           `<form method="post" action="/checkout/${session.id}/pay"><button>Pay</button></form>` +
           `<form method="post" action="/checkout/${session.id}/pay"><input type="hidden" name="card" value="declined"><button>Pay with a declined card</button></form>` +
-          `<a href="${escapeHtml(session.cancel_url as string)}">Back</a>`,
+          `<a href="${escapeHtml(z.string().parse(session.cancel_url))}">Back</a>`,
       ),
     };
   }
@@ -461,7 +495,8 @@ class Fake {
         ),
       };
     }
-    if (session.status !== "open") return { status: 303, location: session.success_url as string };
+    const successUrl = z.string().parse(session.success_url);
+    if (session.status !== "open") return { status: 303, location: successUrl };
     session.status = "complete";
     const subscription = this.subscribe(session, this.takeCard(session, form));
     this.invoiceFor(subscription, "paid");
@@ -469,11 +504,11 @@ class Fake {
     await this.emit("customer.subscription.created", subscription);
     return {
       status: 303,
-      location: (session.success_url as string).replace("{CHECKOUT_SESSION_ID}", session.id),
+      location: successUrl.replace("{CHECKOUT_SESSION_ID}", session.id),
     };
   }
 
-  private async portalPage(method: string, portalId: string, action: string | undefined) {
+  private async portalPage(method: string, portalId = "", action: string | undefined) {
     const session = this.portals.get(portalId);
     if (!session) return { status: 404, html: page("Not found", "") };
     const subscription = [...this.subscriptions.values()].find(
@@ -488,7 +523,7 @@ class Fake {
       status: 200,
       html: page(
         "Fake Stripe Billing Portal",
-        `${planState(portalId, subscription)}<a href="${escapeHtml(session.return_url)}">Return</a>`,
+        `${planState(portalId, subscription)}<a href="${escapeHtml(z.string().parse(session.return_url))}">Return</a>`,
       ),
     };
   }
@@ -534,7 +569,7 @@ class Fake {
       };
     }
     // A server's requests always have a method.
-    const method = request.method as string;
+    const method = required(request.method, "the request's method");
     const key = request.headers["idempotency-key"];
     const cacheKey = typeof key === "string" ? `${method} ${url.pathname} ${key}` : null;
     const cached = cacheKey ? this.idempotent.get(cacheKey) : undefined;
@@ -558,7 +593,7 @@ class Fake {
   /** Every request: the API, the test hooks, or a hosted page. */
   async handle(request: IncomingMessage, response: ServerResponse) {
     // A server's requests always have a URL and a method.
-    const url = new URL(request.url as string, "http://fake");
+    const url = new URL(required(request.url, "the request's URL"), "http://fake");
     const chunks: Buffer[] = [];
     for await (const chunk of request as AsyncIterable<Buffer>) chunks.push(chunk);
     const raw = Buffer.concat(chunks).toString();
@@ -572,9 +607,12 @@ class Fake {
         const result = await this.hooks(url.pathname, url.searchParams);
         return result ? json(response, 200, result) : json(response, 404, { error: "not found" });
       }
-      send(response, await this.hosted(request.method as string, url.pathname, form));
+      send(
+        response,
+        await this.hosted(required(request.method, "the request's method"), url.pathname, form),
+      );
     } catch (error) {
-      json(response, 500, { error: { type: "api_error", message: (error as Error).message } });
+      json(response, 500, { error: { type: "api_error", message: fieldOf(error, "message") } });
     }
   }
 }
@@ -608,7 +646,8 @@ export async function startFakeStripe(options: FakeStripeOptions) {
   const fake = new Fake(options);
   const server = createServer((request, response) => void fake.handle(request, response));
   await new Promise<void>((resolve) => server.listen(options.port ?? 0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  // Listening on a port, the server's address is that port's.
+  const { port } = z.object({ port: z.number() }).parse(server.address());
   fake.baseUrl = `http://127.0.0.1:${port}`;
 
   return {
