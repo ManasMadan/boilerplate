@@ -67,6 +67,11 @@ export async function fromStripe<T>(work: () => Promise<T>): Promise<T> {
 const CHECKOUT_SESSION_SECONDS = DAY_S;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** The plan a subscription row gives (free unless it's a paid status). */
+function planOf(subscription: { status: string; plan: string } | null): PlanName {
+  return subscription && paid.has(subscription.status) ? planName.parse(subscription.plan) : "free";
+}
+
 @Injectable()
 export class BillingService {
   constructor(
@@ -93,17 +98,9 @@ export class BillingService {
     };
   }
 
-  async plan(orgId: string): Promise<PlanName> {
-    if (!this.enabled) return "pro";
-    const subscription = await this.repository.current(orgId);
-    return subscription && paid.has(subscription.status)
-      ? planName.parse(subscription.plan)
-      : "free";
-  }
-
   async entitlements(orgId: string): Promise<Entitlements> {
     if (!this.enabled) return unlimited;
-    return plans[await this.plan(orgId)].entitlements;
+    return plans[planOf(await this.repository.current(orgId))].entitlements;
   }
 
   /** Throws ENTITLEMENT_REQUIRED unless the organization's plan includes `entitlement`. */
@@ -114,12 +111,14 @@ export class BillingService {
   }
 
   async overview(orgId: string): Promise<BillingOverview> {
-    const [plan, entitlements, members, subscription] = await Promise.all([
-      this.plan(orgId),
-      this.entitlements(orgId),
+    // One read of the subscription, the plan and its entitlements taken from that same
+    // row: separate reads could straddle a sync and show a plan with no subscription.
+    const [members, subscription] = await Promise.all([
       this.repository.memberCount(orgId),
       this.enabled ? this.repository.current(orgId) : null,
     ]);
+    const plan = this.enabled ? planOf(subscription) : "pro";
+    const entitlements = this.enabled ? plans[plan].entitlements : unlimited;
     return {
       enabled: this.enabled,
       plan,
