@@ -18,6 +18,8 @@ type Step = {
   with?: Record<string, unknown>;
 };
 type Job = {
+  name?: string;
+  needs?: string | string[];
   if?: string;
   environment?: string;
   env?: Record<string, string>;
@@ -656,5 +658,54 @@ describe("ci.yml's unit job", () => {
     expect(steps.map((step) => step.run ?? "")).toContain(
       "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts scripts .claude/hooks",
     );
+  });
+});
+
+describe("the checks a merge waits for", () => {
+  /** Each workflow that can block a pull request, and the one gate it reports. */
+  const GATES: Record<string, string> = {
+    "ci.yml": "CI passed",
+    "security.yml": "Security passed",
+    "kind.yml": "Kubernetes passed",
+    "infra.yml": "Infrastructure passed",
+  };
+  /** Jobs a gate leaves out on purpose: the nightly evals call real model providers. */
+  const NOT_GATED: Record<string, string[]> = { "ci.yml": ["evals"] };
+  /** Runs on pull requests but never blocks one: optional, or started by a label. */
+  const ADVISORY = ["claude-review.yml", "preview.yml"];
+  const onPullRequests = readdirSync(join(ROOT, ".github/workflows")).filter(
+    (file) => file.endsWith(".yml") && "pull_request" in workflow(file).on,
+  );
+
+  it("come from one gate per workflow that needs every other job and always reports", () => {
+    expect(onPullRequests.filter((file) => !ADVISORY.includes(file)).sort()).toEqual(
+      Object.keys(GATES).sort(),
+    );
+    for (const [file, name] of Object.entries(GATES)) {
+      const { on, jobs } = workflow(file);
+      const [key, gate] = Object.entries(jobs).find(([, job]) => job.name === name) ?? [];
+      expect({ file, gate: Boolean(gate) }).toEqual({ file, gate: true });
+      expect({ file, if: gate?.if }).toEqual({ file, if: "always()" });
+      const others = Object.keys(jobs).filter(
+        (job) => job !== key && !(NOT_GATED[file] ?? []).includes(job),
+      );
+      expect({ file, needs: [gate?.needs ?? []].flat().sort() }).toEqual({
+        file,
+        needs: others.sort(),
+      });
+      // A path filter would leave the gate unreported on other pull requests, and a
+      // queued pull request waits for it in the merge queue.
+      expect({ file, filtered: JSON.stringify(on.pull_request ?? {}).includes("paths") }).toEqual({
+        file,
+        filtered: false,
+      });
+      expect({ file, queue: "merge_group" in on }).toEqual({ file, queue: true });
+    }
+  });
+
+  it("are the gates and nothing else in the master ruleset", () => {
+    const settings = readFileSync(join(ROOT, "docs/repository-settings.md"), "utf8");
+    const required = [...settings.matchAll(/\{"context": "([^"]+)"\}/g)].map(([, name]) => name);
+    expect(required.sort()).toEqual(Object.values(GATES).sort());
   });
 });

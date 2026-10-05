@@ -54,8 +54,9 @@ for env in infra-staging-plan infra-production-plan; do
 JSON
 done
 
-# master: pull requests only, squash-merged, with CI, the security checks and CodeQL
-# passing. APPROVALS is 0 for a single maintainer (GitHub doesn't let you approve your
+# master: pull requests only, squash-merged, with each workflow's gate and CodeQL
+# passing. Only the gates are required: each needs every other job of its workflow and
+# always reports, so adding a job never needs a change here. APPROVALS is 0 for a single maintainer (GitHub doesn't let you approve your
 # own pull request); make it 1 and CODE_OWNERS true once there's a team.
 APPROVALS=0 CODE_OWNERS=false
 gh api -X POST "repos/$REPO/rulesets" --input - <<JSON
@@ -68,8 +69,8 @@ gh api -X POST "repos/$REPO/rulesets" --input - <<JSON
     "dismiss_stale_reviews_on_push": true, "require_last_push_approval": false,
     "required_review_thread_resolution": true, "allowed_merge_methods": ["squash"]}},
   {"type": "required_status_checks", "parameters": {"strict_required_status_checks_policy": false,
-    "required_status_checks": [{"context": "CI passed"}, {"context": "Secrets in the history"},
-      {"context": "Dependency review"}, {"context": "Known vulnerabilities (OSV)"}]}},
+    "required_status_checks": [{"context": "CI passed"}, {"context": "Security passed"},
+      {"context": "Kubernetes passed"}, {"context": "Infrastructure passed"}]}},
   {"type": "code_scanning", "parameters": {"code_scanning_tools": [
     {"tool": "CodeQL", "security_alerts_threshold": "high_or_higher", "alerts_threshold": "errors"}]}}
  ],
@@ -138,14 +139,17 @@ To check: `gh api "repos/$REPO/rulesets" --jq '.[].name'` prints `master` and
   let you approve your own pull request; that's what the command above sets). Once
   there's a team, raise it here to 1 approval with **Require review from Code Owners**
   (`.github/CODEOWNERS`).
-- Require status checks to pass: **CI passed**, which succeeds only when every CI job
-  does (see `ci.yml`), so adding a CI job never needs a change here; and from
-  `security.yml`, **Secrets in the history**, **Dependency review** and **Known
-  vulnerabilities (OSV)**.
+- Require status checks to pass: the four gates and nothing else. **CI passed**,
+  **Security passed**, **Kubernetes passed** and **Infrastructure passed** each need every
+  other job of their workflow (`ci.yml`, `security.yml`, `kind.yml`, `infra.yml`) and
+  always report: Kubernetes and Infrastructure run on every pull request and skip their
+  real work when nothing they check changed. So adding a job never needs a change here,
+  and `scripts/workflows.test.ts` fails if a workflow that can block a pull request has
+  no gate, or the ruleset here requires anything else.
 - Require code scanning results: **CodeQL**, blocking on high or higher.
-- Optional: **Require merge queue** (CI and the Security workflow run on `merge_group`;
-  there the secrets scan and dependency review are skipped, which the ruleset counts as
-  passing, since the pull request's own run already did them).
+- Optional: **Require merge queue** (all four gated workflows run on `merge_group`;
+  there the secrets scan and dependency review are skipped, which Security's gate counts
+  as passing, since the pull request's own run already did them).
 - Bypass list: the repository's GitHub App (below), so the staging bump can reach
   `master` without a pull request. Nobody else.
 

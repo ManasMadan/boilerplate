@@ -144,3 +144,35 @@ jobs:
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
+
+  # The one check the master ruleset requires from this workflow (docs/repository-settings.md):
+  # it always reports, so a pull request this workflow has nothing to do for isn't left
+  # waiting on it.
+  security-ok:
+    name: Security passed
+    if: always()
+    needs: [codeql, secrets, dependencies, osv, misconfig]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            nodejs.org:443
+            registry.npmjs.org:443
+      - name: Require every job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        # Skipped is fine: the merge queue skips the secrets scan and dependency review, which the pull request's own run did.
+        run: echo "$NEEDS" | jq -e 'to_entries | all(.value.result == "success" or .value.result == "skipped")' > /dev/null

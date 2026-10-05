@@ -26,8 +26,12 @@ paths:
   job's own setup steps. A job
   that runs turbo asks for uv (`python: "true"`): tasks depend on `^gen`, which reaches
   the Python service's `gen` through the AI client (`scripts/workflows.test.ts` checks).
-- A new CI job goes in `ci-ok`'s `needs` list, the one required check, so branch
-  protection never changes. A heavy one also `needs: changes` and runs only for the
+- Only gates are required checks: one per workflow that can block a pull request
+  (**CI passed**, **Security passed**, **Kubernetes passed**, **Infrastructure passed**),
+  each `if: always()` and needing every other job of its workflow, and none behind a path
+  filter (a job that has nothing to do is skipped by a `changes` job instead, so the gate
+  still reports). A new job goes in its workflow gate's `needs`, so the ruleset never
+  changes; `scripts/workflows.test.ts` fails otherwise. In `ci.yml` that gate is `ci-ok`. A heavy one also `needs: changes` and runs only for the
   areas it checks (`if: needs.changes.outputs.<area> == 'true'`, areas in
   `scripts/changes.ts`), with the same areas in `ci-ok`'s `$gates`
   (`scripts/workflows.test.ts` fails when the two disagree). Jobs run the same commands a developer runs locally
