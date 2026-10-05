@@ -39,6 +39,10 @@ digest, Helm charts, OpenTofu providers, and versions marked with a `# renovate:
   release's `kind-linux-amd64.sha256sum` before merging.
 - **Postgres majors** are disabled: a major needs a dump and restore or pg_upgrade,
   never a tag bump.
+- **Renovate's own config.** `bun run lint:renovate` validates `renovate.json5` in
+  strict mode with the Renovate version `renovate.yml` pins; the lint job and the
+  pre-commit hook run it. After raising `renovate-version`, run it and fix any setting
+  the new version wants migrated.
 - **Images** in `deploy/` and the charts: `bun run charts:check` renders and validates
   them. **OpenTofu providers**: `bun run infra:check`.
 - **Python** (`apps/ai/uv.lock`): Renovate updates the lockfile; locally

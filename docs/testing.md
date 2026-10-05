@@ -21,9 +21,9 @@ the machine has cores, less one): gitleaks scans them for secrets
 (`scripts/secret-scan.ts`); a staged Dockerfile, or anything under `deploy/` or `infra/`,
 adds Trivy's misconfiguration scan (`scripts/misconfig.ts`); a staged `bun.lock` or
 `apps/ai/uv.lock` adds OSV's (`scripts/osv.ts`); a staged workflow adds actionlint and
-zizmor, a shell script shellcheck, a Dockerfile hadolint and OpenTofu tflint
-(`scripts/linters.ts`). The two scans are the Security workflow's, with the same
-versions and configuration (`trivy.yaml`, `osv-scanner.toml`), and the linters are the
+zizmor, a shell script shellcheck, a Dockerfile hadolint, OpenTofu tflint and
+`renovate.json5` Renovate's config validator (`scripts/linters.ts`). The two scans are
+the Security workflow's, with the same versions and configuration (`trivy.yaml`, `osv-scanner.toml`), and the linters are the
 lint job's, so what passes the hook passes those jobs. Each uses a local binary of CI's
 version, else its image in Docker; with neither, the commit stops and says so. Only a failed step's
 output is printed. With a Dockerfile, a chart and `bun.lock` staged, the hook takes about
@@ -526,6 +526,7 @@ The evals run on every change with the local stand-ins; see
 | `bun run lint:shellcheck` | every shell script: `*.sh`, the git hooks in `.husky/`, and any file whose first line runs a shell. A `.shellcheckrc` says which shell for the scripts that have no first line saying so (the hooks and the data chart's scripts, all run with `sh`) |
 | `bun run lint:hadolint` | every Dockerfile (`deploy/docker/`, `.devcontainer/Dockerfile`) |
 | `bun run lint:tflint` | the OpenTofu modules and environment, with every rule of the Terraform ruleset bundled with tflint (`infra/tofu/.tflint.hcl`) |
+| `bun run lint:renovate` | `renovate.json5`, with Renovate's config validator in strict mode, so a broken or outdated setting fails here instead of Renovate quietly stopping. The version is the one `renovate.yml` runs Renovate at, read from that workflow: a local `renovate-config-validator` of it, else the `renovate/renovate` image in Docker (a large pull, once; about two seconds after that) |
 | `bun run lint:unused` | knip (`knip.jsonc`): unused files, exports and dependencies, and dependencies used but not declared |
 | `bun run lint:markers` | no `ponytail:` markers in tracked source (`scripts/check-markers.ts`): a comment says why in plain words |
 | `bun run lint:patterns` | code shapes Biome can't see (`scripts/check-patterns.ts`): in services' and packages' `src/`, `scripts/`, `load/` and `turbo/generators/`, parsed JSON cast to a type, a type argument on `$queryRaw`, an optional chain three deep, a role compared with `"member"`, an error sent without `sendError`; in tests, a fixed sleep outside a polling loop |
@@ -548,7 +549,7 @@ for those areas.
 
 | Job | Runs |
 |---|---|
-| Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, suppressions, the linters of the workflows, shell scripts, Dockerfiles and OpenTofu, each package's lint) |
+| Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, suppressions, the linters of the workflows, shell scripts, Dockerfiles, OpenTofu and Renovate's config, each package's lint) |
 | Type-check | `bun run check-types`, then `bun run type-coverage` (strict: no `any`, type assertion or non-null `!` in any workspace's source, the repo's scripts, the load test or the code generators, but the Type-coverage exceptions) |
 | Unit tests | `bun run test` |
 | Components | the stories with coverage, `test:visual` |

@@ -23,6 +23,7 @@ export const STEPS: string[][] = [
   ["bun", "run", "lint:shellcheck"],
   ["bun", "run", "lint:hadolint"],
   ["bun", "run", "lint:tflint"],
+  ["bun", "run", "lint:renovate"],
   ["bunx", "turbo", "run", "lint"],
 ];
 

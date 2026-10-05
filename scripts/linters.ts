@@ -10,6 +10,9 @@
  *                runs a shell (a .shellcheckrc beside scripts without one says which)
  *   hadolint     every Dockerfile
  *   tflint       the OpenTofu code (infra/tofu/.tflint.hcl)
+ *   renovate     renovate.json5, by Renovate's config validator in strict mode (it also
+ *                fails on settings Renovate would migrate), at the version renovate.yml
+ *                runs Renovate at
  *
  * Each uses a local binary of its version, else its image in Docker; with neither, it
  * fails and says how to get one, rather than skipping the check.
@@ -19,6 +22,8 @@ import { join } from "node:path";
 import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 type Linter = {
+  /** Its command, when not its name. */
+  binary?: string;
   /** Its image, without the tag. */
   image: string;
   /** The image's tag: the version CI runs. */
@@ -47,8 +52,14 @@ export function isShellScript(path: string, root: string): boolean {
   );
 }
 
+/** The Renovate version renovate.yml runs (its action's `renovate-version` input). */
+export function renovateVersion(root = ROOT): string {
+  const workflow = readFileSync(join(root, ".github/workflows/renovate.yml"), "utf8");
+  return String(/^\s+renovate-version: (\S+)$/m.exec(workflow)?.[1]);
+}
+
 export const LINTERS: Record<
-  "actionlint" | "zizmor" | "shellcheck" | "hadolint" | "tflint",
+  "actionlint" | "zizmor" | "shellcheck" | "hadolint" | "tflint" | "renovate",
   Linter
 > = {
   actionlint: {
@@ -99,6 +110,16 @@ export const LINTERS: Record<
       "--format=compact",
     ],
   },
+  renovate: {
+    binary: "renovate-config-validator",
+    image: "renovate/renovate",
+    version: renovateVersion(),
+    releases: "https://github.com/renovatebot/renovate/releases",
+    reads: (path) => path === "renovate.json5",
+    // No file: it finds renovate.json5 and validates it as a repository's configuration
+    // (a file named here is validated as Renovate's own, global one).
+    args: () => ["--strict"],
+  },
 };
 
 /** Every file under `root` git tracks or would (new ones too), that still exists. */
@@ -112,15 +133,16 @@ export function repositoryFiles(run: Run = runSync, root = ROOT): string[] {
 
 /** The command that runs `name` at its version: a local binary of it, else Docker. */
 function command(name: string, linter: Linter, run: Run, root: string): string[] | undefined {
-  const local = run(name, ["--version"], { cwd: root });
+  const binary = linter.binary ?? name;
+  const local = run(binary, ["--version"], { cwd: root });
   if (`${local.stdout}${local.stderr}`.split(/\s+/).includes(linter.version.replace(/^v/, ""))) {
-    return [name];
+    return [binary];
   }
   if (run("docker", ["info"], { cwd: root, stdio: "ignore" }).status === 0) {
     return [
       "docker",
       ...["run", "--rm", "--memory=512m", "-v", `${root}:${root}:ro`, "-w", root],
-      ...["--entrypoint", name, `${linter.image}:${linter.version}`],
+      ...["--entrypoint", binary, `${linter.image}:${linter.version}`],
     ];
   }
   return undefined;

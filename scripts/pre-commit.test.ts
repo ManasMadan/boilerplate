@@ -91,10 +91,15 @@ describe("the pre-commit checks", () => {
     ]);
   });
 
-  it("lints a staged shell script, Dockerfile and OpenTofu file with their linters", async () => {
+  it("lints a staged shell script, Dockerfile, OpenTofu file and Renovate's config", async () => {
     captureOutput();
     const { run, started, finish } = steps();
-    const staged = [".husky/pre-commit", ".devcontainer/Dockerfile", "infra/tofu/envs/k3s/main.tf"];
+    const staged = [
+      ".husky/pre-commit",
+      ".devcontainer/Dockerfile",
+      "infra/tofu/envs/k3s/main.tf",
+      "renovate.json5",
+    ];
     const done = preCommit({ staged, run, slots: 8 });
     await finish();
     expect(await done).toBe(0);
@@ -102,6 +107,7 @@ describe("the pre-commit checks", () => {
       "bun scripts/linters.ts shellcheck",
       "bun scripts/linters.ts hadolint",
       "bun scripts/linters.ts tflint",
+      "bun scripts/linters.ts renovate",
     ]);
   });
 

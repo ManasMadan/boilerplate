@@ -4,7 +4,8 @@
  * secret scan and, when a staged file is one they read, the infrastructure
  * misconfiguration scan (Trivy), the known-vulnerability scan (OSV) and each linter of
  * scripts/linters.ts (a staged workflow runs actionlint and zizmor, a shell script
- * shellcheck, a Dockerfile hadolint, OpenTofu tflint). lint-staged writes: it fixes and
+ * shellcheck, a Dockerfile hadolint, OpenTofu tflint, renovate.json5 Renovate's config
+ * validator). lint-staged writes: it fixes and
  * restages files, hiding and restoring the unstaged changes around that, so for a moment
  * files the others read are gone or half-written. They start once it has finished, and
  * see the tree it leaves. As many at once as the machine has cores, less one. A step's output is printed only

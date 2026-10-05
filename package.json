@@ -97,6 +97,7 @@
     "lint:shellcheck": "bun scripts/linters.ts shellcheck",
     "lint:hadolint": "bun scripts/linters.ts hadolint",
     "lint:tflint": "bun scripts/linters.ts tflint",
+    "lint:renovate": "bun scripts/linters.ts renovate",
     "lint:prisma": "bun scripts/format-prisma.ts --check",
     "format": "biome check --write .",
     "test": "turbo run test",
