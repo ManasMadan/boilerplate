@@ -18,8 +18,12 @@ REPO=owner/name
 gh repo edit "$REPO" --visibility public --accept-visibility-change-consequences --template
 
 # Squash merges only, titled by the pull request; head branches deleted after merging.
+# Auto-merge: a pull request set to merge does so once the ruleset's checks pass (`gh pr
+# merge --auto --squash`, or the button). "Update branch" brings a behind one up to date.
+# No wiki or projects: the docs live in this repository, and work in issues.
 gh repo edit "$REPO" --enable-squash-merge --squash-merge-commit-message pr-title-description \
-  --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge
+  --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge \
+  --enable-auto-merge --allow-update-branch --enable-wiki=false --enable-projects=false
 
 # Workflows get read-only tokens unless a job asks for more, and never approve pull requests.
 gh api -X PUT "repos/$REPO/actions/permissions/workflow" \
