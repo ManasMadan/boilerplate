@@ -125,7 +125,8 @@ async function isStale(client: pg.Client) {
 /** Test database names carry the pid of the process that owns them (and drops them). */
 const TEST_DATABASE = /^app_test_(\d+)_[0-9a-f]+$/;
 
-function isRunning(pid: number) {
+/** Whether process `pid` runs on this machine (as any user). */
+export function isRunning(pid: number) {
   try {
     process.kill(pid, 0);
     return true;
@@ -140,7 +141,9 @@ function isRunning(pid: number) {
  * crashed, out of memory): the process in their name no longer runs. Test databases
  * live on the local server only, so the pid is on this machine.
  */
-export async function dropAbandonedTestDatabases() {
+export async function dropAbandonedTestDatabases(
+  abandoned = (_name: string, pid: number) => !isRunning(pid),
+) {
   const client = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
   await client.connect();
   try {
@@ -149,7 +152,7 @@ export async function dropAbandonedTestDatabases() {
     );
     for (const { datname } of rows) {
       const pid = TEST_DATABASE.exec(datname)?.[1];
-      if (pid !== undefined && !isRunning(Number(pid))) {
+      if (pid !== undefined && abandoned(datname, Number(pid))) {
         await client.query(`DROP DATABASE IF EXISTS ${pg.escapeIdentifier(datname)} WITH (FORCE)`);
       }
     }

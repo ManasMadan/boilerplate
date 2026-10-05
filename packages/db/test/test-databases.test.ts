@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createTestDatabase, dropAbandonedTestDatabases } from "../src/testing";
+import { createTestDatabase, dropAbandonedTestDatabases, isRunning } from "../src/testing";
 
 const admin = () => {
   const url = new URL(process.env.MIGRATOR_DATABASE_URL ?? "");
@@ -22,13 +22,23 @@ afterAll(async () => {
 });
 
 describe("abandoned test databases", () => {
-  it("are dropped once their process is gone; a running process's stay", async () => {
+  it("tell a process that's gone from one that runs, as this user or another", () => {
+    expect(isRunning(process.pid)).toBe(true);
     // The pid of a process that has exited.
-    const gone = spawnSync("true").pid;
-    const abandoned = `app_test_${gone}_0123456789ab`;
+    expect(isRunning(spawnSync("true").pid ?? 0)).toBe(false);
+    // init/launchd: running, as root, so signalling it is refused (EPERM).
+    expect(isRunning(1)).toBe(true);
+  });
+
+  it("are dropped once their process is gone; a running process's stay", async () => {
+    // Named for this process, so other packages' runs (which drop abandoned databases
+    // as they start, in parallel on CI) leave it alone; this call treats it as abandoned.
+    const abandoned = `app_test_${process.pid}_0123456789ab`;
     await client.query(`CREATE DATABASE ${abandoned}`);
     const live = await createTestDatabase();
     try {
+      await dropAbandonedTestDatabases((name) => name === abandoned);
+      // By default only a gone process's databases go: this run's own stays.
       await dropAbandonedTestDatabases();
       expect(await exists(abandoned)).toBe(false);
       expect(await exists(live.name)).toBe(true);
