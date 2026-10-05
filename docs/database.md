@@ -88,7 +88,9 @@ await tenantTx(database.write, orgId, async (tx) => {  // one interactive transa
 });
 ```
 
-`withUser` / `userTx` are the same for `app.user_id`. The setting must be applied inside
+`withUser` / `userTx` are the same for `app.user_id`. They take a branded id, an `OrgId`
+or a `UserId` from `@repo/contracts/ids` ([architecture.md](architecture.md#auth-and-tenancy)),
+so a user's id can't scope a workspace's query. The setting must be applied inside
 the transaction that runs the query, because PgBouncer (transaction mode) hands each
 transaction a different connection. `tenantTx` holds a connection until it ends, so it
 contains database calls only: never await HTTP, Redis or a queue inside it. Nested

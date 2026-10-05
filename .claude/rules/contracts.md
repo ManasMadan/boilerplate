@@ -15,6 +15,11 @@ builds in the field all depend on it.
   Register the file in `src/api/index.ts`.
 - Every input has bounds: max lengths, `PAGE_SIZE_MAX`, enums instead of free strings.
   Lists use `pageInput` / `page(item)` from `src/pagination.ts` (cursor only).
+- An id field uses its kind's branded schema from `src/ids.ts` (`orgIdSchema`,
+  `userIdSchema`, `todoIdSchema`, ...), in inputs, outputs, events and job payloads, so
+  the server gets a typed `TodoId` from the input and clients get one in the response.
+  The brand is type-only (the OpenAPI document still says `uuid`). A new kind of id gets
+  its schema and type in `src/ids.ts`; never `z.uuid()` for an id of a kind that has one.
 - API keys: a procedure callable with a key sets `base.meta({ apiKeyScope: "..." })`
   with a scope from `API_KEY_SCOPES` in `src/api/scopes.ts`. No scope means keys get
   `FORBIDDEN`. Add a scope only for data a third party should reach.

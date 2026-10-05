@@ -111,6 +111,16 @@ Tenant tables carry `org_id` (or `user_id` for per-user data) and forced row-lev
 security keyed on a transaction-local setting, so a query without it sees nothing, in
 every service and in Python too. See [database.md](database.md).
 
+Ids are branded in TypeScript: a workspace's id is an `OrgId`, a user's a `UserId`, a
+todo's a `TodoId`, and so on (`packages/contracts/src/ids.ts`), so passing one kind
+where another belongs, or swapping `(orgId, userId)`, fails to compile. At run time each
+is a plain UUID string. A branded id is made by its schema, which checks it, where the
+id enters the code: the contract's input and output schemas, queue payloads and events
+(`parseJob`), better-auth's users, sessions and members (`apps/api/src/auth/ids.ts`),
+Stripe metadata and tokens, and a database row handed on (`orgIdSchema.parse(row.orgId)`;
+Prisma types columns as plain strings). `withTenant`, `tenantTx`, `withUser` and
+`userTx` take only an `OrgId` or a `UserId`. An id is never cast to its brand.
+
 ## Async work
 
 A change and its event commit together (transactional outbox); the worker's relay copies
@@ -151,6 +161,7 @@ and the skill that swaps it, is the "Scaling path" table in the [README](../READ
 |---|---|
 | Workspace, organization | the same thing: the tenant. The UI says workspace; the code, better-auth and the database say organization (`org_id`). Every user gets a personal one at sign-up |
 | Tenant table | a table with `org_id` (or `user_id` for per-user data) and forced row-level security, read through `withTenant` and written in `tenantTx` ([database.md](database.md)) |
+| Branded id | an id typed by its kind (`OrgId`, `UserId`, `TodoId`, ...; `packages/contracts/src/ids.ts`), made only by parsing it with its schema, so ids of different kinds can't be mixed up ([Auth and tenancy](#auth-and-tenancy)) |
 | Owner schema | each Postgres schema (`app`, `auth`, `files`, …) has one service that writes it; others get the narrowest grants they need ([database.md](database.md#schemas-and-owners)) |
 | Runtime role, migrator | services connect as their own `app_<service>` role, which can't change the schema or bypass row-level security; migrations run as `migrator`, which owns every table |
 | Outbox | a table each event-emitting service writes its domain events to, in the same transaction as the change; the worker's relay copies them into the queues ([jobs-and-events.md](jobs-and-events.md)) |

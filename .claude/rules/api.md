@@ -27,6 +27,13 @@ paths:
   `lint:boundaries`) fails when any other file under `src/modules` calls a model. Never
   query tenant tables with the bare client: RLS returns
   nothing, which looks like "not found", not like a bug.
+- Ids are branded (`OrgId`, `UserId`, `TodoId`, ...; `@repo/contracts/ids`): services
+  and repositories take the branded type, never `string`, and the procedures hand
+  routers `context.orgId`, `context.userId` and `context.user.id` already branded.
+  better-auth's ids are branded once in `src/auth/ids.ts` (`userIdOf`, `orgIdOf`,
+  `membershipOf`, `sessionWithIds`); a row's id is parsed where the code hands it on
+  (`todoIdSchema.parse(row.id)`), or taken from the branded id it was queried by. Never
+  cast a string to an id.
 - Inside `tenantTx`/`userTx` only database calls. No HTTP, Redis or queue awaits: the
   transaction holds a pooled connection and times out after 5s.
 - Domain events: `emitEvent(tx, "<name>.v1", payload)` from `src/outbox.ts`, in the same
