@@ -42,7 +42,9 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
 ## Principles (non-negotiable)
 
 1. **Fix root causes.** No workarounds, no `as any`, no `@ts-ignore`, no disabling a
-   lint rule to get green. If the design forces a workaround, change the design.
+   lint rule to get green. If the design forces a workaround, change the design. A fix
+   also lands with whatever stops it coming back (a test, a lint rule, a check or a
+   hook), so the checks catch it next time instead of someone reading the code.
 2. **Validate at every boundary**: env (t3-env), HTTP input (contract schemas), queue
    payloads (`parseJob`), cross-service data. Types come from schemas, never duplicated.
 3. **One implementation per concern.** Before writing a helper, search `packages/` for it.
