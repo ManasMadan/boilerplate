@@ -83,7 +83,7 @@ export default defineConfig({
         oxc: { jsx: { runtime: "automatic" as const } },
         test: {
           name: "unit",
-          include: ["src/**/*.test.{ts,tsx}"],
+          include: ["src/**/*.test.{ts,tsx}", "*.test.ts"],
           setupFiles: ["./test/next-server.ts"],
           // Bundled like Next does, so the aliases above and next/font's stand-in
           // (test/next-server.ts) apply inside these packages too.
