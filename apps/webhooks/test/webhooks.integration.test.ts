@@ -8,6 +8,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type { EventName } from "@repo/contracts/events";
+import { type OrgId, orgIdSchema, webhookEndpointIdSchema } from "@repo/contracts/ids";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { createProducer } from "@repo/jobs";
 import { createRedis, keysFromEnv, SecretBox, webhookSecretContext } from "@repo/nest-common";
@@ -73,9 +74,9 @@ async function endpoint(
     previous?: { secret: string; expiresAt: Date };
   } = {},
 ) {
-  const orgId = randomUUID();
+  const orgId = orgIdSchema.parse(randomUUID());
   const secret = `whsec_${randomBytes(24).toString("base64")}`;
-  const endpointId = randomUUID();
+  const endpointId = webhookEndpointIdSchema.parse(randomUUID());
   const context = webhookSecretContext(endpointId);
   await asRole("app_api", async (client) => {
     await client.query(
@@ -119,7 +120,7 @@ async function delivery(deliveryId: string) {
 }
 
 /** Publishes a domain event to the webhooks consumer queue, as the relay would. */
-async function publish(orgId: string | null, name: EventName = "todo.created.v1") {
+async function publish(orgId: OrgId | null, name: EventName = "todo.created.v1") {
   const producer = createProducer("events-webhooks", createRedis(process.env.REDIS_URL as string));
   const event = {
     id: randomUUID(),
@@ -284,7 +285,7 @@ describe("outbound deliveries", () => {
   it("only sends subscribed events, and nothing for other organizations", async () => {
     const { orgId, endpointId } = await endpoint({ events: ["todo.deleted.v1"] });
     const created = await publish(orgId, "todo.created.v1");
-    const elsewhere = await publish(randomUUID(), "todo.deleted.v1");
+    const elsewhere = await publish(orgIdSchema.parse(randomUUID()), "todo.deleted.v1");
     const deleted = await publish(orgId, "todo.deleted.v1");
     for (const event of [created, elsewhere, deleted]) await processed("events-webhooks", event.id);
     // Every event has been handled and made one delivery between them: nothing else is on
@@ -461,7 +462,9 @@ describe("outbound deliveries", () => {
     const { orgId, endpointId } = await endpoint();
     const deliveryId = await deliveries.createTest(orgId, endpointId);
     // Row-level security: from another organization the delivery isn't there.
-    expect(await deliveries.attempt(randomUUID(), deliveryId, true)).toBe("skipped");
+    expect(await deliveries.attempt(orgIdSchema.parse(randomUUID()), deliveryId, true)).toBe(
+      "skipped",
+    );
     expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("succeeded");
     expect(await deliveries.attempt(orgId, deliveryId, true)).toBe("skipped");
     expect(received).toHaveLength(1);

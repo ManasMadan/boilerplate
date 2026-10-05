@@ -4,6 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { Processor } from "@nestjs/bullmq";
+import type { OrgId, WebhookDeliveryId } from "@repo/contracts/ids";
 import {
   createProducer,
   type JobName,
@@ -77,7 +78,7 @@ export class DeliveryProcessor extends JobProcessor {
     }
   }
 
-  private enqueue(deliveryId: string, orgId: string, jobId: string) {
+  private enqueue(deliveryId: WebhookDeliveryId, orgId: OrgId, jobId: string) {
     return this.queue.add("deliver", { deliveryId, orgId }, { jobId, meta: { orgId } });
   }
 

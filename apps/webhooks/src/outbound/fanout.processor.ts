@@ -6,6 +6,7 @@
  */
 import { Processor } from "@nestjs/bullmq";
 import { eventEnvelope } from "@repo/contracts/events";
+import { webhookDeliveryIdSchema } from "@repo/contracts/ids";
 import { withTenant } from "@repo/db";
 import { createProducer, parseJob, queuePrefix, type UncheckedJob } from "@repo/jobs";
 import {
@@ -69,7 +70,7 @@ export class FanoutProcessor extends JobProcessor {
       await this.deliveries.addBulk(
         deliveries.map((delivery) => ({
           name: "deliver" as const,
-          payload: { deliveryId: delivery.id, orgId },
+          payload: { deliveryId: webhookDeliveryIdSchema.parse(delivery.id), orgId },
           options: { jobId: delivery.id, meta: { ...meta, orgId } },
         })),
       );

@@ -10,6 +10,13 @@
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { WebhookDeliveryError } from "@repo/contracts/api";
+import {
+  type OrgId,
+  type WebhookDeliveryId,
+  type WebhookEndpointId,
+  webhookDeliveryIdSchema,
+  webhookEndpointIdSchema,
+} from "@repo/contracts/ids";
 import { HOUR_MS } from "@repo/contracts/time";
 import { tenantTx, withTenant } from "@repo/db";
 import {
@@ -60,7 +67,7 @@ export class DeliveryService {
     url: string,
     headers: Record<string, string>,
     body: string,
-    ids: { orgId: string; deliveryId: string },
+    ids: { orgId: OrgId; deliveryId: WebhookDeliveryId },
   ): Promise<{ status?: number; error?: WebhookDeliveryError }> {
     try {
       const response = await safeFetch(url, {
@@ -84,7 +91,11 @@ export class DeliveryService {
   }
 
   /** One attempt. `isLastAttempt`: no retry follows if this one fails. */
-  async attempt(orgId: string, deliveryId: string, isLastAttempt: boolean): Promise<AttemptResult> {
+  async attempt(
+    orgId: OrgId,
+    deliveryId: WebhookDeliveryId,
+    isLastAttempt: boolean,
+  ): Promise<AttemptResult> {
     const tenant = withTenant(this.database.write, orgId);
     const delivery = await tenant.webhookDelivery.findUnique({
       where: { id: deliveryId },
@@ -146,12 +157,16 @@ export class DeliveryService {
       },
     });
     if (outcome === "failed")
-      await this.disableIfFailing(orgId, delivery.endpoint.id, delivery.endpoint.url);
+      await this.disableIfFailing(
+        orgId,
+        webhookEndpointIdSchema.parse(delivery.endpoint.id),
+        delivery.endpoint.url,
+      );
     return outcome;
   }
 
   /** Puts a finished delivery back in the queue's hands (admin replay). */
-  async reset(orgId: string, deliveryId: string) {
+  async reset(orgId: OrgId, deliveryId: WebhookDeliveryId) {
     const { count } = await withTenant(this.database.write, orgId).webhookDelivery.updateMany({
       where: { id: deliveryId, status: { not: "pending" } },
       data: { status: "pending" },
@@ -160,7 +175,7 @@ export class DeliveryService {
   }
 
   /** Creates (once per `eventId`) a delivery of a test event to one endpoint; returns its id. */
-  async createTest(orgId: string, endpointId: string, eventId: string = randomUUID()) {
+  async createTest(orgId: OrgId, endpointId: WebhookEndpointId, eventId: string = randomUUID()) {
     const body = JSON.stringify({
       type: "webhook.test",
       timestamp: new Date().toISOString(),
@@ -172,10 +187,10 @@ export class DeliveryService {
       update: {},
       select: { id: true },
     });
-    return delivery.id;
+    return webhookDeliveryIdSchema.parse(delivery.id);
   }
 
-  private async disableIfFailing(orgId: string, endpointId: string, url: string) {
+  private async disableIfFailing(orgId: OrgId, endpointId: WebhookEndpointId, url: string) {
     await tenantTx(this.database.write, orgId, async (tx) => {
       const lastSuccess = await tx.webhookDelivery.findFirst({
         where: { endpointId, status: "succeeded" },
