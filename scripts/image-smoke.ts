@@ -91,6 +91,28 @@ export const IMAGES: Record<
 export const request = (url: string): Promise<{ status: number }> =>
   fetch(url, { signal: AbortSignal.timeout(5000) });
 
+/** An image with no port (migrate): runs to the end; the exit code. */
+function runToExit(image: string, args: string[], tag: string, run: typeof runSync) {
+  const status = run("docker", [...args, "--rm", tag], { stdio: "inherit" }).status;
+  if (status === 0) ok(`${image}: exited 0`);
+  else fail(`${image}: exited ${status}`);
+  return status === 0 ? 0 : 1;
+}
+
+/** The last status `url` answered, polling every `pollMs` until a 200 or `timeoutMs`. */
+async function statusOf(url: string, get: typeof request, timeoutMs: number, pollMs: number) {
+  const deadline = Date.now() + timeoutMs;
+  let status = 0;
+  while (status !== 200 && Date.now() < deadline) {
+    status = await get(url).then(
+      (response) => response.status,
+      () => 0,
+    );
+    if (status !== 200) await sleep(pollMs);
+  }
+  return status;
+}
+
 /** Smoke-tests `image`; the exit code. Waits up to `timeoutMs` for each path. */
 export async function smoke(
   image: string | undefined,
@@ -105,13 +127,7 @@ export async function smoke(
   const env = Object.entries(spec.env()).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
   const args = ["run", "--name", name, "--network", "host", ...env];
   const tag = `boilerplate/${image}:dev`;
-
-  if (!spec.port) {
-    const status = run("docker", [...args, "--rm", tag], { stdio: "inherit" }).status;
-    if (status === 0) ok(`${image}: exited 0`);
-    else fail(`${image}: exited ${status}`);
-    return status === 0 ? 0 : 1;
-  }
+  if (!spec.port) return runToExit(image, args, tag, run);
 
   const started = run("docker", [...args, "--detach", tag]);
   if (started.status !== 0) {
@@ -120,16 +136,7 @@ export async function smoke(
   }
   let passed = true;
   for (const path of spec.paths) {
-    const url = `http://127.0.0.1:${spec.port}${path}`;
-    const deadline = Date.now() + timeoutMs;
-    let status = 0;
-    while (status !== 200 && Date.now() < deadline) {
-      status = await get(url).then(
-        (response) => response.status,
-        () => 0,
-      );
-      if (status !== 200) await sleep(pollMs);
-    }
+    const status = await statusOf(`http://127.0.0.1:${spec.port}${path}`, get, timeoutMs, pollMs);
     if (status === 200) ok(`${image}: ${path} → 200`);
     else {
       fail(`${image}: ${path} → ${status}`);

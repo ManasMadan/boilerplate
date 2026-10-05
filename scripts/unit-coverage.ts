@@ -20,6 +20,15 @@ import { type FileCoverage, isSource, mergeLcov } from "./coverage";
 import { fail, ok, ROOT } from "./lib";
 import { listedFiles } from "./suppressions";
 
+/** The line numbers a `@@ -a,b +c,d @@` hunk header adds, or none for another line. */
+function hunkLines(line: string): number[] {
+  const hunk = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/.exec(line);
+  if (!hunk) return [];
+  const start = Number(hunk[1]);
+  const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+  return Array.from({ length: count }, (_, index) => start + index);
+}
+
 /** Changed line numbers per file, from `git diff -U0` output. */
 export function parseDiff(diff: string): Map<string, Set<number>> {
   const changed = new Map<string, Set<number>>();
@@ -27,16 +36,12 @@ export function parseDiff(diff: string): Map<string, Set<number>> {
   for (const line of diff.split("\n")) {
     const file = /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/.exec(line);
     if (file) {
+      // A deleted file (`+++ /dev/null`) has no lines left to cover.
       lines = file[1] ? new Set() : undefined;
       if (file[1] && lines) changed.set(file[1], lines);
       continue;
     }
-    const hunk = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/.exec(line);
-    if (hunk && lines) {
-      const start = Number(hunk[1]);
-      const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-      for (let number = start; number < start + count; number++) lines.add(number);
-    }
+    for (const number of lines ? hunkLines(line) : []) lines?.add(number);
   }
   return changed;
 }

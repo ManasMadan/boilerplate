@@ -24,6 +24,30 @@ export function defaultPorts(example: Record<string, string>): Record<string, nu
   );
 }
 
+/** Each port that isn't yet where `stack` puts it, and the old value each moves from. */
+function movedPorts(
+  current: Record<string, string>,
+  example: Record<string, string>,
+  stack: number,
+) {
+  const changes: Record<string, string> = {};
+  const moved = new Map<string, string>();
+  for (const [key, port] of Object.entries(defaultPorts(example))) {
+    const next = String(port + stack * STEP);
+    const now = current[key] ?? String(port);
+    if (now === next) continue;
+    changes[key] = next;
+    moved.set(now, next);
+  }
+  return { changes, moved };
+}
+
+/** A local URL with any port that moved pointed at its new one. */
+const repointed = (value: string, moved: Map<string, string>) =>
+  value.replace(/\b(localhost|127\.0\.0\.1):(\d+)\b/g, (match, host, port) =>
+    moved.has(port) ? `${host}:${moved.get(port)}` : match,
+  );
+
 /**
  * What changes in `current` (a .env's values) for `stack`: every port moved to its
  * default plus 100 per stack, every local URL naming a port that moved pointed at the
@@ -38,21 +62,10 @@ export function stackValues(
   if (!Number.isInteger(stack) || stack < 0 || stack >= STACKS) {
     throw new Error(`A stack is a whole number from 0 to ${STACKS - 1}, not ${stack}.`);
   }
-  const changes: Record<string, string> = {};
-  const moved = new Map<string, string>();
-  for (const [key, port] of Object.entries(defaultPorts(example))) {
-    const next = String(port + stack * STEP);
-    const now = current[key] ?? String(port);
-    if (now === next) continue;
-    changes[key] = next;
-    moved.set(now, next);
-  }
+  const { changes, moved } = movedPorts(current, example, stack);
   for (const [key, value] of Object.entries(current)) {
-    if (key in changes) continue;
-    const url = value.replace(/\b(localhost|127\.0\.0\.1):(\d+)\b/g, (match, host, port) =>
-      moved.has(port) ? `${host}:${moved.get(port)}` : match,
-    );
-    if (url !== value) changes[key] = url;
+    const url = repointed(value, moved);
+    if (!(key in changes) && url !== value) changes[key] = url;
   }
   if (project !== undefined) {
     const name = stack === 0 ? project : `${project}-stack${stack}`;
