@@ -136,7 +136,7 @@ export function createAiClient(options: {
       caller: AiCaller,
       question: string,
       signal?: AbortSignal,
-    ): Promise<AsyncGenerator<AssistantEvent>> {
+    ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
       // From the service's OpenAPI document: a changed route or body fails to compile. The
       // generated SDK can't be used here: it reads the whole body, and this streams it.
       const path: AnswerData["url"] = "/v1/assistant/answers";
@@ -165,7 +165,9 @@ export function createAiClient(options: {
 }
 
 /** Server-Sent Events from a response body, each one's data one AssistantEvent. */
-async function* events(body: ReadableStream<BufferSource>): AsyncGenerator<AssistantEvent> {
+async function* events(
+  body: ReadableStream<BufferSource>,
+): AsyncGenerator<AssistantEvent, void, unknown> {
   const stream = body
     .pipeThrough(new TextDecoderStream())
     .pipeThrough(new EventSourceParserStream());
