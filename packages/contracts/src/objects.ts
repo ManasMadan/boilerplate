@@ -18,3 +18,15 @@ export function keysOf<T extends object>(object: T): (keyof T & string)[] {
 export function entriesOf<T extends object>(object: T): [keyof T & string, T[keyof T & string]][] {
   return keysOf(object).map((key) => [key, object[key]]);
 }
+
+/**
+ * A field of a value whose type isn't known, like a thrown error's `code`: undefined when
+ * the value isn't an object or has no such field.
+ */
+export function fieldOf(value: unknown, key: string): unknown {
+  return hasField(value, key) ? value[key] : undefined;
+}
+
+function hasField<K extends string>(value: unknown, key: K): value is Record<K, unknown> {
+  return typeof value === "object" && value !== null && key in value;
+}

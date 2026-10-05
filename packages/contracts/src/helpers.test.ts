@@ -4,7 +4,7 @@ import { isErrorCode } from "./errors";
 import { fileContentPath } from "./files";
 import { AI_MCP_PATH, MCP_PATH, mcpResource } from "./mcp";
 import { formatMoney } from "./money";
-import { entriesOf, hasKey, keysOf } from "./objects";
+import { entriesOf, fieldOf, hasKey, keysOf } from "./objects";
 import { pageInput, toPage } from "./pagination";
 
 describe("toPage", () => {
@@ -69,5 +69,15 @@ describe("keysOf, entriesOf and hasKey", () => {
     ]);
     expect(hasKey({ a: 1 }, "a")).toBe(true);
     expect(hasKey({ a: 1 }, "toString")).toBe(false);
+  });
+});
+
+describe("fieldOf", () => {
+  it("reads a field of anything thrown, own or inherited, and undefined otherwise", () => {
+    expect(fieldOf(Object.assign(new Error("x"), { code: "EPERM" }), "code")).toBe("EPERM");
+    expect(fieldOf(new TypeError("x"), "name")).toBe("TypeError");
+    expect(fieldOf({}, "code")).toBeUndefined();
+    expect(fieldOf("EPERM", "code")).toBeUndefined();
+    expect(fieldOf(null, "code")).toBeUndefined();
   });
 });
