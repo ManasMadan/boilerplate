@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAuthErrorMessage, useAuthSchemas } from "@/hooks/use-auth";
 import { authClient } from "@/lib/auth-client";
+import { useCaptcha } from "@/lib/captcha";
 
 export default function VerifyEmail() {
   const t = useTranslations();
   const errorMessage = useAuthErrorMessage();
   const schemas = useAuthSchemas();
+  const captcha = useCaptcha();
   const { email } = useLocalSearchParams<{ email?: string }>();
   const [notice, setNotice] = useState<{ text: string; error: boolean }>();
   const schema = z.object({ otp: schemas.otp });
@@ -37,9 +39,15 @@ export default function VerifyEmail() {
 
   // An arrow function keeps the check above narrowing `email` (a declaration is hoisted).
   const resend = async () => {
+    const headers = await captcha();
+    if (!headers) {
+      setNotice({ text: t("mobile.captchaCancelled"), error: true });
+      return;
+    }
     const { error } = await authClient.emailOtp.sendVerificationOtp({
       email,
       type: "email-verification",
+      fetchOptions: { headers },
     });
     setNotice(
       error

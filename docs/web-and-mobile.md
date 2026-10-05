@@ -113,6 +113,11 @@ screenshots are identical on every machine and in CI.
 - **i18n**: use-intl with the same catalogs.
 - **Push**: `expo-notifications` gets the native FCM or APNs token and registers the device
   with the API (`src/lib/push.ts`).
+- **Captcha**: when the API has Turnstile on, sign-up and resending the email code first
+  open the web app's `/captcha` page in the system's browser sheet, which hands the app a
+  token through its scheme (`useCaptcha()` in `src/lib/captcha.ts`; see
+  [auth.md](auth.md#captcha)). A new form whose request the API guards with captcha calls
+  it too.
 - **Not there yet**: passkeys (web only for now), and https links that open the app (see
   "Universal links and App Links" below; today only `boilerplate://` links do).
 - Native projects (`ios/`, `android/`) come from `expo prebuild` and aren't committed.
@@ -121,7 +126,7 @@ screenshots are identical on every machine and in CI.
 |---|---|
 | `dev` | Metro and the Expo dev server |
 | `ios`, `android` | build and install a development build |
-| `build:web`, `serve:web` | the app rendered for the web, served on `MOBILE_WEB_PORT` (3005) with the API on its own origin (the mobile end-to-end suite runs against it) |
+| `build:web`, `serve:web` | the app rendered for the web, served on `MOBILE_WEB_PORT` (3005) with the API and the web app's captcha page on its own origin (the mobile end-to-end suite runs against it) |
 | `test` | Jest (React Native Testing Library) |
 | `test:e2e` | Playwright against the web build |
 | `doctor` | expo-doctor |

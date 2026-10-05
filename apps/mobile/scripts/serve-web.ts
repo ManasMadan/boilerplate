@@ -1,13 +1,14 @@
 /**
  * Serves the app's web build (`bun run build:web` → dist/) with the API on the same
- * origin, the way the gateway serves apps/web: /rpc and /api go to the API, anything
- * else is the single-page app. Used by the end-to-end tests, and to try the app in a
- * browser: `bun run serve:web`.
+ * origin, the way the gateway serves apps/web: /rpc and /api go to the API, the web app's
+ * captcha page (and its assets) to the web app, anything else is the single-page app.
+ * Used by the end-to-end tests, and to try the app in a browser: `bun run serve:web`.
  *
  *   MOBILE_WEB_PORT  where to listen
  *   API_URL          where apps/api is
+ *   WEB_URL          where apps/web is
  *
- * both from the root .env (or the e2e run, which sets them for this checkout's stack).
+ * all from the root .env (or the e2e run, which sets them for this checkout's stack).
  *
  * That origin must be one of the API's APP_ORIGINS, or sign-in is refused (CSRF check).
  */
@@ -24,6 +25,7 @@ const required = (name: string) => {
 };
 const port = Number(required("MOBILE_WEB_PORT"));
 const api = required("API_URL");
+const web = required("WEB_URL");
 const dist = join(import.meta.dirname, "..", "dist");
 const index = join(dist, "index.html");
 if (!existsSync(index)) {
@@ -34,8 +36,8 @@ if (!existsSync(index)) {
 /** Response headers that describe the upstream encoding, which fetch has already undone. */
 const HOP_BY_HOP = ["content-encoding", "content-length", "transfer-encoding", "connection"];
 
-async function proxy(request: Request, url: URL) {
-  const upstream = await fetch(new URL(url.pathname + url.search, api), {
+async function proxy(request: Request, url: URL, to: string) {
+  const upstream = await fetch(new URL(url.pathname + url.search, to), {
     method: request.method,
     headers: request.headers,
     body:
@@ -66,7 +68,11 @@ Bun.serve({
       return new Response("ok");
     }
     if (/^\/(rpc|api)(\/|$)/.test(url.pathname)) {
-      return proxy(request, url);
+      return proxy(request, url, api);
+    }
+    // The page the app opens for a security check when the API has captcha on.
+    if (/^\/(captcha|_next)(\/|$)/.test(url.pathname)) {
+      return proxy(request, url, web);
     }
     return asset(url.pathname);
   },

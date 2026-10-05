@@ -961,7 +961,8 @@ declare const messages: {
     "languages": {
       "en": "English",
       "es": "Español"
-    }
+    },
+    "captchaCancelled": "The security check wasn't finished. Try again."
   }
 };
 export default messages;

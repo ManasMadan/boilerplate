@@ -239,7 +239,26 @@ Cloudflare saw.
 
 With `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` set, Cloudflare Turnstile guards
 sign-up, sending a verification code and requesting a password reset. Clients get the
-site key from `system.info` and render the widget (`apps/web/src/components/captcha.tsx`).
+site key from `system.info` and send the token in the `x-captcha-response` header. The
+web app renders the widget in its forms (`apps/web/src/components/captcha.tsx`).
+
+The mobile app can't run the widget, which needs a web page, so it borrows the web
+app's: `useCaptcha()` (`apps/mobile/src/lib/captcha.ts`) opens `/captcha` on the site in
+the system's browser sheet (`openAuthSessionAsync` from expo-web-browser), with
+`?return_to=boilerplate://captcha-done`. Once the check passes, the page sends the browser
+there with `?token=`, the sheet closes, and the app sends the token like the web forms
+do. Closing the sheet leaves the form with a message to try again. The page sends
+tokens only to the app's scheme or to its own origin, never anywhere `return_to` says
+(`apps/web/src/modules/auth/hooks/use-captcha-return.ts`), so it can't be used as an
+open redirect. A token is single-use and only proves a person solved a check, so the
+scheme, which any app can register on Android, is enough to carry it.
+
+On the app's web build (the mobile end-to-end suite), the sheet is a popup. The build is
+served with the captcha page on its own origin (`apps/mobile/scripts/serve-web.ts`), the
+page comes back to the build's `/captcha-done`, and the root layout hands that URL to the
+window that opened the popup (`maybeCompleteAuthSession`). On Android the OS also opens
+the app with the scheme's link; `src/app/+native-intent.ts` drops it, so it doesn't
+cover the form waiting for the token.
 
 ## Changing the auth setup
 

@@ -37,5 +37,8 @@ gotchas; these are the rules.
   auth client, the API client or expo-router's screens. Playwright
   against the web build for screens (`bun run test:e2e --app mobile`), Maestro for what
   only a native build shows (`maestro/`, run by hand).
+- A request the API guards with captcha (sign-up, emailed codes, password reset) gets
+  its headers from `useCaptcha()` (`src/lib/captcha.ts`), which opens the web app's
+  `/captcha` page when captcha is on; a null result means the person closed it.
 - The API must keep serving old installed builds: a breaking change raises
   `MINIMUM_CLIENT_VERSION`, which sends them to `update-required`.

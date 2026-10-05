@@ -6,8 +6,8 @@ import { aSession, fail, fakeApi, openApp, server } from "../../test/app";
 // The sign-in page opens in the system's browser sheet, which tests don't have: each test
 // says how the person left it.
 jest.mock("expo-web-browser", () => ({
+  ...jest.requireActual("expo-web-browser"),
   openAuthSessionAsync: jest.fn(),
-  WebBrowserResultType: { CANCEL: "cancel" },
 }));
 const browser = jest.mocked(WebBrowser.openAuthSessionAsync);
 

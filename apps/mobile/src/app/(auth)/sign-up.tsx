@@ -11,12 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAuthErrorMessage, useAuthSchemas } from "@/hooks/use-auth";
 import { authClient } from "@/lib/auth-client";
+import { useCaptcha } from "@/lib/captcha";
 import { deviceLocale, deviceTimeZone } from "@/lib/i18n";
 
 export default function SignUp() {
   const t = useTranslations();
   const errorMessage = useAuthErrorMessage();
   const schemas = useAuthSchemas();
+  const captcha = useCaptcha();
   const [failure, setFailure] = useState<string>();
   const schema = z.object({
     name: schemas.name,
@@ -30,11 +32,17 @@ export default function SignUp() {
 
   const submit = form.handleSubmit(async (values) => {
     setFailure(undefined);
+    const headers = await captcha();
+    if (!headers) {
+      setFailure(t("mobile.captchaCancelled"));
+      return;
+    }
     const { error } = await authClient.signUp.email({
       ...values,
       // Emails (starting with the verification code) and dates use these.
       locale: deviceLocale(),
       timezone: deviceTimeZone(),
+      fetchOptions: { headers },
     });
     if (error) {
       setFailure(errorMessage(error));

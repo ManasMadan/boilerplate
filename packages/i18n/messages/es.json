@@ -960,6 +960,7 @@
     "languages": {
       "en": "English",
       "es": "Español"
-    }
+    },
+    "captchaCancelled": "El control de seguridad no se completó. Inténtalo de nuevo."
   }
 }

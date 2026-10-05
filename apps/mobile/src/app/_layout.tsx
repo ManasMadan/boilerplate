@@ -10,6 +10,7 @@ import { isLocale } from "@repo/i18n/locales";
 import { PortalHost } from "@rn-primitives/portal";
 import { SplashScreen, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as WebBrowser from "expo-web-browser";
 import { Suspense, useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ApiProvider } from "@/lib/api";
@@ -18,6 +19,9 @@ import { deviceLocale, I18nProvider } from "@/lib/i18n";
 import { presentForegroundNotifications } from "@/lib/push";
 
 presentForegroundNotifications();
+// On the web build the captcha check runs in a popup, which comes back to this app: hand
+// its URL to the window waiting for it (lib/captcha.ts). Does nothing anywhere else.
+WebBrowser.maybeCompleteAuthSession();
 // Until the stored session is known, so the first screen is the right one.
 void SplashScreen.preventAutoHideAsync();
 

@@ -294,7 +294,8 @@ CI runs the suite with the captcha on, with Cloudflare's always-pass test keys (
   the build's manifest) are mocked, in `jest.setup.ts`.
 - `bun run test:e2e --app mobile`: the app's screens rendered with react-native-web and
   driven by Playwright (`apps/mobile/e2e`), against the API on the mobile web build's own
-  origin.
+  origin. With the captcha on (CI's test keys), sign-up and resending a code open the web
+  app's captcha page in a popup, which passes and closes by itself.
 - Maestro flows for what only a native build can check, run by hand
   (`apps/mobile/maestro/README.md`).
 
