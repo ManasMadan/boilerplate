@@ -6,6 +6,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "stack.labels" (list $ $name) | nindent 4 }}
 spec:

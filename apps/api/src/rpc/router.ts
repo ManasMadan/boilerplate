@@ -6,7 +6,7 @@
  * under src/modules/<feature> (module, service, repository, router), register the module
  * in app.module.ts and its router below.
  */
-import type { INestApplication } from "@nestjs/common";
+import type { INestApplicationContext } from "@nestjs/common";
 import { AiService, aiRouter } from "../modules/ai";
 import { ApiKeysService, apiKeysRouter } from "../modules/api-keys";
 import { AppsService, appsRouter } from "../modules/apps";
@@ -21,7 +21,7 @@ import { AvatarService, PhoneService, userRouter } from "../modules/user";
 import { WebhooksService, webhooksRouter } from "../modules/webhooks";
 import type { Procedures } from "./procedures";
 
-export function createRouter(procedures: Procedures, app: INestApplication) {
+export function createRouter(procedures: Procedures, app: INestApplicationContext) {
   return procedures.os.router({
     system: systemRouter(procedures),
     user: userRouter(procedures, app.get(PhoneService), app.get(AvatarService)),

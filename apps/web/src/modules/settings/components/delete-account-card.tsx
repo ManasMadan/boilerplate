@@ -34,7 +34,9 @@ export function DeleteAccountCard() {
           variant="destructive"
           onConfirm={async (password) => {
             const { error } = await authClient.deleteUser({ password });
-            if (error) return errorMessage(error);
+            if (error) {
+              return errorMessage(error);
+            }
             queryClient.clear();
             toast.success(t("deleted"));
             router.replace("/");

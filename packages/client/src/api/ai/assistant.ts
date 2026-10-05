@@ -1,46 +1,12 @@
 /**
- * The assistant: the workspace's documents, and streamed answers from them.
+ * The assistant: streamed answers from the workspace's documents.
  *
- *   const documents = useAiDocumentsQuery();
  *   const assistant = useAssistant();
  *   assistant.ask("How long do refunds take?");   // assistant.answer fills in as it streams
  */
 import type { AssistantEvent } from "@repo/contracts/api";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApi } from "../../provider";
-
-export function useAiDocumentsQuery() {
-  const { api } = useApi();
-  // Documents being prepared change status on their own; realtime says when, and a
-  // slow poll covers a missed message.
-  return useQuery(
-    api.ai.documents.queryOptions({
-      refetchInterval: (query) =>
-        query.state.data?.some((d) => d.status === "pending" || d.status === "indexing")
-          ? 5_000
-          : false,
-    }),
-  );
-}
-
-function useInvalidateDocuments() {
-  const { api } = useApi();
-  const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: api.ai.documents.key() });
-}
-
-export function useAddDocumentMutation() {
-  const { api } = useApi();
-  const invalidate = useInvalidateDocuments();
-  return useMutation(api.ai.addDocument.mutationOptions({ onSuccess: invalidate }));
-}
-
-export function useRemoveDocumentMutation() {
-  const { api } = useApi();
-  const invalidate = useInvalidateDocuments();
-  return useMutation(api.ai.removeDocument.mutationOptions({ onSuccess: invalidate }));
-}
 
 type Source = Extract<AssistantEvent, { type: "sources" }>["sources"][number];
 
@@ -71,7 +37,9 @@ export function useAssistant() {
       try {
         const stream = await client.ai.ask({ question }, { signal: controller.signal });
         for await (const event of stream) {
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted) {
+            return;
+          }
           setState((previous) => {
             switch (event.type) {
               case "text":
@@ -86,8 +54,9 @@ export function useAssistant() {
           });
         }
       } catch (error) {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setState((previous) => ({ ...previous, status: "error", error }));
+        }
       }
     },
     [client],

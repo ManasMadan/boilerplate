@@ -7,6 +7,8 @@
  * files migration's row-level security), and what processing it gets (apps/worker
  * files processor).
  */
+import type { FileId } from "@repo/contracts/ids";
+import { keysOf } from "./objects";
 export const uploadPurposes = {
   /** A profile picture: re-encoded to a square WebP, metadata (EXIF, GPS) stripped. */
   avatar: {
@@ -16,22 +18,19 @@ export const uploadPurposes = {
 } as const satisfies Record<string, { types: readonly string[]; maxBytes: number }>;
 
 export type UploadPurpose = keyof typeof uploadPurposes;
-export const uploadPurposeNames = Object.keys(uploadPurposes) as [
-  UploadPurpose,
-  ...UploadPurpose[],
-];
+export const uploadPurposeNames = keysOf(uploadPurposes);
 
 export const fileStatuses = ["pending", "processing", "ready", "rejected"] as const;
-export type FileStatus = (typeof fileStatuses)[number];
 
 /** Why the worker turned an upload down (error codes, translated by clients). */
 export const fileRejections = [
   "FILE_TYPE_NOT_ALLOWED",
   "FILE_TOO_LARGE",
+  "FILE_SIZE_MISMATCH",
   "FILE_INFECTED",
   "FILE_UNREADABLE",
 ] as const;
 export type FileRejection = (typeof fileRejections)[number];
 
 /** The path a stored file is served from (the API redirects to a short-lived URL). */
-export const fileContentPath = (fileId: string) => `/api/v1/files/${fileId}/content`;
+export const fileContentPath = (fileId: FileId) => `/api/v1/files/${fileId}/content`;

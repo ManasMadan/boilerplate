@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Badge } from "./badge";
 
 const meta = { component: Badge } satisfies Meta<typeof Badge>;
@@ -17,4 +18,12 @@ export const Variants: Story = {
       )}
     </div>
   ),
+  play: async ({ canvas }) => {
+    for (const variant of ["default", "secondary", "destructive", "outline", "ghost", "link"]) {
+      const badge = canvas.getByText(variant);
+      // A label, not a control.
+      await expect(badge.tagName).toBe("SPAN");
+      await expect(badge).toHaveAttribute("data-variant", variant);
+    }
+  },
 };

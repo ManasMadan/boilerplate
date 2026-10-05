@@ -5,6 +5,7 @@ import type * as React from "react";
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: the caller ties it to its control (htmlFor, or the control inside it), through props the rule can't see
     <label
       data-slot="label"
       className={cn(

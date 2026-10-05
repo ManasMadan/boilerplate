@@ -13,6 +13,9 @@ gateway:
     - name: public
       namespace: gateway-system
       sectionName: http
+# The data release is boilerplate-data here (scripts/k8s.ts), so its Postgres is too.
+database:
+  caSecret: boilerplate-data-postgres-ca
 env:
   LOG_LEVEL: debug
 defaults:
@@ -33,8 +36,11 @@ services:
     env:
       # Local stand-ins, as in development.
       MINIMUM_CLIENT_VERSION: "0.0.0"
+  # KEDA scales the worker on its queues, as in the clusters: its operator reaching Valkey
+  # through the data chart's network policy is checked here (scripts/k8s.ts). At most
+  # two, to fit the machine.
   worker:
-    keda: { enabled: false }
+    keda: { enabled: true, maxReplicas: 2 }
     storage: none
     env:
       FILE_SCANNER: none

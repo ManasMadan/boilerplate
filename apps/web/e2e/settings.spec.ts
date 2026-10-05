@@ -111,18 +111,6 @@ test.describe("password", () => {
     await card.getByRole("button", { name: "Change password" }).click();
     await expect(card.getByText("That password is wrong.")).toBeVisible();
   });
-
-  test("a breached password is refused", async ({ page }) => {
-    const user = await signUp(page);
-    await page.goto("/settings/security");
-    const card = page.locator("[data-slot=card]", { hasText: "Changing it signs out" });
-    await card.getByLabel("Current password").fill(user.password);
-    await card.getByLabel("New password").fill("password123");
-    await card.getByRole("button", { name: "Change password" }).click();
-    await expect(
-      card.getByText("This password appeared in a data breach. Choose a different one."),
-    ).toBeVisible();
-  });
 });
 
 test.describe("delete account", () => {

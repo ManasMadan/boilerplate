@@ -5,6 +5,11 @@ models describe the same tables, and tests/test_models_match_db.py fails if they
 from the migrated database. Foreign keys to other schemas (auth.organization,
 auth.user) exist in the database but aren't modelled: this service never reads those
 tables.
+
+They're written by hand rather than generated with sqlacodegen because generating them
+from the database follows those foreign keys and drags the auth tables in as models,
+which this service must not have; the drift test gives the same guarantee a generator
+would.
 """
 
 import datetime
@@ -14,6 +19,8 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from app.schemas import DocumentStatus
 
 EMBEDDING_DIMENSIONS = 1536
 
@@ -32,9 +39,13 @@ def _now() -> Mapped[datetime.datetime]:
     )
 
 
+# SQLAlchemy declares __table_args__ as Any; these are indexes and the schema.
+type TableArgs = tuple[Index | dict[str, str], ...]
+
+
 class Document(Base):
     __tablename__ = "document"
-    __table_args__ = (
+    __table_args__: TableArgs = (
         Index("document_org_id_created_at_idx", "org_id", "created_at"),
         {"schema": "ai"},
     )
@@ -46,8 +57,7 @@ class Document(Base):
     # The text as added, kept so the document can be re-indexed.
     content: Mapped[str] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
-    # pending | indexing | ready | failed
-    status: Mapped[str] = mapped_column(Text, server_default=text("'pending'::text"))
+    status: Mapped[DocumentStatus] = mapped_column(Text, server_default=text("'pending'::text"))
     error: Mapped[str | None] = mapped_column(Text)
     chunk_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     created_at: Mapped[datetime.datetime] = _now()
@@ -60,7 +70,7 @@ class Document(Base):
 
 class DocumentChunk(Base):
     __tablename__ = "chunk"
-    __table_args__ = (
+    __table_args__: TableArgs = (
         Index("chunk_document_id_ordinal_key", "document_id", "ordinal", unique=True),
         Index("chunk_org_id_idx", "org_id"),
         Index(
@@ -87,7 +97,7 @@ class DocumentChunk(Base):
 
 class AiUsage(Base):
     __tablename__ = "usage"
-    __table_args__ = (
+    __table_args__: TableArgs = (
         Index("usage_org_id_created_at_idx", "org_id", "created_at"),
         {"schema": "ai"},
     )

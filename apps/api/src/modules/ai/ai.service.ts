@@ -6,16 +6,25 @@
  * Service errors are mapped to this API's error codes; anything unexpected becomes
  * UPSTREAM_UNAVAILABLE, never the service's own message.
  */
+
 import { Injectable } from "@nestjs/common";
 import { type AiCaller, AiServiceError, createAiClient } from "@repo/ai-client";
 import type { AiDocument, AssistantEvent } from "@repo/contracts/api";
-import { type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import type { ErrorCode } from "@repo/contracts/errors";
+import {
+  type DocumentId,
+  documentIdSchema,
+  type OrgId,
+  type UserId,
+  userIdSchema,
+} from "@repo/contracts/ids";
+import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
-  createRateLimiter,
   currentContext,
-  InjectRedis,
-  type Redis,
+  describeError,
+  InjectPinoLogger,
+  PinoLogger,
 } from "@repo/nest-common";
 import { env } from "../../env";
 
@@ -33,38 +42,18 @@ export class AiService {
     env.AI_URL && env.AI_SERVICE_SECRET
       ? createAiClient({ baseUrl: env.AI_URL, secret: env.AI_SERVICE_SECRET })
       : null;
-  private readonly questions;
-  private readonly uploads;
 
-  constructor(@InjectRedis() redis: Redis) {
-    this.questions = createRateLimiter(redis, {
-      name: "ai-questions",
-      points: 20,
-      windowSeconds: 60,
-    });
-    this.uploads = createRateLimiter(redis, {
-      name: "ai-documents",
-      points: 30,
-      windowSeconds: 60 * 60,
-    });
-  }
+  constructor(@InjectPinoLogger(AiService.name) private readonly log: PinoLogger) {}
 
   private get ai() {
-    if (!this.client) throw new AppError("FEATURE_DISABLED", { params: { feature: "ai" } });
+    if (!this.client) {
+      throw new AppError("FEATURE_DISABLED", { params: { feature: "ai" } });
+    }
     return this.client;
   }
 
-  private caller(userId: string, orgId: string): AiCaller {
+  private caller(userId: UserId, orgId: OrgId): AiCaller {
     return { userId, orgId, requestId: currentContext()?.requestId };
-  }
-
-  private async limit(limiter: typeof this.questions, key: string) {
-    const result = await limiter.consume(key);
-    if (!result.allowed) {
-      throw new AppError("RATE_LIMITED", {
-        params: { retryAfterSeconds: result.retryAfterSeconds },
-      });
-    }
   }
 
   private async call<T>(work: () => Promise<T>): Promise<T> {
@@ -75,51 +64,58 @@ export class AiService {
     }
   }
 
-  sentiment(userId: string, orgId: string, text: string) {
+  async sentiment(userId: UserId, orgId: OrgId, text: string) {
     return this.call(() => this.ai.sentiment(this.caller(userId, orgId), text));
   }
 
-  async documents(userId: string, orgId: string): Promise<AiDocument[]> {
+  async documents(userId: UserId, orgId: OrgId): Promise<AiDocument[]> {
     const rows = await this.call(() => this.ai.listDocuments(this.caller(userId, orgId)));
     return rows.map(toDocument);
   }
 
-  async addDocument(userId: string, orgId: string, input: { title: string; content: string }) {
-    await this.limit(this.uploads, userId);
+  async addDocument(userId: UserId, orgId: OrgId, input: { title: string; content: string }) {
     const row = await this.call(() => this.ai.createDocument(this.caller(userId, orgId), input));
     return toDocument(row);
   }
 
   /** A member may remove their own documents; owners and admins any. */
-  async removeDocument(userId: string, orgId: string, role: string, documentId: string) {
-    if (role === "member") {
+  async removeDocument(userId: UserId, orgId: OrgId, role: OrgRole, documentId: DocumentId) {
+    if (!canManageWorkspace(role)) {
       const document = (await this.documents(userId, orgId)).find((d) => d.id === documentId);
-      if (!document) throw new AppError("DOCUMENT_NOT_FOUND");
-      if (document.createdBy !== userId) throw new AppError("FORBIDDEN");
+      if (!document) {
+        throw new AppError("DOCUMENT_NOT_FOUND");
+      }
+      if (document.createdBy !== userId) {
+        throw new AppError("FORBIDDEN");
+      }
     }
     await this.call(() => this.ai.deleteDocument(this.caller(userId, orgId), documentId));
   }
 
   /**
-   * Starts an answer: limits, budget and an unavailable service are refused here, as
+   * Starts an answer: the budget and an unavailable service are refused here, as
    * typed errors, before the stream begins. A failure midway (the connection drops)
    * ends the stream with an `error` event, which the contract has for exactly that.
    */
   async ask(
-    userId: string,
-    orgId: string,
+    userId: UserId,
+    orgId: OrgId,
     question: string,
     signal?: AbortSignal,
-  ): Promise<AsyncGenerator<AssistantEvent>> {
-    await this.limit(this.questions, userId);
+  ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
     const stream = await this.call(() =>
       this.ai.answer(this.caller(userId, orgId), question, signal),
     );
+    const log = this.log;
     return (async function* () {
       try {
         yield* stream;
-      } catch {
-        if (signal?.aborted) return; // the client went away
+      } catch (error) {
+        if (signal?.aborted) {
+          return; // the client went away
+        }
+        // The client hears the service failed either way; the log says which it was.
+        log[streamFailureLevel(error)]({ err: describeError(error) }, "assistant stream failed");
         yield { type: "error", code: "UPSTREAM_UNAVAILABLE" } as const;
       }
     })();
@@ -136,13 +132,31 @@ function toDocument(row: {
   createdBy: string | null;
   createdAt: string;
 }): AiDocument {
-  return { ...row, createdAt: new Date(row.createdAt) };
+  return {
+    ...row,
+    id: documentIdSchema.parse(row.id),
+    createdBy: userIdSchema.nullable().parse(row.createdBy),
+    createdAt: new Date(row.createdAt),
+  };
+}
+
+/**
+ * How loudly to log an answer that broke off: the service or the connection failing is a
+ * warning (it happens); anything else, like the stream breaking its contract, is a bug.
+ */
+export function streamFailureLevel(error: unknown): "warn" | "error" {
+  const dropped =
+    error instanceof AiServiceError ||
+    (error instanceof TypeError && error.message === "terminated");
+  return dropped ? "warn" : "error";
 }
 
 function toAppError(error: unknown): AppError {
-  if (error instanceof AppError) return error;
-  if (error instanceof AiServiceError && isErrorCode(error.code) && PASSED_ON.has(error.code)) {
-    return new AppError(error.code, { params: error.params as Record<string, string | number> });
+  if (error instanceof AppError) {
+    return error;
+  }
+  if (error instanceof AiServiceError && PASSED_ON.has(error.code)) {
+    return new AppError(error.code, { params: error.params });
   }
   return new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "ai" }, cause: error });
 }

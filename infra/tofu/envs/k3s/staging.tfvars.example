@@ -7,6 +7,13 @@ cloudflare_account_id = "0123456789abcdef0123456789abcdef"
 tls_email             = "ops@example.com"
 previews              = true
 
+# DNS of your own instead of Cloudflare (then no cloudflare_account_id), with the TSIG
+# key's secret in TF_VAR_dns_tsig_secret:
+# dns = {
+#   provider = "rfc2136"
+#   rfc2136  = { server = "ns1.example.com", key_name = "staging" }
+# }
+
 # One machine is enough for staging: it's the server and runs everything.
 nodes = {
   staging-1 = { address = "203.0.113.10" }

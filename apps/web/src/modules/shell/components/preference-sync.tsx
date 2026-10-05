@@ -32,7 +32,9 @@ export function PreferenceSync({ timeZone }: { timeZone: string }) {
       setPreferenceCookie("tz", browserZone);
       changed = true;
     }
-    if (changed) router.refresh();
+    if (changed) {
+      router.refresh();
+    }
   }, [savedLocale, locale, timeZone, router]);
 
   return null;

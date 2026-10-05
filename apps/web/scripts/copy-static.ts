@@ -4,7 +4,16 @@
  * `bun run start` and the Docker image serve them the same way, from the same place.
  */
 import { cpSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
-const target = ".next/standalone/apps/web";
-cpSync(".next/static", `${target}/.next/static`, { recursive: true });
-if (existsSync("public")) cpSync("public", `${target}/public`, { recursive: true });
+/** Copies the build in `dir`'s static assets and public/ next to its standalone server. */
+export function copyStatic(dir = ".") {
+  const target = join(dir, ".next/standalone/apps/web");
+  cpSync(join(dir, ".next/static"), join(target, ".next/static"), { recursive: true });
+  if (existsSync(join(dir, "public"))) {
+    cpSync(join(dir, "public"), join(target, "public"), { recursive: true });
+  }
+}
+
+// Run as `bun run scripts/copy-static.ts` in apps/web, not when a test imports it.
+import.meta.main && copyStatic();

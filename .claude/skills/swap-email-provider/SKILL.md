@@ -1,6 +1,7 @@
 ---
 name: swap-email-provider
-description: Send email through something other than the self-hosted Stalwart server (another SMTP server, or an HTTP API such as SES or Postmark). Use when the user wants a different mail path, or email fails in production because of the mail server.
+description: Send email through something other than the self-hosted Stalwart server (another SMTP server, or an HTTP API such as SES or Postmark). Use when the user decides to move to a different mail path. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the email provider
@@ -40,3 +41,11 @@ and is for development only.
 Mailpit, and `test/stalwart.integration.test.ts` sends through a real Stalwart. For an
 HTTP provider, add a small local fake of its API (like `apps/notifications/test/fake-twilio.ts`)
 and a test that sends through it.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

@@ -2,13 +2,18 @@
 
 import math
 import os
+import runpy
+import secrets
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from app.assistant import Deps, _local_extractive, create_agent
+from app.assistant import Deps, create_agent, local_extractive
 from app.auth import verify
 from app.documents import Passage, create_summaries
 from app.embeddings import HashingEmbedder
@@ -27,7 +32,7 @@ def test_a_valid_token_names_the_user_and_organization() -> None:
 @pytest.mark.parametrize(
     "token",
     [
-        service_token(USER, ORG, secret="another-secret-that-is-also-long-enough-x"),
+        service_token(USER, ORG, secret=secrets.token_urlsafe(32)),  # someone else's
         service_token(USER, ORG, lifetime=-10),  # expired
         service_token(USER, ORG, aud="web"),
         service_token(USER, ORG, iss="someone"),
@@ -66,7 +71,7 @@ def test_production_refuses_development_stand_ins() -> None:
             AI_MODEL="local:extractive",
         )
     with pytest.raises(ValidationError):
-        _settings(AI_SERVICE_SECRET="short")
+        _settings(AI_SERVICE_SECRET="x" * 31)  # one character short
 
 
 async def test_hashing_embeddings_put_similar_wording_close() -> None:
@@ -101,16 +106,16 @@ async def test_the_agent_searches_then_answers_from_the_passage() -> None:
     documents = StubDocuments(
         [Passage(document_id=doc, title="Handbook", content="Refunds take 5 days.", score=0.9)]
     )
-    deps = Deps(org_id=ORG, documents=documents)  # pyright: ignore[reportArgumentType]
-    result = await create_agent(_local_extractive()).run("How long do refunds take?", deps=deps)
+    deps = Deps(org_id=ORG, documents=documents)
+    result = await create_agent(local_extractive()).run("How long do refunds take?", deps=deps)
     assert documents.queries == ["How long do refunds take?"]
     assert result.output == "From “Handbook”: Refunds take 5 days."
     assert deps.sources == {doc: "Handbook"}
 
 
 async def test_the_agent_says_so_when_nothing_matches() -> None:
-    deps = Deps(org_id=ORG, documents=StubDocuments([]))  # pyright: ignore[reportArgumentType]
-    result = await create_agent(_local_extractive()).run("Anything?", deps=deps)
+    deps = Deps(org_id=ORG, documents=StubDocuments([]))
+    result = await create_agent(local_extractive()).run("Anything?", deps=deps)
     assert result.output == "I couldn't find that in the workspace's documents."
     assert deps.sources == {}
 
@@ -128,3 +133,78 @@ def test_summaries_follow_the_configured_model() -> None:
     summaries = create_summaries(_settings(AI_MODEL="local:extractive", AI_TOKENS_PER_RUN="5000"))
     assert summaries is not None
     assert (summaries.model_name, summaries.monthly_tokens) == ("local:extractive", 2_000_000)
+
+
+async def test_nothing_reaches_the_database_before_the_engine_is_opened() -> None:
+    from app.db.session import close_engine, engine, tenant
+
+    await close_engine()
+    with pytest.raises(RuntimeError, match="open_engine"):
+        engine()
+    with pytest.raises(RuntimeError, match="open_engine"):
+        async with tenant(ORG):
+            pass
+
+
+def test_routes_have_no_services_before_the_app_starts() -> None:
+    from app.main import services
+
+    with pytest.raises(RuntimeError, match="lifespan"):
+        services()
+
+
+def test_the_openapi_export_is_the_committed_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "openapi.json"
+    monkeypatch.setattr(sys, "argv", ["export_openapi", str(out)])
+    runpy.run_module("app.export_openapi", run_name="__main__")
+    # What `bun run gen` writes; CI also fails when the committed copy is stale.
+    committed = Path(__file__).resolve().parents[1] / "openapi.json"
+    assert out.read_text() == committed.read_text()
+
+
+def test_a_job_this_version_does_not_know_fails() -> None:
+    from app.worker import JOB_NAME
+
+    assert JOB_NAME.validate_python("summarize") == "summarize"
+    with pytest.raises(ValidationError):
+        JOB_NAME.validate_python("translate")
+
+
+def test_the_worker_heartbeat_is_alive_while_fresh_and_dead_when_stale(tmp_path: Path) -> None:
+    from app.heartbeat import alive
+
+    path = tmp_path / "alive"
+    assert not alive(path)
+    path.touch()
+    mtime = path.stat().st_mtime
+    assert alive(path, 60, now=lambda: mtime + 59)
+    assert not alive(path, 60, now=lambda: mtime + 61)
+
+
+async def test_the_worker_heartbeat_touches_its_file_until_cancelled(tmp_path: Path) -> None:
+    import asyncio
+
+    from app.heartbeat import beat
+
+    path = tmp_path / "alive"
+    task = asyncio.create_task(beat(path, every=0.01))
+    await asyncio.sleep(0.05)
+    assert path.exists()
+    _ = task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+def test_the_liveness_probe_passes_only_with_a_fresh_heartbeat(tmp_path: Path) -> None:
+    # The probe's own command, reading the heartbeat from the temporary directory.
+    def probe() -> int:
+        env = {**os.environ, "TMPDIR": str(tmp_path)}
+        return subprocess.run(
+            [sys.executable, "-m", "app.heartbeat"], env=env, check=False
+        ).returncode
+
+    assert probe() == 1
+    (tmp_path / "ai-worker-alive").touch()
+    assert probe() == 0

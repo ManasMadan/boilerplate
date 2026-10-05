@@ -1,17 +1,17 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  useApiKeysQuery,
-  useCreateApiKeyMutation,
-  useRevokeApiKeyMutation,
-} from "@repo/client/api/api-keys/keys";
+import { useApiErrorMessage } from "@repo/client";
+import { useCreateApiKeyMutation } from "@repo/client/api/api-keys/create";
+import { useApiKeysQuery } from "@repo/client/api/api-keys/list";
+import { useRevokeApiKeyMutation } from "@repo/client/api/api-keys/revoke";
 import {
   API_KEY_EXPIRY_DAYS,
   API_KEY_SCOPES,
   type ApiKey,
   createApiKeyInput,
 } from "@repo/contracts/api";
+import { MINUTE_MS } from "@repo/contracts/time";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +55,6 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { TextField } from "@/components/form-fields";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { SecretDialog } from "../components/secret-dialog";
 
 export function WorkspaceApiKeysPage() {
@@ -82,21 +81,22 @@ export function WorkspaceApiKeysPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {keys.isPending ? (
-            <Skeleton className="h-16" />
-          ) : keys.isError ? (
+          {keys.isPending ? <Skeleton className="h-16" /> : null}
+          {keys.isError ? (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(keys.error)}
             </p>
-          ) : keys.data?.length ? (
+          ) : null}
+          {keys.isSuccess && keys.data.length > 0 ? (
             <ul className="flex flex-col divide-y" aria-label={t("title")}>
               {keys.data.map((key) => (
                 <KeyRow key={key.id} apiKey={key} />
               ))}
             </ul>
-          ) : (
+          ) : null}
+          {keys.isSuccess && keys.data.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("empty")}</p>
-          )}
+          ) : null}
         </CardContent>
       </Card>
       <CreateKeyCard onCreated={setSecret} />
@@ -115,7 +115,7 @@ function KeyRow({ apiKey }: { apiKey: ApiKey }) {
   const tCommon = useTranslations("common");
   const format = useFormatter();
   // An explicit, ticking "now" keeps server and client renders in agreement.
-  const now = useNow({ updateInterval: 60_000 });
+  const now = useNow({ updateInterval: MINUTE_MS });
   const errorMessage = useApiErrorMessage();
   const revoke = useRevokeApiKeyMutation();
   const date = (value: Date) => format.dateTime(value, { dateStyle: "medium" });
@@ -182,8 +182,6 @@ function KeyRow({ apiKey }: { apiKey: ApiKey }) {
   );
 }
 
-const NEVER = "never";
-
 function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
   const t = useTranslations("workspace.apiKeys");
   const errorMessage = useApiErrorMessage();
@@ -192,13 +190,11 @@ function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
     resolver: zodResolver(createApiKeyInput),
     defaultValues: { name: "", scopes: [], expiresInDays: 90 },
   });
-  const expiryItems = [
-    ...API_KEY_EXPIRY_DAYS.map((days) => ({
-      value: String(days),
-      label: t("expiryDays", { days }),
-    })),
-    { value: NEVER, label: t("never") },
-  ];
+  // Every key expires (a stolen session can't leave one behind for good).
+  const expiryItems = API_KEY_EXPIRY_DAYS.map((days) => ({
+    value: String(days),
+    label: t("expiryDays", { days }),
+  }));
 
   return (
     <Card>
@@ -260,10 +256,8 @@ function CreateKeyCard({ onCreated }: { onCreated: (key: string) => void }) {
                 <Field>
                   <FieldLabel htmlFor="api-key-expiry">{t("expiry")}</FieldLabel>
                   <Select
-                    value={field.value === null ? NEVER : String(field.value)}
-                    onValueChange={(value) =>
-                      value && field.onChange(value === NEVER ? null : Number(value))
-                    }
+                    value={String(field.value)}
+                    onValueChange={(value) => value && field.onChange(Number(value))}
                     items={expiryItems}
                   >
                     <SelectTrigger id="api-key-expiry" className="w-full sm:w-48">

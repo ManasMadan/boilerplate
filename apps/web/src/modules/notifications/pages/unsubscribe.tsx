@@ -1,6 +1,7 @@
 "use client";
 
-import { useUnsubscribeMutation } from "@repo/client/api/notifications/preferences";
+import { useApiErrorMessage } from "@repo/client";
+import { useUnsubscribeMutation } from "@repo/client/api/notifications/unsubscribe";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import {
   Card,
@@ -12,7 +13,6 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /** Where an email's "Unsubscribe" link lands. Works signed out; the token says who. */
 export function UnsubscribePage() {
@@ -36,9 +36,8 @@ export function UnsubscribePage() {
           ) : null}
         </CardHeader>
         <CardContent className="flex flex-col items-start gap-3">
-          {!token ? (
-            <p className="text-sm text-muted-foreground">{t("missing")}</p>
-          ) : unsubscribe.data ? null : (
+          {token ? null : <p className="text-sm text-muted-foreground">{t("missing")}</p>}
+          {token && !unsubscribe.data ? (
             <>
               <Button
                 onClick={() => unsubscribe.mutate({ token })}
@@ -52,7 +51,7 @@ export function UnsubscribePage() {
                 </p>
               ) : null}
             </>
-          )}
+          ) : null}
           <Link href="/settings/notifications" className={buttonVariants({ variant: "link" })}>
             {t("manage")}
           </Link>

@@ -2,16 +2,34 @@
  * Helpers for integration tests (not part of the runtime surface).
  */
 
+import { required } from "@repo/contracts/objects";
+import type { Redis } from "ioredis";
+
 /**
  * The local Redis/Valkey at REDIS_URL, but a specific logical database, so a test
  * suite never shares queues or sessions with the dev stack or another suite.
- * Numbers in use (Valkey has 0-15; 0 is the dev stack): 11 webhooks, 12 nest-common,
- * 13-5 api (one per test file: each starts its own API, whose queue consumers must not
- * take another file's jobs), 14 notifications, 15 worker; apps/ai's pytest uses 6.
- * packages/jobs shares 12 under a random key prefix (nothing flushes 12).
+ * docs/testing.md lists who has which; scripts/redis-databases.test.ts keeps them apart.
  */
 export function redisDatabase(index: number): string {
-  const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
+  // Always set in tests: every vitest config applies .env.example's values.
+  const url = new URL(required(process.env.REDIS_URL, "REDIS_URL"));
   url.pathname = `/${index}`;
   return url.toString();
+}
+
+/**
+ * Empties the suite's own database. A number the server doesn't have leaves ioredis on
+ * database 0 (it logs the refusal and carries on), which is the dev stack's: this checks
+ * where the connection really is before flushing, and refuses 0.
+ */
+export async function flushTestDatabase(redis: Redis) {
+  const info = String(await redis.call("CLIENT", "INFO"));
+  // CLIENT INFO always names the connection's database; anything else reads as 0.
+  const db = Number(info.replace(/^.*\bdb=(\d+).*$/s, "$1"));
+  if (!db) {
+    throw new Error(
+      "Refusing to flush Valkey database 0, the dev stack's: the suite's own database doesn't exist. Recreate Valkey with the databases docker-compose.yml asks for (`docker compose up -d valkey`).",
+    );
+  }
+  await redis.flushdb();
 }

@@ -1,21 +1,25 @@
 /**
  * A local, stateful stand-in for the parts of Stripe the app uses: customers, Checkout,
- * the billing portal, subscriptions and invoices. It keeps state between calls (unlike
- * stripe-mock), checks the secret key, honours Idempotency-Key, and sends signed webhooks
+ * the billing portal, subscriptions, invoices and the cards subscriptions are paid with.
+ * It keeps state between calls (unlike stripe-mock), checks the secret key, honours
+ * Idempotency-Key (refusing a key reused for other parameters), and sends signed webhooks
  * to apps/webhooks exactly like Stripe does, so billing can be tested end to end, in
  * integration tests and in the browser.
  *
- * Hosted pages: `/checkout/<session>` (pay, pay with a declined card, or go back) and
+ * Hosted pages: `/checkout/<session>` (pay, pay with a declined card, or go back; a
+ * posted `card` names the card, so a test can pay twice with the same one) and
  * `/portal/<session>` (cancel or resume the plan, then return). Test hooks under
- * `/__fake/` make a renewal fail or a subscription lapse.
+ * `/__fake/` make a renewal fail, a subscription lapse, or add an invoice in any status.
  *
  * Only what the app calls is implemented; anything else answers 404 like an unknown
  * Stripe route, so a new Stripe call fails loudly in tests until it's added here.
  */
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { fieldOf, required } from "@repo/contracts/objects";
+import { DAY_S } from "@repo/contracts/time";
 import Stripe from "stripe";
+import * as z from "zod";
 
 export interface FakeStripeOptions {
   secretKey: string;
@@ -29,63 +33,121 @@ export interface FakeStripeOptions {
 
 type Form = Record<string, unknown>;
 
-interface Subscription {
-  id: string;
-  object: "subscription";
+// The fake's objects hold only what the app reads. Each field it shares with Stripe's own
+// types takes its type from them, so a field Stripe renames or retypes in an SDK upgrade
+// fails to compile here instead of the fake quietly answering the old shape.
+interface Subscription
+  extends Pick<
+    Stripe.Subscription,
+    | "id"
+    | "object"
+    | "metadata"
+    | "cancel_at_period_end"
+    | "trial_end"
+    | "canceled_at"
+    | "created"
+    | "default_payment_method"
+  > {
   customer: string;
-  status: string;
-  metadata: Record<string, string>;
-  cancel_at_period_end: boolean;
-  trial_end: number | null;
-  canceled_at: number | null;
-  created: number;
-  items: { object: "list"; data: SubscriptionItem[] };
+  status: Stripe.Subscription.Status;
+  // The app's subscriptions have one item: the seats.
+  items: { object: "list"; data: [SubscriptionItem] };
 }
 
-interface SubscriptionItem {
-  id: string;
-  object: "subscription_item";
+interface SubscriptionItem
+  extends Pick<
+    Stripe.SubscriptionItem,
+    "id" | "object" | "current_period_start" | "current_period_end"
+  > {
+  // Optional and nullable in Stripe's types; the fake always sets them.
   quantity: number;
-  current_period_start: number;
-  current_period_end: number;
-  price: { id: string; object: "price"; recurring: { interval: string }; unit_amount: number };
+  price: Pick<Stripe.Price, "id" | "object"> & {
+    unit_amount: number;
+    recurring: Pick<Stripe.Price.Recurring, "interval">;
+  };
 }
 
-interface Invoice {
-  id: string;
-  object: "invoice";
+interface Invoice
+  extends Pick<
+    Stripe.Invoice,
+    "id" | "object" | "number" | "amount_due" | "created" | "hosted_invoice_url"
+  > {
   customer: string;
   /** Where this API version puts an invoice's subscription. */
-  parent: { type: "subscription_details"; subscription_details: { subscription: string } };
-  number: string;
-  status: "paid" | "open";
-  amount_due: number;
+  parent: {
+    type: Stripe.Invoice.Parent["type"];
+    subscription_details: { subscription: string };
+  };
+  /**
+   * A draft has no number or hosted page until it's finalized. Any status: tests set ones
+   * Stripe doesn't document, as a newer API version could.
+   */
+  status: string;
   currency: "usd";
-  created: number;
-  hosted_invoice_url: string;
+}
+
+/**
+ * How a subscription is paid, as far as the app reads it: a card, whose fingerprint is the
+ * same for every use of it, or a SEPA debit, which has no card.
+ */
+interface PaymentMethod extends Pick<Stripe.PaymentMethod, "id" | "object"> {
+  type: "card" | "sepa_debit";
+  card?: { fingerprint: string; last4: string };
 }
 
 const now = () => Math.floor(Date.now() / 1000);
 const id = (prefix: string) => `${prefix}_${randomBytes(12).toString("hex")}`;
 
+/** A form, or a nested part of one (`metadata[a]`, `line_items[0]`): an object or an array. */
+type FormPart = Form | unknown[];
+const isFormPart = (value: unknown): value is FormPart =>
+  typeof value === "object" && value !== null;
+const fieldIn = (node: FormPart, name: string) =>
+  Array.isArray(node) ? node[Number(name)] : node[name];
+
 /** Stripe's form encoding (`a[b][0][c]=x`) into nested objects and arrays. */
 export function parseForm(body: string): Form {
   const root: Form = {};
   for (const [key, value] of new URLSearchParams(body)) {
-    const path = key.replaceAll("]", "").split("[");
-    let node: Record<string, unknown> = root;
-    path.forEach((part, index) => {
-      if (index === path.length - 1) {
-        node[part] = value;
-        return;
+    let node: FormPart = root;
+    let name = "";
+    for (const [index, part] of key.replaceAll("]", "").split("[").entries()) {
+      // Each part after the first is a field of the one before: an array's when it's a number.
+      if (index > 0) {
+        const inner = fieldIn(node, name);
+        node = isFormPart(inner) ? inner : setField(node, name, /^\d+$/.test(part) ? [] : {});
       }
-      const next = path[index + 1] as string;
-      node[part] ??= /^\d+$/.test(next) ? [] : {};
-      node = node[part] as Record<string, unknown>;
-    });
+      name = part;
+    }
+    setField(node, name, value);
   }
   return root;
 }
+
+/** Sets a field of a form part; the value set. */
+function setField<V>(node: FormPart, name: string, value: V): V {
+  if (Array.isArray(node)) {
+    node[Number(name)] = value;
+  } else {
+    node[name] = value;
+  }
+  return value;
+}
+
+// The parts of a form the fake reads. It stays as lenient as it always was: a field the
+// app always sends is checked where it's used, so a test can leave out what it doesn't need.
+const metadata = z.record(z.string(), z.string());
+const subscriptionData = z.object({
+  metadata: metadata.optional(),
+  trial_period_days: z.string().optional(),
+});
+const lineItems = z.array(z.object({ id: z.string(), quantity: z.string().optional() }));
+const withFirstLine = z.object({
+  line_items: z.tuple(
+    [z.object({ price: z.string(), quantity: z.string().optional() })],
+    z.unknown(),
+  ),
+});
 
 const page = (title: string, body: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head>` +
@@ -94,21 +156,62 @@ const page = (title: string, body: string) =>
 const escapeHtml = (text: string) =>
   text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
 
-export async function startFakeStripe(options: FakeStripeOptions) {
-  const customers = new Map<
-    string,
-    { id: string; object: "customer"; metadata: Record<string, string> }
-  >();
-  const sessions = new Map<string, Form & { id: string }>();
-  const portals = new Map<string, { customer: string; return_url: string }>();
-  const subscriptions = new Map<string, Subscription>();
-  const invoices: Invoice[] = [];
-  const idempotent = new Map<string, { status: number; body: unknown }>();
-  const events: { type: string; object: unknown }[] = [];
-  let baseUrl = "";
+/**
+ * An API handler's result as a response: nothing is Stripe's 404, a `{ status, body }` is
+ * sent as it is, and anything else is a 200 with it as the body.
+ */
+function answerFor(result: unknown): { status: number; body: unknown } {
+  if (result === undefined) {
+    return {
+      status: 404,
+      body: { error: { type: "invalid_request_error", message: "Unrecognized request URL" } },
+    };
+  }
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "status" in result &&
+    "body" in result &&
+    typeof result.status === "number"
+  ) {
+    return { status: result.status, body: result.body };
+  }
+  return { status: 200, body: result };
+}
 
-  async function emit(type: string, object: unknown) {
-    events.push({ type, object });
+const notFound = (what: string) => ({
+  status: 404,
+  body: { error: { type: "invalid_request_error", message: `No such ${what}` } },
+});
+
+type Customer = { id: string; object: "customer"; metadata: Record<string, string> };
+type CheckoutSession = Form & { id: string; customer: string };
+
+/** A Stripe API route: the method, the path, and what it answers (undefined is a 404). */
+type Route = [
+  method: string,
+  path: RegExp,
+  handle: (match: RegExpExecArray, form: Form, query: URLSearchParams, method: string) => unknown,
+];
+
+/** Everything the fake remembers between calls, and what it does with it. */
+class Fake {
+  readonly customers = new Map<string, Customer>();
+  readonly sessions = new Map<string, CheckoutSession>();
+  readonly portals = new Map<string, { customer: string; return_url: unknown }>();
+  readonly subscriptions = new Map<string, Subscription>();
+  readonly invoices: Invoice[] = [];
+  readonly paymentMethods = new Map<string, PaymentMethod>();
+  /** Each key's answer, and the request body it answered (a key is for one request). */
+  readonly idempotent = new Map<string, { request: string; status: number; body: unknown }>();
+  readonly events: { type: string; object: unknown }[] = [];
+  baseUrl = "";
+
+  constructor(private readonly options: FakeStripeOptions) {}
+
+  /** Sends a signed event to the webhook endpoint, as Stripe does. */
+  async emit(type: string, object: unknown) {
+    this.events.push({ type, object });
     const payload = JSON.stringify({
       id: id("evt"),
       object: "event",
@@ -121,18 +224,21 @@ export async function startFakeStripe(options: FakeStripeOptions) {
     // Async: under Bun the SDK signs with SubtleCrypto, which has no synchronous API.
     const signature = await Stripe.webhooks.generateTestHeaderStringAsync({
       payload,
-      secret: options.webhookSecret,
+      secret: this.options.webhookSecret,
     });
-    const response = await fetch(options.webhookUrl, {
+    const response = await fetch(this.options.webhookUrl, {
       method: "POST",
       headers: { "content-type": "application/json", "stripe-signature": signature },
       body: payload,
     });
-    if (!response.ok) throw new Error(`webhook ${type} was refused: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`webhook ${type} was refused: ${response.status}`);
+    }
   }
 
-  function invoiceFor(subscription: Subscription, status: Invoice["status"]) {
-    const item = subscription.items.data[0] as SubscriptionItem;
+  invoiceFor(subscription: Subscription, status: string) {
+    const [item] = subscription.items.data;
+    const draft = status === "draft";
     const invoice: Invoice = {
       id: id("in"),
       object: "invoice",
@@ -141,300 +247,475 @@ export async function startFakeStripe(options: FakeStripeOptions) {
         type: "subscription_details",
         subscription_details: { subscription: subscription.id },
       },
-      number: `FAKE-${String(invoices.length + 1).padStart(4, "0")}`,
+      number: draft ? null : `FAKE-${String(this.invoices.length + 1).padStart(4, "0")}`,
       status,
       amount_due: subscription.status === "trialing" ? 0 : item.price.unit_amount * item.quantity,
       currency: "usd",
       created: now(),
-      hosted_invoice_url: `${baseUrl}/invoices/${invoices.length + 1}`,
+      hosted_invoice_url: draft ? null : `${this.baseUrl}/invoices/${this.invoices.length + 1}`,
     };
-    invoices.push(invoice);
+    this.invoices.push(invoice);
     return invoice;
   }
 
-  function subscribe(session: Form & { id: string }) {
-    const lines = session.line_items as { price: string; quantity: string }[];
-    const line = lines[0] as { price: string; quantity: string };
-    const price = options.prices[line.price];
-    if (!price) throw new Error(`unknown price ${line.price}`);
-    const data = (session.subscription_data ?? {}) as {
-      metadata?: Record<string, string>;
-      trial_period_days?: string;
-    };
+  /** The subscription a completed Checkout session starts. */
+  subscribe(session: CheckoutSession, paymentMethod: string | null) {
+    const [line] = withFirstLine.parse(session).line_items;
+    const price = this.options.prices[line.price];
+    if (!price) {
+      throw new Error(`unknown price ${line.price}`);
+    }
+    const data = subscriptionData.parse(session.subscription_data ?? {});
     const trialDays = Number(data.trial_period_days ?? 0);
     const start = now();
-    const end = start + (price.interval === "month" ? 30 : 365) * 86_400;
+    const item: SubscriptionItem = {
+      id: id("si"),
+      object: "subscription_item",
+      quantity: Number(line.quantity ?? 1),
+      current_period_start: start,
+      current_period_end: start + (price.interval === "month" ? 30 : 365) * DAY_S,
+      price: {
+        id: line.price,
+        object: "price",
+        recurring: { interval: price.interval },
+        unit_amount: price.unitAmount,
+      },
+    };
     const subscription: Subscription = {
       id: id("sub"),
       object: "subscription",
-      customer: session.customer as string,
+      customer: session.customer,
       status: trialDays > 0 ? "trialing" : "active",
       metadata: data.metadata ?? {},
       cancel_at_period_end: false,
-      trial_end: trialDays > 0 ? start + trialDays * 86_400 : null,
+      trial_end: trialDays > 0 ? start + trialDays * DAY_S : null,
       canceled_at: null,
       created: start,
-      items: {
-        object: "list",
-        data: [
-          {
-            id: id("si"),
-            object: "subscription_item",
-            quantity: Number(line.quantity ?? 1),
-            current_period_start: start,
-            current_period_end: end,
-            price: {
-              id: line.price,
-              object: "price",
-              recurring: { interval: price.interval },
-              unit_amount: price.unitAmount,
-            },
-          },
-        ],
-      },
+      default_payment_method: paymentMethod,
+      items: { object: "list", data: [item] },
     };
-    subscriptions.set(subscription.id, subscription);
+    this.subscriptions.set(subscription.id, subscription);
     return subscription;
   }
 
-  async function api(method: string, path: string, form: Form, query: URLSearchParams) {
-    if (method === "POST" && path === "/v1/customers") {
-      const customer = {
-        id: id("cus"),
-        object: "customer" as const,
-        metadata: (form.metadata ?? {}) as Record<string, string>,
-      };
-      customers.set(customer.id, customer);
-      return customer;
+  /**
+   * The payment method a completed checkout saves on its subscription. `card` names the card
+   * (any value but "declined"): the same name is the same card, so the same fingerprint;
+   * `method=sepa_debit` pays without one. A trial with `payment_method_collection:
+   * "if_required"` takes none, as Stripe's does.
+   */
+  takeCard(session: CheckoutSession, form: Form) {
+    const trial = subscriptionData.optional().parse(session.subscription_data)?.trial_period_days;
+    if (session.payment_method_collection === "if_required" && trial) {
+      return null;
     }
-    if (method === "POST" && path === "/v1/checkout/sessions") {
-      if (!customers.has(form.customer as string)) return notFound("customer");
-      const session = { ...form, id: id("cs"), object: "checkout.session", status: "open" };
-      sessions.set(session.id, session);
-      return { ...session, url: `${baseUrl}/checkout/${session.id}` };
-    }
-    if (method === "POST" && path === "/v1/billing_portal/sessions") {
-      if (!customers.has(form.customer as string)) return notFound("customer");
-      const portal = id("bps");
-      portals.set(portal, {
-        customer: form.customer as string,
-        return_url: form.return_url as string,
-      });
-      return { id: portal, object: "billing_portal.session", url: `${baseUrl}/portal/${portal}` };
-    }
-    const subscriptionPath = /^\/v1\/subscriptions\/(sub_\w+)$/.exec(path);
-    if (subscriptionPath) {
-      const subscription = subscriptions.get(subscriptionPath[1] as string);
-      if (!subscription) return notFound("subscription");
-      if (method === "GET") return subscription;
-      if (method === "DELETE") {
-        subscription.status = "canceled";
-        subscription.canceled_at = now();
-        await emit("customer.subscription.deleted", subscription);
-        return subscription;
+    const card = typeof form.card === "string" ? form.card : "4242";
+    const paymentMethod: PaymentMethod =
+      form.method === "sepa_debit"
+        ? { id: id("pm"), object: "payment_method", type: "sepa_debit" }
+        : {
+            id: id("pm"),
+            object: "payment_method",
+            type: "card",
+            card: { fingerprint: `fp_${card}`, last4: card.slice(-4).padStart(4, "0") },
+          };
+    this.paymentMethods.set(paymentMethod.id, paymentMethod);
+    return paymentMethod.id;
+  }
+
+  /** The API routes the app calls. */
+  private readonly routes: Route[] = [
+    ["POST", /^\/v1\/customers$/, (_, form) => this.createCustomer(form)],
+    ["POST", /^\/v1\/checkout\/sessions$/, (_, form) => this.createCheckout(form)],
+    ["GET", /^\/v1\/checkout\/sessions\/(cs_\w+)$/, ([, cs]) => this.checkout(cs)],
+    ["GET", /^\/v1\/payment_methods\/(pm_\w+)$/, ([, pm]) => this.paymentMethod(pm)],
+    ["POST", /^\/v1\/checkout\/sessions\/(cs_\w+)\/expire$/, ([, cs]) => this.expire(cs)],
+    ["POST", /^\/v1\/billing_portal\/sessions$/, (_, form) => this.createPortal(form)],
+    [
+      "*",
+      /^\/v1\/subscriptions\/(sub_\w+)$/,
+      ([, sub], form, _, method) => this.subscription(method, sub, form),
+    ],
+    ["GET", /^\/v1\/subscriptions$/, (_, __, query) => this.listSubscriptions(query)],
+    ["GET", /^\/v1\/invoices$/, (_, __, query) => this.listInvoices(query)],
+  ];
+
+  /** What an API call answers: its route's result, or undefined when there's no route. */
+  api(method: string, path: string, form: Form, query: URLSearchParams) {
+    for (const [routeMethod, pattern, handle] of this.routes) {
+      const match = pattern.exec(path);
+      if (match && (routeMethod === "*" || method === routeMethod)) {
+        return handle(match, form, query, method);
       }
-      if (method === "POST") {
-        const items = (form.items ?? []) as { id: string; quantity?: string }[];
-        for (const change of items) {
-          const item = subscription.items.data.find((existing) => existing.id === change.id);
-          if (!item) return notFound("subscription item");
-          if (change.quantity !== undefined) item.quantity = Number(change.quantity);
-        }
-        if (form.cancel_at_period_end !== undefined)
-          subscription.cancel_at_period_end = form.cancel_at_period_end === "true";
-        await emit("customer.subscription.updated", subscription);
-        return subscription;
-      }
-    }
-    if (method === "GET" && path === "/v1/subscriptions") {
-      const data = [...subscriptions.values()].filter((s) => s.customer === query.get("customer"));
-      return { object: "list", data, has_more: false };
-    }
-    if (method === "GET" && path === "/v1/invoices") {
-      const data = invoices
-        .filter((invoice) => invoice.customer === query.get("customer"))
-        .reverse()
-        .slice(0, Number(query.get("limit") ?? 10));
-      return { object: "list", data, has_more: false };
     }
     return undefined;
   }
 
-  function notFound(what: string) {
+  private createCustomer(form: Form) {
+    const customer: Customer = {
+      id: id("cus"),
+      object: "customer",
+      metadata: metadata.parse(form.metadata ?? {}),
+    };
+    this.customers.set(customer.id, customer);
+    return customer;
+  }
+
+  private createCheckout(form: Form) {
+    const { customer } = form;
+    if (typeof customer !== "string" || !this.customers.has(customer)) {
+      return notFound("customer");
+    }
+    const session = { ...form, customer, id: id("cs"), object: "checkout.session", status: "open" };
+    this.sessions.set(session.id, session);
+    return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
+  }
+
+  private paymentMethod(paymentMethodId = "") {
+    return this.paymentMethods.get(paymentMethodId) ?? notFound("payment method");
+  }
+
+  private checkout(sessionId = "") {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return notFound("checkout session");
+    }
+    return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
+  }
+
+  private expire(sessionId = "") {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return notFound("checkout session");
+    }
+    if (session.status !== "open") {
+      return {
+        status: 400,
+        body: {
+          error: {
+            type: "invalid_request_error",
+            message: "Only Checkout Sessions with a status of open can be expired.",
+          },
+        },
+      };
+    }
+    session.status = "expired";
+    return session;
+  }
+
+  private createPortal(form: Form) {
+    const { customer } = form;
+    if (typeof customer !== "string" || !this.customers.has(customer)) {
+      return notFound("customer");
+    }
+    const portal = id("bps");
+    this.portals.set(portal, { customer, return_url: form.return_url });
     return {
-      status: 404,
-      body: { error: { type: "invalid_request_error", message: `No such ${what}` } },
+      id: portal,
+      object: "billing_portal.session",
+      url: `${this.baseUrl}/portal/${portal}`,
     };
   }
 
-  async function hosted(
-    request: IncomingMessage,
-    response: ServerResponse,
-    path: string,
-    form: Form,
-  ) {
-    const html = (status: number, body: string) => {
-      response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
-      response.end(body);
-    };
-    const redirect = (to: string) => {
-      response.writeHead(303, { location: to });
-      response.end();
-    };
+  /** A subscription: read it, cancel it now (DELETE) or change it (POST). */
+  private subscription(method: string, subscriptionId = "", form: Form) {
+    const subscription = this.subscriptions.get(subscriptionId);
+    if (!subscription) {
+      return notFound("subscription");
+    }
+    if (method === "GET") {
+      return subscription;
+    }
+    if (method === "DELETE") {
+      return this.cancel(subscription);
+    }
+    if (method === "POST") {
+      return this.update(subscription, form);
+    }
+    return undefined;
+  }
 
+  private async cancel(subscription: Subscription) {
+    subscription.status = "canceled";
+    subscription.canceled_at = now();
+    await this.emit("customer.subscription.deleted", subscription);
+    return subscription;
+  }
+
+  private async update(subscription: Subscription, form: Form) {
+    for (const change of lineItems.parse(form.items ?? [])) {
+      const item = subscription.items.data.find((existing) => existing.id === change.id);
+      if (!item) {
+        return notFound("subscription item");
+      }
+      if (change.quantity !== undefined) {
+        item.quantity = Number(change.quantity);
+      }
+    }
+    if (form.cancel_at_period_end !== undefined) {
+      subscription.cancel_at_period_end = form.cancel_at_period_end === "true";
+    }
+    // Ending a trial now charges the card at once, as Stripe does.
+    if (form.trial_end === "now" && subscription.status === "trialing") {
+      subscription.status = "active";
+      subscription.trial_end = now();
+      this.invoiceFor(subscription, "paid");
+    }
+    await this.emit("customer.subscription.updated", subscription);
+    return subscription;
+  }
+
+  private listSubscriptions(query: URLSearchParams) {
+    const data = [...this.subscriptions.values()].filter(
+      (s) => s.customer === query.get("customer"),
+    );
+    return { object: "list", data, has_more: false };
+  }
+
+  private listInvoices(query: URLSearchParams) {
+    const data = this.invoices
+      .filter((invoice) => invoice.customer === query.get("customer"))
+      .reverse()
+      .slice(0, Number(query.get("limit") ?? 10));
+    return { object: "list", data, has_more: false };
+  }
+
+  /** The hosted pages: Checkout and the billing portal. */
+  async hosted(method: string, path: string, form: Form): Promise<Page> {
     const checkout = /^\/checkout\/(cs_\w+)(\/pay)?$/.exec(path);
     if (checkout) {
-      const session = sessions.get(checkout[1] as string);
-      if (!session) return html(404, page("Not found", ""));
-      if (request.method === "POST" && checkout[2]) {
-        if (form.card === "declined") {
-          return html(
-            402,
-            page(
-              "Fake Stripe Checkout",
-              `<p role="alert">Your card was declined.</p><a href="${escapeHtml(`/checkout/${session.id}`)}">Try again</a>`,
-            ),
-          );
-        }
-        if (session.status !== "open") return redirect(session.success_url as string);
-        session.status = "complete";
-        const subscription = subscribe(session);
-        invoiceFor(subscription, "paid");
-        await emit("checkout.session.completed", {
-          ...session,
-          subscription: subscription.id,
-        });
-        await emit("customer.subscription.created", subscription);
-        return redirect(
-          (session.success_url as string).replace("{CHECKOUT_SESSION_ID}", session.id),
-        );
-      }
-      const line = (session.line_items as { price: string; quantity: string }[])[0];
-      const price = options.prices[line?.price ?? ""];
-      return html(
-        200,
-        page(
-          "Fake Stripe Checkout",
-          `<p>${line?.quantity ?? 1} × ${((price?.unitAmount ?? 0) / 100).toFixed(2)} USD / ${price?.interval}</p>` +
-            `<form method="post" action="/checkout/${session.id}/pay"><button>Pay</button></form>` +
-            `<form method="post" action="/checkout/${session.id}/pay"><input type="hidden" name="card" value="declined"><button>Pay with a declined card</button></form>` +
-            `<a href="${escapeHtml(session.cancel_url as string)}">Back</a>`,
-        ),
-      );
+      return this.checkoutPage(method, checkout[1], !!checkout[2], form);
     }
-
     const portal = /^\/portal\/(bps_\w+)(\/cancel|\/resume)?$/.exec(path);
     if (portal) {
-      const session = portals.get(portal[1] as string);
-      if (!session) return html(404, page("Not found", ""));
-      const subscription = [...subscriptions.values()].find(
-        (s) => s.customer === session.customer && s.status !== "canceled",
-      );
-      if (request.method === "POST" && portal[2] && subscription) {
-        subscription.cancel_at_period_end = portal[2] === "/cancel";
-        await emit("customer.subscription.updated", subscription);
-        return redirect(`/portal/${portal[1]}`);
-      }
-      const state = subscription
-        ? `<p>Plan: ${subscription.status}${subscription.cancel_at_period_end ? ", cancels at the end of the period" : ""}</p>` +
-          (subscription.cancel_at_period_end
-            ? `<form method="post" action="/portal/${portal[1]}/resume"><button>Resume plan</button></form>`
-            : `<form method="post" action="/portal/${portal[1]}/cancel"><button>Cancel plan</button></form>`)
-        : "<p>No subscription.</p>";
-      return html(
-        200,
-        page(
-          "Fake Stripe Billing Portal",
-          `${state}<a href="${escapeHtml(session.return_url)}">Return</a>`,
-        ),
-      );
+      return this.portalPage(method, portal[1], portal[2]);
     }
-    return html(404, page("Not found", ""));
+    return { status: 404, html: page("Not found", "") };
   }
 
-  /** Test hooks: things only time or a bank would do. */
-  async function hooks(path: string) {
+  // The page's path always has the session's id (the regex requires it).
+  private async checkoutPage(method: string, sessionId = "", pay: boolean, form: Form) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return { status: 404, html: page("Not found", "") };
+    }
+    if (session.status === "expired") {
+      return {
+        status: 410,
+        html: page("Fake Stripe Checkout", "<p>This checkout session has expired.</p>"),
+      };
+    }
+    if (method === "POST" && pay) {
+      return this.pay(session, form);
+    }
+    const line = withFirstLine.safeParse(session).data?.line_items[0];
+    const price = this.options.prices[line?.price ?? ""];
+    return {
+      status: 200,
+      html: page(
+        "Fake Stripe Checkout",
+        `<p>${line?.quantity ?? 1} × ${((price?.unitAmount ?? 0) / 100).toFixed(2)} USD / ${price?.interval}</p>` +
+          `<form method="post" action="/checkout/${session.id}/pay"><button>Pay</button></form>` +
+          `<form method="post" action="/checkout/${session.id}/pay"><input type="hidden" name="card" value="declined"><button>Pay with a declined card</button></form>` +
+          `<a href="${escapeHtml(z.string().parse(session.cancel_url))}">Back</a>`,
+      ),
+    };
+  }
+
+  /** Paying on the Checkout page: declined, or the subscription starts and is invoiced. */
+  private async pay(session: CheckoutSession, form: Form): Promise<Page> {
+    if (form.card === "declined") {
+      return {
+        status: 402,
+        html: page(
+          "Fake Stripe Checkout",
+          `<p role="alert">Your card was declined.</p><a href="${escapeHtml(`/checkout/${session.id}`)}">Try again</a>`,
+        ),
+      };
+    }
+    const successUrl = z.string().parse(session.success_url);
+    if (session.status !== "open") {
+      return { status: 303, location: successUrl };
+    }
+    session.status = "complete";
+    const subscription = this.subscribe(session, this.takeCard(session, form));
+    this.invoiceFor(subscription, "paid");
+    await this.emit("checkout.session.completed", { ...session, subscription: subscription.id });
+    await this.emit("customer.subscription.created", subscription);
+    return {
+      status: 303,
+      location: successUrl.replace("{CHECKOUT_SESSION_ID}", session.id),
+    };
+  }
+
+  private async portalPage(method: string, portalId = "", action: string | undefined) {
+    const session = this.portals.get(portalId);
+    if (!session) {
+      return { status: 404, html: page("Not found", "") };
+    }
+    const subscription = [...this.subscriptions.values()].find(
+      (s) => s.customer === session.customer && s.status !== "canceled",
+    );
+    if (method === "POST" && action && subscription) {
+      subscription.cancel_at_period_end = action === "/cancel";
+      await this.emit("customer.subscription.updated", subscription);
+      return { status: 303, location: `/portal/${portalId}` };
+    }
+    return {
+      status: 200,
+      html: page(
+        "Fake Stripe Billing Portal",
+        `${planState(portalId, subscription)}<a href="${escapeHtml(z.string().parse(session.return_url))}">Return</a>`,
+      ),
+    };
+  }
+
+  /**
+   * Test hooks: things only time or a bank would do, and invoices in any status
+   * (`/invoice?status=draft`), as Stripe's dashboard can leave them.
+   */
+  async hooks(path: string, query: URLSearchParams) {
+    if (path === "/__fake/state") {
+      return { subscriptions: [...this.subscriptions.values()], events: this.events };
+    }
     const failed = /^\/__fake\/subscriptions\/(sub_\w+)\/payment-failed$/.exec(path);
     const lapsed = /^\/__fake\/subscriptions\/(sub_\w+)\/lapse$/.exec(path);
-    const subscription = subscriptions.get((failed ?? lapsed)?.[1] ?? "");
-    if (!subscription) return undefined;
+    // An invoice in any status (`?status=draft`: the next renewal's, as Stripe drafts it
+    // an hour before it's due), without an event, as Stripe's dashboard can leave one.
+    const invoice = /^\/__fake\/subscriptions\/(sub_\w+)\/invoice$/.exec(path);
+    const subscription = this.subscriptions.get((failed ?? lapsed ?? invoice)?.[1] ?? "");
+    if (!subscription) {
+      return undefined;
+    }
+    if (invoice) {
+      return this.invoiceFor(subscription, String(query.get("status")));
+    }
     if (failed) {
       subscription.status = "past_due";
-      const invoice = invoiceFor(subscription, "open");
-      await emit("invoice.payment_failed", { ...invoice, attempt_count: 1 });
-      await emit("customer.subscription.updated", subscription);
+      const open = this.invoiceFor(subscription, "open");
+      await this.emit("invoice.payment_failed", { ...open, attempt_count: 1 });
+      await this.emit("customer.subscription.updated", subscription);
     } else {
       subscription.status = "canceled";
       subscription.canceled_at = now();
-      await emit("customer.subscription.deleted", subscription);
+      await this.emit("customer.subscription.deleted", subscription);
     }
     return subscription;
   }
 
-  const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? "/", "http://fake");
+  /**
+   * An API call: the key checked, and an Idempotency-Key's first answer replayed, or
+   * refused for a different request, as Stripe does.
+   */
+  async answerApi(request: IncomingMessage, url: URL, form: Form, raw: string) {
+    if (request.headers.authorization !== `Bearer ${this.options.secretKey}`) {
+      return {
+        status: 401,
+        body: { error: { type: "invalid_request_error", message: "Invalid API Key" } },
+      };
+    }
+    // A server's requests always have a method.
+    const method = required(request.method, "the request's method");
+    const key = request.headers["idempotency-key"];
+    const cacheKey = typeof key === "string" ? `${method} ${url.pathname} ${key}` : null;
+    const cached = cacheKey ? this.idempotent.get(cacheKey) : undefined;
+    if (cached && cached.request !== raw) {
+      return {
+        status: 400,
+        body: {
+          error: {
+            type: "idempotency_error",
+            message: `Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '${key}' if you meant to execute a different request.`,
+          },
+        },
+      };
+    }
+    if (cached) {
+      return cached;
+    }
+    const answer = answerFor(await this.api(method, url.pathname, form, url.searchParams));
+    if (cacheKey && method === "POST") {
+      this.idempotent.set(cacheKey, { request: raw, ...answer });
+    }
+    return answer;
+  }
+
+  /** Every request: the API, the test hooks, or a hosted page. */
+  async handle(request: IncomingMessage, response: ServerResponse) {
+    // A server's requests always have a URL and a method.
+    const url = new URL(required(request.url, "the request's URL"), "http://fake");
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk as Buffer);
-    const form = parseForm(Buffer.concat(chunks).toString());
-    const json = (status: number, body: unknown) => {
-      response.writeHead(status, { "content-type": "application/json" });
-      response.end(JSON.stringify(body));
-    };
+    for await (const chunk of request as AsyncIterable<Buffer>) {
+      chunks.push(chunk);
+    }
+    const raw = Buffer.concat(chunks).toString();
+    const form = parseForm(raw);
     try {
       if (url.pathname.startsWith("/v1/")) {
-        if (request.headers.authorization !== `Bearer ${options.secretKey}`) {
-          return json(401, {
-            error: { type: "invalid_request_error", message: "Invalid API Key" },
-          });
-        }
-        const key = request.headers["idempotency-key"];
-        const cacheKey =
-          typeof key === "string" ? `${request.method} ${url.pathname} ${key}` : null;
-        const cached = cacheKey ? idempotent.get(cacheKey) : undefined;
-        if (cached) return json(cached.status, cached.body);
-        const result = await api(request.method ?? "GET", url.pathname, form, url.searchParams);
-        const answer =
-          result === undefined
-            ? {
-                status: 404,
-                body: {
-                  error: { type: "invalid_request_error", message: "Unrecognized request URL" },
-                },
-              }
-            : typeof result === "object" &&
-                result !== null &&
-                "status" in result &&
-                "body" in result
-              ? (result as { status: number; body: unknown })
-              : { status: 200, body: result };
-        if (cacheKey && request.method === "POST") idempotent.set(cacheKey, answer);
-        return json(answer.status, answer.body);
+        const { status, body } = await this.answerApi(request, url, form, raw);
+        return json(response, status, body);
       }
       if (url.pathname.startsWith("/__fake/")) {
-        const result =
-          url.pathname === "/__fake/state"
-            ? { subscriptions: [...subscriptions.values()], events }
-            : await hooks(url.pathname);
-        return result ? json(200, result) : json(404, { error: "not found" });
+        const result = await this.hooks(url.pathname, url.searchParams);
+        return result ? json(response, 200, result) : json(response, 404, { error: "not found" });
       }
-      return await hosted(request, response, url.pathname, form);
+      send(
+        response,
+        await this.hosted(required(request.method, "the request's method"), url.pathname, form),
+      );
     } catch (error) {
-      json(500, { error: { type: "api_error", message: (error as Error).message } });
+      json(response, 500, { error: { type: "api_error", message: fieldOf(error, "message") } });
     }
-  });
+  }
+}
+
+/** A hosted page's answer: HTML, or a redirect. */
+type Page = { status: number; html?: string; location?: string };
+
+function send(response: ServerResponse, { status, html, location }: Page) {
+  if (location) {
+    response.writeHead(status, { location });
+  } else {
+    response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  }
+  response.end(html);
+}
+
+function json(response: ServerResponse, status: number, body: unknown) {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify(body));
+}
+
+/** The portal's plan line, with the button that cancels or resumes it. */
+function planState(portalId: string, subscription: Subscription | undefined) {
+  if (!subscription) {
+    return "<p>No subscription.</p>";
+  }
+  const cancels = subscription.cancel_at_period_end;
+  const action = cancels ? "resume" : "cancel";
+  return (
+    `<p>Plan: ${subscription.status}${cancels ? ", cancels at the end of the period" : ""}</p>` +
+    `<form method="post" action="/portal/${portalId}/${action}"><button>${cancels ? "Resume plan" : "Cancel plan"}</button></form>`
+  );
+}
+
+export async function startFakeStripe(options: FakeStripeOptions) {
+  const fake = new Fake(options);
+  const server = createServer((request, response) => void fake.handle(request, response));
   await new Promise<void>((resolve) => server.listen(options.port ?? 0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  baseUrl = `http://127.0.0.1:${port}`;
+  // Listening on a port, the server's address is that port's.
+  const { port } = z.object({ port: z.number() }).parse(server.address());
+  fake.baseUrl = `http://127.0.0.1:${port}`;
 
   return {
-    url: baseUrl,
+    url: fake.baseUrl,
     port,
-    events,
-    customers,
-    subscriptions,
+    events: fake.events,
+    customers: fake.customers,
+    subscriptions: fake.subscriptions,
     /** The subscription an organization has (by the orgId the app puts in metadata). */
     subscriptionFor: (orgId: string) =>
-      [...subscriptions.values()].find((s) => s.metadata.orgId === orgId),
+      [...fake.subscriptions.values()].find((s) => s.metadata.orgId === orgId),
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }

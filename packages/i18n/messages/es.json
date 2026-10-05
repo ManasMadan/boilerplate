@@ -101,7 +101,8 @@
     "ORGANIZATION_NEEDS_OWNER": "Eres propietario de un espacio compartido. Haz propietario a otra persona antes de eliminar tu cuenta.",
     "generic": "Algo salió mal. Inténtalo de nuevo.",
     "ENTITLEMENT_REQUIRED": "Se alcanzó el límite de miembros de tu plan. Mejóralo en la configuración de facturación para invitar a más personas.",
-    "OAUTH_REQUEST_EXPIRED": "La solicitud de la aplicación caducó. Vuelve a la aplicación y conéctala de nuevo."
+    "OAUTH_REQUEST_EXPIRED": "La solicitud de la aplicación caducó. Vuelve a la aplicación y conéctala de nuevo.",
+    "SIGN_IN_INCOMPLETE": "El inicio de sesión no terminó. Inténtalo de nuevo."
   },
   "nav": {
     "dashboard": "Panel",
@@ -129,7 +130,7 @@
         "negative": "Negativo",
         "neutral": "Neutral"
       },
-      "result": "{score}% de confianza · modelo {model}",
+      "result": "{score, number}% de confianza · modelo {model}",
       "disabled": "El servicio de IA no está configurado."
     }
   },
@@ -306,12 +307,13 @@
     "todoReminder": {
       "subject": "Recordatorio: {title}",
       "greeting": "Hola {name},",
+      "greetingNoName": "Hola:",
       "body": "Este es tu recordatorio para «{title}»."
     },
     "orgInvitation": {
-      "subject": "{inviterName} te invitó a {organizationName}",
-      "heading": "Únete a {organizationName}",
-      "body": "{inviterName} te invitó a colaborar en {organizationName}.",
+      "subject": "Te invitaron a un espacio de trabajo en Boilerplate",
+      "heading": "Únete a «{organizationName}»",
+      "body": "«{inviterName}» te invitó a colaborar en el espacio de trabajo «{organizationName}».",
       "cta": "Aceptar invitación",
       "expires": "Esta invitación caduca en {days, plural, one {# día} other {# días}}."
     },
@@ -353,6 +355,14 @@
       "app-connected": {
         "subject": "Se conectó una aplicación a tu cuenta",
         "body": "Una aplicación puede usar ahora los datos de tu cuenta en uno de tus espacios de trabajo, hasta que la desconectes en tus ajustes de seguridad."
+      },
+      "api-key-created": {
+        "subject": "Se creó una clave de API en tu espacio de trabajo",
+        "body": "Un administrador creó la clave de API «{label}». Puede actuar en el espacio de trabajo sin iniciar sesión hasta que caduque o se revoque."
+      },
+      "webhook-endpoint-created": {
+        "subject": "Se añadió un endpoint de webhook a tu espacio de trabajo",
+        "body": "Un administrador añadió un endpoint de webhook en {label}. Los eventos del espacio de trabajo se envían ahora allí."
       }
     },
     "webhookDisabled": {
@@ -439,7 +449,13 @@
     "APP_NOT_FOUND": "Esa aplicación no está conectada a tu cuenta.",
     "API_KEY_NOT_FOUND": "Esa clave de API no existe en este espacio de trabajo.",
     "API_KEY_LIMIT_REACHED": "Este espacio de trabajo ya tiene todas las claves de API que puede tener. Revoca alguna que ya no uses.",
-    "API_KEY_SCOPE_MISSING": "Esta clave de API no tiene el permiso {scope}."
+    "API_KEY_SCOPE_MISSING": "Esta clave de API no tiene el permiso {scope}.",
+    "METHOD_NOT_SUPPORTED": "Eso no se admite aquí.",
+    "TIMEOUT": "Tardó demasiado. Inténtalo de nuevo.",
+    "PAYLOAD_TOO_LARGE": "Son demasiados datos para enviar de una vez.",
+    "UNSUPPORTED_MEDIA_TYPE": "Aquí no se acepta ese tipo de contenido.",
+    "INVALID_SIGNATURE": "La firma de la solicitud no coincide.",
+    "FILE_SIZE_MISMATCH": "El archivo subido no tiene el tamaño anunciado. Vuelve a subirlo."
   },
   "workspace": {
     "switcher": {
@@ -482,7 +498,8 @@
       "role": {
         "owner": "Propietario",
         "admin": "Administrador",
-        "member": "Miembro"
+        "member": "Miembro",
+        "unknown": "Sin acceso (rol desconocido)"
       },
       "roleLabel": "Rol de {name}",
       "remove": "Quitar",
@@ -638,7 +655,7 @@
         "copied": "Copiado",
         "done": "Ya lo guardé",
         "rotate": "Cambiar secreto",
-        "rotated": "Se creó un secreto nuevo. El anterior sigue firmando las entregas junto a él durante {hours} horas: cambia tu receptor al secreto nuevo antes de que termine ese plazo."
+        "rotated": "Se creó un secreto nuevo. El anterior sigue firmando las entregas junto a él durante {hours, number} horas: cambia tu receptor al secreto nuevo antes de que termine ese plazo."
       },
       "status": {
         "enabled": "Activo",
@@ -663,7 +680,14 @@
         "failed": "Falló",
         "redeliver": "Enviar de nuevo",
         "redelivered": "Se enviará de nuevo",
-        "loadMore": "Cargar más"
+        "loadMore": "Cargar más",
+        "error": {
+          "timeout": "tiempo agotado",
+          "connection_failed": "no se pudo conectar",
+          "destination_not_allowed": "dirección no permitida",
+          "response_too_large": "respuesta demasiado grande",
+          "endpoint_disabled": "endpoint desactivado"
+        }
       },
       "eventLabels": {
         "todo": {
@@ -706,8 +730,7 @@
         "audit:read": "Ver el registro de auditoría"
       },
       "expiry": "Caduca",
-      "expiryDays": "En {days} días",
-      "never": "Nunca",
+      "expiryDays": "En {days, number} días",
       "create": "Crear clave",
       "created": "Clave de API creada",
       "key": {
@@ -800,8 +823,14 @@
     "manage": "Gestionar todos los ajustes de notificaciones",
     "missing": "Esta página necesita el enlace de uno de nuestros correos."
   },
+  "captcha": {
+    "title": "Control de seguridad",
+    "description": "Completa el control para continuar en la app.",
+    "invalidReturn": "Esta página solo funciona cuando la abre la app.",
+    "backToApp": "Volver a la app"
+  },
   "sms": {
-    "phoneCode": "{code} es tu código de verificación de Boilerplate. Caduca en {expiresInMinutes} minutos. No lo compartas con nadie.",
+    "phoneCode": "{code} es tu código de verificación de Boilerplate. Caduca en {expiresInMinutes, number} minutos. No lo compartas con nadie.",
     "securityAlert": {
       "email-changed": "Boilerplate: se cambió el correo de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
       "password-changed": "Boilerplate: se cambió tu contraseña. ¿No fuiste tú? Restablécela ahora.",
@@ -823,7 +852,7 @@
       "pro": "Pro"
     },
     "current": "Plan actual",
-    "membersLimit": "{used} de {limit} miembros",
+    "membersLimit": "{used, number} de {limit, number} miembros",
     "membersUnlimited": "{used, plural, one {# miembro} other {# miembros}}, sin límite",
     "webhooks": "Webhooks",
     "included": "Incluido",
@@ -857,7 +886,7 @@
       }
     },
     "checkoutDone": "¡Gracias! Tu plan se actualizará en un momento.",
-    "limitReached": "Tu plan permite {limit} miembros. Mejóralo en la configuración de facturación para invitar a más.",
+    "limitReached": "Tu plan permite {limit, number} miembros. Mejóralo en la configuración de facturación para invitar a más.",
     "upgradeForWebhooks": "Los webhooks forman parte de Pro. Mejora tu plan en la configuración de facturación para enviar eventos a tus endpoints."
   },
   "assistant": {
@@ -932,8 +961,6 @@
       "en": "English",
       "es": "Español"
     },
-    "invitation": {
-      "accepting": "Uniéndote al espacio de trabajo…"
-    }
+    "captchaCancelled": "El control de seguridad no se completó. Inténtalo de nuevo."
   }
 }

@@ -6,6 +6,7 @@
  *     database trigger queues them) are deleted from storage.
  */
 import { Inject, Injectable } from "@nestjs/common";
+import { HOUR_MS } from "@repo/contracts/time";
 import { type Database, InjectDatabase, STORAGE, type Storage } from "@repo/nest-common";
 
 const STALE_HOURS = 24;
@@ -19,22 +20,30 @@ export class FilesCleanup {
   ) {}
 
   async run() {
-    if (!this.storage) return { stale: 0, objects: 0 };
+    if (!this.storage) {
+      return { stale: 0, objects: 0 };
+    }
     const db = this.database.write;
     const { count: stale } = await db.file.deleteMany({
       where: {
         status: { in: ["pending", "processing", "rejected"] },
-        createdAt: { lt: new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000) },
+        createdAt: { lt: new Date(Date.now() - STALE_HOURS * HOUR_MS) },
       },
     });
     let objects = 0;
     for (;;) {
       const queued = await db.fileObjectDeletion.findMany({ take: BATCH, select: { key: true } });
-      if (queued.length === 0) break;
-      for (const { key } of queued) await this.storage.delete(key); // idempotent
+      if (queued.length === 0) {
+        break;
+      }
+      for (const { key } of queued) {
+        await this.storage.delete(key); // idempotent
+      }
       await db.fileObjectDeletion.deleteMany({ where: { key: { in: queued.map((q) => q.key) } } });
       objects += queued.length;
-      if (queued.length < BATCH) break;
+      if (queued.length < BATCH) {
+        break;
+      }
     }
     return { stale, objects };
   }

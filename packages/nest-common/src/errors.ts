@@ -12,22 +12,32 @@
  * Anything that is not an AppError is a bug: it is logged with its stack and the
  * client receives a generic INTERNAL error with the request id.
  */
-import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
+import {
+  ERROR_CODES,
+  type ERROR_PARAMS,
+  type ErrorCode,
+  type ErrorParams,
+} from "@repo/contracts/errors";
 
 export type { ErrorCode };
 
-export interface AppErrorOptions {
+interface AppErrorOptions<C extends ErrorCode = ErrorCode> {
   /** Values the client needs to render the message, e.g. { retryAfterSeconds: 30 }. */
-  params?: Record<string, string | number>;
+  params?: ErrorParams<C>;
   cause?: unknown;
 }
 
-export class AppError extends Error {
-  readonly code: ErrorCode;
+/** A code whose message needs parameters must be given them (ERROR_PARAMS). */
+type OptionsFor<C extends ErrorCode> = C extends keyof typeof ERROR_PARAMS
+  ? [options: AppErrorOptions<C> & { params: ErrorParams<C> }]
+  : [options?: AppErrorOptions<C>];
+
+export class AppError<C extends ErrorCode = ErrorCode> extends Error {
+  readonly code: C;
   readonly status: number;
   readonly params: Record<string, string | number>;
 
-  constructor(code: ErrorCode, options: AppErrorOptions = {}) {
+  constructor(code: C, ...[options = {}]: OptionsFor<C>) {
     super(code, { cause: options.cause });
     this.name = "AppError";
     this.code = code;

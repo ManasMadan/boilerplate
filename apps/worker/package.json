@@ -8,9 +8,10 @@
     "build": "tsdown",
     "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
     "check-types": "tsc",
-    "test": "vitest run --project unit --passWithNoTests",
-    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
-    "coverage": "bun --env-file=../../.env run vitest run --coverage"
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration --tags-filter=!files",
+    "test:integration:files": "vitest run --project integration --tags-filter=files",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@nestjs/bullmq": "catalog:",
@@ -31,6 +32,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@repo/testing": "workspace:*",
     "@repo/tsdown-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",

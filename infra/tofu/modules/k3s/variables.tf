@@ -51,11 +51,14 @@ variable "nodes" {
   }
 }
 
+# Ephemeral: it's only used to connect while applying, so it's in neither the state nor
+# a saved plan, and a plan doesn't need it.
 variable "ssh_private_key" {
-  description = "The private key OpenTofu connects to the nodes with (unused with install_over_ssh = false)."
+  description = "The private key OpenTofu connects to the nodes with (unused with install_over_ssh = false). Needed to apply, not to plan."
   type        = string
   default     = null
   sensitive   = true
+  ephemeral   = true
 }
 
 variable "install_over_ssh" {

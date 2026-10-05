@@ -10,15 +10,20 @@ import { startFakeStripe } from "./index";
 
 const required = (name: string) => {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} must be set to run the fake Stripe`);
+  if (!value) {
+    throw new Error(`${name} must be set to run the fake Stripe`);
+  }
   return value;
 };
 
-const fake = await startFakeStripe({
+export const fake = await startFakeStripe({
   secretKey: required("STRIPE_SECRET_KEY"),
   webhookSecret: required("STRIPE_WEBHOOK_SECRET"),
-  webhookUrl: process.env.STRIPE_FAKE_WEBHOOK_URL ?? "http://localhost:3004/webhooks/stripe",
-  port: Number(process.env.STRIPE_FAKE_PORT ?? 12111),
+  // The webhooks service on this checkout's port (WEBHOOKS_PORT, in the root .env).
+  webhookUrl:
+    process.env.STRIPE_FAKE_WEBHOOK_URL ??
+    `http://localhost:${required("WEBHOOKS_PORT")}/webhooks/stripe`,
+  port: Number(required("STRIPE_FAKE_PORT")),
   prices: {
     [required("STRIPE_PRICE_PRO_MONTHLY")]: { interval: "month", unitAmount: 1_200 },
     [required("STRIPE_PRICE_PRO_YEARLY")]: { interval: "year", unitAmount: 12_000 },

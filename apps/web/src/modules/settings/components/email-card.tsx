@@ -44,8 +44,11 @@ export function EmailCard() {
       fetchOptions: { headers: captcha.headers() },
     });
     captcha.reset();
-    if (error) toast.error(errorMessage(error));
-    else setStep({ name: "current" });
+    if (error) {
+      toast.error(errorMessage(error));
+    } else {
+      setStep({ name: "current" });
+    }
   }
 
   return (
@@ -67,12 +70,14 @@ export function EmailCard() {
               {t("change")}
             </Button>
           </div>
-        ) : step.name === "current" ? (
+        ) : null}
+        {step.name === "current" ? (
           <RequestChange
             currentEmail={email}
             onSent={(newEmail) => setStep({ name: "new", newEmail })}
           />
-        ) : (
+        ) : null}
+        {step.name === "new" ? (
           <ConfirmChange
             newEmail={step.newEmail}
             onDone={async () => {
@@ -82,7 +87,7 @@ export function EmailCard() {
               setStep({ name: "start" });
             }}
           />
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -101,7 +106,7 @@ function RequestChange({
   const schema = z.object({
     otp: schemas.otp,
     newEmail: schemas.email.refine(
-      (value) => value.toLowerCase() !== currentEmail.toLowerCase(),
+      (value: string) => value.toLowerCase() !== currentEmail.toLowerCase(),
       t("sameEmail"),
     ),
   });

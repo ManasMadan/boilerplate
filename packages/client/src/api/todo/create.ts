@@ -2,13 +2,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 import type { TodoListData } from "./list";
-import { useTodoListQueryKey } from "./list";
 import { applyCreate } from "./optimistic";
 
 export function useTodoCreateMutation() {
   const { api } = useApi();
   const queryClient = useQueryClient();
-  const listKey = useTodoListQueryKey();
+  const listKey = api.todo.list.key();
   return useMutation(
     api.todo.create.mutationOptions({
       onSuccess: (todo) => {

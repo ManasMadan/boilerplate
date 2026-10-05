@@ -9,11 +9,13 @@
   "scripts": {
     "start": "bun --env-file=../../.env src/main.ts",
     "check-types": "tsc",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "stripe": "catalog:"
+    "@repo/contracts": "workspace:*",
+    "stripe": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

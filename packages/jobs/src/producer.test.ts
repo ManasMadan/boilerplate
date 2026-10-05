@@ -1,5 +1,6 @@
+import { UnrecoverableError } from "bullmq";
 import { describe, expect, it } from "vitest";
-import { createProducer, parseJob } from "./producer";
+import { createProducer, idOf, isJobName, jobName, parseJob } from "./producer";
 import { queues, WEBHOOK_RETRY_DELAYS_MS } from "./queues";
 
 const payload = {
@@ -18,14 +19,36 @@ describe("parseJob", () => {
     expect(parsed.template).toBe("auth.otp");
   });
 
+  it("refuses a job its queue doesn't have", () => {
+    expect(() =>
+      parseJob("notifications-critical", "nope" as never, { meta: {}, payload }),
+    ).toThrow('Unknown job "nope" on queue "notifications-critical"');
+  });
+
   it("rejects payloads that break the contract, and data without the envelope", () => {
     expect(() =>
       parseJob("notifications-critical", "send", {
         meta: {},
         payload: { ...payload, to: { email: "nope", locale: "en" } },
       }),
-    ).toThrow();
-    expect(() => parseJob("notifications-critical", "send", payload)).toThrow();
+    ).toThrow(UnrecoverableError);
+    // Retrying can't fix it, so the job fails at once rather than with full backoff.
+    expect(() => parseJob("notifications-critical", "send", payload)).toThrow(UnrecoverableError);
+  });
+});
+
+describe("jobName, isJobName and idOf", () => {
+  it("accept only the queue's own job names", () => {
+    expect(jobName("maintenance", "files-cleanup")).toBe("files-cleanup");
+    expect(isJobName("maintenance", "send")).toBe(false);
+    // Not an own key of the queue's jobs, though every object has it.
+    expect(isJobName("maintenance", "toString")).toBe(false);
+    expect(() => jobName("files", "send")).toThrow('Unknown job "send" on queue "files"');
+  });
+
+  it("returns a job's id, and refuses a job without one", () => {
+    expect(idOf({ id: "job-1", name: "send" })).toBe("job-1");
+    expect(() => idOf({ id: undefined, name: "send" })).toThrow('Job "send" has no id');
   });
 });
 

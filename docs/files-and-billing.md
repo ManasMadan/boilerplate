@@ -21,9 +21,12 @@ check before anyone can see it:
    it was given.
 3. **Complete.** `files.completeUpload` queues a `files` job with the file id as job id,
    so completing twice checks once.
-4. **Check** (`apps/worker/src/files/files.processor.ts`): the stored size matches what was
-   declared and is within the limit; ClamAV finds nothing (before anything parses the
-   bytes); the real type, sniffed from the bytes, is allowed.
+4. **Check** (`apps/worker/src/files/files.processor.ts`): the stored size is within the
+   limit (`FILE_TOO_LARGE`) and matches what was declared (`FILE_SIZE_MISMATCH`); ClamAV
+   finds nothing (before anything parses the bytes); the real type, sniffed from the
+   bytes, is allowed. The checked file is stored, then its row updated, then the
+   quarantined original removed, so a retry after a crash either checks the original
+   again or only cleans up.
 5. **Re-encode.** Per purpose: avatars are decoded and re-encoded as a 512 px WebP (at
    most 50 megapixels in), which drops everything but pixels (EXIF, GPS, embedded
    payloads).
@@ -35,6 +38,9 @@ check before anyone can see it:
 Pages link to `/api/v1/files/<id>/content`, which checks the session and redirects to a
 presigned download valid for 5 minutes, so links never expire. Row-level security keeps
 files private to their uploader, except ready avatars, which anyone signed in may read.
+A user's picture (`user.image`) is only ever such an avatar, or the profile picture a
+social provider gave at sign-up: sign-up and profile updates ignore or refuse a picture
+a client sends.
 
 The worker's `files-cleanup` task (hourly) forgets uploads never completed or rejected
 after a day, and deletes objects whose row is gone (a trigger queues them in
@@ -77,10 +83,15 @@ its first start to download signatures. `FILE_SCANNER=none` skips scanning while
 on something else (refused in production). The RustFS console is at
 http://localhost:59001.
 
+The local ClamAV can stop answering after running for some hours: uploads then stay
+`pending` and the worker's logs show `clamd timed out`. `docker compose restart clamav`
+brings it back (it keeps its signatures, so it's quick).
+
 ## Billing
 
 Billing is per organization, on Stripe (`apps/api/src/modules/billing`). Stripe is the
-source of truth; `billing.customer` and `billing.subscription` mirror it.
+source of truth; `billing.customer` and `billing.subscription` mirror it, and
+`billing.trial_card` remembers which cards have had a free trial.
 
 ### Plans and entitlements
 
@@ -99,7 +110,7 @@ Free. With billing off, every organization has every entitlement.
 Checks happen where the feature is used: `BillingService.require(orgId, "webhooks")`
 throws `ENTITLEMENT_REQUIRED`, and the member limit is enforced by better-auth's
 organization plugin (`membershipLimit`, and `beforeCreateInvitation` in
-`apps/api/src/auth/auth.ts`). Clients read the plan and entitlements from
+`apps/api/src/auth/auth-plugins.ts`). Clients read the plan and entitlements from
 `billing.overview` to hide or badge features.
 
 To add an entitlement: add it to both plans, check it with `require` where the feature
@@ -109,9 +120,23 @@ is used, and hide or badge it in the clients.
 
 - Every `billing.*` procedure is for owners and admins (`orgAdmin`).
 - `billing.checkout` creates the Stripe customer the first time, with
-  the organization id in its metadata, and returns a Checkout URL. The first subscription
-  gets a `STRIPE_TRIAL_DAYS` trial. `billing.portal` opens Stripe's billing portal;
-  `billing.invoices` lists past invoices.
+  the organization id in its metadata, and returns a Checkout URL. A workspace has one
+  checkout open at a time, kept in Redis (`billing:checkout:<org>`): asking again for the
+  same offer (price, seats, trial) returns that session while it's open, and a new session
+  (another interval, or the member count changed) expires the one before, so two admins
+  or two tabs can't end up paying for two subscriptions. Requests that race each other send
+  the same idempotency key, which names the previous session and the offer, so Stripe
+  answers them with one session and never replays a closed one. If two live subscriptions
+  appear anyway, sync logs an error naming both, for someone to refund one.
+- The first subscription of a workspace gets a `STRIPE_TRIAL_DAYS` trial, and each card
+  gets one trial: when sync sees a trialing subscription, it claims the card's Stripe
+  fingerprint (the same for a card in every customer) in `billing.trial_card`, and a
+  subscription whose card was already claimed by another has its trial ended at once
+  (`trial_end: "now"`, so Stripe charges the card), so new workspaces or accounts can't
+  farm trials. Only cards have fingerprints; a trial paid another way, or started without
+  a card (`payment_method_collection: "if_required"`), keeps it, and Stripe Radar rules
+  can cover those.
+- `billing.portal` opens Stripe's billing portal; `billing.invoices` lists past invoices.
 - Stripe's events arrive at apps/webhooks, `POST /webhooks/stripe`: the signature is
   checked against `STRIPE_WEBHOOK_SECRET`, the event is stored once in
   `webhooks.inbound_event` (unique on Stripe's id) together with a
@@ -126,11 +151,13 @@ is used, and hide or badge it in the clients.
 ### Locally without a Stripe account
 
 `packages/fake-stripe` is a stateful stand-in for the parts of Stripe the app uses:
-customers, Checkout, the billing portal, subscriptions and invoices. It checks the secret
-key, honours `Idempotency-Key`, sends signed webhooks to apps/webhooks like Stripe does,
+customers, Checkout, the billing portal, subscriptions, invoices and the cards they're
+paid with. It checks the secret key, honours `Idempotency-Key` (and refuses a key reused
+with other parameters, as Stripe does), sends signed webhooks to apps/webhooks like Stripe does,
 and answers 404 to anything it doesn't implement, so a new Stripe call fails loudly until
 it's added. Hosted pages at `/checkout/<session>` (pay, pay with a declined card, go back)
-and `/portal/<session>` (cancel or resume); test hooks under `/__fake/` make a renewal fail
+(a posted `card` names the card, so tests can pay twice with the same one) and
+`/portal/<session>` (cancel or resume); test hooks under `/__fake/` make a renewal fail
 or a subscription lapse.
 
 ```sh
@@ -147,6 +174,13 @@ end-to-end suite starts it the same way (`scripts/e2e.ts`), and the API's integr
 tests start it in-process (`startFakeStripe`).
 
 ### Real Stripe test mode
+
+Every call the api makes is also checked against Stripe's test mode weekly
+(`packages/fake-stripe/src/contract.test.ts`, run by `stripe.yml` with the
+`STRIPE_CONTRACT_SECRET_KEY` secret), so the fake can't drift from Stripe unnoticed. To
+run it yourself: `STRIPE_CONTRACT_SECRET_KEY=sk_test_… bunx vitest run src/contract.test.ts`
+in `packages/fake-stripe`. Hosted Checkout, the portal's pages and webhooks still need a
+person, as below.
 
 Use your `sk_test_` key and two recurring prices, leave `STRIPE_API_URL` empty, and
 forward events:

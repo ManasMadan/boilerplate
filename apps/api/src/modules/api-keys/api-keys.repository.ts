@@ -4,6 +4,7 @@
  * and deletes rows here, so it's typed and runs in our transactions.
  */
 import { Injectable } from "@nestjs/common";
+import type { ApiKeyId, OrgId, UserId } from "@repo/contracts/ids";
 import type { Tx } from "@repo/db";
 import { type Database, InjectDatabase } from "@repo/nest-common";
 
@@ -22,7 +23,7 @@ const fields = {
 export class ApiKeysRepository {
   constructor(@InjectDatabase() private readonly database: Database) {}
 
-  list(orgId: string) {
+  list(orgId: OrgId) {
     return this.database.read.apikey.findMany({
       where: { referenceId: orgId },
       orderBy: { createdAt: "desc" },
@@ -31,25 +32,25 @@ export class ApiKeysRepository {
   }
 
   /** From the primary: a key just created must be found at once. */
-  find(orgId: string, id: string) {
-    return this.database.write.apikey.findFirst({
+  find(orgId: OrgId, id: ApiKeyId) {
+    return this.database.write.apikey.findFirstOrThrow({
       where: { id, referenceId: orgId },
       select: fields,
     });
   }
 
-  count(orgId: string) {
+  count(orgId: OrgId) {
     return this.database.write.apikey.count({ where: { referenceId: orgId } });
   }
 
-  users(ids: string[]) {
+  users(ids: UserId[]) {
     return this.database.read.user.findMany({
       where: { id: { in: ids } },
       select: { id: true, name: true },
     });
   }
 
-  findForRevoke(tx: Tx, orgId: string, id: string) {
+  findForRevoke(tx: Tx, orgId: OrgId, id: ApiKeyId) {
     return tx.apikey.findFirst({
       where: { id, referenceId: orgId },
       select: { id: true, name: true },

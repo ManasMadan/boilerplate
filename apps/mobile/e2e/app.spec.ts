@@ -1,6 +1,6 @@
 /** The app's screens (rendered for the web) against the real stack. */
 import { totp } from "@repo/testing/totp";
-import { expect, newUser, signUp, test } from "./support";
+import { addPasskeyAuthenticator, expect, newUser, nextCode, signUp, test } from "./support";
 
 test("sign up, verify the email and land on the todos", async ({ page }) => {
   await signUp(page);
@@ -36,11 +36,57 @@ test("sign out, then sign in again", async ({ page }) => {
 
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill("wrong-password");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("That email and password don't match.");
 
   await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
+});
+
+test("reset a forgotten password and sign in with the new one", async ({ page }) => {
+  const user = await signUp(page);
+  await page.getByRole("tab", { name: /Settings/ }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page.getByText("Reset your password")).toBeVisible();
+
+  const sent = new Date();
+  await page.getByLabel("Email").filter({ visible: true }).fill(user.email);
+  await page.getByRole("button", { name: "Send code" }).click();
+  await expect(page.getByText("Choose a new password")).toBeVisible();
+  const password = newUser().password;
+  await page.getByLabel("Verification code").fill(await nextCode(user.email, sent));
+  await page.getByLabel("New password").fill(password);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Password updated. Sign in with your new password.")).toBeVisible();
+
+  // The old password no longer works; the new one does. On the web the screens passed
+  // through stay mounted (hidden), so the fields are the visible ones.
+  await page.getByLabel("Email").filter({ visible: true }).fill(user.email);
+  await page.getByLabel("Password").filter({ visible: true }).fill(user.password);
+  await page
+    .getByRole("button", { name: "Sign in", exact: true })
+    .filter({ visible: true })
+    .click();
+  await expect(page.getByRole("alert")).toHaveText("That email and password don't match.");
+  await page.getByLabel("Password").filter({ visible: true }).fill(password);
+  await page
+    .getByRole("button", { name: "Sign in", exact: true })
+    .filter({ visible: true })
+    .click();
+  await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
+});
+
+test("add a passkey in settings, then sign in with it", async ({ page }) => {
+  await addPasskeyAuthenticator(page);
+  await signUp(page);
+  await page.getByRole("tab", { name: /Settings/ }).click();
+  await page.getByRole("button", { name: "Add a passkey" }).click();
+  await expect(page.getByText("Passkey added")).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+
+  await page.getByRole("button", { name: "Sign in with a passkey" }).click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
 });
 
@@ -61,7 +107,7 @@ test("an unverified user signing in is asked for the emailed code", async ({ pag
   await page.goto("/sign-in");
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Check your email")).toBeVisible();
 });
 
@@ -108,7 +154,7 @@ test("switch workspace: each keeps its own todos", async ({ page }) => {
   await expect(page.getByText("Nothing to do. Add your first todo above.")).toBeVisible();
 });
 
-test("an invitation link joins the workspace", async ({ page, browser }) => {
+test("an invitation link joins the workspace once accepted", async ({ page, browser }) => {
   // An owner (on another device) invites this user.
   const invitee = await signUp(page);
   const owner = await browser.newContext({ baseURL: new URL(page.url()).origin });
@@ -126,6 +172,9 @@ test("an invitation link joins the workspace", async ({ page, browser }) => {
   await owner.close();
 
   await page.goto(`/invitations/${invitation.id}`);
+  // Opening the link only shows it: any app or page can open one.
+  await expect(page.getByText("Join Invited Co to start collaborating.")).toBeVisible();
+  await page.getByRole("button", { name: "Accept invitation" }).click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
   await page.getByRole("tab", { name: /Settings/ }).click();
   await expect(page.getByRole("radio", { name: "Invited Co" })).toBeChecked();
@@ -169,7 +218,7 @@ test("a user with two-step verification signs in with an authenticator code", as
 
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Two-step verification")).toBeVisible();
   await page.getByLabel("Verification code").fill("000000");
   await page.getByRole("button", { name: "Continue" }).click();

@@ -1,4 +1,5 @@
 import { Inject, Module, type OnApplicationShutdown } from "@nestjs/common";
+import { required } from "@repo/contracts/objects";
 import { env, pushPlatforms } from "../../env";
 import { ApnsTransport } from "./apns";
 import { FcmTransport } from "./fcm";
@@ -6,48 +7,43 @@ import { PushChannel } from "./push.channel";
 import { PUSH_TRANSPORTS, type PushTransports } from "./push-transport";
 import { WebPushTransport } from "./web-push";
 
+// A platform is on only when all of its variables are set (checked at boot in env.ts).
 function createTransports(): PushTransports {
   const transports: PushTransports = {};
-  if (pushPlatforms.android && env.FCM_PROJECT_ID && env.FCM_CLIENT_EMAIL && env.FCM_PRIVATE_KEY) {
+  if (pushPlatforms.android) {
     transports.android = new FcmTransport({
-      projectId: env.FCM_PROJECT_ID,
-      clientEmail: env.FCM_CLIENT_EMAIL,
+      projectId: required(env.FCM_PROJECT_ID, "FCM_PROJECT_ID"),
+      clientEmail: required(env.FCM_CLIENT_EMAIL, "FCM_CLIENT_EMAIL"),
       // Keys pasted into env files carry literal "\\n"s.
-      privateKey: env.FCM_PRIVATE_KEY.replaceAll("\\n", "\n"),
+      privateKey: required(env.FCM_PRIVATE_KEY, "FCM_PRIVATE_KEY").replaceAll("\\n", "\n"),
       ...(env.FCM_TOKEN_URL && { tokenUrl: env.FCM_TOKEN_URL }),
       ...(env.FCM_API_URL && { apiUrl: env.FCM_API_URL }),
     });
   }
-  if (
-    pushPlatforms.ios &&
-    env.APNS_KEY_ID &&
-    env.APNS_TEAM_ID &&
-    env.APNS_PRIVATE_KEY &&
-    env.APNS_BUNDLE_ID
-  ) {
+  if (pushPlatforms.ios) {
     transports.ios = new ApnsTransport({
-      keyId: env.APNS_KEY_ID,
-      teamId: env.APNS_TEAM_ID,
-      privateKey: env.APNS_PRIVATE_KEY.replaceAll("\\n", "\n"),
-      bundleId: env.APNS_BUNDLE_ID,
+      keyId: required(env.APNS_KEY_ID, "APNS_KEY_ID"),
+      teamId: required(env.APNS_TEAM_ID, "APNS_TEAM_ID"),
+      privateKey: required(env.APNS_PRIVATE_KEY, "APNS_PRIVATE_KEY").replaceAll("\\n", "\n"),
+      bundleId: required(env.APNS_BUNDLE_ID, "APNS_BUNDLE_ID"),
       url: env.APNS_URL,
     });
   }
-  if (pushPlatforms.web && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT) {
+  if (pushPlatforms.web) {
     transports.web = new WebPushTransport({
-      publicKey: env.VAPID_PUBLIC_KEY,
-      privateKey: env.VAPID_PRIVATE_KEY,
-      subject: env.VAPID_SUBJECT,
+      publicKey: required(env.VAPID_PUBLIC_KEY, "VAPID_PUBLIC_KEY"),
+      privateKey: required(env.VAPID_PRIVATE_KEY, "VAPID_PRIVATE_KEY"),
+      subject: required(env.VAPID_SUBJECT, "VAPID_SUBJECT"),
       testOrigin: env.WEB_PUSH_TEST_ORIGIN,
     });
   }
   return transports;
 }
 
-class TransportsLifecycle implements OnApplicationShutdown {
+export class TransportsLifecycle implements OnApplicationShutdown {
   constructor(@Inject(PUSH_TRANSPORTS) private readonly transports: PushTransports) {}
-  onApplicationShutdown() {
-    (this.transports.ios as ApnsTransport | undefined)?.close();
+  async onApplicationShutdown() {
+    await Promise.all(Object.values(this.transports).map((transport) => transport?.close?.()));
   }
 }
 

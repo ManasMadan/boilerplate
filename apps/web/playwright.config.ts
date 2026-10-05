@@ -19,10 +19,14 @@ export default defineConfig({
   // more than this starves the services and measures the laptop, not the app.
   workers: process.env.CI ? 2 : 4,
   forbidOnly: Boolean(process.env.CI),
+  // Retried in CI to tell a flaky test from a broken one, but a test that only passed on
+  // a retry still fails the run: retries alone would hide it.
   retries: process.env.CI ? 2 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+    // The site's origin (the root .env's WEB_URL, or the e2e run's).
+    baseURL: process.env.E2E_BASE_URL ?? process.env.WEB_URL,
     trace: "retain-on-failure",
     locale: "en-US",
     // Matches the server's default zone, so the first page load doesn't refresh to

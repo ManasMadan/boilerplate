@@ -14,7 +14,20 @@ services:
       EMAIL_FROM: Boilerplate <no-reply@example.com>
   web:
     autoscaling: { minReplicas: 2, maxReplicas: 4 }
+    # Optional: the mobile app's https links and passkeys (docs/web-and-mobile.md,
+    # "Universal links and App Links"), for the build that talks to this site
+    # (the preview variant). Off while unset; set all four or none (a partial set stops the
+    # web app), and give the api the same fingerprints.
+    # env:
+    #   APPLE_TEAM_ID: ABCDE12345
+    #   IOS_BUNDLE_ID: com.boilerplate.app.preview
+    #   ANDROID_PACKAGE: com.boilerplate.app.preview
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
   api:
     autoscaling: { minReplicas: 2, maxReplicas: 4 }
+    # With the mobile app's links on (web, above): passkeys made in the Android app come
+    # from its certificates (apps/api/src/auth/auth.ts).
+    # env:
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
   clamav:
     enabled: true

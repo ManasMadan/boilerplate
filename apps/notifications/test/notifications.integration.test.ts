@@ -4,13 +4,25 @@
  */
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import {
+  apiKeyIdSchema,
+  type OrgId,
+  orgIdSchema,
+  todoIdSchema,
+  type UserId,
+  userIdSchema,
+  webhookEndpointIdSchema,
+} from "@repo/contracts/ids";
 import { createDb } from "@repo/db";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
-import { createProducer, type Producer, queuePrefix } from "@repo/jobs";
-import { createRedis } from "@repo/nest-common";
-import { redisDatabase } from "@repo/nest-common/testing";
+import { createProducer, type Producer, parseJob, queuePrefix } from "@repo/jobs";
+import { createRedis, DATABASE, I18N, PinoLogger, REDIS } from "@repo/nest-common";
+import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
+import { eventually } from "@repo/testing/eventually";
 import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -25,15 +37,24 @@ interface MailpitMessage {
   To: { Address: string }[];
 }
 
-async function waitForEmail(to: string, timeoutMs = 15_000): Promise<MailpitMessage> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const res = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`);
-    const body = (await res.json()) as { messages: MailpitMessage[] };
-    if (body.messages[0]) return body.messages[0];
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`No email for ${to} within ${timeoutMs}ms`);
+async function waitForEmail(to: string): Promise<MailpitMessage> {
+  return eventually(
+    async () => {
+      const res = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`);
+      return ((await res.json()) as { messages: MailpitMessage[] }).messages[0];
+    },
+    (message): message is MailpitMessage => message !== undefined,
+    { interval: 200 },
+  );
+}
+
+/** A port nothing listens on yet. */
+async function freePort() {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
 }
 
 describe("notifications service", () => {
@@ -55,8 +76,11 @@ describe("notifications service", () => {
     // development can't take this test's jobs (the API tests use 13).
     process.env.REDIS_URL = redisDatabase(14);
     process.env.UNSUBSCRIBE_SECRET ??= "test-unsubscribe-secret-at-least-32-chars";
+    // For the service main.ts starts, at the end.
+    process.env.PORT = String(await freePort());
+    process.env.LOAD_SHEDDING = "off";
     const redis = createRedis(process.env.REDIS_URL);
-    await redis.flushdb();
+    await flushTestDatabase(redis);
     await redis.quit();
     // Imported after the env is set: env.ts validates at import time.
     const { AppModule } = await import("../src/app.module");
@@ -104,7 +128,9 @@ describe("notifications service", () => {
     const email = `user-${randomUUID()}@test.dev`;
     // Users are created by the api service, which owns the auth schema.
     const api = createDb({ url: testDb.urlFor("app_api"), poolMax: 1, service: "test" });
-    const user = await api.user.create({ data: { name: "Lucía", email, locale: "es" } });
+    const user = await api.user
+      .create({ data: { name: "Lucía", email, locale: "es" } })
+      .then((row) => ({ ...row, id: userIdSchema.parse(row.id) }));
     await api.$disconnect();
 
     await bulk.add(
@@ -112,7 +138,7 @@ describe("notifications service", () => {
       {
         template: "todo.reminder",
         to: { userId: user.id },
-        data: { todoId: randomUUID(), title: "Llamar al banco" },
+        data: { todoId: todoIdSchema.parse(randomUUID()), title: "Llamar al banco" },
       },
       { jobId: randomUUID() },
     );
@@ -138,9 +164,8 @@ describe("notifications service", () => {
       { jobId },
     );
     await waitForEmail(to);
-    // Give the worker a moment to acknowledge completion after the SMTP send.
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(await producer.queue.getJob(jobId)).toBeUndefined();
+    // The worker acknowledges completion just after the SMTP send.
+    await expect.poll(() => producer.queue.getJob(jobId)).toBeUndefined();
   });
 
   it("rejects payloads that break the contract before they reach the queue", async () => {
@@ -165,7 +190,7 @@ describe("notifications service", () => {
     const api = createDb({ url: testDb.urlFor("app_api"), poolMax: 1, service: "test" });
     const user = await api.user.create({ data: { name, email, locale: "en" } });
     await api.$disconnect();
-    return user;
+    return { ...user, id: userIdSchema.parse(user.id) };
   }
 
   async function sql<T = Record<string, unknown>>(query: string, params: unknown[] = []) {
@@ -178,30 +203,28 @@ describe("notifications service", () => {
     }
   }
 
-  async function reminder(userId: string, jobId = randomUUID()) {
+  async function reminder(userId: UserId, jobId = randomUUID()) {
     await bulk.add(
       "send",
       {
         template: "todo.reminder",
         to: { userId },
-        data: { todoId: randomUUID(), title: "Water the plants" },
+        data: { todoId: todoIdSchema.parse(randomUUID()), title: "Water the plants" },
       },
       { jobId },
     );
     return jobId;
   }
 
-  async function settle(jobId: string, deliveries: number) {
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline) {
-      const rows = await sql<{ status: string }>(
-        "SELECT status FROM notifications.delivery WHERE idempotency_key LIKE $1 AND status <> 'sending'",
-        [`${jobId}:%`],
-      );
-      if (rows.length >= deliveries) return rows;
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
-    throw new Error(`deliveries for ${jobId} didn't settle`);
+  function settle(jobId: string, deliveries: number) {
+    return eventually(
+      () =>
+        sql<{ status: string }>(
+          "SELECT status FROM notifications.delivery WHERE idempotency_key LIKE $1 AND status <> 'sending'",
+          [`${jobId}:%`],
+        ),
+      (rows) => rows.length >= deliveries,
+    );
   }
 
   it("puts a notification in the inbox and emails it with a one-click unsubscribe", async () => {
@@ -237,7 +260,7 @@ describe("notifications service", () => {
     const payload = {
       template: "todo.reminder" as const,
       to: { userId: user.id },
-      data: { todoId: randomUUID(), title: "Only once" },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title: "Only once" },
     };
     const key = randomUUID();
     // As when a job is retried or an event is redelivered.
@@ -315,10 +338,7 @@ describe("notifications service", () => {
         },
         { jobId: eventId },
       );
-      const deadline = Date.now() + 10_000;
-      while ((await queue.getJobState(eventId)) !== "completed" && Date.now() < deadline)
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(await queue.getJobState(eventId)).toBe("completed");
+      await expect.poll(() => queue.getJobState(eventId), { timeout: 10_000 }).toBe("completed");
     };
     const reasons = async () =>
       (
@@ -360,7 +380,7 @@ describe("notifications service", () => {
     const owner = await newUser("Owner");
     const admin = await newUser("Admin");
     const member = await newUser("Member");
-    const orgId = randomUUID();
+    const orgId = orgIdSchema.parse(randomUUID());
     await sql("INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)", [
       orgId,
     ]);
@@ -379,7 +399,7 @@ describe("notifications service", () => {
       "events-notifications",
       createRedis(process.env.REDIS_URL as string),
     );
-    const endpointId = randomUUID();
+    const endpointId = webhookEndpointIdSchema.parse(randomUUID());
     const eventId = randomUUID();
     await events.add(
       "event",
@@ -406,6 +426,123 @@ describe("notifications service", () => {
     expect((await waitForEmail(admin.email)).Subject).toBe(
       "Webhook endpoint turned off: https://example.com/hook",
     );
+  });
+
+  it("tells a workspace's owners and admins when an API key or webhook endpoint is created", async () => {
+    const [owner, admin, member] = [
+      await newUser("Owner"),
+      await newUser("Admin"),
+      await newUser("Member"),
+    ];
+    const orgId = orgIdSchema.parse(randomUUID());
+    await sql("INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)", [
+      orgId,
+    ]);
+    for (const [user, role] of [
+      [owner, "owner"],
+      [admin, "admin"],
+      [member, "member"],
+    ] as const) {
+      await sql("INSERT INTO auth.member (organization_id, user_id, role) VALUES ($1, $2, $3)", [
+        orgId,
+        user.id,
+        role,
+      ]);
+    }
+    const events = createProducer(
+      "events-notifications",
+      createRedis(process.env.REDIS_URL as string),
+    );
+    const created = [
+      {
+        name: "org.api_key_created.v1",
+        payload: { apiKeyId: apiKeyIdSchema.parse(randomUUID()), name: "CI", scopes: [] },
+      },
+      {
+        name: "webhook.endpoint_created.v1",
+        payload: {
+          endpointId: webhookEndpointIdSchema.parse(randomUUID()),
+          url: "https://example.com/in",
+        },
+      },
+    ];
+    const ids: string[] = [];
+    for (const { name, payload } of created) {
+      const id = randomUUID();
+      ids.push(id);
+      await events.add(
+        "event",
+        {
+          id,
+          name,
+          key: randomUUID(),
+          payload,
+          orgId,
+          actorId: admin.id,
+          requestId: null,
+          occurredAt: new Date().toISOString(),
+          source: "api",
+        },
+        { jobId: id },
+      );
+    }
+    await events.close();
+    for (const id of ids) {
+      await settle(id, 2);
+    }
+
+    const subjects = async (email: string) => {
+      const res = await fetch(
+        `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      );
+      return ((await res.json()) as { messages: MailpitMessage[] }).messages
+        .map((m) => m.Subject)
+        .sort();
+    };
+    const expected = [
+      "A webhook endpoint was added to your workspace",
+      "An API key was created in your workspace",
+    ];
+    await waitForEmail(owner.email);
+    expect(await subjects(owner.email)).toEqual(expected);
+    expect(await subjects(admin.email)).toEqual(expected);
+    expect(await subjects(member.email)).toEqual([]);
+  });
+
+  it("sends a notification asked for in the outbox, once however often it arrives", async () => {
+    const email = `user-${randomUUID()}@test.dev`;
+    const events = createProducer(
+      "events-notifications",
+      createRedis(process.env.REDIS_URL as string),
+    );
+    const id = randomUUID();
+    const event = {
+      id,
+      name: "notification.requested.v1",
+      key: randomUUID(),
+      payload: {
+        notification: {
+          template: "auth.security-alert",
+          to: { email, locale: "en" },
+          data: { event: "password-changed", securityUrl: "https://app.test/settings/security" },
+        },
+      },
+      orgId: null,
+      actorId: null,
+      requestId: null,
+      occurredAt: new Date().toISOString(),
+      source: "app",
+    };
+    await events.add("event", event, { jobId: id });
+    await events.add("event", event, { jobId: `${id}-again` });
+    await events.close();
+    await settle(id, 1);
+    expect((await waitForEmail(email)).Subject).toBe("Your password was changed");
+    const sent = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM notifications.delivery WHERE idempotency_key LIKE $1",
+      [`${id}:%`],
+    );
+    expect(sent[0]?.n).toBe(1);
   });
 
   it("keeps each user's inbox private at the database level", async () => {
@@ -486,14 +623,15 @@ describe("notifications service", () => {
     const user = await newUser();
     const live = `android-${randomUUID()}`;
     await addDevice(user.id, "android", `dead-${randomUUID()}`);
+    await addDevice(user.id, "android", `malformed-${randomUUID()}`);
     await addDevice(user.id, "android", live);
     await addDevice(user.id, "ios", DEAD_APNS_TOKEN);
     await addDevice(user.id, "web", push.goneSubscription());
 
     const jobId = await reminder(user.id);
-    await settle(jobId, 6);
+    await settle(jobId, 7);
     const statuses = (await pushStatuses(jobId)).map((row) => row.status).sort();
-    expect(statuses).toEqual(["sent", "skipped", "skipped", "skipped"]);
+    expect(statuses).toEqual(["sent", "skipped", "skipped", "skipped", "skipped"]);
     expect(await devices(user.id)).toEqual([live]);
     expect(deliveredTo(live)).toHaveLength(1);
   });
@@ -511,6 +649,29 @@ describe("notifications service", () => {
     expect(await devices(user.id)).toEqual([]);
   });
 
+  it("keeps going when a push provider throws: other devices and channels still get it", async () => {
+    const user = await newUser();
+    const live = `android-${randomUUID()}`;
+    await addDevice(user.id, "android", `crash-${randomUUID()}`);
+    await addDevice(user.id, "android", live);
+    const { Dispatcher } = await import("../src/dispatch/dispatcher");
+    const dispatcher = app.get(Dispatcher);
+    const key = randomUUID();
+    await expect(
+      dispatcher.dispatch(
+        {
+          template: "todo.reminder",
+          to: { userId: user.id },
+          data: { todoId: todoIdSchema.parse(randomUUID()), title: "Still" },
+        },
+        key,
+      ),
+    ).rejects.toThrow(/1 deliveries failed/);
+    expect((await pushStatuses(key)).map((row) => row.status).sort()).toEqual(["failed", "sent"]);
+    expect(deliveredTo(live)).toHaveLength(1);
+    expect((await waitForEmail(user.email)).Subject).toBe("Reminder: Still");
+  });
+
   it("retries a push the provider failed, without resending the ones that went out", async () => {
     const user = await newUser();
     const good = `android-${randomUUID()}`;
@@ -523,7 +684,7 @@ describe("notifications service", () => {
     const payload = {
       template: "todo.reminder" as const,
       to: { userId: user.id },
-      data: { todoId: randomUUID(), title: "Try again" },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title: "Try again" },
     };
     const key = randomUUID();
 
@@ -553,8 +714,8 @@ describe("notifications service", () => {
     );
     const jobId = await reminder(user.id);
     await settle(jobId, 2);
-    // Give a stray push the time it would take.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Every channel is tried within the job: once it's done, no push is on its way.
+    expect(await finished(bulk.queue, jobId)).toBe("completed");
     expect(await pushStatuses(jobId)).toEqual([]);
     expect(deliveredTo(token)).toEqual([]);
   });
@@ -575,9 +736,10 @@ describe("notifications service", () => {
     await settle(jobId, 2);
     expect(await pushStatuses(jobId)).toEqual([]);
 
-    const delayed = (await bulk.queue.getDelayed()).filter(
-      (job) => job.name === "deferred" && job.data.payload.userId === user.id,
-    );
+    const deferredFor = (job: { name: string; data: unknown }) =>
+      job.name === "deferred" &&
+      parseJob("notifications-bulk", "deferred", job.data).payload.userId === user.id;
+    const delayed = (await bulk.queue.getDelayed()).filter(deferredFor);
     expect(delayed).toHaveLength(1);
     const [job] = delayed;
     const wait = (job?.opts.delay ?? 0) / 60_000;
@@ -588,18 +750,15 @@ describe("notifications service", () => {
     const { Dispatcher } = await import("../src/dispatch/dispatcher");
     const dispatcher = app.get(Dispatcher);
     const redelivered = await bulk.queue.getJob(jobId);
-    await dispatcher.dispatch(redelivered?.data.payload, jobId);
-    expect(
-      (await bulk.queue.getDelayed()).filter((j) => j.data.payload.userId === user.id),
-    ).toHaveLength(1);
+    await dispatcher.dispatch(
+      parseJob("notifications-bulk", "send", redelivered?.data).payload,
+      jobId,
+    );
+    expect((await bulk.queue.getDelayed()).filter(deferredFor)).toHaveLength(1);
 
     // Quiet hours are over.
     await job?.promote();
-    const deadline = Date.now() + 15_000;
-    while (deliveredTo(token).length === 0 && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    expect(deliveredTo(token)).toHaveLength(1);
+    await expect.poll(() => deliveredTo(token), { timeout: 15_000 }).toHaveLength(1);
     expect((await pushStatuses(jobId)).map((row) => row.status)).toEqual(["sent"]);
   });
   // ------------------------------------------------------------------------------- sms
@@ -624,14 +783,11 @@ describe("notifications service", () => {
     return jobId;
   }
 
-  async function settleSms(jobId: string) {
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline) {
-      const rows = (await smsStatuses(jobId)).filter((row) => row.status !== "sending");
-      if (rows.length > 0) return rows;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    throw new Error(`the text for ${jobId} didn't settle`);
+  function settleSms(jobId: string) {
+    return eventually(
+      async () => (await smsStatuses(jobId)).filter((row) => row.status !== "sending"),
+      (rows) => rows.length > 0,
+    );
   }
 
   const newPhone = () => `+1415${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
@@ -730,7 +886,7 @@ describe("notifications service", () => {
 
   /** A time zone where it's past the digest hour now, and one where it isn't yet. */
   async function digestZones() {
-    const { localClock } = await import("../src/digest/local-clock");
+    const { wallClock: localClock } = await import("../src/wall-clock");
     const zones = [
       "Pacific/Pago_Pago",
       "Pacific/Honolulu",
@@ -744,7 +900,9 @@ describe("notifications service", () => {
     ];
     const due = zones.find((zone) => localClock(zone).hour >= 8);
     const early = zones.find((zone) => localClock(zone).hour < 8);
-    if (!due || !early) throw new Error("no suitable time zones right now");
+    if (!due || !early) {
+      throw new Error("no suitable time zones right now");
+    }
     return { due, early, dateIn: (zone: string) => localClock(zone).date };
   }
 
@@ -773,7 +931,7 @@ describe("notifications service", () => {
             {
               template: "todo.reminder",
               to: { userId: user.id },
-              data: { todoId: randomUUID(), title },
+              data: { todoId: todoIdSchema.parse(randomUUID()), title },
             },
             { jobId: randomUUID() },
           )
@@ -813,7 +971,8 @@ describe("notifications service", () => {
     );
     await (await digests()).send(user.id, dateIn(due));
     await (await digests()).scheduleDue();
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    // The day's digest job is the one already done (the same id is never queued twice).
+    expect(await finished(bulk.queue, `digest-${user.id}-${dateIn(due)}`)).toBe("completed");
     const search = (await (
       await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${user.email}`)}`)
     ).json()) as { messages: unknown[] };
@@ -878,7 +1037,7 @@ describe("notifications service", () => {
     const admin = await newUser("Admin");
     const member = await newUser("Member");
     await sql(`UPDATE auth."user" SET locale = 'es' WHERE id = $1`, [admin.id]);
-    const orgId = randomUUID();
+    const orgId = orgIdSchema.parse(randomUUID());
     await sql(
       "INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Acme', $1::text)",
       [orgId],
@@ -931,5 +1090,285 @@ describe("notifications service", () => {
       await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${member.email}`)}`)
     ).json()) as { messages: unknown[] };
     expect(search.messages).toHaveLength(0);
+  });
+
+  // ------------------------------------------------------------------ the rarer paths
+
+  async function dispatcher() {
+    const { Dispatcher } = await import("../src/dispatch/dispatcher");
+    return app.get(Dispatcher);
+  }
+
+  /** An organization with these members, created the way apps/api does. */
+  async function workspace(members: [{ id: string }, string][]) {
+    const orgId = orgIdSchema.parse(randomUUID());
+    await sql("INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Org', $1::text)", [
+      orgId,
+    ]);
+    for (const [user, role] of members) {
+      await sql("INSERT INTO auth.member (organization_id, user_id, role) VALUES ($1, $2, $3)", [
+        orgId,
+        user.id,
+        role,
+      ]);
+    }
+    return orgId;
+  }
+
+  /** Waits until BullMQ has finished the job, one way or the other. */
+  function finished(queue: Queue, jobId: string) {
+    return eventually(
+      async () => (await queue.getJob(jobId))?.getState(),
+      (state) => state === "completed" || state === "failed",
+    );
+  }
+
+  async function mailText(email: string) {
+    const message = await waitForEmail(email);
+    return (
+      (await (await fetch(`${MAILPIT}/api/v1/message/${message.ID}`)).json()) as { Text: string }
+    ).Text;
+  }
+
+  it("sends nothing to a user deleted before the notification went out", async () => {
+    const key = randomUUID();
+    await (await dispatcher()).dispatch(
+      {
+        template: "todo.reminder",
+        to: { userId: userIdSchema.parse(randomUUID()) },
+        data: { todoId: todoIdSchema.parse(randomUUID()), title: "Nobody" },
+      },
+      key,
+    );
+    expect(
+      await sql("SELECT 1 FROM notifications.delivery WHERE idempotency_key LIKE $1", [`${key}:%`]),
+    ).toEqual([]);
+  });
+
+  it("writes in English to a user whose language it doesn't speak, and greets the nameless", async () => {
+    const user = await newUser(" ");
+    await sql(`UPDATE auth."user" SET locale = 'fr' WHERE id = $1`, [user.id]);
+    await settle(await reminder(user.id), 2);
+    const text = await mailText(user.email);
+    // The greeting without a name (the plain-text version writes headings in capitals).
+    expect(text).toMatch(/^hi,\r?$/im);
+    expect(text).toContain("This is your reminder for");
+  });
+
+  it("emails an invitation in the invitee's language", async () => {
+    const to = `invitee-${randomUUID()}@test.dev`;
+    await producer.add(
+      "send",
+      {
+        template: "org.invitation",
+        to: { email: to, locale: "en" },
+        data: {
+          organizationName: "Acme",
+          inviterName: "Ada",
+          acceptUrl: "http://localhost:3000/invitations/abc",
+          expiresInDays: 7,
+        },
+      },
+      { jobId: randomUUID() },
+    );
+    expect((await waitForEmail(to)).Subject).toBe("You're invited to a workspace on Boilerplate");
+    expect(await mailText(to)).toContain(
+      "“Ada” invited you to collaborate in the workspace “Acme”.",
+    );
+  });
+
+  it("still reaches the next admin when a push can't be recorded for the first", async () => {
+    const [owner, admin] = [await newUser("Owner"), await newUser("Admin")];
+    const tokens = [`android-${randomUUID()}`, `android-${randomUUID()}`];
+    await addDevice(owner.id, "android", tokens[0] as string);
+    await addDevice(admin.id, "android", tokens[1] as string);
+    const orgId = await workspace([
+      [owner, "owner"],
+      [admin, "admin"],
+    ]);
+    const key = randomUUID();
+    // While the first push is in flight its delivery row disappears, so recording the
+    // result throws.
+    push.hooks.whileDelivering = async () => {
+      push.hooks.whileDelivering = undefined;
+      await sql("DELETE FROM notifications.delivery WHERE idempotency_key LIKE $1", [
+        `${key}:push:%`,
+      ]);
+    };
+    const endpointId = webhookEndpointIdSchema.parse(randomUUID());
+    await expect(
+      (await dispatcher()).dispatch(
+        {
+          template: "webhooks.endpoint-disabled",
+          to: { orgId, roles: ["owner", "admin"] },
+          data: { endpointId, url: "https://example.com/hook" },
+        },
+        key,
+      ),
+    ).rejects.toThrow(/1 deliveries failed/);
+    for (const token of tokens) {
+      expect(deliveredTo(token), token).toEqual([
+        expect.objectContaining({
+          title: "A webhook endpoint was turned off",
+          link: `/settings/webhooks/${endpointId}`,
+        }),
+      ]);
+    }
+    expect(await pushStatuses(key)).toEqual([{ status: "sent", error: null }]);
+  });
+
+  it("drops a deferred push for a user deleted meanwhile, and retries one that fails", async () => {
+    const payload = (userId: UserId) => ({
+      template: "todo.reminder" as const,
+      to: { userId },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title: "Later" },
+    });
+    const gone = userIdSchema.parse(randomUUID());
+    await (await dispatcher()).deliverDeferred(payload(gone), "push", gone, randomUUID());
+
+    const user = await newUser();
+    await addDevice(user.id, "android", `crash-${randomUUID()}`);
+    const key = randomUUID();
+    await expect(
+      (await dispatcher()).deliverDeferred(payload(user.id), "push", user.id, key),
+    ).rejects.toThrow(/deferred delivery failed/);
+    expect((await pushStatuses(key)).map((row) => row.status)).toEqual(["failed"]);
+  });
+
+  it("skips texts when no SMS provider is configured, and still emails", async () => {
+    const { Dispatcher } = await import("../src/dispatch/dispatcher");
+    const { RecipientResolver } = await import("../src/dispatch/recipients");
+    const { TemplateSource } = await import("../src/dispatch/templates");
+    const { DeliveryLog } = await import("../src/dispatch/delivery-log");
+    const { DeliveryPolicy } = await import("../src/dispatch/policy");
+    const { EmailChannel } = await import("../src/channels/email/email.channel");
+    const { InAppChannel } = await import("../src/channels/in-app/in-app.channel");
+    const { PushChannel } = await import("../src/channels/push/push.channel");
+    const { SmsChannel } = await import("../src/channels/sms/sms.channel");
+    const logger = new PinoLogger({});
+    // The dispatcher as production builds it with SMS_PROVIDER unset.
+    const withoutSms = new Dispatcher(
+      app.get(I18N),
+      app.get(RecipientResolver),
+      app.get(TemplateSource),
+      app.get(DeliveryLog),
+      app.get(DeliveryPolicy),
+      app.get(EmailChannel),
+      app.get(InAppChannel),
+      app.get(PushChannel),
+      new SmsChannel(null, logger),
+      app.get(REDIS),
+      app.get(DATABASE),
+      logger,
+    );
+    const email = `no-sms-${randomUUID()}@test.dev`;
+    const key = randomUUID();
+    await withoutSms.dispatch(
+      {
+        template: "auth.security-alert",
+        to: { email, locale: "en", phone: newPhone() },
+        data: { event: "password-changed", securityUrl: "http://localhost:3000/settings/security" },
+      },
+      key,
+    );
+    expect(await smsStatuses(key)).toEqual([
+      { status: "skipped", error: "no SMS provider configured" },
+    ]);
+    expect((await waitForEmail(email)).Subject).toBe("Your password was changed");
+  });
+
+  it("fails a job neither queue knows, and runs the hourly digest job", async () => {
+    const mystery = randomUUID();
+    await bulk.queue.add("mystery", { meta: {}, payload: {} }, { jobId: mystery, attempts: 1 });
+    expect(await finished(bulk.queue, mystery)).toBe("failed");
+    expect((await bulk.queue.getJob(mystery))?.failedReason).toBe(
+      'Unknown job "mystery" on notifications-bulk',
+    );
+    const hourly = randomUUID();
+    await bulk.queue.add("digests", { meta: {}, payload: {} }, { jobId: hourly });
+    expect(await finished(bulk.queue, hourly)).toBe("completed");
+  });
+
+  it("ignores events that notify nobody", async () => {
+    const events = createProducer(
+      "events-notifications",
+      createRedis(process.env.REDIS_URL as string),
+    );
+    const event = (name: string, payload: unknown, orgId: OrgId | null) => ({
+      id: randomUUID(),
+      name,
+      key: randomUUID(),
+      payload,
+      orgId,
+      actorId: null,
+      requestId: null,
+      occurredAt: new Date().toISOString(),
+      source: "api",
+    });
+    const quiet = [
+      // Not an event this service maps to anything.
+      event(
+        "todo.created.v1",
+        { todoId: todoIdSchema.parse(randomUUID()), title: "t" },
+        orgIdSchema.parse(randomUUID()),
+      ),
+      // Workspace events without a workspace have nobody to tell.
+      event(
+        "webhook.endpoint_disabled.v1",
+        {
+          endpointId: webhookEndpointIdSchema.parse(randomUUID()),
+          url: "https://example.com",
+          reason: "failing",
+        },
+        null,
+      ),
+      event(
+        "org.api_key_created.v1",
+        { apiKeyId: apiKeyIdSchema.parse(randomUUID()), name: "CI", scopes: [] },
+        null,
+      ),
+    ];
+    for (const item of quiet) {
+      await events.add("event", item, { jobId: item.id });
+    }
+    for (const item of quiet) {
+      expect(await finished(events.queue, item.id)).toBe("completed");
+    }
+    await events.close();
+    for (const item of quiet) {
+      expect(
+        await sql("SELECT 1 FROM notifications.delivery WHERE idempotency_key LIKE $1", [
+          `${item.id}:%`,
+        ]),
+      ).toEqual([]);
+    }
+  });
+
+  it("skips a digest with nothing in it, or for a user who's gone", async () => {
+    const user = await digestUser("UTC");
+    const date = new Date().toISOString().slice(0, 10);
+    const gone = userIdSchema.parse(randomUUID());
+    for (const userId of [user.id, gone]) {
+      await (await digests()).send(userId, date);
+    }
+    expect(
+      await sql(
+        "SELECT status, error FROM notifications.delivery WHERE idempotency_key = ANY($1) ORDER BY idempotency_key",
+        [[`digest:${user.id}:${date}`, `digest:${gone}:${date}`]],
+      ),
+    ).toEqual([
+      { status: "skipped", error: "nothing to send" },
+      { status: "skipped", error: "nothing to send" },
+    ]);
+  });
+
+  it("starts as a service on its port, answering health checks", async () => {
+    const { app: service } = await import("../src/main");
+    try {
+      const live = await fetch(`http://127.0.0.1:${process.env.PORT}/health/live`);
+      expect(live.status).toBe(200);
+    } finally {
+      await service.close();
+    }
   });
 });

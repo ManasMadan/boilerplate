@@ -6,13 +6,38 @@ let server: Server | undefined;
 const sockets = new Set<Socket>();
 
 function closeServer() {
-  for (const socket of sockets) socket.destroy();
+  for (const socket of sockets) {
+    socket.destroy();
+  }
   sockets.clear();
   const closing = server;
   server = undefined;
   return new Promise<void>((resolve) => (closing ? closing.close(() => resolve()) : resolve()));
 }
 afterEach(closeServer);
+
+const INSTREAM = "zINSTREAM\0";
+
+/**
+ * The file an INSTREAM command sent (length-prefixed chunks, ended by an empty one), or
+ * undefined while its last chunk hasn't arrived.
+ */
+function streamedFile(buffer: Buffer) {
+  let offset = INSTREAM.length;
+  const chunks: Buffer[] = [];
+  while (offset + 4 <= buffer.length) {
+    const size = buffer.readUInt32BE(offset);
+    if (size === 0) {
+      return Buffer.concat(chunks);
+    }
+    if (offset + 4 + size > buffer.length) {
+      return undefined;
+    }
+    chunks.push(buffer.subarray(offset + 4, offset + 4 + size));
+    offset += 4 + size;
+  }
+  return undefined;
+}
 
 /**
  * A clamd stand-in: reads the INSTREAM framing, then answers with `answer(bytes)` (or,
@@ -25,21 +50,17 @@ async function fakeClamd(answer: (bytes: Buffer) => string | null) {
     let buffer = Buffer.alloc(0);
     socket.on("data", (data: Buffer) => {
       buffer = Buffer.concat([buffer, data]);
-      const command = "zINSTREAM\0";
-      if (buffer.length < command.length) return;
-      expect(buffer.subarray(0, command.length).toString()).toBe(command);
-      let offset = command.length;
-      const chunks: Buffer[] = [];
-      while (offset + 4 <= buffer.length) {
-        const size = buffer.readUInt32BE(offset);
-        if (size === 0) {
-          const reply = answer(Buffer.concat(chunks));
-          if (reply !== null) socket.end(`${reply}\0`);
-          return;
-        }
-        if (offset + 4 + size > buffer.length) return;
-        chunks.push(buffer.subarray(offset + 4, offset + 4 + size));
-        offset += 4 + size;
+      if (buffer.length < INSTREAM.length) {
+        return;
+      }
+      expect(buffer.subarray(0, INSTREAM.length).toString()).toBe(INSTREAM);
+      const streamed = streamedFile(buffer);
+      if (!streamed) {
+        return;
+      }
+      const reply = answer(streamed);
+      if (reply !== null) {
+        socket.end(`${reply}\0`);
       }
     });
   });
@@ -71,6 +92,13 @@ describe("ClamdScanner", () => {
     const { port } = await fakeClamd(() => "INSTREAM size limit exceeded. ERROR");
     await expect(new ClamdScanner("127.0.0.1", port).scan(Buffer.from("x"))).rejects.toThrow(
       /size limit exceeded/,
+    );
+  });
+
+  it("fails when clamd hangs up without an answer", async () => {
+    const { port } = await fakeClamd(() => "");
+    await expect(new ClamdScanner("127.0.0.1", port).scan(Buffer.from("x"))).rejects.toThrow(
+      "clamd: no answer",
     );
   });
 

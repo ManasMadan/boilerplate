@@ -1,12 +1,12 @@
 {{- range $name := keys .Values.services | sortAlpha }}
 {{- $svc := include "stack.service" (list $ $name) | fromYaml }}
 {{- if $svc.enabled }}
-{{- $uid := $svc.runAsUser | default 10001 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "stack.labels" (list $ $name) | nindent 4 }}
 spec:
@@ -41,9 +41,9 @@ spec:
       {{- end }}
       securityContext:
         runAsNonRoot: true
-        runAsUser: {{ $uid }}
-        runAsGroup: {{ $uid }}
-        fsGroup: {{ $uid }}
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds }}
@@ -94,7 +94,7 @@ spec:
             {{- toYaml $svc.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: {{ ne $svc.readOnlyRootFilesystem false }}
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
           {{- if $svc.port }}
@@ -123,6 +123,16 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
           {{- end }}
+          {{- else if $svc.livenessCommand }}
+          {{- /* A worker without a port proves it's alive with a command. */}}
+          startupProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 30
+            timeoutSeconds: 10
           {{- end }}
           {{- if $svc.routes }}
           lifecycle:
@@ -143,9 +153,11 @@ spec:
               mountPath: /etc/ssl/extra
               readOnly: true
             {{- end }}
+            {{- include "stack.dbCaMount" (list $ $svc) | nindent 12 }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- include "stack.dbCaVolume" (list $ $svc) | nindent 8 }}
         {{- with $svc.caBundle }}
         - name: ca-bundle
           secret:

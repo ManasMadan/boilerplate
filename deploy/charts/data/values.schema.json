@@ -45,6 +45,17 @@
             "serverName": { "type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" }
           }
         },
+        "drill": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schedule": { "type": "string", "pattern": "^\\S+( \\S+){4}$" },
+            "maxAgeHours": { "type": "integer", "minimum": 1 },
+            "timeoutMinutes": { "type": "integer", "minimum": 5 },
+            "image": { "type": "string", "minLength": 1 }
+          }
+        },
         "restore": {
           "type": "object",
           "additionalProperties": false,
@@ -67,7 +78,29 @@
         "secretName": { "type": "string", "minLength": 1 },
         "storage": { "$ref": "#/$defs/storage" },
         "resources": { "$ref": "#/$defs/resources" },
-        "maxmemory": { "type": "string", "pattern": "^[0-9]+(kb|mb|gb)$" }
+        "maxmemory": { "type": "string", "pattern": "^[0-9]+(kb|mb|gb)$" },
+        "replication": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "replicas": {
+              "type": "integer",
+              "minimum": 3,
+              "multipleOf": 1,
+              "not": { "multipleOf": 2 }
+            },
+            "proxy": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "image": { "type": "string", "minLength": 1 },
+                "replicas": { "type": "integer", "minimum": 1 },
+                "resources": { "$ref": "#/$defs/resources" }
+              }
+            }
+          }
+        }
       }
     },
     "storage": {
@@ -138,7 +171,58 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "namespace": { "type": "string" },
-        "quota": { "type": "object", "additionalProperties": { "type": "string" } }
+        "quota": {
+          "type": "object",
+          "required": ["requests.cpu", "requests.memory", "limits.cpu", "limits.memory"],
+          "additionalProperties": { "type": "string" }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["defaultRequest", "default", "min", "max"],
+          "properties": {
+            "defaultRequest": { "$ref": "#/$defs/cpuMemory" },
+            "default": { "$ref": "#/$defs/cpuMemory" },
+            "min": { "$ref": "#/$defs/cpuMemory" },
+            "max": { "$ref": "#/$defs/cpuMemory" }
+          }
+        },
+        "mailpit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "image", "tlsSecret"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "image": { "type": "string", "minLength": 1 },
+            "tlsSecret": { "type": "string", "minLength": 1 },
+            "resources": { "$ref": "#/$defs/resources" }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operatorNamespace", "metricsNamespace"],
+      "properties": {
+        "operatorNamespace": { "type": "string", "minLength": 1 },
+        "metricsNamespace": { "type": "string", "minLength": 1 }
+      }
+    },
+    "offsite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "schedule", "secretName"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "endpoint": { "type": "string", "pattern": "^(https?://.+)?$" },
+        "region": { "type": "string" },
+        "bucket": { "anyOf": [{ "const": "" }, { "$ref": "#/$defs/bucket" }] },
+        "prefix": { "type": "string", "pattern": "^([a-z0-9][a-z0-9._-]*)?$" },
+        "secretName": { "type": "string", "minLength": 1 },
+        "schedule": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "resources": { "$ref": "#/$defs/resources" }
       }
     }
   },
@@ -159,6 +243,12 @@
         "requests": { "type": "object", "additionalProperties": { "type": "string" } },
         "limits": { "type": "object", "additionalProperties": { "type": "string" } }
       }
+    },
+    "cpuMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
     },
     "bucket": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$" }
   }

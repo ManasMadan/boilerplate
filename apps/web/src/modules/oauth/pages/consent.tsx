@@ -1,5 +1,8 @@
 "use client";
 
+import type { Workspace } from "@repo/client/auth";
+import { useOAuthClientQuery } from "@repo/client/auth/oauth-client";
+import { loosely } from "@repo/i18n";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -17,7 +20,6 @@ import {
   SelectValue,
 } from "@repo/ui/components/select";
 import { Skeleton } from "@repo/ui/components/skeleton";
-import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useId, useState } from "react";
@@ -47,18 +49,7 @@ export function OAuthConsentPage() {
   const returnTo = hostOf(params.get("redirect_uri"));
   const { data: session } = authClient.useSession();
   const workspaces = useWorkspaces();
-  const client = useQuery({
-    queryKey: ["auth", "oauth-client", clientId],
-    enabled: Boolean(clientId),
-    retry: false,
-    queryFn: async () => {
-      const { data, error } = await authClient.oauth2.publicClient({
-        query: { client_id: clientId as string },
-      });
-      if (error) throw error;
-      return data;
-    },
-  });
+  const client = useOAuthClientQuery(authClient, clientId);
 
   if (!isOAuthRequest(params) || !clientId) {
     return <Shell title={t("title")} description={t("missing")} />;
@@ -103,9 +94,11 @@ export function OAuthConsentPage() {
               value={activeId}
               disabled={busy}
               onValueChange={(id) => {
-                if (id && id !== activeId) void switchWorkspace(id);
+                if (id && id !== activeId) {
+                  void switchWorkspace(id);
+                }
               }}
-              items={workspaces.data.map((workspace) => ({
+              items={workspaces.data.map((workspace: Workspace) => ({
                 value: workspace.id,
                 label: workspaceName(workspace),
               }))}
@@ -114,7 +107,7 @@ export function OAuthConsentPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {workspaces.data.map((workspace) => (
+                {workspaces.data.map((workspace: Workspace) => (
                   <SelectItem key={workspace.id} value={workspace.id}>
                     {workspaceName(workspace)}
                   </SelectItem>
@@ -130,9 +123,7 @@ export function OAuthConsentPage() {
           <ul className="list-disc pl-5 text-sm text-muted-foreground">
             {scopes.map((scope) => (
               <li key={scope}>
-                {t.has(`scopes.${scope}` as "scopes.openid")
-                  ? t(`scopes.${scope}` as "scopes.openid")
-                  : scope}
+                {loosely(t).has(`scopes.${scope}`) ? loosely(t)(`scopes.${scope}`) : scope}
               </li>
             ))}
           </ul>
@@ -141,11 +132,13 @@ export function OAuthConsentPage() {
           {returnTo ? t("returnTo", { host: returnTo }) : null} {t("trust")}
         </p>
       </CardContent>
+      {/* Both wait for the app's details: the server renders this page before the
+          browser can act on a click, and a click on an enabled button then is lost. */}
       <CardFooter className="gap-2">
         <Button onClick={() => answer(true)} disabled={busy || client.isPending}>
           {t("allow")}
         </Button>
-        <Button variant="ghost" onClick={() => answer(false)} disabled={busy}>
+        <Button variant="ghost" onClick={() => answer(false)} disabled={busy || client.isPending}>
           {t("deny")}
         </Button>
       </CardFooter>
@@ -179,7 +172,9 @@ function Shell({
 
 /** Where the app will receive the answer, shown so a look-alike app stands out. */
 function hostOf(uri: string | null) {
-  if (!uri) return null;
+  if (!uri) {
+    return null;
+  }
   try {
     return new URL(uri).host;
   } catch {

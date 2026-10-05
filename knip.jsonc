@@ -5,17 +5,19 @@
 // Vitest, Playwright, Storybook, Expo, Jest, …); the ones below are started some other way.
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
-  // Generated clients export more than we call; they're regenerated, not pruned.
-  "ignore": ["**/generated/**"],
-  // Tools installed on the machine (doctor checks them), not npm packages.
-  "ignoreBinaries": ["uv", "tofu", "kind", "openssl"],
+  // Generated clients export more than we call; they're regenerated, not pruned. A
+  // `.d.json.ts` types its JSON file for TypeScript, which nothing imports by name.
+  "ignore": ["**/generated/**", "**/*.d.json.ts"],
+  // A tool installed on the machine (doctor checks it), not an npm package.
+  "ignoreBinaries": ["uv"],
   "workspaces": {
     ".": {
       // Claude Code hooks (.claude/settings.json), the image build's peer check
       // (deploy/docker/*.Dockerfile) and the repo scripts.
       "entry": [".claude/hooks/*.ts", "deploy/docker/check-peers.mjs", "scripts/*.ts"],
-      // Scripts started with `bun scripts/…` from the repo root, not imports.
-      "ignoreUnresolved": ["scripts/services.ts", "scripts/doctor.ts"]
+      // Run through bunx by scripts/type-coverage.ts and scripts/pre-commit.ts, which knip
+      // doesn't read as commands.
+      "ignoreDependencies": ["type-coverage", "lint-staged"]
     },
     "apps/api": {
       // The better-auth CLI's config (the auth:schema script).
@@ -44,27 +46,40 @@
       "entry": ["api.ts"],
       "ignoreDependencies": ["k6"]
     },
+    // A package's exports are its API to the rest of the repo: one nothing imports is
+    // dead, so knip reports it too (includeEntryExports) instead of trusting the entry.
+    // The glob covers the packages without settings of their own; each package listed
+    // below sets it again, since a workspace's own entry replaces the glob's.
+    "packages/*": { "includeEntryExports": true },
     "packages/ai-client": {
+      "includeEntryExports": true,
       // Orders codegen: the client is generated from apps/ai's openapi.json.
       "ignoreDependencies": ["@repo/ai"]
     },
     "packages/db": {
+      "includeEntryExports": true,
       // Imported by the generated Prisma client (src/generated, not committed).
       "ignoreDependencies": ["@prisma/client"]
     },
     "packages/logger": {
+      "includeEntryExports": true,
       // Loaded by name as pino's development transport.
       "ignoreDependencies": ["pino-pretty"]
     },
     "packages/nest-common": {
+      "includeEntryExports": true,
       // Run as a child `node --import …` process by test/telemetry.integration.test.ts.
       "entry": ["test/fixtures/*.mjs"]
     },
     "packages/typescript-config": {
+      "includeEntryExports": true,
       // The Next.js TypeScript plugin, named in nextjs.json.
       "ignoreUnresolved": ["next"]
     },
     "packages/ui": {
+      // The components are shadcn's, kept whole (overlays, portals, scroll buttons and
+      // variants included) so `shadcn add --overwrite` can update them from upstream.
+      "includeEntryExports": false,
       // The visual regression run (test:visual, in the Playwright image).
       "entry": ["visual/playwright.config.ts", "visual/serve.mjs"]
     }

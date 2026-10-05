@@ -11,7 +11,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export function createSignedTokens(secret: string) {
-  if (secret.length < 32) throw new Error("Token secrets must be at least 32 characters");
+  if (secret.length < 32) {
+    throw new Error("Token secrets must be at least 32 characters");
+  }
   const signature = (purpose: string, payload: string) =>
     createHmac("sha256", secret).update(`${purpose}.${payload}`).digest("base64url");
 
@@ -22,10 +24,14 @@ export function createSignedTokens(secret: string) {
     },
     verify(purpose: string, token: string): string[] | null {
       const [payload, given, extra] = token.split(".");
-      if (!payload || !given || extra !== undefined) return null;
+      if (!payload || !given || extra !== undefined) {
+        return null;
+      }
       const expected = Buffer.from(signature(purpose, payload));
       const actual = Buffer.from(given);
-      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+        return null;
+      }
       try {
         const parts: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
         return Array.isArray(parts) && parts.every((part) => typeof part === "string")

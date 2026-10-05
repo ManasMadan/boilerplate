@@ -36,6 +36,7 @@ passwords equal the role names.
 |---|---|---|
 | `migrator` | `prisma migrate`, test setup | Owns every schema and table. `NOBYPASSRLS`. |
 | `app_api`, `app_worker`, `app_notifications`, `app_webhooks`, `app_ai` | one service each | `NOBYPASSRLS NOINHERIT`, only the grants in migrations. |
+| `app_readonly` | Claude Code's Postgres MCP server, **local database only** (`02-readonly-role.sql`, reapplied by `bun run db:up`) | `BYPASSRLS`, read-only transactions, `SELECT` on everything the migrator owns. Never in CI or a cluster. |
 
 Extensions need a superuser, so the bootstrap script creates them, not migrations.
 Because the services run with production's privileges locally and in tests, a missing
@@ -44,17 +45,32 @@ grant fails there first.
 When a service needs something outside its grants (creating audit partitions, purging
 another schema's history, registering a device), a migration adds a narrow
 `SECURITY DEFINER` function and grants `EXECUTE` on it (see the
-`audit_log_and_retention` and `push_devices` migrations).
+`audit_log_and_retention` and `push_devices` migrations). Forced row-level security
+applies to the function's owner too, so every table it reads or writes under FORCE needs
+an `owner_functions` policy for `migrator`, or it silently sees no rows; the database's
+security tests fail on any that lacks one.
+
+Prisma's errors that mean something to a client become catalog errors wherever they
+surface (`fromPrismaError` in `packages/nest-common`, applied to procedures and to the
+HTTP error filter): a unique constraint lost to a concurrent write or a write conflict is
+`CONFLICT`, a row gone between reading and writing is `NOT_FOUND`, and a pool or
+transaction timeout is `SERVICE_UNAVAILABLE`. Anything else stays `INTERNAL`. A call that
+means something more specific (`PHONE_NUMBER_TAKEN`) still catches its own.
 
 ## Row-level security
 
 Tenant tables have `ENABLE` and `FORCE ROW LEVEL SECURITY` (FORCE applies the policy to
 the table owner too) and a policy on a transaction-local setting:
 
-- **Organization data** (`app.todo`, `webhooks.endpoint`/`delivery`, `billing.*`, `ai.*`,
-  reads of `audit.audit_log`): `org_id = nullif(current_setting('app.org_id', true), '')::uuid`.
+- **Organization data** (`app.todo`, `webhooks.endpoint`/`delivery`,
+  `billing.customer`/`subscription`, `ai.*`, reads of `audit.audit_log`):
+  `org_id = nullif(current_setting('app.org_id', true), '')::uuid`.
 - **Per-user data** (`notifications.notification`/`preference`/`settings`/`device`/`digest_item`,
   `files.file`): the same on `user_id` and `app.user_id`.
+
+`billing.trial_card` has neither: the one-trial-per-card check has to see every
+workspace's cards, and a row holds only Stripe's ids (a card fingerprint and a
+subscription), no workspace's data.
 
 `nullif` keeps the policy valid when the setting is unset: it resets to `''`, and
 `''::uuid` would raise instead of matching nothing. A query without the setting sees no
@@ -72,7 +88,9 @@ await tenantTx(database.write, orgId, async (tx) => {  // one interactive transa
 });
 ```
 
-`withUser` / `userTx` are the same for `app.user_id`. The setting must be applied inside
+`withUser` / `userTx` are the same for `app.user_id`. They take a branded id, an `OrgId`
+or a `UserId` from `@repo/contracts/ids` ([architecture.md](architecture.md#auth-and-tenancy)),
+so a user's id can't scope a workspace's query. The setting must be applied inside
 the transaction that runs the query, because PgBouncer (transaction mode) hands each
 transaction a different connection. `tenantTx` holds a connection until it ends, so it
 contains database calls only: never await HTTP, Redis or a queue inside it. Nested
@@ -168,8 +186,10 @@ Running it again changes nothing; it refuses to run in production.
 
 ## Restore drill
 
-`bun run db:restore-drill` (`scripts/restore-drill.ts`) proves a backup restores: it
-dumps the database with `pg_dump` (custom format), restores it into a scratch database
+`bun run db:restore-drill` (`scripts/restore-drill.ts`) proves a logical backup restores
+(the clusters' own backups are Barman base backups and WAL: deploy/README.md, "Backups
+and restore", says how to try those in staging): it dumps the database with `pg_dump`
+(custom format), restores it into a scratch database
 and requires an identical fingerprint: each table's row count and content hash,
 row-level security flags and policies, grants, default privileges, functions, triggers,
 extensions and sequence positions. The scratch database and dump are removed either

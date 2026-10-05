@@ -7,6 +7,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "mail.name" . }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "mail.labels" . | nindent 4 }}
   annotations:
@@ -23,8 +24,8 @@ spec:
   {{- end }}
   selector:
     {{- include "mail.selectorLabels" . | nindent 4 }}
+  # Each to its container port by name (the server listens on unprivileged ones).
   ports:
-    - { name: smtp, port: 25, targetPort: smtp }
-    - { name: submissions, port: 465, targetPort: submissions }
-    - { name: submission, port: 587, targetPort: submission }
-    - { name: imaps, port: 993, targetPort: imaps }
+    {{- range $name, $l := include "mail.listeners" . | fromYaml }}
+    - { name: {{ $name }}, port: {{ $l.port }}, targetPort: {{ $name }} }
+    {{- end }}

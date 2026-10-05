@@ -71,6 +71,7 @@ function Field({
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a fieldset brings its own border, padding and minimum width into every form row (FieldSet is the fieldset, for a group of fields)
     <div
       role="group"
       data-slot="field"

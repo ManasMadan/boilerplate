@@ -19,11 +19,14 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
+        # Above the host's own users, so it never shares one's id (any id works: it writes
+        # nowhere but /tmp).
+        runAsUser: 10001
+        runAsGroup: 10001
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: mailpit
-          image: docker.io/axllent/mailpit:v1.31.3
+          image: docker.io/axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
           env:
             - { name: MP_SMTP_TLS_CERT, value: /tls/tls.crt }
             - { name: MP_SMTP_TLS_KEY, value: /tls/tls.key }
@@ -34,17 +37,22 @@ spec:
             - { name: http, containerPort: 8025 }
           resources:
             requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 128Mi }
+            limits: { cpu: 200m, memory: 128Mi }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
           volumeMounts:
             - { name: tls, mountPath: /tls, readOnly: true }
+            # Its message database is a file in the temp directory: without a writable
+            # one under the read-only root it exits at once.
+            - { name: tmp, mountPath: /tmp }
       volumes:
         - name: tls
           secret:
             secretName: mailpit-tls
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
 ---
 apiVersion: v1
 kind: Service
@@ -56,3 +64,21 @@ spec:
   ports:
     - { name: smtp, port: 1025, targetPort: smtp }
     - { name: http, port: 8025, targetPort: http }
+---
+# The namespace accepts nothing a policy doesn't allow (the data chart's default deny):
+# the services send mail to it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mailpit
+  namespace: boilerplate
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: mailpit }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 1025
+        - port: 8025

@@ -8,9 +8,9 @@
     "build": "tsdown",
     "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
     "check-types": "tsc",
-    "test": "vitest run --project unit --passWithNoTests",
-    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
-    "coverage": "bun --env-file=../../.env run vitest run --coverage"
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@nestjs/bullmq": "catalog:",
@@ -26,11 +26,13 @@
     "ioredis": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
+    "standardwebhooks": "^1.1.1",
     "stripe": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@nestjs/platform-fastify": "catalog:",
+    "@repo/testing": "workspace:*",
     "@repo/tsdown-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
@@ -39,7 +41,6 @@
     "@types/pg": "^8.23.1",
     "nodemailer": "^10.0.12",
     "pg": "^8.23.0",
-    "standardwebhooks": "^1.1.1",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

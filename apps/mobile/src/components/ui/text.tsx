@@ -46,13 +46,17 @@ type TextVariantProps = VariantProps<typeof textVariants>;
 
 type TextVariant = NonNullable<TextVariantProps["variant"]>;
 
+// react-native's Role leaves out the roles only react-native-web renders, like these.
+// type-coverage:ignore-next-line
+const webRole = (role: "blockquote" | "code") => Platform.select({ web: role as Role });
+
 const ROLE: Partial<Record<TextVariant, Role>> = {
   h1: "heading",
   h2: "heading",
   h3: "heading",
   h4: "heading",
-  blockquote: Platform.select({ web: "blockquote" as Role }),
-  code: Platform.select({ web: "code" as Role }),
+  blockquote: webRole("blockquote"),
+  code: webRole("code"),
 };
 
 const ARIA_LEVEL: Partial<Record<TextVariant, string>> = {

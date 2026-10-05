@@ -1,10 +1,8 @@
 "use client";
 
-import {
-  useMarkAllNotificationsReadMutation,
-  useMarkNotificationsReadMutation,
-  useNotificationsInfiniteQuery,
-} from "@repo/client/api/notifications/inbox";
+import { useNotificationsInfiniteQuery } from "@repo/client/api/notifications/list";
+import { useMarkAllNotificationsReadMutation } from "@repo/client/api/notifications/mark-all-read";
+import { useMarkNotificationsReadMutation } from "@repo/client/api/notifications/mark-read";
 import { Button } from "@repo/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
@@ -33,11 +31,11 @@ export function NotificationsPage() {
         ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {inbox.isPending ? (
-          <Skeleton className="h-24" />
-        ) : items.length === 0 ? (
+        {inbox.isPending ? <Skeleton className="h-24" /> : null}
+        {!inbox.isPending && items.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
+        ) : null}
+        {items.length > 0 ? (
           <ul className="flex flex-col divide-y">
             {items.map((notification) => (
               <li key={notification.id} className="py-2">
@@ -53,7 +51,7 @@ export function NotificationsPage() {
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
         {inbox.hasNextPage ? (
           <Button variant="outline" className="self-start" onClick={() => inbox.fetchNextPage()}>
             {t("loadMore")}

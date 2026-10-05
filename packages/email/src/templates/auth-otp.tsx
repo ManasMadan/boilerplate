@@ -1,7 +1,7 @@
 import { Heading, Text } from "@react-email/components";
 import { Layout, type LocalizedProps } from "./layout";
 
-export type OtpPurpose = "sign-in" | "email-verification" | "forget-password" | "change-email";
+type OtpPurpose = "sign-in" | "email-verification" | "forget-password" | "change-email";
 
 export interface AuthOtpEmailProps extends LocalizedProps {
   otp: string;

@@ -1,14 +1,18 @@
 /**
  * Uploading a file: ask the API for an upload, PUT the bytes straight to storage, then
- * complete it. The worker checks it next; `useFileQuery` follows its status (refetched
- * on the `files.changed` realtime nudge, and polled meanwhile in case one is missed).
+ * complete it. The worker checks it next; `useFileQuery` (./get) follows its status.
  */
-import type { FileInfo } from "@repo/contracts/api";
 import { type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useApi } from "../../provider";
 
 /** Why a file can't be uploaded for `purpose`, before anything is sent (or null). */
+/** The rules of a purpose as its refusals' messages name them (`{types}`, `{maxBytes}`). */
+export function uploadRuleParams(purpose: UploadPurpose) {
+  const rules = uploadPurposes[purpose];
+  return { types: rules.types.join(", "), maxBytes: rules.maxBytes };
+}
+
 export function checkUpload(
   purpose: UploadPurpose,
   file: { type: string; size: number },
@@ -17,11 +21,12 @@ export function checkUpload(
   params: Record<string, string | number>;
 } | null {
   const rules = uploadPurposes[purpose];
+  const { types, maxBytes } = uploadRuleParams(purpose);
   if (!(rules.types as readonly string[]).includes(file.type)) {
-    return { code: "FILE_TYPE_NOT_ALLOWED" as const, params: { types: rules.types.join(", ") } };
+    return { code: "FILE_TYPE_NOT_ALLOWED" as const, params: { types } };
   }
   if (file.size > rules.maxBytes) {
-    return { code: "FILE_TOO_LARGE" as const, params: { maxBytes: rules.maxBytes } };
+    return { code: "FILE_TOO_LARGE" as const, params: { maxBytes } };
   }
   return null;
 }
@@ -48,22 +53,10 @@ export function useUploadFileMutation() {
         Object.entries(upload.headers).filter(([name]) => name.toLowerCase() !== "content-length"),
       );
       const response = await fetch(upload.url, { method: "PUT", headers, body: file });
-      if (!response.ok) throw new UploadFailedError(response.status);
+      if (!response.ok) {
+        throw new UploadFailedError(response.status);
+      }
       return client.files.completeUpload({ fileId: created.id });
     },
   });
-}
-
-const settled = (file: FileInfo | undefined) =>
-  file?.status === "ready" || file?.status === "rejected";
-
-export function useFileQuery(fileId: string | null) {
-  const { api } = useApi();
-  return useQuery(
-    api.files.get.queryOptions({
-      input: { fileId: fileId ?? "" },
-      enabled: fileId !== null,
-      refetchInterval: (query) => (settled(query.state.data) ? false : 3_000),
-    }),
-  );
 }

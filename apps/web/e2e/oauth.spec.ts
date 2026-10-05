@@ -158,6 +158,8 @@ test("denying sends the app an access_denied answer", async ({ page }) => {
   await signUp(page);
   const clientId = await registerClient(page);
   await startAuthorization(page, clientId);
+  // The page is interactive once it names the app; a click before that went nowhere.
+  await expect(consent(page)).toHaveText("Connect E2E Agent");
   await page.getByRole("button", { name: "Deny" }).click();
   const answer = await callback(page);
   expect(answer.get("error")).toBe("access_denied");

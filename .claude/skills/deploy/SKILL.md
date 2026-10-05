@@ -1,6 +1,7 @@
 ---
 name: deploy
 description: Ship master to staging and check the rollout. Use when the user asks to deploy, whether a change is live on staging, why staging didn't update, or how a merge reaches an environment.
+allowed-tools: Bash(gh run list *) Bash(gh run view *) Bash(gh run watch *) Bash(git log *) Bash(kubectl -n boilerplate rollout status *) Bash(kubectl -n boilerplate get *)
 ---
 
 # Deploy to staging

@@ -1,13 +1,13 @@
 "use client";
 
-import {
-  useBillingOverviewQuery,
-  useCheckoutMutation,
-  useInvoicesQuery,
-  usePortalMutation,
-} from "@repo/client/api/billing";
+import { useApiErrorMessage } from "@repo/client";
+import { useCheckoutMutation } from "@repo/client/api/billing/checkout";
+import { useInvoicesQuery } from "@repo/client/api/billing/invoices";
+import { useBillingOverviewQuery } from "@repo/client/api/billing/overview";
+import { usePortalMutation } from "@repo/client/api/billing/portal";
 import type { BillingOverview } from "@repo/contracts/api";
 import { formatMoney } from "@repo/contracts/money";
+import { loosely } from "@repo/i18n";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -22,7 +22,6 @@ import { Skeleton } from "@repo/ui/components/skeleton";
 import { useSearchParams } from "next/navigation";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { useActiveWorkspace } from "@/modules/workspace";
 
 /** The workspace's plan, subscription and invoices (owners and admins). */
@@ -74,6 +73,30 @@ export function BillingPage() {
   );
 }
 
+/** The subscription's state in a sentence, with the date that matters for it. */
+function statusText(
+  subscription: NonNullable<BillingOverview["subscription"]>,
+  t: ReturnType<typeof useTranslations<"billing">>,
+  date: (value: Date) => string,
+) {
+  if (subscription.cancelAtPeriodEnd && subscription.status !== "canceled") {
+    return t("status.canceling", { date: date(subscription.currentPeriodEnd) });
+  }
+  if (subscription.status === "trialing" && subscription.trialEnd) {
+    return t("status.trialing", { date: date(subscription.trialEnd) });
+  }
+  if (subscription.status === "active") {
+    return t("status.active", { date: date(subscription.currentPeriodEnd) });
+  }
+  if (subscription.status === "past_due") {
+    return t("status.past_due");
+  }
+  if (subscription.status === "unpaid") {
+    return t("status.unpaid");
+  }
+  return t("status.canceled");
+}
+
 function PlanSummary({ data }: { data: BillingOverview }) {
   const t = useTranslations("billing");
   const format = useFormatter();
@@ -81,20 +104,7 @@ function PlanSummary({ data }: { data: BillingOverview }) {
   const portal = usePortalMutation();
   const date = (value: Date) => format.dateTime(value, { dateStyle: "long" });
   const subscription = data.subscription;
-
-  const status = !subscription
-    ? null
-    : subscription.cancelAtPeriodEnd && subscription.status !== "canceled"
-      ? t("status.canceling", { date: date(subscription.currentPeriodEnd) })
-      : subscription.status === "trialing" && subscription.trialEnd
-        ? t("status.trialing", { date: date(subscription.trialEnd) })
-        : subscription.status === "active"
-          ? t("status.active", { date: date(subscription.currentPeriodEnd) })
-          : subscription.status === "past_due"
-            ? t("status.past_due")
-            : subscription.status === "unpaid"
-              ? t("status.unpaid")
-              : t("status.canceled");
+  const status = subscription ? statusText(subscription, t, date) : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -102,15 +112,12 @@ function PlanSummary({ data }: { data: BillingOverview }) {
         <span className="text-lg font-semibold">{t(`plans.${data.plan}`)}</span>
         <Badge variant="secondary">{t("current")}</Badge>
       </div>
-      {status ? (
-        subscription?.status === "past_due" ? (
-          <Alert variant="destructive">
-            <AlertDescription>{status}</AlertDescription>
-          </Alert>
-        ) : (
-          <p className="text-sm">{status}</p>
-        )
+      {subscription?.status === "past_due" ? (
+        <Alert variant="destructive">
+          <AlertDescription>{status}</AlertDescription>
+        </Alert>
       ) : null}
+      {status && subscription?.status !== "past_due" ? <p className="text-sm">{status}</p> : null}
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
         <dt className="text-muted-foreground">{t("seats", { seats: data.members })}</dt>
         <dd>
@@ -182,11 +189,11 @@ function Invoices() {
         <CardTitle>{t("title")}</CardTitle>
       </CardHeader>
       <CardContent>
-        {!invoices.data ? (
-          <Skeleton className="h-16" />
-        ) : invoices.data.length === 0 ? (
+        {!invoices.data ? <Skeleton className="h-16" /> : null}
+        {invoices.data?.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
+        ) : null}
+        {invoices.data?.length ? (
           <ul className="flex flex-col divide-y text-sm">
             {invoices.data.map((invoice) => (
               <li key={invoice.id} className="flex items-center justify-between gap-4 py-2">
@@ -199,8 +206,8 @@ function Invoices() {
                   )}
                 </span>
                 <span>
-                  {t.has(`status.${invoice.status}` as "status.paid")
-                    ? t(`status.${invoice.status}` as "status.paid")
+                  {loosely(t).has(`status.${invoice.status}`)
+                    ? loosely(t)(`status.${invoice.status}`)
                     : invoice.status}
                 </span>
                 {invoice.url ? (
@@ -211,7 +218,7 @@ function Invoices() {
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

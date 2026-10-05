@@ -11,13 +11,14 @@
  * Each call carries a token signed for that call (60 seconds, AI_SERVICE_SECRET) naming
  * the user and organization it's for: the service trusts nothing else.
  */
+import { EventSourceParserStream } from "eventsource-parser/stream";
 import { SignJWT } from "jose";
-import type { z } from "zod";
+import type * as z from "zod";
 import { createClient } from "./generated/client";
 import { createDocument, deleteDocument, listDocuments, sentiment } from "./generated/sdk.gen";
-import { zAssistantEvent } from "./generated/zod.gen";
+import type { AnswerData, ErrorCode, ErrorIssue } from "./generated/types.gen";
+import { zAssistantEvent, zErrorResponse } from "./generated/zod.gen";
 
-export type { DocumentOut as AiDocument, SentimentResponse } from "./generated/types.gen";
 export type AssistantEvent = z.infer<typeof zAssistantEvent>["event"];
 
 export interface AiCaller {
@@ -26,65 +27,94 @@ export interface AiCaller {
   requestId?: string | undefined;
 }
 
-/** A failure the service reported, with its stable error code (or a transport failure). */
+/**
+ * A failure the service reported, with its stable error code, or UPSTREAM_UNAVAILABLE
+ * when it couldn't be reached or answered with something other than an error body.
+ */
 export class AiServiceError extends Error {
   constructor(
     readonly status: number,
-    readonly code: string,
-    readonly params: Record<string, unknown> = {},
+    readonly code: ErrorCode,
+    readonly params: Record<string, string | number> = {},
+    readonly issues: ErrorIssue[] = [],
   ) {
     super(`AI service answered ${status} ${code}`);
   }
 }
 
+/** The error a failed response carries, parsed against the service's error model. */
+function toServiceError(status: number, body: unknown): AiServiceError {
+  const parsed = zErrorResponse.safeParse(body);
+  if (!parsed.success) {
+    return new AiServiceError(status, "UPSTREAM_UNAVAILABLE");
+  }
+  const { code, data } = parsed.data;
+  return new AiServiceError(status, code, data.params, data.issues ?? []);
+}
+
 const TOKEN_LIFETIME_SECONDS = 60;
 
-export function createAiClient(options: { baseUrl: string; secret: string; timeoutMs?: number }) {
+/** A call's headers: its own token, naming the user and organization, and the request id. */
+async function callHeaders(key: Uint8Array, caller: AiCaller) {
+  const token = await new SignJWT({ org: caller.orgId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer("api")
+    .setAudience("ai")
+    .setSubject(caller.userId)
+    .setIssuedAt()
+    .setExpirationTime(`${TOKEN_LIFETIME_SECONDS}s`)
+    .sign(key);
+  return {
+    authorization: `Bearer ${token}`,
+    ...(caller.requestId && { "x-request-id": caller.requestId }),
+  };
+}
+
+/** The result of a call that succeeded; the service's error (or an outage) otherwise. */
+async function settle<R extends { error?: unknown; response?: Response }>(
+  call: Promise<R>,
+): Promise<R> {
+  // The generated client never rejects: an unreachable service comes back as a result
+  // without a response.
+  const result = await call;
+  if (!result.response?.ok) {
+    throw toServiceError(result.response?.status ?? 503, result.error);
+  }
+  return result;
+}
+
+async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: Response }>) {
+  const { data } = await settle(call);
+  // The generated client validated the body; one that broke the contract lands here.
+  if (data === undefined) {
+    throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+  }
+  return data;
+}
+
+export function createAiClient(options: {
+  baseUrl: string;
+  secret: string;
+  timeoutMs?: number;
+  /** The longest an answer may stream, start to finish (default two minutes). */
+  answerTimeoutMs?: number;
+}) {
   const key = new TextEncoder().encode(options.secret);
   const timeoutMs = options.timeoutMs ?? 30_000;
 
-  async function headers(caller: AiCaller) {
-    const token = await new SignJWT({ org: caller.orgId })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuer("api")
-      .setAudience("ai")
-      .setSubject(caller.userId)
-      .setIssuedAt()
-      .setExpirationTime(`${TOKEN_LIFETIME_SECONDS}s`)
-      .sign(key);
-    return {
-      authorization: `Bearer ${token}`,
-      ...(caller.requestId && { "x-request-id": caller.requestId }),
-    };
-  }
+  const headers = (caller: AiCaller) => callHeaders(key, caller);
 
   /** A client for one call: its token, and a timeout so a hung service can't hang us. */
   async function forCall(caller: AiCaller) {
     return createClient({
       baseUrl: options.baseUrl,
       headers: await headers(caller),
+      // Always JSON, so the validator sees every body: left to the content type, a body
+      // without one would come back as a raw stream, unchecked.
+      parseAs: "json",
       fetch: (input: RequestInfo | URL, init?: RequestInit) =>
         fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) }),
     });
-  }
-
-  async function unwrap<T>(
-    call: Promise<{ data?: T; error?: unknown; response?: Response }>,
-  ): Promise<T> {
-    let result: { data?: T; error?: unknown; response?: Response };
-    try {
-      result = await call;
-    } catch (cause) {
-      throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });
-    }
-    if (result.response?.ok && result.data !== undefined) return result.data;
-    if (result.response?.ok) return undefined as T; // 204
-    const body = (result.error ?? {}) as { code?: string; params?: Record<string, unknown> };
-    throw new AiServiceError(
-      result.response?.status ?? 503,
-      body.code ?? "UPSTREAM_UNAVAILABLE",
-      body.params,
-    );
   }
 
   return {
@@ -98,7 +128,7 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
       return unwrap(createDocument({ client: await forCall(caller), body }));
     },
     async deleteDocument(caller: AiCaller, documentId: string) {
-      await unwrap(
+      await settle(
         deleteDocument({ client: await forCall(caller), path: { document_id: documentId } }),
       );
     },
@@ -112,49 +142,42 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
       caller: AiCaller,
       question: string,
       signal?: AbortSignal,
-    ): Promise<AsyncGenerator<AssistantEvent>> {
+    ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
+      // From the service's OpenAPI document: a changed route or body fails to compile. The
+      // generated SDK can't be used here: it reads the whole body, and this streams it.
+      const path: AnswerData["url"] = "/v1/assistant/answers";
+      const body: AnswerData["body"] = { question };
       let response: Response;
       try {
-        response = await fetch(new URL("/v1/assistant/answers", options.baseUrl), {
+        response = await fetch(new URL(path, options.baseUrl), {
           method: "POST",
           headers: { ...(await headers(caller)), "content-type": "application/json" },
-          body: JSON.stringify({ question }),
-          ...(signal && { signal }),
+          body: JSON.stringify(body),
+          // The caller's signal (the client went away) or the answer's own limit.
+          signal: AbortSignal.any([
+            AbortSignal.timeout(options.answerTimeoutMs ?? 120_000),
+            ...(signal ? [signal] : []),
+          ]),
         });
       } catch (cause) {
         throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });
       }
       if (!response.ok || !response.body) {
-        const body = (await response.json().catch(() => ({}))) as {
-          code?: string;
-          params?: Record<string, unknown>;
-        };
-        throw new AiServiceError(response.status, body.code ?? "UPSTREAM_UNAVAILABLE", body.params);
+        throw toServiceError(response.status, await response.json().catch(() => undefined));
       }
       return events(response.body);
     },
   };
 }
 
-/** Server-Sent Events from a response body, each `data:` payload one AssistantEvent. */
-async function* events(body: ReadableStream<Uint8Array>): AsyncGenerator<AssistantEvent> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for await (const chunk of body) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let end = buffer.indexOf("\n\n");
-    while (end !== -1) {
-      const frame = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      const data = frame
-        .split("\n")
-        .filter((line) => line.startsWith("data: "))
-        .map((line) => line.slice(6))
-        .join("\n");
-      if (data) yield zAssistantEvent.parse(JSON.parse(data)).event;
-      end = buffer.indexOf("\n\n");
-    }
+/** Server-Sent Events from a response body, each one's data one AssistantEvent. */
+async function* events(
+  body: ReadableStream<BufferSource>,
+): AsyncGenerator<AssistantEvent, void, unknown> {
+  const stream = body
+    .pipeThrough(new TextDecoderStream())
+    .pipeThrough(new EventSourceParserStream());
+  for await (const message of stream) {
+    yield zAssistantEvent.parse(JSON.parse(message.data)).event;
   }
 }
-
-export type AiClient = ReturnType<typeof createAiClient>;

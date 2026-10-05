@@ -13,7 +13,9 @@ export function useFinishSignIn() {
   const router = useRouter();
   const next = useNextPath();
   return (data: unknown) => {
-    if (isRedirect(data)) return;
+    if (isRedirect(data)) {
+      return;
+    }
     router.replace(next);
     router.refresh();
   };

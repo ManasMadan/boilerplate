@@ -16,6 +16,7 @@ apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "stack.labels" (list $ $name) | nindent 4 }}
 spec:
@@ -41,6 +42,7 @@ apiVersion: keda.sh/v1alpha1
 kind: TriggerAuthentication
 metadata:
   name: {{ include "stack.fullname" (list $ "valkey") }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "stack.labels" (list $ "valkey") | nindent 4 }}
 spec:

@@ -23,12 +23,21 @@
         "uniwind-types.d.ts"
       ]
     },
+    // The web build fixes its rewrites' upstreams (API_URL, AI_URL) when it's built, so
+    // a build for other ports (the e2e run passes the checkout's .env, moved by
+    // `bun run setup --stack <n>`) is never a cache hit.
     "build": {
+      "env": ["API_URL", "AI_URL"],
       "dependsOn": ["^build", "gen", "^gen"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**", "storybook-static/**"]
     },
     "check-types": {
       "dependsOn": ["gen", "^gen"]
+    },
+    // The component library's static Storybook, which the screenshot tests run against
+    // (packages/ui test:visual): rebuilt only when the library changed.
+    "build-storybook": {
+      "outputs": ["storybook-static/**"]
     },
     "lint": {},
     // Unit tests are pure (no network, no services), so their results are cacheable.
@@ -41,8 +50,13 @@
       "dependsOn": ["gen", "^gen"],
       "cache": false
     },
-    // Unit and integration tests with coverage thresholds (needs the services, like
-    // test:integration).
+    // The integration tests that need the files profile (RustFS, ClamAV).
+    "test:integration:files": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false
+    },
+    // Unit and integration tests with coverage, as LCOV for scripts/coverage.ts (needs the
+    // services, like test:integration).
     "coverage": {
       "dependsOn": ["gen", "^gen"],
       "cache": false

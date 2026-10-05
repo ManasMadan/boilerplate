@@ -1,19 +1,22 @@
 /**
  * Cache-aside on Redis.
  *
- *   const plan = await cache.wrap(`org:${orgId}:plan`, 300, () => billing.loadPlan(orgId));
+ *   const plan = await cache.wrap(`org:${orgId}:plan`, 300, planSchema, () => billing.loadPlan(orgId));
  *   await cache.invalidate(`org:${orgId}:plan`);   // e.g. from a billing.plan_changed event
  *
  * - Concurrent misses in one process share one load (no stampede on a cold key).
  * - TTLs get ±10% jitter so keys written together don't all expire together.
- * - Keys are versioned (`CACHE_VERSION`): bump it when a cached shape changes and old
- *   entries are simply never read again.
- * - Values are JSON; cache only what serializes losslessly (no Dates, Maps, classes).
+ * - What comes back is parsed with the caller's schema: an entry written by an older
+ *   release in another shape is a miss, loaded again, never a value of the wrong type.
+ *   Keys are versioned too (`CACHE_VERSION`), to drop every entry at once.
+ * - Values are JSON; cache only what serializes losslessly (no Maps or classes; a Date
+ *   comes back as its string, so its schema must coerce it).
  *
  * Tenant data must include the org id in the key; a cache is not protected by
  * row-level security.
  */
 import type { Redis } from "ioredis";
+import type * as z from "zod";
 
 const CACHE_VERSION = "v1";
 
@@ -29,9 +32,13 @@ export class CacheService {
     return `cache:${this.namespace}:${CACHE_VERSION}:${key}`;
   }
 
-  async get<T>(key: string): Promise<T | undefined> {
+  async get<T>(key: string, schema: z.ZodType<T>): Promise<T | undefined> {
     const raw = await this.redis.get(this.key(key));
-    return raw === null ? undefined : (JSON.parse(raw) as T);
+    if (raw === null) {
+      return undefined;
+    }
+    const parsed = schema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : undefined;
   }
 
   async set(key: string, value: unknown, ttlSeconds: number) {
@@ -39,12 +46,22 @@ export class CacheService {
     await this.redis.set(this.key(key), JSON.stringify(value), "EX", jittered);
   }
 
-  async wrap<T>(key: string, ttlSeconds: number, load: () => Promise<T>): Promise<T> {
-    const cached = await this.get<T>(key);
-    if (cached !== undefined) return cached;
+  async wrap<T>(
+    key: string,
+    ttlSeconds: number,
+    schema: z.ZodType<T>,
+    load: () => Promise<T>,
+  ): Promise<T> {
+    const cached = await this.get(key, schema);
+    if (cached !== undefined) {
+      return cached;
+    }
 
-    const pending = this.inflight.get(key) as Promise<T> | undefined;
-    if (pending !== undefined) return pending;
+    // Another call is loading this key: the same value it will cache, so the same parse.
+    const pending = this.inflight.get(key);
+    if (pending !== undefined) {
+      return schema.parse(await pending);
+    }
 
     const loading = load()
       .then(async (value) => {

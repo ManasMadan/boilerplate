@@ -1,10 +1,31 @@
 /**
  * Firebase Cloud Messaging, HTTP v1 API, authenticated as a service account: a JWT signed
- * with its private key is exchanged for an OAuth access token (cached until shortly
- * before it expires). No SDK: the protocol is two HTTPS calls.
+ * with its private key (jose) is exchanged for an OAuth access token (cached until
+ * shortly before it expires). No SDK: the protocol is two HTTPS calls.
  */
-import { createSign } from "node:crypto";
+
+import { MINUTE_MS, PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
+import { importPKCS8, SignJWT } from "jose";
+import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
+
+// What FCM answers, checked: a changed response fails here, by name, not as undefined later.
+const tokenResponse = z.object({ access_token: z.string(), expires_in: z.number() });
+const sendResponse = z.object({ name: z.string() });
+const errorResponse = z
+  .object({
+    error: z.object({
+      status: z.string().optional(),
+      details: z
+        .array(
+          z.object({
+            fieldViolations: z.array(z.object({ field: z.string().optional() })).optional(),
+          }),
+        )
+        .optional(),
+    }),
+  })
+  .catch({ error: {} });
 
 export interface FcmConfig {
   projectId: string;
@@ -15,39 +36,40 @@ export interface FcmConfig {
   apiUrl?: string;
 }
 
-const base64url = (value: string | Buffer) => Buffer.from(value).toString("base64url");
-
 export class FcmTransport implements PushTransport {
   private accessToken: { value: string; expiresAt: number } | undefined;
+  private key: Promise<CryptoKey> | undefined;
 
   constructor(private readonly config: FcmConfig) {}
 
   private async token() {
-    if (this.accessToken && this.accessToken.expiresAt > Date.now() + 60_000)
+    if (this.accessToken && this.accessToken.expiresAt > Date.now() + MINUTE_MS) {
       return this.accessToken.value;
+    }
     const tokenUrl = this.config.tokenUrl ?? "https://oauth2.googleapis.com/token";
-    const now = Math.floor(Date.now() / 1000);
-    const claims = {
-      iss: this.config.clientEmail,
+    this.key ??= importPKCS8(this.config.privateKey, "RS256");
+    const assertion = await new SignJWT({
       scope: "https://www.googleapis.com/auth/firebase.messaging",
-      aud: tokenUrl,
-      iat: now,
-      exp: now + 3600,
-    };
-    const unsigned = `${base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${base64url(JSON.stringify(claims))}`;
-    const signature = createSign("RSA-SHA256").update(unsigned).sign(this.config.privateKey);
+    })
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setIssuer(this.config.clientEmail)
+      .setAudience(tokenUrl)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(await this.key);
     const response = await fetch(tokenUrl, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion: `${unsigned}.${base64url(signature)}`,
+        assertion,
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
-    if (!response.ok)
+    if (!response.ok) {
       throw new Error(`FCM auth failed: ${response.status} ${await response.text()}`);
-    const body = (await response.json()) as { access_token: string; expires_in: number };
+    }
+    const body = tokenResponse.parse(await response.json());
     this.accessToken = { value: body.access_token, expiresAt: Date.now() + body.expires_in * 1000 };
     return body.access_token;
   }
@@ -68,16 +90,40 @@ export class FcmTransport implements PushTransport {
           android: message.collapseKey ? { collapse_key: message.collapseKey } : undefined,
         },
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
-    if (response.ok)
-      return { ok: true, providerMessageId: ((await response.json()) as { name: string }).name };
+    if (response.ok) {
+      return { ok: true, providerMessageId: sendResponse.parse(await response.json()).name };
+    }
     const text = await response.text();
-    // UNREGISTERED (404) and INVALID_ARGUMENT for a bad token mean the token is dead.
-    const gone =
-      response.status === 404 ||
-      text.includes("UNREGISTERED") ||
-      text.includes("registration-token-not-registered");
-    return { ok: false, gone, error: `FCM ${response.status}: ${text.slice(0, 200)}` };
+    return {
+      ok: false,
+      gone: tokenIsDead(response.status, text),
+      error: `FCM ${response.status}: ${text.slice(0, 200)}`,
+    };
   }
+}
+
+/**
+ * Whether FCM's error means the token will never work: UNREGISTERED (404), or
+ * INVALID_ARGUMENT naming the token field (a malformed token). INVALID_ARGUMENT about
+ * anything else is our message's fault, and forgetting the device for it would be wrong.
+ */
+export function tokenIsDead(status: number, body: string): boolean {
+  if (status === 404 || body.includes("UNREGISTERED")) {
+    return true;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    return false;
+  }
+  const { error } = errorResponse.parse(json);
+  return (
+    error.status === "INVALID_ARGUMENT" &&
+    (error.details ?? []).some((detail) =>
+      (detail.fieldViolations ?? []).some((violation) => violation.field === "message.token"),
+    )
+  );
 }

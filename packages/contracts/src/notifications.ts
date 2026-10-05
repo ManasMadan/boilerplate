@@ -9,6 +9,8 @@
  * templates at it.
  */
 import * as z from "zod";
+import { todoIdSchema, webhookEndpointIdSchema } from "./ids";
+import { entriesOf } from "./objects";
 
 export const notificationChannels = ["in_app", "email", "push", "sms"] as const;
 export type NotificationChannel = (typeof notificationChannels)[number];
@@ -23,12 +25,7 @@ export const notificationCategories = {
 export type NotificationCategory = keyof typeof notificationCategories;
 
 /** Categories users can change, with the channels they can change them on. */
-export const mutableCategories = (
-  Object.entries(notificationCategories) as [
-    NotificationCategory,
-    (typeof notificationCategories)[NotificationCategory],
-  ][]
-)
+export const mutableCategories = entriesOf(notificationCategories)
   .filter(([, category]) => category.mutable)
   .map(([name, category]) => ({ name, channels: category.channels }));
 
@@ -37,15 +34,14 @@ export const mutableCategories = (
  * packages/i18n (`notification.<type>.title` / `.body`, with the data as arguments).
  */
 export const inAppNotifications = {
-  "webhooks.endpoint-disabled": z.object({ endpointId: z.uuid(), url: z.string() }),
-  "todo.reminder": z.object({ todoId: z.uuid(), title: z.string() }),
+  "webhooks.endpoint-disabled": z.object({ endpointId: webhookEndpointIdSchema, url: z.string() }),
+  "todo.reminder": z.object({ todoId: todoIdSchema, title: z.string() }),
   "billing.payment-failed": z.object({ amount: z.string() }),
 } as const;
 export type InAppNotificationType = keyof typeof inAppNotifications;
 
 /** Where a device receives push: APNs (ios), FCM (android) or Web Push (web). */
 export const pushPlatforms = ["ios", "android", "web"] as const;
-export type PushPlatform = (typeof pushPlatforms)[number];
 
 /**
  * The browsers' push services. A Web Push subscription names the URL the notifications
@@ -62,7 +58,9 @@ const webPushHosts = [
 export function isWebPushEndpoint(endpoint: string, extraHosts: readonly string[] = []) {
   // The host must follow "https://" directly: no credentials, no port.
   const hostname = /^https:\/\/([a-z0-9.-]+)\//i.exec(endpoint)?.[1]?.toLowerCase();
-  if (!hostname) return false;
+  if (!hostname) {
+    return false;
+  }
   return [...webPushHosts, ...extraHosts].some((host) =>
     host.startsWith(".") ? hostname.endsWith(host) : hostname === host,
   );

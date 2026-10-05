@@ -15,6 +15,7 @@ import { type LoggerConfig, loggerOptions } from "@repo/logger";
 import { LoggerModule as PinoLoggerModule } from "nestjs-pino";
 import proxyAddr from "proxy-addr";
 import { contextLogFields } from "./context";
+import { redactQuery } from "./telemetry";
 
 export const REQUEST_ID_HEADER = "x-request-id";
 
@@ -52,7 +53,7 @@ export const LoggerModule = {
           req: (req: { id: string; method: string; url: string }) => ({
             id: req.id,
             method: req.method,
-            url: req.url,
+            url: redactQuery(req.url),
           }),
         },
       },
@@ -60,4 +61,4 @@ export const LoggerModule = {
   },
 };
 
-export { InjectPinoLogger, Logger, PinoLogger } from "nestjs-pino";
+export { InjectPinoLogger, PinoLogger } from "nestjs-pino";

@@ -8,7 +8,9 @@ version renamed middleware to `src/proxy.ts`.
 ## Commands (from the repo root)
 
 - Types (runs `next typegen` first): `bun run --filter @repo/web check-types`
-- Unit tests: `bun run --filter @repo/web test`
+- Unit tests (Node): `bun run --filter @repo/web test`
+- Browser tests (pages against the real API): `bun run --filter @repo/web test:integration`
+  (one file: `bun run --cwd apps/web test:integration test/auth/sign-in.test.tsx`)
 - E2E against a running `bun dev`: `bun run --cwd apps/web test:e2e`
   (one spec: `bun run --cwd apps/web test:e2e e2e/todos.spec.ts`)
 - E2E on a fresh production build: `bun run test:e2e --app web`

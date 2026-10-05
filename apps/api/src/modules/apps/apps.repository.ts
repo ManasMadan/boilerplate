@@ -3,6 +3,7 @@
  * user's list of connected apps, and removing one with every token issued under it.
  */
 import { Injectable } from "@nestjs/common";
+import type { UserId } from "@repo/contracts/ids";
 import type { Tx } from "@repo/db";
 import { type Database, InjectDatabase } from "@repo/nest-common";
 
@@ -10,7 +11,7 @@ import { type Database, InjectDatabase } from "@repo/nest-common";
 export class AppsRepository {
   constructor(@InjectDatabase() private readonly database: Database) {}
 
-  list(userId: string) {
+  list(userId: UserId) {
     return this.database.read.oauthConsent.findMany({
       where: { userId, referenceId: { not: null } },
       orderBy: { createdAt: "desc" },
@@ -30,7 +31,7 @@ export class AppsRepository {
    * When each (client, workspace) pair of the user's last renewed its access. Access
    * tokens are JWTs and aren't stored; every grant and refresh issues a refresh token.
    */
-  lastUsed(userId: string) {
+  lastUsed(userId: UserId) {
     return this.database.read.oauthRefreshToken.groupBy({
       by: ["clientId", "referenceId"],
       where: { userId },
@@ -38,7 +39,7 @@ export class AppsRepository {
     });
   }
 
-  find(tx: Tx, id: string, userId: string) {
+  find(tx: Tx, id: string, userId: UserId) {
     return tx.oauthConsent.findFirst({
       where: { id, userId },
       select: { id: true, clientId: true, referenceId: true },
@@ -49,7 +50,7 @@ export class AppsRepository {
   async remove(
     tx: Tx,
     grant: { id: string; clientId: string; referenceId: string },
-    userId: string,
+    userId: UserId,
   ) {
     const issued = { clientId: grant.clientId, userId, referenceId: grant.referenceId };
     await tx.oauthRefreshToken.deleteMany({ where: issued });

@@ -1,13 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { errorCode } from "@repo/client";
+import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useMeQuery } from "@repo/client/api/user/me";
-import {
-  useRemovePhoneMutation,
-  useSendPhoneCodeMutation,
-  useVerifyPhoneMutation,
-} from "@repo/client/api/user/phone";
+import { useRemovePhoneMutation } from "@repo/client/api/user/remove-phone";
+import { useSendPhoneCodeMutation } from "@repo/client/api/user/send-phone-code";
+import { useVerifyPhoneMutation } from "@repo/client/api/user/verify-phone";
 import { phoneNumberSchema } from "@repo/contracts/auth";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -20,12 +18,11 @@ import {
 import { FieldGroup } from "@repo/ui/components/field";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 import { OtpField, TextField } from "@/components/form-fields";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { useAuthSchemas } from "@/modules/auth";
 import { ReauthPrompt } from "./reauth-prompt";
 
@@ -39,74 +36,103 @@ export function PhoneCard() {
   const t = useTranslations("settings.security.phone");
   const errorMessage = useApiErrorMessage();
   const me = useMeQuery();
-  const remove = useRemovePhoneMutation();
   const [step, setStep] = useState<Step>({ name: "view" });
   const [stale, setStale] = useState(false);
 
   const handle = (error: unknown) => {
-    if (errorCode(error) === "FRESH_SESSION_REQUIRED") setStale(true);
-    else toast.error(errorMessage(error));
+    if (errorCode(error) === "FRESH_SESSION_REQUIRED") {
+      setStale(true);
+    } else {
+      toast.error(errorMessage(error));
+    }
   };
 
-  const phoneNumber = me.data?.phoneNumber ?? null;
+  let content: ReactNode;
+  if (stale) {
+    content = <ReauthPrompt />;
+  } else if (!me.data) {
+    content = <Skeleton className="h-9 w-48" />;
+  } else if (step.name === "view") {
+    content = (
+      <CurrentNumber
+        phoneNumber={me.data.phoneNumber}
+        onChange={() => setStep({ name: "number" })}
+        onError={handle}
+      />
+    );
+  } else if (step.name === "number") {
+    content = (
+      <NumberStep
+        onSent={(number) => setStep({ name: "code", phoneNumber: number })}
+        onCancel={() => setStep({ name: "view" })}
+        onError={handle}
+      />
+    );
+  } else {
+    content = (
+      <CodeStep
+        phoneNumber={step.phoneNumber}
+        onDone={() => {
+          toast.success(t("verified"));
+          setStep({ name: "view" });
+        }}
+        onBack={() => setStep({ name: "number" })}
+        onError={handle}
+      />
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t("title")}</CardTitle>
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {stale ? (
-          <ReauthPrompt />
-        ) : !me.data ? (
-          <Skeleton className="h-9 w-48" />
-        ) : step.name === "view" ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm">
-              {phoneNumber ? (
-                <span className="font-medium">{phoneNumber}</span>
-              ) : (
-                <span className="text-muted-foreground">{t("none")}</span>
-              )}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => setStep({ name: "number" })}>
-              {phoneNumber ? t("change") : t("add")}
-            </Button>
-            {phoneNumber ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={remove.isPending}
-                onClick={() =>
-                  remove.mutate(undefined, {
-                    onSuccess: () => toast.success(t("removed")),
-                    onError: handle,
-                  })
-                }
-              >
-                {t("remove")}
-              </Button>
-            ) : null}
-          </div>
-        ) : step.name === "number" ? (
-          <NumberStep
-            onSent={(number) => setStep({ name: "code", phoneNumber: number })}
-            onCancel={() => setStep({ name: "view" })}
-            onError={handle}
-          />
-        ) : (
-          <CodeStep
-            phoneNumber={step.phoneNumber}
-            onDone={() => {
-              toast.success(t("verified"));
-              setStep({ name: "view" });
-            }}
-            onBack={() => setStep({ name: "number" })}
-            onError={handle}
-          />
-        )}
-      </CardContent>
+      <CardContent className="flex flex-col gap-4">{content}</CardContent>
     </Card>
+  );
+}
+
+/** The number on the account (or none), with buttons to change or remove it. */
+function CurrentNumber({
+  phoneNumber,
+  onChange,
+  onError,
+}: {
+  phoneNumber: string | null;
+  onChange: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations("settings.security.phone");
+  const remove = useRemovePhoneMutation();
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <p className="text-sm">
+        {phoneNumber ? (
+          <span className="font-medium">{phoneNumber}</span>
+        ) : (
+          <span className="text-muted-foreground">{t("none")}</span>
+        )}
+      </p>
+      <Button variant="outline" size="sm" onClick={onChange}>
+        {phoneNumber ? t("change") : t("add")}
+      </Button>
+      {phoneNumber ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={remove.isPending}
+          onClick={() =>
+            remove.mutate(undefined, {
+              onSuccess: () => toast.success(t("removed")),
+              onError,
+            })
+          }
+        >
+          {t("remove")}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -181,7 +207,9 @@ function CodeStep({
           await verify.mutateAsync({ phoneNumber, code });
           onDone();
         } catch (error) {
-          if (errorCode(error) === "FRESH_SESSION_REQUIRED") return onError(error);
+          if (errorCode(error) === "FRESH_SESSION_REQUIRED") {
+            return onError(error);
+          }
           form.setValue("code", "");
           form.setError("code", { message: errorMessage(error) });
         }

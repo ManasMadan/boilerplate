@@ -5,8 +5,17 @@
  * endpoint is a browser push service (the subscription came from a client).
  */
 import { isWebPushEndpoint } from "@repo/contracts/notifications";
+import { DAY_S, PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
+import { asError } from "@repo/nest-common";
 import webPush from "web-push";
+import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
+
+/** A browser's PushSubscription as it stored it (PushSubscription.toJSON()). */
+const subscriptionSchema = z.object({
+  endpoint: z.string(),
+  keys: z.object({ p256dh: z.string(), auth: z.string() }),
+});
 
 export interface WebPushConfig {
   publicKey: string;
@@ -21,17 +30,24 @@ export class WebPushTransport implements PushTransport {
   constructor(private readonly config: WebPushConfig) {}
 
   async send(token: string, message: PushMessage): Promise<PushResult> {
-    let subscription: webPush.PushSubscription;
+    let stored: unknown;
     try {
-      subscription = JSON.parse(token) as webPush.PushSubscription;
+      stored = JSON.parse(token);
     } catch {
       return { ok: false, gone: true, error: "stored subscription isn't JSON" };
     }
-    const endpoint = String(subscription.endpoint);
+    const parsed = subscriptionSchema.safeParse(stored);
+    if (!parsed.success) {
+      return { ok: false, gone: true, error: "stored subscription is malformed" };
+    }
+    const subscription: webPush.PushSubscription = parsed.data;
+    const endpoint = subscription.endpoint;
     const allowed =
       isWebPushEndpoint(endpoint) ||
       (this.config.testOrigin !== undefined && endpoint.startsWith(`${this.config.testOrigin}/`));
-    if (!allowed) return { ok: false, gone: true, error: "not a browser push service" };
+    if (!allowed) {
+      return { ok: false, gone: true, error: "not a browser push service" };
+    }
 
     const request = webPush.generateRequestDetails(
       subscription,
@@ -47,7 +63,7 @@ export class WebPushTransport implements PushTransport {
           publicKey: this.config.publicKey,
           privateKey: this.config.privateKey,
         },
-        TTL: 24 * 3600,
+        TTL: DAY_S,
         ...(message.collapseKey && { topic: message.collapseKey.replaceAll(/[^\w-]/g, "") }),
       },
     );
@@ -59,13 +75,14 @@ export class WebPushTransport implements PushTransport {
         // The encrypted payload, as bytes fetch accepts (a Node Buffer isn't typed as one).
         body: new Uint8Array(request.body),
         redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
     } catch (error) {
-      return { ok: false, gone: false, error: `Web Push: ${(error as Error).message}` };
+      return { ok: false, gone: false, error: `Web Push: ${asError(error).message}` };
     }
-    if (response.ok)
+    if (response.ok) {
       return { ok: true, providerMessageId: response.headers.get("location") ?? undefined };
+    }
     const text = await response.text();
     return {
       ok: false,

@@ -1,0 +1,14 @@
+{
+  "name": "boilerplate",
+  "description": "The Claude Code setup of apps made from this template, kept up to date from it.",
+  "owner": {
+    "name": "Manas Madan"
+  },
+  "plugins": [
+    {
+      "name": "boilerplate",
+      "source": "./",
+      "description": "Skills, agents, hooks, output style and MCP servers for apps made from this template."
+    }
+  ]
+}

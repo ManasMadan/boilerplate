@@ -3,61 +3,151 @@
  * dependencies, starts local services, applies migrations and generates code.
  *
  *   bun run setup
+ *   bun scripts/setup.ts --env   only .env (what `bun dev` runs first, after a pull)
+ *   bun run setup --stack <n>    this checkout gets its own services and app ports (a
+ *                                worktree next to another that runs them): compose
+ *                                project `<name>-stack<n>`, every port 100 × n up (1 to
+ *                                9; 0 goes back to the defaults). packages/testing/src/stack.ts
  *
  * Safe to run again: existing .env values are kept; only missing variables are added
  * and placeholders are replaced.
  */
 
-import { createECDH, randomBytes } from "node:crypto";
-import { copyFileSync, existsSync } from "node:fs";
-import { $ } from "bun";
-import { ENV_EXAMPLE_PATH, ENV_PATH, ok, PLACEHOLDER, readEnv, writeEnvValue } from "./lib";
+import { constants, copyFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+// By path, not package name: setup writes .env before `bun install` has linked packages.
+import { fillPlaceholders } from "../packages/testing/src/secrets";
+import { STACK_FILE, STACKS, stackValues } from "../packages/testing/src/stack";
+import {
+  ENV_EXAMPLE_PATH,
+  ENV_PATH,
+  envLine,
+  errno,
+  fail,
+  ok,
+  ROOT,
+  readEnv,
+  runMain,
+  runSync,
+  writeEnvValue,
+} from "./lib";
 
-console.log("\n1. Environment");
-if (!existsSync(ENV_PATH)) {
-  copyFileSync(ENV_EXAMPLE_PATH, ENV_PATH);
-  ok("Created .env from .env.example");
-}
-const env = readEnv(ENV_PATH);
-for (const [key, value] of readEnv(ENV_EXAMPLE_PATH)) {
-  if (!env.has(key)) writeEnvValue(ENV_PATH, key, value);
-}
-// The VAPID keys are a pair (P-256), so they're generated together.
-const current = readEnv(ENV_PATH);
-if (["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"].some((k) => PLACEHOLDER.test(current.get(k) ?? ""))) {
-  const ecdh = createECDH("prime256v1");
-  ecdh.generateKeys();
-  writeEnvValue(ENV_PATH, "VAPID_PUBLIC_KEY", ecdh.getPublicKey().toString("base64url"));
-  // The raw scalar can come back shorter than 32 bytes; VAPID wants exactly 32.
-  const privateKey = Buffer.from(ecdh.getPrivateKey("hex").padStart(64, "0"), "hex");
-  writeEnvValue(ENV_PATH, "VAPID_PRIVATE_KEY", privateKey.toString("base64url"));
-  ok("Generated a VAPID key pair for browser push");
-}
-for (const [key, value] of readEnv(ENV_PATH)) {
-  if (PLACEHOLDER.test(value)) {
-    writeEnvValue(ENV_PATH, key, generateSecret(key));
-    ok(`Generated a random ${key}`);
+/** The steps after .env, each a command that must pass before the next. */
+const STEPS: [string, string[]][] = [
+  ["2. Dependencies", ["bun", "install"]],
+  ["3. Local services", ["bun", "scripts/services.ts", "up"]],
+  ["4. Database", ["bun", "run", "db:deploy"]],
+  ["5. Code generation", ["bun", "run", "gen"]],
+];
+
+/**
+ * Brings .env up to .env.example: creates it, adds what's missing, and turns
+ * placeholders into fresh secrets. Existing values stay.
+ */
+export function syncEnv(envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH) {
+  // Copied only if there's none, in one step: a check first, then the copy, could
+  // overwrite a .env made in between.
+  try {
+    copyFileSync(examplePath, envPath, constants.COPYFILE_EXCL);
+    ok("Created .env from .env.example");
+  } catch (error) {
+    if (!errno(error, "EEXIST")) {
+      throw error;
+    }
+  }
+  const env = readEnv(envPath);
+  for (const [key, value] of readEnv(examplePath)) {
+    if (!env.has(key)) {
+      writeEnvValue(envPath, key, value);
+    }
+  }
+  // Placeholders become fresh secrets in each variable's format (the VAPID pair together).
+  const current = Object.fromEntries(readEnv(envPath));
+  for (const [key, value] of Object.entries(fillPlaceholders(current))) {
+    if (value !== current[key]) {
+      writeEnvValue(envPath, key, value);
+      ok(`Generated ${key}`);
+    }
   }
 }
 
-/** A fresh secret in the format each variable expects. */
-function generateSecret(key: string) {
-  const random = randomBytes(32).toString("base64");
-  // SecretBox keys carry an id so they can be rotated: "<id>:<32-byte base64 key>".
-  if (key === "ENCRYPTION_KEYS") return `${new Date().toISOString().slice(0, 7)}:${random}`;
-  return randomBytes(32).toString("base64url");
+/** The compose project's name (docker-compose.yml's `name:`). */
+export const composeProject = (root = ROOT) =>
+  /^name:\s*(\S+)/m.exec(readFileSync(join(root, "docker-compose.yml"), "utf8"))?.[1] ?? "app";
+
+/**
+ * Moves this checkout's services to `stack`: the ports, local URLs and compose project in
+ * `envPath`, and `.env.stack` beside it, the same moves over .env.example, for the tests.
+ */
+export function useStack(stack: number, envPath: string, examplePath: string, project: string) {
+  const example = Object.fromEntries(readEnv(examplePath));
+  const changes = stackValues(Object.fromEntries(readEnv(envPath)), example, stack, project);
+  for (const [key, value] of Object.entries(changes)) {
+    writeEnvValue(envPath, key, value);
+  }
+  const forTests = join(dirname(envPath), STACK_FILE);
+  if (stack === 0) {
+    rmSync(forTests, { force: true });
+  } else {
+    const values = Object.entries(stackValues(example, example, stack));
+    writeFileSync(forTests, `${values.map(([key, value]) => envLine(key, value)).join("\n")}\n`);
+  }
+  const env = readEnv(envPath);
+  ok(
+    `Stack ${stack}: compose project ${env.get("COMPOSE_PROJECT_NAME")}, Postgres on ${env.get("POSTGRES_PORT")}, Valkey on ${env.get("VALKEY_PORT")}, the site on ${env.get("WEB_URL")}`,
+  );
 }
 
-console.log("\n2. Dependencies");
-await $`bun install`;
+interface Options {
+  run?: typeof runSync;
+  envPath?: string;
+  examplePath?: string;
+  /** The stack to move to (`--stack <n>`), if any. */
+  stack?: number;
+  project?: string;
+}
 
-console.log("\n3. Local services");
-await $`bun scripts/services.ts up`;
+/** Writes `envPath` from `examplePath`, then runs the steps; the exit code. */
+export function setup({
+  run = runSync,
+  envPath = ENV_PATH,
+  examplePath = ENV_EXAMPLE_PATH,
+  stack,
+  project = composeProject(),
+}: Options = {}) {
+  console.log("\n1. Environment");
+  syncEnv(envPath, examplePath);
+  if (stack !== undefined) {
+    useStack(stack, envPath, examplePath, project);
+  }
+  for (const [title, [command = "", ...args]] of STEPS) {
+    console.log(`\n${title}`);
+    const { status } = run(command, args, { stdio: "inherit" });
+    if (status !== 0) {
+      return status ?? 1;
+    }
+  }
+  console.log("\nSetup complete. Start everything with `bun dev`.\n");
+  return 0;
+}
 
-console.log("\n4. Database");
-await $`bun run db:deploy`;
+/** The command: .env only with `--env`, otherwise the whole setup; the exit code. */
+export function main(argv = process.argv.slice(2), options: Omit<Options, "stack"> = {}) {
+  const at = argv.indexOf("--stack");
+  const stack = at === -1 ? undefined : Number(argv[at + 1]);
+  if (stack !== undefined && !(Number.isInteger(stack) && stack >= 0 && stack < STACKS)) {
+    fail(`--stack takes a number from 0 to ${STACKS - 1}.`);
+    return 1;
+  }
+  if (!argv.includes("--env")) {
+    return setup({ ...options, stack });
+  }
+  const { envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH } = options;
+  syncEnv(envPath, examplePath);
+  if (stack !== undefined) {
+    useStack(stack, envPath, examplePath, options.project ?? composeProject());
+  }
+  return 0;
+}
 
-console.log("\n5. Code generation");
-await $`bun run gen`;
-
-console.log("\nSetup complete. Start everything with `bun dev`.\n");
+await runMain(import.meta, main);

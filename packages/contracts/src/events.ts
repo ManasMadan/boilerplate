@@ -4,7 +4,7 @@
  *
  * Names are versioned (`todo.completed.v1`). Adding an optional field is compatible;
  * anything else is a new version, published alongside the old one until every
- * consumer has moved. Consumers must be idempotent (events are delivered at least once)
+ * consumer has moved (CI checks this: scripts/events-compat.ts). Consumers must be idempotent (events are delivered at least once)
  * and must not depend on order.
  *
  * Adding an event: define its payload here, emit it with `emitEvent(tx, ...)` in the
@@ -12,15 +12,27 @@
  * subscribe to it. The audit log records every event automatically.
  */
 import * as z from "zod";
+import {
+  apiKeyIdSchema,
+  orgIdSchema,
+  todoIdSchema,
+  userIdSchema,
+  webhookEndpointIdSchema,
+} from "./ids";
+import { keysOf } from "./objects";
 
-const todoEvent = z.object({ todoId: z.uuid(), title: z.string() });
-const userEvent = z.object({ userId: z.uuid() });
-const memberEvent = z.object({ organizationId: z.uuid(), userId: z.uuid(), role: z.string() });
+const todoEvent = z.object({ todoId: todoIdSchema, title: z.string() });
+const userEvent = z.object({ userId: userIdSchema });
+const memberEvent = z.object({
+  organizationId: orgIdSchema,
+  userId: userIdSchema,
+  role: z.string(),
+});
 
 export const events = {
   "todo.created.v1": todoEvent,
   "todo.completed.v1": todoEvent,
-  "todo.deleted.v1": z.object({ todoId: z.uuid() }),
+  "todo.deleted.v1": z.object({ todoId: todoIdSchema }),
 
   // Account security. Written after better-auth has committed its own change (it owns
   // those writes), so, unlike product events, these are recorded just after the fact.
@@ -56,25 +68,35 @@ export const events = {
   "auth.phone_changed.v1": userEvent.extend({ change: z.enum(["added", "removed"]) }),
   /** An OAuth (MCP) client was approved for, or disconnected from, one of the user's workspaces. */
   "auth.app_connected.v1": userEvent.extend({ clientId: z.string() }),
-  "auth.app_disconnected.v1": userEvent.extend({ clientId: z.string(), organizationId: z.uuid() }),
+  "auth.app_disconnected.v1": userEvent.extend({
+    clientId: z.string(),
+    organizationId: orgIdSchema,
+  }),
   "auth.account_deleted.v1": userEvent,
 
-  "org.created.v1": z.object({ organizationId: z.uuid(), name: z.string() }),
-  "org.deleted.v1": z.object({ organizationId: z.uuid() }),
+  "org.created.v1": z.object({ organizationId: orgIdSchema, name: z.string() }),
+  "org.deleted.v1": z.object({ organizationId: orgIdSchema }),
   "org.member_added.v1": memberEvent,
   "org.member_removed.v1": memberEvent,
   "org.member_role_changed.v1": memberEvent.extend({ previousRole: z.string() }),
   "org.api_key_created.v1": z.object({
-    apiKeyId: z.uuid(),
+    apiKeyId: apiKeyIdSchema,
     name: z.string(),
     scopes: z.array(z.string()),
   }),
-  "org.api_key_revoked.v1": z.object({ apiKeyId: z.uuid(), name: z.string() }),
+  "org.api_key_revoked.v1": z.object({ apiKeyId: apiKeyIdSchema, name: z.string() }),
   // Emitted by apps/webhooks.
   /**
    * Our mail server says an address hard-bounced (or, from a feedback loop, that its
    * owner marked our mail as spam): apps/notifications never emails it again.
    */
+  /**
+   * A notification to send, written in the same transaction as the change it's about,
+   * so it can't be lost when Redis is down or be sent for a change that rolled back
+   * (security alerts). Only the notification service reads it (it validates the
+   * notification); the audit log and webhooks never copy it, since it holds addresses.
+   */
+  "notification.requested.v1": z.object({ notification: z.record(z.string(), z.unknown()) }),
   "email.feedback_received.v1": z.object({
     provider: z.enum(["stalwart"]),
     kind: z.enum(["bounce", "complaint"]),
@@ -89,21 +111,21 @@ export const events = {
     /** The Stripe event's `data.object`, as Stripe sent it. */
     object: z.record(z.string(), z.unknown()),
   }),
-  "webhook.endpoint_created.v1": z.object({ endpointId: z.uuid(), url: z.url() }),
+  "webhook.endpoint_created.v1": z.object({ endpointId: webhookEndpointIdSchema, url: z.url() }),
   "webhook.endpoint_updated.v1": z.object({
-    endpointId: z.uuid(),
+    endpointId: webhookEndpointIdSchema,
     changed: z.array(z.enum(["url", "description", "events", "enabled"])),
   }),
-  "webhook.endpoint_deleted.v1": z.object({ endpointId: z.uuid(), url: z.url() }),
-  "webhook.secret_rotated.v1": z.object({ endpointId: z.uuid() }),
+  "webhook.endpoint_deleted.v1": z.object({ endpointId: webhookEndpointIdSchema, url: z.url() }),
+  "webhook.secret_rotated.v1": z.object({ endpointId: webhookEndpointIdSchema }),
   "webhook.endpoint_disabled.v1": z.object({
-    endpointId: z.uuid(),
+    endpointId: webhookEndpointIdSchema,
     url: z.url(),
     reason: z.enum(["failing"]),
   }),
 
   "org.invitation_sent.v1": z.object({
-    organizationId: z.uuid(),
+    organizationId: orgIdSchema,
     invitationId: z.uuid(),
     email: z.email(),
     role: z.string(),
@@ -113,7 +135,12 @@ export const events = {
 export type EventName = keyof typeof events;
 export type EventPayload<N extends EventName> = z.infer<(typeof events)[N]>;
 
-export const eventNames = Object.keys(events) as [EventName, ...EventName[]];
+export const eventNames = keysOf(events);
+
+/** Events the audit log doesn't record: their payloads hold addresses, and the change they're about has its own event. */
+export const unauditedEvents: ReadonlySet<string> = new Set<EventName>([
+  "notification.requested.v1",
+]);
 
 /**
  * Events customers can receive on their webhook endpoints: product facts about their
@@ -143,8 +170,8 @@ export const eventEnvelope = z.object({
   /** Ordering/partition key, usually the aggregate id. */
   key: z.string(),
   payload: z.unknown(),
-  orgId: z.uuid().nullable(),
-  actorId: z.uuid().nullable(),
+  orgId: orgIdSchema.nullable(),
+  actorId: userIdSchema.nullable(),
   requestId: z.string().nullable(),
   occurredAt: z.iso.datetime({ offset: true }),
   /** The owning schema whose outbox the event came from. */

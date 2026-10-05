@@ -7,12 +7,12 @@ a second process shares the api's memory limit and gets the container OOM-killed
 */}}
 {{- $svc := include "stack.service" (list . .Values.reencrypt.service) | fromYaml }}
 {{- if and .Values.reencrypt.enabled $svc.enabled }}
-{{- $uid := $svc.runAsUser | default 10001 }}
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: {{ include "stack.fullname" (list . "reencrypt") }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "stack.labels" (list . "reencrypt") | nindent 4 }}
 spec:
@@ -37,8 +37,8 @@ spec:
           {{- end }}
           securityContext:
             runAsNonRoot: true
-            runAsUser: {{ $uid }}
-            runAsGroup: {{ $uid }}
+            runAsUser: 10001
+            runAsGroup: 10001
             seccompProfile:
               type: RuntimeDefault
           containers:
@@ -62,9 +62,11 @@ spec:
                   mountPath: /etc/ssl/extra
                   readOnly: true
                 {{- end }}
+                {{- include "stack.dbCaMount" (list $ $svc) | nindent 16 }}
           volumes:
             - name: tmp
               emptyDir: {}
+            {{- include "stack.dbCaVolume" (list $ $svc) | nindent 12 }}
             {{- with $svc.caBundle }}
             - name: ca-bundle
               secret:

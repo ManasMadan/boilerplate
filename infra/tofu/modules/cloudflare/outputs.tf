@@ -1,5 +1,6 @@
 output "zone_id" {
-  value = local.zone_id
+  description = "The Cloudflare zone the records are in."
+  value       = local.zone_id
 }
 
 output "dns_api_token" {

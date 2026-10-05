@@ -1,6 +1,7 @@
 ---
 name: swap-notification-templates
-description: Load notification templates from a database or CMS instead of code (editable emails and push copy, per-tenant branding). Use when the user wants non-developers to edit notification content or brand it per workspace.
+description: Load notification templates from a database or CMS instead of code (editable emails and push copy, per-tenant branding). Use when the user wants non-developers to edit notification content or brand it per workspace. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the notification template source
@@ -31,3 +32,11 @@ description: Load notification templates from a database or CMS instead of code 
 `apps/notifications/test/notifications.integration.test.ts` sends every channel through
 Mailpit and the fake push and SMS servers; add cases for a stored template and for the
 fallback. `packages/email/src/render.test.tsx` covers the code templates.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

@@ -8,7 +8,7 @@ mock_provider "cloudflare" {
   }
   override_data {
     target = data.cloudflare_api_token_permission_groups_list.this
-    values = { result = [{ id = "perm-id", name = "permission", scopes = [] }] }
+    values = { result = [{ id = "perm-id", name = "permission", category = "Zone", is_selectable = true, scopes = [] }] }
   }
   mock_resource "cloudflare_api_token" {
     defaults = { id = "token-id", value = "token-value" }
@@ -31,6 +31,10 @@ run "hardens_the_zone" {
   assert {
     condition     = cloudflare_zone_setting.this["ssl"].value == "strict" && cloudflare_zone_setting.this["always_use_https"].value == "on"
     error_message = "the zone must use strict TLS and HTTPS only"
+  }
+  assert {
+    condition     = cloudflare_authenticated_origin_pulls_settings.this.enabled
+    error_message = "Cloudflare must present its client certificate, which the gateway requires"
   }
   assert {
     condition     = length(cloudflare_ruleset.managed_waf) == 0

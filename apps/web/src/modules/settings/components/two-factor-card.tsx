@@ -36,6 +36,26 @@ export function TwoFactorCard() {
   const [setup, setSetup] = useState<Setup | null>(null);
   const enabled = session?.user.twoFactorEnabled === true;
 
+  async function disable(password: string) {
+    const { error } = await authClient.twoFactor.disable({ password });
+    if (error) {
+      return errorMessage(error);
+    }
+    await refetch();
+    return undefined;
+  }
+
+  async function enable(password: string) {
+    // The authenticator (TOTP) method, which needs a scan-and-confirm step: its answer is
+    // always the secret and backup codes.
+    const { data, error } = await authClient.twoFactor.enable({ password, method: "totp" });
+    if (error) {
+      return errorMessage(error);
+    }
+    setSetup(data as Setup);
+    return undefined;
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -54,30 +74,12 @@ export function TwoFactorCard() {
               await refetch();
             }}
           />
-        ) : enabled ? (
-          <PasswordConfirm
-            label={t("confirmPassword")}
-            submit={t("disable")}
-            variant="destructive"
-            onConfirm={async (password) => {
-              const { error } = await authClient.twoFactor.disable({ password });
-              if (error) return errorMessage(error);
-              await refetch();
-              return undefined;
-            }}
-          />
         ) : (
           <PasswordConfirm
             label={t("confirmPassword")}
-            submit={t("enable")}
-            onConfirm={async (password) => {
-              const { data, error } = await authClient.twoFactor.enable({ password });
-              if (error) return errorMessage(error);
-              // Only the authenticator (TOTP) method needs a scan-and-confirm step.
-              if (data.method === "totp") setSetup(data);
-              else await refetch();
-              return undefined;
-            }}
+            submit={enabled ? t("disable") : t("enable")}
+            variant={enabled ? "destructive" : "default"}
+            onConfirm={enabled ? disable : enable}
           />
         )}
       </CardContent>

@@ -30,6 +30,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: {{ $cluster }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -37,6 +38,11 @@ spec:
   imageName: {{ $pg.imageName }}
   enableSuperuserAccess: false
   postgresql:
+    # TLS only: CloudNativePG serves it with its own certificate authority (the
+    # <cluster>-ca Secret, which the services verify against), and a connection without
+    # it is refused.
+    pg_hba:
+      - hostnossl all all all reject
     parameters:
       {{- range $key, $value := $pg.parameters }}
       {{ $key }}: {{ $value | quote }}
@@ -115,6 +121,7 @@ apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
 metadata:
   name: {{ include "data.objectStore" . }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -141,6 +148,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
   name: {{ $cluster }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:

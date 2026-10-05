@@ -1,5 +1,7 @@
 "use client";
 
+import { usePasskeysQuery } from "@repo/client/auth/passkeys";
+import { authKeys } from "@repo/client/auth/query";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -9,7 +11,7 @@ import {
   CardTitle,
 } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,29 +19,23 @@ import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "@/modules/auth";
 import { needsRecentSignIn, ReauthPrompt } from "./reauth-prompt";
 
-const PASSKEYS_KEY = ["auth", "passkeys"] as const;
-
 export function PasskeysCard() {
   const t = useTranslations("settings.security.passkeys");
   const format = useFormatter();
   const errorMessage = useAuthErrorMessage();
   const queryClient = useQueryClient();
-  const passkeys = useQuery({
-    queryKey: PASSKEYS_KEY,
-    queryFn: async () => {
-      const { data, error } = await authClient.passkey.listUserPasskeys();
-      if (error) throw error;
-      return data;
-    },
-  });
+  const passkeys = usePasskeysQuery(authClient);
   const [staleSession, setStaleSession] = useState(false);
-  const refresh = () => queryClient.invalidateQueries({ queryKey: PASSKEYS_KEY });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: authKeys.passkeys() });
 
   async function add() {
     const result = await authClient.passkey.addPasskey();
     if (result?.error) {
-      if (needsRecentSignIn(result.error)) setStaleSession(true);
-      else toast.error(errorMessage(result.error));
+      if (needsRecentSignIn(result.error)) {
+        setStaleSession(true);
+      } else {
+        toast.error(errorMessage(result.error));
+      }
       return;
     }
     // The list is up to date by the time the confirmation shows.
@@ -49,7 +45,9 @@ export function PasskeysCard() {
 
   async function remove(id: string) {
     const { error } = await authClient.passkey.deletePasskey({ id });
-    if (error) toast.error(errorMessage(error));
+    if (error) {
+      toast.error(errorMessage(error));
+    }
     await refresh();
   }
 
@@ -61,9 +59,11 @@ export function PasskeysCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {staleSession ? <ReauthPrompt /> : null}
-        {passkeys.isPending ? (
-          <Skeleton className="h-10" />
-        ) : passkeys.data?.length ? (
+        {passkeys.isPending ? <Skeleton className="h-10" /> : null}
+        {!passkeys.isPending && !passkeys.data?.length ? (
+          <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        ) : null}
+        {passkeys.data?.length ? (
           <ul className="flex flex-col divide-y">
             {passkeys.data.map((passkey) => (
               <li key={passkey.id} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -81,9 +81,7 @@ export function PasskeysCard() {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        )}
+        ) : null}
         <Button variant="outline" className="self-start" onClick={add}>
           {t("add")}
         </Button>

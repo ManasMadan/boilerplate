@@ -40,7 +40,8 @@ export function SecretDialog({
           <Button
             variant="outline"
             onClick={async () => {
-              if (secret) await navigator.clipboard.writeText(secret);
+              // Only reachable while open, that is with a secret to show.
+              await navigator.clipboard.writeText(String(secret));
               setCopied(true);
             }}
           >

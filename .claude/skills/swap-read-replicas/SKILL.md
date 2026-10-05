@@ -1,6 +1,7 @@
 ---
 name: swap-read-replicas
-description: Send read queries to Postgres read replicas. Use when the primary database is saturated by reads, or the user asks about read replicas or splitting reads and writes.
+description: Send read queries to Postgres read replicas. Use when the user decides the primary needs relief from reads, or asks about read replicas or splitting reads and writes. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Add read replicas
@@ -34,3 +35,11 @@ The Python service (`apps/ai/app/db/session.py`) has one engine; it's separate.
 `packages/db/test/security.test.ts` (row-level security and privileges). Integration
 suites run with `read` equal to `write`; add a test that points `read` at a separate
 client and checks a repository's read-after-write paths use `write`.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

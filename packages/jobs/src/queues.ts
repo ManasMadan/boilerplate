@@ -15,10 +15,25 @@
  * Python consumers (apps/ai) read the same queues; their Pydantic models are generated
  * from these schemas (see docs/jobs-and-events.md).
  */
-import { type EventName, eventEnvelope, webhookEvents } from "@repo/contracts/events";
+import {
+  type EventName,
+  eventEnvelope,
+  unauditedEvents,
+  webhookEvents,
+} from "@repo/contracts/events";
+import {
+  documentIdSchema,
+  fileIdSchema,
+  orgIdSchema,
+  todoIdSchema,
+  userIdSchema,
+  webhookDeliveryIdSchema,
+  webhookEndpointIdSchema,
+} from "@repo/contracts/ids";
+import { DAY_S, HOUR_MS, HOUR_S, MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import { locales } from "@repo/i18n";
 import type { JobsOptions } from "bullmq";
-import { z } from "zod";
+import * as z from "zod";
 
 /**
  * BullMQ key prefix for a queue: the queue name in braces, i.e. a Redis Cluster hash
@@ -49,7 +64,7 @@ const phone = z.string().regex(/^\+[1-9]\d{6,14}$/);
  * Account changes the owner is told about (by email, and by text when they have a
  * verified phone), so a takeover can't happen silently.
  */
-export const SECURITY_EVENTS = [
+const SECURITY_EVENTS = [
   "email-changed",
   "password-changed",
   "password-reset",
@@ -108,14 +123,34 @@ export const notificationPayload = z.discriminatedUnion("template", [
     }),
   }),
   z.object({
+    // Someone created a way into the workspace that outlives their session: its owners
+    // and admins hear about it, so a stolen session can't leave one behind unseen.
+    template: z.literal("workspace.access-created"),
+    to: z.object({
+      orgId: orgIdSchema,
+      roles: z.array(z.enum(["owner", "admin", "member"])).min(1),
+    }),
+    data: z.object({
+      kind: z.enum(["api-key", "webhook-endpoint"]),
+      /** The key's name or the endpoint's URL. */
+      label: z.string(),
+    }),
+  }),
+  z.object({
     template: z.literal("webhooks.endpoint-disabled"),
     // Everyone in the organization with one of these roles.
-    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
-    data: z.object({ endpointId: z.uuid(), url: z.string() }),
+    to: z.object({
+      orgId: orgIdSchema,
+      roles: z.array(z.enum(["owner", "admin", "member"])).min(1),
+    }),
+    data: z.object({ endpointId: webhookEndpointIdSchema, url: z.string() }),
   }),
   z.object({
     template: z.literal("billing.payment-failed"),
-    to: z.object({ orgId: z.uuid(), roles: z.array(z.enum(["owner", "admin", "member"])).min(1) }),
+    to: z.object({
+      orgId: orgIdSchema,
+      roles: z.array(z.enum(["owner", "admin", "member"])).min(1),
+    }),
     data: z.object({
       organizationName: z.string(),
       /** Minor units (cents), and an ISO 4217 code. */
@@ -126,8 +161,8 @@ export const notificationPayload = z.discriminatedUnion("template", [
   }),
   z.object({
     template: z.literal("todo.reminder"),
-    to: z.object({ userId: z.string() }),
-    data: z.object({ todoId: z.string(), title: z.string() }),
+    to: z.object({ userId: userIdSchema }),
+    data: z.object({ todoId: todoIdSchema, title: z.string() }),
   }),
 ]);
 export type NotificationPayload = z.infer<typeof notificationPayload>;
@@ -136,35 +171,40 @@ export type NotificationPayload = z.infer<typeof notificationPayload>;
  * One channel of a notification, delayed until the recipient's quiet hours end. Keeps
  * the original delivery key, so it still can't be sent twice.
  */
-export const deferredDelivery = z.object({
+const deferredDelivery = z.object({
   payload: notificationPayload,
   // Only push waits for quiet hours today: texts are security messages, which never wait.
   channel: z.enum(["push"]),
-  userId: z.uuid(),
+  userId: userIdSchema,
   key: z.string(),
 });
 export type NotificationTemplate = NotificationPayload["template"];
-
-const DAY = 24 * 60 * 60;
 
 /**
  * When failed webhook deliveries are retried, after the first attempt (Standard Webhooks'
  * recommended schedule): 5s, 5m, 30m, 2h, 5h, 10h, 10h.
  */
 export const WEBHOOK_RETRY_DELAYS_MS = [
-  5_000,
-  5 * 60_000,
-  30 * 60_000,
-  2 * 3_600_000,
-  5 * 3_600_000,
-  10 * 3_600_000,
-  10 * 3_600_000,
+  5 * SECOND_MS,
+  5 * MINUTE_MS,
+  30 * MINUTE_MS,
+  2 * HOUR_MS,
+  5 * HOUR_MS,
+  10 * HOUR_MS,
+  10 * HOUR_MS,
 ];
 
-/** Retries with exponential backoff; the defaults every queue starts from. */
-const aiDocumentJob = z.object({ documentId: z.uuid(), orgId: z.uuid() });
+const aiDocumentJob = z.object({ documentId: documentIdSchema, orgId: orgIdSchema });
 
-const retrying: JobsOptions = { attempts: 5, backoff: { type: "exponential", delay: 2_000 } };
+/**
+ * Retries with exponential backoff; the defaults every queue starts from. The jitter
+ * spreads retries out, so jobs that failed together (a provider's outage) don't all come
+ * back at the same moment.
+ */
+const retrying: JobsOptions = {
+  attempts: 5,
+  backoff: { type: "exponential", delay: 2_000, jitter: 0.5 },
+};
 
 export const queues = {
   /**
@@ -174,7 +214,7 @@ export const queues = {
    */
   "notifications-critical": {
     jobs: { send: notificationPayload, deferred: deferredDelivery },
-    options: { ...retrying, removeOnComplete: true, removeOnFail: { age: 60 * 60 } },
+    options: { ...retrying, removeOnComplete: true, removeOnFail: { age: HOUR_S } },
   },
   /** Everything else users are notified about: reminders, digests, product updates. */
   "notifications-bulk": {
@@ -184,12 +224,12 @@ export const queues = {
       /** Hourly: queues a `digest` for each user whose digest time has come today. */
       digests: z.object({}),
       /** One user's daily digest email, for one local date (YYYY-MM-DD). */
-      digest: z.object({ userId: z.uuid(), date: z.iso.date() }),
+      digest: z.object({ userId: userIdSchema, date: z.iso.date() }),
     },
     options: {
       ...retrying,
-      removeOnComplete: { age: DAY, count: 10_000 },
-      removeOnFail: { age: 7 * DAY },
+      removeOnComplete: { age: DAY_S, count: 10_000 },
+      removeOnFail: { age: 7 * DAY_S },
     },
   },
   /**
@@ -200,16 +240,16 @@ export const queues = {
    */
   "events-audit": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   "events-webhooks": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   /** Domain events that notify someone (apps/notifications maps them to templates). */
   "events-notifications": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   /** Live UI updates (apps/worker → Redis pub/sub → the api's SSE streams); short-lived. */
   "events-realtime": {
@@ -218,12 +258,12 @@ export const queues = {
       attempts: 3,
       backoff: { type: "fixed", delay: 1_000 },
       removeOnComplete: true,
-      removeOnFail: { age: DAY },
+      removeOnFail: { age: DAY_S },
     },
   },
   "events-billing": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   /**
    * Outgoing customer webhooks (apps/webhooks). One job per delivery (jobId = delivery
@@ -232,17 +272,17 @@ export const queues = {
    */
   "webhook-deliveries": {
     jobs: {
-      deliver: z.object({ deliveryId: z.uuid(), orgId: z.uuid() }),
+      deliver: z.object({ deliveryId: webhookDeliveryIdSchema, orgId: orgIdSchema }),
       /** Send an existing delivery again (admin replay from the delivery log). */
-      redeliver: z.object({ deliveryId: z.uuid(), orgId: z.uuid() }),
+      redeliver: z.object({ deliveryId: webhookDeliveryIdSchema, orgId: orgIdSchema }),
       /** A test event to one endpoint, from its settings page. */
-      "send-test": z.object({ endpointId: z.uuid(), orgId: z.uuid() }),
+      "send-test": z.object({ endpointId: webhookEndpointIdSchema, orgId: orgIdSchema }),
     },
     options: {
       attempts: 8,
       backoff: { type: "webhook" },
-      removeOnComplete: { age: DAY },
-      removeOnFail: { age: 7 * DAY },
+      removeOnComplete: { age: DAY_S },
+      removeOnFail: { age: 7 * DAY_S },
     },
   },
   /** Scheduled housekeeping in apps/worker (retention, partitions). */
@@ -251,8 +291,8 @@ export const queues = {
    * id is the file id, so completing an upload twice checks it once.
    */
   files: {
-    jobs: { process: z.object({ fileId: z.uuid() }) },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
+    jobs: { process: z.object({ fileId: fileIdSchema }) },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
   },
   /**
    * Indexing a document for the assistant (apps/ai produces and consumes it; the payload
@@ -265,7 +305,7 @@ export const queues = {
       /** Summarize an indexed document (queued after indexing when a model is configured). */
       summarize: aiDocumentJob,
     },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
   },
   maintenance: {
     jobs: {
@@ -276,9 +316,9 @@ export const queues = {
     },
     options: {
       attempts: 3,
-      backoff: { type: "exponential", delay: 60_000 },
+      backoff: { type: "exponential", delay: MINUTE_MS, jitter: 0.5 },
       removeOnComplete: { count: 100 },
-      removeOnFail: { age: 30 * DAY },
+      removeOnFail: { age: 30 * DAY_S },
     },
   },
 } as const satisfies Record<string, { jobs: Record<string, z.ZodType>; options: JobsOptions }>;
@@ -290,6 +330,7 @@ export const notificationQueue = {
   "org.invitation": "notifications-critical",
   "auth.security-alert": "notifications-critical",
   "webhooks.endpoint-disabled": "notifications-critical",
+  "workspace.access-created": "notifications-critical",
   "billing.payment-failed": "notifications-critical",
   "todo.reminder": "notifications-bulk",
 } as const satisfies Record<NotificationTemplate, keyof typeof queues>;
@@ -306,18 +347,38 @@ export type JobPayload<Q extends QueueName, J extends JobName<Q>> = z.infer<
  * filter accepts it. A new consumer gets a queue above and a line here; it sees events
  * from the moment it's added (older ones can be replayed from the outbox's retention).
  */
-const customerFacing: ReadonlySet<string> = new Set<EventName>(webhookEvents);
 export const eventSubscribers = {
-  "events-audit": () => true,
-  "events-webhooks": (name: string) => customerFacing.has(name),
+  "events-audit": (name: string) => !unauditedEvents.has(name),
+  "events-webhooks": only(webhookEvents),
   // Stripe's events, and membership changes (paid plans are billed per seat).
-  "events-billing": (name: string) =>
-    name === "stripe.event_received.v1" ||
-    name === "org.member_added.v1" ||
-    name === "org.member_removed.v1",
+  "events-billing": only([
+    "stripe.event_received.v1",
+    "org.member_added.v1",
+    "org.member_removed.v1",
+  ]),
   // Events that notify someone, and email feedback (bounces, complaints) to suppress.
-  "events-notifications": (name: string) =>
-    name === "webhook.endpoint_disabled.v1" || name === "email.feedback_received.v1",
+  "events-notifications": only([
+    "webhook.endpoint_disabled.v1",
+    "org.api_key_created.v1",
+    "webhook.endpoint_created.v1",
+    "notification.requested.v1",
+    "email.feedback_received.v1",
+  ]),
   "events-realtime": (name: string) => name.startsWith("todo."),
 } as const satisfies Partial<Record<QueueName, (name: string) => boolean>>;
 export type EventQueue = keyof typeof eventSubscribers;
+
+/**
+ * A filter passing exactly these events. It narrows the name, so a consumer that checks
+ * it can only handle events routed to it: handling `todo.completed.v2` while the route
+ * still names v1 fails to compile instead of never arriving.
+ */
+function only<const Name extends EventName>(names: readonly Name[]) {
+  const routed: ReadonlySet<string> = new Set(names);
+  return (name: string): name is Name => routed.has(name);
+}
+
+/** The event names a queue's filter passes, when it lists them. */
+type Filter<Name extends string> = (name: string) => name is Name;
+export type RoutedEvent<Q extends EventQueue> =
+  (typeof eventSubscribers)[Q] extends Filter<infer Name> ? Name : string;

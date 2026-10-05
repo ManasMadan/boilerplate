@@ -21,8 +21,8 @@ export const newUser = (): User => ({
   password: `pw-${randomUUID()}`,
 });
 
-/** The 6-digit code in the newest email to `to`. */
-async function nextCode(to: string, after = new Date(0)) {
+/** The 6-digit code in the newest email to `to` sent after `after`. */
+export async function nextCode(to: string, after = new Date(0)) {
   let code: string | undefined;
   await expect
     .poll(
@@ -31,7 +31,9 @@ async function nextCode(to: string, after = new Date(0)) {
           `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`,
         ).then((r) => r.json() as Promise<{ messages?: { ID: string; Created: string }[] }>);
         const latest = search.messages?.find((m) => new Date(m.Created) > after);
-        if (!latest) return false;
+        if (!latest) {
+          return false;
+        }
         const message = await fetch(`${MAILPIT}/api/v1/message/${latest.ID}`).then(
           (r) => r.json() as Promise<{ Text: string }>,
         );
@@ -56,4 +58,23 @@ export async function signUp(page: Page, user: User = newUser()) {
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
   return user;
+}
+
+/**
+ * A passkey authenticator built into the browser (Chrome's virtual one), which answers
+ * every prompt as if the person had confirmed it.
+ */
+export async function addPasskeyAuthenticator(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: {
+      protocol: "ctap2",
+      transport: "internal",
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
 }

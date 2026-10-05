@@ -41,6 +41,10 @@ export function WorkspaceSwitcher() {
   // Mounted from the first open on, so closing still animates.
   const [opened, setOpened] = useState(false);
   const activeId = active.data?.id;
+  let activeName = "…";
+  if (active.data) {
+    activeName = isPersonal(active.data) ? t("personal") : active.data.name;
+  }
 
   return (
     <>
@@ -50,9 +54,7 @@ export function WorkspaceSwitcher() {
             <Button variant="ghost" size="sm" className="max-w-48 gap-1" aria-label={t("label")} />
           }
         >
-          <span className="truncate">
-            {active.data ? (isPersonal(active.data) ? t("personal") : active.data.name) : "…"}
-          </span>
+          <span className="truncate">{activeName}</span>
           <ChevronsUpDown className="size-3.5 opacity-60" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-56">
@@ -60,9 +62,10 @@ export function WorkspaceSwitcher() {
             <DropdownMenuLabel>{t("label")}</DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={activeId ?? ""}
-              onValueChange={(id) => {
-                if (id && id !== activeId)
+              onValueChange={(id: string) => {
+                if (id && id !== activeId) {
                   switchTo(id).catch((error: unknown) => toast.error(errorMessage(error)));
+                }
               }}
             >
               {(workspaces.data ?? []).map((workspace) => (

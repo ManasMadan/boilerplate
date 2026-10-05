@@ -13,7 +13,8 @@
       "required": [
         "type"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "TodosChanged"
     },
     {
       "type": "object",
@@ -26,7 +27,8 @@
       "required": [
         "type"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "NotificationsChanged"
     },
     {
       "type": "object",
@@ -39,7 +41,8 @@
       "required": [
         "type"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "DocumentsChanged"
     },
     {
       "type": "object",
@@ -52,7 +55,8 @@
       "required": [
         "type"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "FilesChanged"
     }
   ]
 }

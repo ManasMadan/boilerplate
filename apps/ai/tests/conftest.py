@@ -3,11 +3,10 @@
 from collections.abc import Iterator
 
 import pytest
-import redis
 from fastapi.testclient import TestClient
 
 from app.settings import get_settings
-from tests.support import ENV, REDIS_URL
+from tests.support import ENV, redis_client
 
 
 @pytest.fixture
@@ -21,7 +20,7 @@ def client(monkeypatch: pytest.MonkeyPatch, extra_env: dict[str, str]) -> Iterat
     for key, value in {**ENV, **extra_env}.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
-    redis.Redis.from_url(REDIS_URL).flushdb()
+    redis_client().flushdb()  # pyright: ignore[reportUnknownMemberType]  # untyped options
     from app.main import app
 
     with TestClient(app) as test_client:

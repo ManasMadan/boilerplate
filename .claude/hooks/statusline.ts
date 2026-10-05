@@ -4,41 +4,46 @@
  * git call and a TCP connect per service (localhost refuses instantly when nothing
  * listens). It never calls Docker, which can take seconds to answer.
  */
-import { connect } from "node:net";
+import { ENV_EXAMPLE_PATH, ENV_PATH, listening, readEnv, runMain } from "../../scripts/lib";
 
-// The default host ports from docker-compose.yml. Overrides in .env are not read here.
-const services = [
-  { name: "pg", port: 55432 },
-  { name: "valkey", port: 56379 },
-  { name: "mail", port: 51025 },
-];
-
-const input = (await Bun.stdin.json().catch(() => ({}))) as {
-  workspace?: { project_dir?: string };
-};
-const cwd = input.workspace?.project_dir ?? process.cwd();
-
-function listening(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = connect({ host: "127.0.0.1", port, timeout: 150 });
-    const done = (up: boolean) => {
-      socket.destroy();
-      resolve(up);
-    };
-    socket.once("connect", () => done(true));
-    socket.once("error", () => done(false));
-    socket.once("timeout", () => done(false));
-  });
+/** The core services' host ports: .env's, else .env.example's (docker-compose.yml's). */
+export function servicePorts(env = readEnv(ENV_PATH), example = readEnv(ENV_EXAMPLE_PATH)) {
+  const port = (key: string) => Number(env.get(key) ?? example.get(key));
+  return [
+    { name: "pg", port: port("POSTGRES_PORT") },
+    { name: "valkey", port: port("VALKEY_PORT") },
+    { name: "mail", port: port("MAILPIT_SMTP_PORT") },
+  ];
 }
 
-const git = Bun.spawnSync(["git", "status", "--porcelain=v1", "--branch"], { cwd });
-const [head = "", ...changes] = git.stdout.toString().trim().split("\n");
-const branch = head.replace(/^## /, "").split("...")[0] || "no git";
-const dirty = changes.filter(Boolean).length;
+/** The status line for the session `stdin` describes (JSON; anything else is ignored). */
+export async function statusline(
+  stdin: { json(): Promise<unknown> } = Bun.stdin,
+  services = servicePorts(),
+): Promise<string> {
+  const input = (await stdin.json().catch(() => ({}))) as {
+    workspace?: { project_dir?: string };
+  };
+  const cwd = input.workspace?.project_dir ?? process.cwd();
 
-const up = await Promise.all(services.map((service) => listening(service.port)));
-const status = services
-  .map((service, index) => `${service.name} ${up[index] ? "up" : "down"}`)
-  .join(" ");
+  const git = Bun.spawnSync(["git", "status", "--porcelain=v1", "--branch"], { cwd });
+  const [head = "", ...changes] = git.stdout.toString().trim().split("\n");
+  const branch = head.replace(/^## /, "").split("...")[0] || "no git";
+  const dirty = changes.filter(Boolean).length;
 
-process.stdout.write(`${branch}${dirty ? ` +${dirty}` : ""} | ${status}`);
+  const up = await Promise.all(services.map((service) => listening(service.port, 150)));
+  const status = services
+    .map((service, index) => `${service.name} ${up[index] ? "up" : "down"}`)
+    .join(" ");
+  return `${branch}${dirty ? ` +${dirty}` : ""} | ${status}`;
+}
+
+/** Prints the status line (Claude Code's statusLine command). */
+export async function printStatusline(
+  write: (text: string) => unknown = process.stdout.write.bind(process.stdout),
+  stdin?: Parameters<typeof statusline>[0],
+) {
+  write(await statusline(stdin));
+}
+
+await runMain(import.meta, printStatusline);

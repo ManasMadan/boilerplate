@@ -12,8 +12,14 @@
  * twice, and consumers use it as the idempotency key towards providers. BullMQ's own
  * auto-increment ids restart after a Redis flush and must never be used for that.
  */
-import { type ConnectionOptions, type JobsOptions, Queue } from "bullmq";
-import { z } from "zod";
+import {
+  type ConnectionOptions,
+  type Job,
+  type JobsOptions,
+  Queue,
+  UnrecoverableError,
+} from "bullmq";
+import * as z from "zod";
 import {
   type JobMeta,
   type JobName,
@@ -25,18 +31,61 @@ import {
 } from "./queues";
 
 /**
- * The payload schema for one job. TypeScript cannot relate an indexed lookup on a
- * generic key back to the generic payload type (a known limit with correlated
- * unions), so the narrowing happens once, here, where the key is checked at runtime.
+ * A job as BullMQ hands it back, to a worker or from a queue's lists. Its data stays
+ * `unknown` until `parseJob` checks it, and its name is any string until `jobName` does:
+ * during a rolling deploy, a newer version may have written it.
  */
+export type UncheckedJob = Job<unknown, unknown>;
+/** A queue whose jobs are read back unchecked (see `UncheckedJob`). */
+export type UncheckedQueue = Queue<unknown, unknown>;
+
+/** What one of a queue's jobs is stored as (`createProducer` writes it). */
+type JobData<Q extends QueueName, J extends JobName<Q> = JobName<Q>> = {
+  meta: JobMeta;
+  payload: JobPayload<Q, J>;
+};
+/**
+ * A queue for adding jobs to directly, where a producer can't (a job scheduler's
+ * template): names and data are checked against the contract at compile time.
+ */
+export type QueueOf<Q extends QueueName> = Queue<JobData<Q>, unknown, JobName<Q>>;
+
+/** Whether a queue has a job by this name. */
+export function isJobName<Q extends QueueName>(queue: Q, name: string): name is JobName<Q> {
+  return Object.hasOwn(queues[queue].jobs, name);
+}
+
+/** A job's name, checked against its queue's contract. */
+export function jobName<Q extends QueueName>(queue: Q, name: string): JobName<Q> {
+  if (!isJobName(queue, name)) {
+    throw new Error(`Unknown job "${name}" on queue "${queue}"`);
+  }
+  return name;
+}
+
+/** A job's id. Every job BullMQ hands back has one (it's in the job's Redis key). */
+export function idOf(job: Pick<Job, "id" | "name">): string {
+  if (job.id === undefined) {
+    throw new Error(`Job "${job.name}" has no id`);
+  }
+  return job.id;
+}
+
+/**
+ * Every job's schema, typed per queue and job. TypeScript can't relate a lookup on generic
+ * keys in `queues` back to the payload type (a known limit with correlated unions), but
+ * it can through a mapped type like this one, and `queues` checks against it.
+ */
+const schemas: { [Q in QueueName]: { jobs: { [J in JobName<Q>]: z.ZodType<JobPayload<Q, J>> } } } =
+  queues;
+
+/** The payload schema for one job. */
 function schemaFor<Q extends QueueName, J extends JobName<Q>>(
   queue: Q,
   job: J,
 ): z.ZodType<JobPayload<Q, J>> {
-  const jobs: Record<string, z.ZodType> = queues[queue].jobs;
-  const schema = jobs[job];
-  if (!schema) throw new Error(`Unknown job "${job}" on queue "${queue}"`);
-  return schema as z.ZodType<JobPayload<Q, J>>;
+  jobName(queue, job);
+  return schemas[queue].jobs[job];
 }
 
 /** BullMQ builds Redis keys from job ids with ":" as separator, so ids can't contain one. */
@@ -48,7 +97,7 @@ function checkJobId(jobId: string) {
 }
 
 export function createProducer<Q extends QueueName>(queue: Q, connection: ConnectionOptions) {
-  const bull = new Queue(queue, {
+  const bull: UncheckedQueue = new Queue(queue, {
     connection,
     prefix: queuePrefix(queue),
     defaultJobOptions: queues[queue].options,
@@ -98,6 +147,11 @@ export function parseJob<Q extends QueueName, J extends JobName<Q>>(
   job: J,
   data: unknown,
 ): { meta: JobMeta; payload: JobPayload<Q, J> } {
-  const envelope = z.object({ meta: jobMeta, payload: z.unknown() }).parse(data);
-  return { meta: envelope.meta, payload: schemaFor(queue, job).parse(envelope.payload) };
+  const parsed = z.object({ meta: jobMeta, payload: schemaFor(queue, job) }).safeParse(data);
+  // A payload that doesn't match its schema never will: retrying it only reaches the
+  // failed set later, with full backoff, so the job fails for good at once.
+  if (!parsed.success) {
+    throw new UnrecoverableError(`invalid ${queue}/${job} job: ${z.prettifyError(parsed.error)}`);
+  }
+  return parsed.data;
 }

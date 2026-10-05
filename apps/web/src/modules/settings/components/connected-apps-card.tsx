@@ -1,6 +1,9 @@
 "use client";
 
-import { useConnectedAppsQuery, useDisconnectAppMutation } from "@repo/client/api/apps/connected";
+import { useApiErrorMessage } from "@repo/client";
+import { useDisconnectAppMutation } from "@repo/client/api/apps/disconnect";
+import { useConnectedAppsQuery } from "@repo/client/api/apps/list";
+import { MINUTE_MS } from "@repo/contracts/time";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -12,7 +15,6 @@ import {
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /**
  * Apps (MCP clients) the user connected over OAuth, one row per app and workspace.
@@ -22,7 +24,7 @@ export function ConnectedAppsCard() {
   const t = useTranslations("settings.security.apps");
   const format = useFormatter();
   // An explicit, ticking "now" keeps server and client renders in agreement.
-  const now = useNow({ updateInterval: 60_000 });
+  const now = useNow({ updateInterval: MINUTE_MS });
   const errorMessage = useApiErrorMessage();
   const apps = useConnectedAppsQuery();
   const disconnect = useDisconnectAppMutation();
@@ -34,9 +36,11 @@ export function ConnectedAppsCard() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent>
-        {apps.isPending ? (
-          <Skeleton className="h-10" />
-        ) : apps.data?.length ? (
+        {apps.isPending ? <Skeleton className="h-10" /> : null}
+        {!apps.isPending && !apps.data?.length ? (
+          <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        ) : null}
+        {apps.data?.length ? (
           <ul className="flex flex-col divide-y">
             {apps.data.map((app) => {
               const name = app.name ?? t("unnamed");
@@ -59,13 +63,12 @@ export function ConnectedAppsCard() {
                     size="sm"
                     disabled={disconnect.isPending}
                     aria-label={`${t("disconnect")}: ${name}`}
+                    // A promise, not mutate's callbacks: those are dropped once the card
+                    // unmounts, as it does when a lost session sends the user to sign in.
                     onClick={() =>
-                      disconnect.mutate(
-                        { id: app.id },
-                        {
-                          onSuccess: () => toast.success(t("disconnected", { name })),
-                          onError: (error) => toast.error(errorMessage(error)),
-                        },
+                      disconnect.mutateAsync({ id: app.id }).then(
+                        () => toast.success(t("disconnected", { name })),
+                        (error: unknown) => toast.error(errorMessage(error)),
                       )
                     }
                   >
@@ -75,9 +78,7 @@ export function ConnectedAppsCard() {
               );
             })}
           </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

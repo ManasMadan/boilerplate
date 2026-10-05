@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "dev": "email dev --dir src/previews --port 3030",
+    "dev": "bun --env-file=../../.env run previews",
+    "previews": "email dev --dir src/previews --port \"$EMAIL_PREVIEW_PORT\"",
     "check-types": "tsc",
     "test": "vitest run",
     "coverage": "vitest run --coverage"

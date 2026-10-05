@@ -34,3 +34,7 @@ MCP server (`src/mcp/`), and `/docs` outside production.
   plain Fastify handlers and do their own auth and validation.
 - The procedure pipeline has no rate limiter: each service adds `createRateLimiter`
   where it is needed.
+- Import injected classes with a plain `import`, never `import type`: Nest resolves
+  constructor parameters from decorator metadata, which needs the class at runtime, and
+  `import type` erases it (the service then fails at boot with an unresolved dependency).
+  That's why Biome's `useImportType` is off for the Nest apps (`biome.jsonc`).

@@ -27,18 +27,18 @@ export function SiteHeader() {
         <nav className="flex items-center gap-2">
           <LanguageSwitcher />
           <ThemeToggle />
-          {isPending && !session ? (
-            <Skeleton className="h-8 w-20" />
-          ) : session ? (
+          {isPending && !session ? <Skeleton className="h-8 w-20" /> : null}
+          {session ? (
             <>
               <NotificationBell />
               <UserMenu user={session.user} />
             </>
-          ) : (
+          ) : null}
+          {!isPending && !session ? (
             <Link href="/sign-in" className={buttonVariants({ size: "sm" })}>
               {t("signIn")}
             </Link>
-          )}
+          ) : null}
         </nav>
       </div>
     </header>

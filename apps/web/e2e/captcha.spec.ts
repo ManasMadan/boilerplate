@@ -1,9 +1,11 @@
-import { expect, mailbox, newUser, test } from "./support";
+import { BASE_URL, expect, mailbox, newUser, test } from "./support";
 
 // Runs when the API has Turnstile configured. With Cloudflare's always-pass test keys
 // (see .env.example) it checks the real widget and token flow end to end; it needs
 // internet access to challenges.cloudflare.com.
 test.describe("captcha", () => {
+  test.use({ realTurnstile: true });
+
   test.beforeEach(async ({ request }) => {
     const info = await (await request.post("/rpc/system/info", { data: { json: {} } })).json();
     test.skip(
@@ -49,7 +51,7 @@ test.describe("captcha", () => {
     const user = newUser();
     const response = await request.post("/api/auth/sign-up/email", {
       data: user,
-      headers: { origin: process.env.E2E_BASE_URL ?? "http://localhost:3000" },
+      headers: { origin: BASE_URL },
     });
     expect(response.status()).toBe(400);
   });

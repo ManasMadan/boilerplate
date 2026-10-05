@@ -4,6 +4,11 @@
  * Each test (and each extra "device") gets its own client IP through X-Forwarded-For, so
  * the per-IP auth rate limits never make parallel tests fail each other. This works
  * locally because every hop is on loopback, which the API trusts (TRUSTED_PROXIES).
+ *
+ * Where the API has Turnstile on (CI uses Cloudflare's always-pass test keys), pages get a
+ * stand-in widget that hands over Cloudflare's dummy token at once, which those keys
+ * accept: a sign-up then never waits on Cloudflare's real widget, which can hang on a CI
+ * runner. captcha.spec.ts opts back into the real one with `realTurnstile`.
  */
 import { randomInt, randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
@@ -14,20 +19,40 @@ import {
   expect,
   type Page,
 } from "@playwright/test";
+import { todoIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { totp } from "@repo/testing/totp";
 import { Redis } from "ioredis";
+import { FAKE_TURNSTILE } from "../test/turnstile";
 
 // Authenticator codes (RFC 6238), shared with the mobile suite.
 export { totp };
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:58025";
-export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+/** The site's origin: E2E_BASE_URL, else WEB_URL (the root .env's, or the e2e run's). */
+const site = process.env.E2E_BASE_URL ?? process.env.WEB_URL;
+if (!site) {
+  throw new Error("Set WEB_URL (the root .env has it) or E2E_BASE_URL.");
+}
+export const BASE_URL = site;
 
 const randomIp = () => `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
 
-export const test = base.extend({
+async function standInTurnstile(context: BrowserContext) {
+  await context.route("https://challenges.cloudflare.com/turnstile/**", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: FAKE_TURNSTILE }),
+  );
+}
+
+export const test = base.extend<{ realTurnstile: boolean }>({
+  realTurnstile: [false, { option: true }],
   extraHTTPHeaders: async ({ extraHTTPHeaders }, use) => {
     await use({ ...extraHTTPHeaders, "x-forwarded-for": randomIp() });
+  },
+  context: async ({ context, realTurnstile }, use) => {
+    if (!realTurnstile) {
+      await standInTurnstile(context);
+    }
+    await use(context);
   },
 });
 export { expect };
@@ -39,6 +64,7 @@ export async function newDevice(browser: Browser, options: { locale?: string } =
     locale: options.locale ?? "en-US",
     extraHTTPHeaders: { "x-forwarded-for": randomIp() },
   });
+  await standInTurnstile(context);
   return { context, page: await context.newPage() };
 }
 
@@ -112,7 +138,9 @@ export async function signUp(
   options: { expectUrl?: RegExp } = {},
 ) {
   const inbox = await mailbox(user.email);
-  if (!/\/sign-up/.test(page.url())) await page.goto("/sign-up");
+  if (!/\/sign-up/.test(page.url())) {
+    await page.goto("/sign-up");
+  }
   await page.getByLabel("Full name").fill(user.name);
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
@@ -125,7 +153,9 @@ export async function signUp(
 }
 
 export async function signIn(page: Page, user: User, options: { expectUrl?: RegExp } = {}) {
-  if (!/\/sign-in/.test(page.url())) await page.goto("/sign-in");
+  if (!/\/sign-in/.test(page.url())) {
+    await page.goto("/sign-in");
+  }
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("main").getByRole("button", { name: "Sign in", exact: true }).click();
@@ -199,8 +229,20 @@ export async function virtualAuthenticator(context: BrowserContext, page: Page) 
 
 // ---------------------------------------------------------------------------- accessibility
 
-/** Fails on any WCAG 2.2 A/AA violation on the current page. */
+/**
+ * Fails on any WCAG 2.2 A/AA violation on the current page. Transitions finish first: axe
+ * measures colours as drawn, so a button fading in would read as low contrast.
+ * Endless animations (spinners) are left running, since they never finish.
+ */
 export async function expectAccessible(page: Page) {
+  await page.evaluate(() =>
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
@@ -238,7 +280,9 @@ export async function ageSession(context: BrowserContext, ms: number) {
     session: { createdAt: string };
   } | null;
   expect(stored, `a session at ${key}`).not.toBeNull();
-  if (!stored) return;
+  if (!stored) {
+    return;
+  }
   stored.session.createdAt = new Date(Date.now() - ms).toISOString();
   await authStore().set(key, JSON.stringify(stored), "KEEPTTL");
 }
@@ -248,7 +292,9 @@ export async function expireCodes(email: string) {
   let expired = 0;
   for (const key of await authStore().keys("auth:verification:*")) {
     const raw = await authStore().get(key);
-    if (!raw?.includes(email)) continue;
+    if (!raw?.includes(email)) {
+      continue;
+    }
     const stored = JSON.parse(raw) as { expiresAt: string };
     stored.expiresAt = new Date(Date.now() - 1000).toISOString();
     await authStore().set(key, JSON.stringify(stored), "KEEPTTL");
@@ -309,7 +355,11 @@ export async function sendReminder(page: Page, title: string) {
   const producer = createProducer("notifications-bulk", authStore());
   await producer.add(
     "send",
-    { template: "todo.reminder", to: { userId: me.id }, data: { todoId: randomUUID(), title } },
+    {
+      template: "todo.reminder",
+      to: { userId: userIdSchema.parse(me.id) },
+      data: { todoId: todoIdSchema.parse(randomUUID()), title },
+    },
     { jobId: randomUUID() },
   );
   await producer.close();

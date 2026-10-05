@@ -1,6 +1,7 @@
 ---
 name: swap-translations
-description: Serve translations from somewhere other than the bundled JSON (a database, a translation service) so copy changes without a deploy. Use when the user wants editable copy, a CMS for strings, or translations loaded at runtime.
+description: Serve translations from somewhere other than the bundled JSON (a database, a translation service) so copy changes without a deploy. Use when the user wants editable copy, a CMS for strings, or translations loaded at runtime. Not for debugging; when something fails, use the debug skill.
+disable-model-invocation: true
 ---
 
 # Swap the translation source
@@ -34,3 +35,11 @@ description: Serve translations from somewhere other than the bundled JSON (a da
 `packages/i18n/src/index.test.ts` (loading, caching, invalidation, catalog completeness)
 with a fake source; `packages/email/src/render.test.tsx` renders emails through a
 translator; integration tests for the store in the owning service.
+
+## Finish
+
+1. The verify skill.
+2. Ask the `reviewer` agent to review the change, and the `security-reviewer` agent: a
+   new implementation brings its own credentials and sends data somewhere new. If you
+   wrote a migration, the `migration-reviewer` agent too.
+3. Update the seam's row in the README's "Scaling path" table if what's "Now" changed.

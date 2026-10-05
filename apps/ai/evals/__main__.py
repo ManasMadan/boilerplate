@@ -20,7 +20,7 @@ import sys
 from uuid import uuid4
 
 from pydantic import BaseModel
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import Evaluator, LLMJudge
 from pydantic_evals.reporting import EvaluationReport
@@ -129,17 +129,21 @@ async def main() -> int:
         )
         return Answer(text=run.output, sources=list(deps.sources.values()))
 
-    graph = build_summary_graph(
-        local_summarizer() if MODEL == "local:extractive" else MODEL, TOKENS_PER_RUN
-    )
+    graph = build_summary_graph(local_summarizer() if MODEL == "local:extractive" else MODEL)
 
     async def summarize_document(title: str) -> str:
-        return (await summarize(graph, [HANDBOOK[title]]))[0]
+        return await summarize(
+            graph,
+            [HANDBOOK[title]],
+            RunUsage(),
+            UsageLimits(total_tokens_limit=TOKENS_PER_RUN),
+        )
 
-    print(f"model {MODEL}, embeddings {EMBEDDINGS}, judge {JUDGE or 'none'}")
+    sys.stdout.write(f"model {MODEL}, embeddings {EMBEDDINGS}, judge {JUDGE or 'none'}\n")
     reports: list[EvaluationReport[object, object, object]] = [
-        await answers.evaluate(answer, progress=False),  # pyright: ignore[reportAssignmentType]
-        await summaries.evaluate(summarize_document, progress=False),  # pyright: ignore[reportAssignmentType]
+        # A report is invariant in its types; the loop below reads only what all share.
+        await answers.evaluate(answer, progress=False),  # pyright: ignore[reportAssignmentType]  # see above
+        await summaries.evaluate(summarize_document, progress=False),
     ]
     passed = total = 0
     for report in reports:
@@ -148,10 +152,10 @@ async def main() -> int:
             total += len(case.assertions)
             passed += sum(1 for result in case.assertions.values() if result.value is True)
         if report.failures:
-            print(f"{report.name}: {len(report.failures)} case(s) raised an error")
+            sys.stdout.write(f"{report.name}: {len(report.failures)} case(s) raised an error\n")
             return 1
     rate = passed / total if total else 0.0
-    print(f"{passed}/{total} checks passed ({rate:.0%}; needs {MIN_PASS_RATE:.0%})")
+    sys.stdout.write(f"{passed}/{total} checks passed ({rate:.0%}; needs {MIN_PASS_RATE:.0%})\n")
     return 0 if rate >= MIN_PASS_RATE else 1
 
 

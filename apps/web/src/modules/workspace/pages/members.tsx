@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { type OrgRole, orgRoleSchema, parseOrgRole } from "@repo/contracts/roles";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -30,14 +31,13 @@ import { useAuthErrorMessage, useAuthSchemas } from "@/modules/auth";
 import { UpgradeHint } from "@/modules/billing";
 import {
   isPersonal,
-  type Role,
   useActiveWorkspace,
   useRefreshWorkspaces,
   useSwitchWorkspace,
   useWorkspaces,
 } from "../hooks/use-workspace";
 
-const ROLES: Role[] = ["member", "admin", "owner"];
+const ROLES: OrgRole[] = ["member", "admin", "owner"];
 
 function RoleSelect({
   value,
@@ -45,8 +45,9 @@ function RoleSelect({
   label,
   id,
 }: {
-  value: Role;
-  onChange: (role: Role) => void;
+  /** Null when the stored role isn't one the app knows: nothing is selected. */
+  value: OrgRole | null;
+  onChange: (role: OrgRole) => void;
   label: string;
   id: string;
 }) {
@@ -54,7 +55,8 @@ function RoleSelect({
   return (
     <Select
       value={value}
-      onValueChange={(next) => next && onChange(next as Role)}
+      // Only the ROLES items can be picked.
+      onValueChange={(next) => onChange(orgRoleSchema.parse(next))}
       items={ROLES.map((role) => ({ value: role, label: t(role) }))}
     >
       <SelectTrigger id={id} aria-label={label} className="w-36">
@@ -71,6 +73,74 @@ function RoleSelect({
   );
 }
 
+type Member = NonNullable<ReturnType<typeof useActiveWorkspace>["data"]>["members"][number];
+
+/** A member: name and address, and for an admin looking at someone else, role and removal. */
+function MemberRow({
+  member,
+  organizationId,
+  isYou,
+  canManage,
+  run,
+}: {
+  member: Member;
+  organizationId: string;
+  isYou: boolean;
+  canManage: boolean;
+  run: (call: Promise<{ error: unknown }>, success: string) => Promise<void>;
+}) {
+  const t = useTranslations("workspace.members");
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div className="flex flex-col">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          {member.user.name}
+          {isYou ? <Badge variant="secondary">{t("you")}</Badge> : null}
+        </span>
+        <span className="text-xs text-muted-foreground">{member.user.email}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {canManage ? (
+          <>
+            <RoleSelect
+              id={`role-${member.id}`}
+              label={t("roleLabel", { name: member.user.name })}
+              value={parseOrgRole(member.role)}
+              onChange={(role) =>
+                run(
+                  authClient.organization.updateMemberRole({
+                    memberId: member.id,
+                    role,
+                    organizationId,
+                  }),
+                  t("roleChanged"),
+                )
+              }
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                run(
+                  authClient.organization.removeMember({
+                    memberIdOrEmail: member.id,
+                    organizationId,
+                  }),
+                  t("removed"),
+                )
+              }
+            >
+              {t("remove")}
+            </Button>
+          </>
+        ) : (
+          <Badge variant="outline">{t(`role.${parseOrgRole(member.role) ?? "unknown"}`)}</Badge>
+        )}
+      </div>
+    </li>
+  );
+}
+
 export function WorkspaceMembersPage() {
   const t = useTranslations("workspace.members");
   const errorMessage = useAuthErrorMessage();
@@ -79,13 +149,17 @@ export function WorkspaceMembersPage() {
   const workspaces = useWorkspaces();
   const switchTo = useSwitchWorkspace();
   const router = useRouter();
-  if (!active.data) return <Skeleton className="h-40" />;
+  if (!active.data) {
+    return <Skeleton className="h-40" />;
+  }
   const workspace = active.data;
-  const owners = workspace.members.filter((member) => member.role === "owner").length;
+  const owners = workspace.members.filter((member) => parseOrgRole(member.role) === "owner").length;
 
   async function run(call: Promise<{ error: unknown }>, success: string) {
     const { error } = await call;
-    if (error) return void toast.error(errorMessage(error));
+    if (error) {
+      return void toast.error(errorMessage(error));
+    }
     await refresh();
     toast.success(success);
   }
@@ -93,9 +167,13 @@ export function WorkspaceMembersPage() {
   async function leave() {
     // Move to another workspace first, so no request ever runs in one you've left.
     const next = (await workspaces.refetch()).data?.find((other) => other.id !== workspace.id);
-    if (next) await switchTo(next.id);
+    if (next) {
+      await switchTo(next.id);
+    }
     const { error } = await authClient.organization.leave({ organizationId: workspace.id });
-    if (error) return void toast.error(errorMessage(error));
+    if (error) {
+      return void toast.error(errorMessage(error));
+    }
     toast.success(t("left"));
     router.replace("/dashboard");
   }
@@ -109,62 +187,16 @@ export function WorkspaceMembersPage() {
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col divide-y">
-            {workspace.members.map((member) => {
-              const isYou = member.userId === active.userId;
-              const canManage = active.isAdmin && !isYou;
-              return (
-                <li
-                  key={member.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3"
-                >
-                  <div className="flex flex-col">
-                    <span className="flex items-center gap-2 text-sm font-medium">
-                      {member.user.name}
-                      {isYou ? <Badge variant="secondary">{t("you")}</Badge> : null}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{member.user.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {canManage ? (
-                      <>
-                        <RoleSelect
-                          id={`role-${member.id}`}
-                          label={t("roleLabel", { name: member.user.name })}
-                          value={member.role as Role}
-                          onChange={(role) =>
-                            run(
-                              authClient.organization.updateMemberRole({
-                                memberId: member.id,
-                                role,
-                                organizationId: workspace.id,
-                              }),
-                              t("roleChanged"),
-                            )
-                          }
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            run(
-                              authClient.organization.removeMember({
-                                memberIdOrEmail: member.id,
-                                organizationId: workspace.id,
-                              }),
-                              t("removed"),
-                            )
-                          }
-                        >
-                          {t("remove")}
-                        </Button>
-                      </>
-                    ) : (
-                      <Badge variant="outline">{t(`role.${member.role as Role}`)}</Badge>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
+            {workspace.members.map((member) => (
+              <MemberRow
+                key={member.id}
+                member={member}
+                organizationId={workspace.id}
+                isYou={member.userId === active.userId}
+                canManage={active.isAdmin && member.userId !== active.userId}
+                run={run}
+              />
+            ))}
           </ul>
           {!isPersonal(workspace) && (active.role !== "owner" || owners > 1) ? (
             <Button variant="outline" className="mt-4" onClick={leave}>
@@ -200,7 +232,7 @@ function InviteCard({ organizationId }: { organizationId: string }) {
   });
   const form = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { email: "", role: "member" as Role },
+    defaultValues: { email: "", role: "member" as OrgRole },
   });
 
   return (
@@ -217,7 +249,9 @@ function InviteCard({ organizationId }: { organizationId: string }) {
               role,
               organizationId,
             });
-            if (error) return void toast.error(errorMessage(error));
+            if (error) {
+              return void toast.error(errorMessage(error));
+            }
             await refresh();
             toast.success(t("sent", { email }));
             form.reset({ email: "", role });
@@ -284,8 +318,10 @@ function PendingInvitations({
                 <div className="flex flex-col">
                   <span>{invitation.email}</span>
                   <span className="text-xs text-muted-foreground">
-                    {t("pending.invited", { role: t(`role.${invitation.role as Role}`) })} ·{" "}
-                    {format.dateTime(new Date(invitation.expiresAt), { dateStyle: "medium" })}
+                    {t("pending.invited", {
+                      role: t(`role.${parseOrgRole(invitation.role) ?? "unknown"}`),
+                    })}{" "}
+                    · {format.dateTime(new Date(invitation.expiresAt), { dateStyle: "medium" })}
                   </span>
                 </div>
                 <Button
@@ -295,7 +331,9 @@ function PendingInvitations({
                     const { error } = await authClient.organization.cancelInvitation({
                       invitationId: invitation.id,
                     });
-                    if (error) return void toast.error(errorMessage(error));
+                    if (error) {
+                      return void toast.error(errorMessage(error));
+                    }
                     await refresh();
                     toast.success(t("pending.cancelled"));
                   }}

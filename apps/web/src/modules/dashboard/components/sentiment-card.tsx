@@ -1,5 +1,6 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useAiSentimentMutation } from "@repo/client/api/ai/sentiment";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { SENTIMENT_TEXT_MAX_LENGTH } from "@repo/contracts/api";
@@ -16,7 +17,6 @@ import { Textarea } from "@repo/ui/components/textarea";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 export function SentimentCard() {
   const t = useTranslations("dashboard.ai");

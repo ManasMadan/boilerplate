@@ -24,8 +24,22 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
+The mail listeners: the port each has on the Service (what DNS, senders and the
+application use) and the one the server listens on in its container. Unprivileged
+container ports, so the server needs no capability to bind them; the Service maps one
+to the other.
+*/}}
+{{- define "mail.listeners" -}}
+smtp: { port: 25, containerPort: 2525, protocol: smtp, tlsImplicit: false }
+submissions: { port: 465, containerPort: 4650, protocol: smtp, tlsImplicit: true }
+submission: { port: 587, containerPort: 5870, protocol: smtp, tlsImplicit: false }
+imaps: { port: 993, containerPort: 9930, protocol: imap, tlsImplicit: true }
+{{- end -}}
+
+{{/*
 The settings, as stalwart-cli apply operations (NDJSON, one per line; lists are objects
 keyed "0", "1", …; "#domain" is the domain of an earlier line): logs to stdout, the
+listeners (exactly these: the server's defaults on 443, 995 and 4190 go), the
 domain with our own DKIM key and certificate, the host name, the account the
 application submits as, and the delivery-failure webhook. Upserts match on a natural
 key, so applying them again changes nothing that didn't change. Secrets are
@@ -34,10 +48,15 @@ password, which the plan init container writes in for @SMTP_PASSWORD@.
 */}}
 {{- define "mail.plan" -}}
 {{- $domain := include "mail.emailDomain" . -}}
+{{- $listeners := dict "http" (dict "name" "http" "protocol" "http" "bind" (dict "[::]:8080" true) "tlsImplicit" false) -}}
+{{- range $name, $l := include "mail.listeners" . | fromYaml -}}
+{{- $_ := set $listeners $name (dict "name" $name "protocol" $l.protocol "bind" (dict (printf "[::]:%v" $l.containerPort) true) "tlsImplicit" $l.tlsImplicit) -}}
+{{- end -}}
 {{- $ops := list
   (dict "@type" "reconcile" "object" "Tracer" "matchOn" "*" "value" (dict "console" (dict
     "@type" "Stdout" "level" "info" "enable" true "ansi" false "buffered" false
     "multiline" false "lossy" false "events" dict "eventsPolicy" "exclude")))
+  (dict "@type" "reconcile" "object" "NetworkListener" "matchOn" (list "name") "value" $listeners)
   (dict "@type" "upsert" "object" "Domain" "matchOn" (list "name") "value" (dict "domain" (dict
     "name" $domain
     "certificateManagement" (dict "@type" "Manual")
@@ -72,6 +91,23 @@ password, which the plan init container writes in for @SMTP_PASSWORD@.
     "httpHeaders" dict
     "events" $events
     "eventsPolicy" "include"))) -}}
+{{- end -}}
+{{- with .Values.relay.host -}}
+{{- $r := $.Values.relay -}}
+{{- $ops = append $ops (dict "@type" "upsert" "object" "MtaRoute" "matchOn" (list "name") "value" (dict "relay" (dict
+    "@type" "Relay"
+    "name" "relay"
+    "address" .
+    "port" $r.port
+    "protocol" "smtp"
+    "implicitTls" $r.implicitTls
+    "allowInvalidCerts" false
+    "authUsername" $r.username
+    "authSecret" (ternary (dict "@type" "EnvironmentVariable" "variableName" "RELAY_PASSWORD") (dict "@type" "None") (ne $r.username ""))))) -}}
+{{- /* Mail for our own domain stays local; everything else goes through the relay. */ -}}
+{{- $ops = append $ops (dict "@type" "update" "object" "MtaOutboundStrategy" "value" (dict "route" (dict
+    "match" (list (dict "if" "is_local_domain(rcpt_domain)" "then" "'local'"))
+    "else" "'relay'"))) -}}
 {{- end -}}
 {{- range $i, $op := concat $ops .Values.extraPlan -}}
 {{- if $i }}{{ "\n" }}{{ end }}{{ toJson $op }}

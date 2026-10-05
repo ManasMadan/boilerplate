@@ -6,7 +6,13 @@
 import { writeFileSync } from "node:fs";
 import { openApiDocument } from "../src/rpc/openapi";
 
-const [file] = process.argv.slice(2);
-if (!file) throw new Error("usage: bun scripts/openapi.ts <file>");
-const spec = await openApiDocument({ version: "1", serverUrl: "/api/v1" });
-writeFileSync(file, `${JSON.stringify(spec, null, 2)}\n`);
+export async function writeOpenApi(file: string | undefined) {
+  if (!file) {
+    throw new Error("usage: bun scripts/openapi.ts <file>");
+  }
+  const spec = await openApiDocument({ version: "1", serverUrl: "/api/v1" });
+  writeFileSync(file, `${JSON.stringify(spec, null, 2)}\n`);
+}
+
+// Run as `bun scripts/openapi.ts <file>`, not when a test imports it.
+import.meta.main && (await writeOpenApi(process.argv[2]));

@@ -3,6 +3,7 @@
  * user's open tabs refresh their bell right away.
  */
 import { Injectable } from "@nestjs/common";
+import type { UserId } from "@repo/contracts/ids";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { withUser } from "@repo/db";
 import { type Database, InjectDatabase, InjectRedis, type Redis } from "@repo/nest-common";
@@ -16,14 +17,14 @@ export class InAppChannel {
     @InjectRedis() private readonly redis: Redis,
   ) {}
 
-  async send(userId: string, message: InAppMessage) {
+  async send(userId: UserId, message: InAppMessage) {
     const row = await withUser(this.database.write, userId).notification.create({
       data: {
         userId,
         orgId: message.orgId ?? null,
         template: message.type,
         data: message.data,
-        link: message.link ?? null,
+        link: message.link,
       },
       select: { id: true },
     });

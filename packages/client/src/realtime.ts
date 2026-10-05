@@ -6,6 +6,11 @@
  * Messages only say what changed, so each maps to a refetch of the affected queries.
  * After any reconnect everything live is refetched too, since messages may have been
  * missed while disconnected.
+ *
+ * The reconnect loop is written out rather than oRPC's ClientRetryPlugin, which does
+ * retry streams: the plugin would sit on every call's link for this one stream, and
+ * its wait between attempts ignores the abort signal, so an unmounted tab would keep a
+ * timer (up to 30s) and then try once more.
  */
 import type { RealtimeMessage } from "@repo/contracts/realtime";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +20,84 @@ import { useApi } from "./provider";
 
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
+
+/**
+ * Half the delay plus up to as much again at random: tabs that lost the stream together
+ * (a deploy) come back spread out, not all at once.
+ */
+export const withJitter = (delay: number) => delay / 2 + Math.random() * (delay / 2);
+
+/**
+ * Waits `ms`, or until `signal` aborts. Each wait removes its own abort listener, so a
+ * long session of reconnects doesn't pile them up on the signal.
+ */
+export function abortableSleep(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
+type Client = ReturnType<typeof useApi>["client"];
+type Handlers = {
+  current: { onMessage: (message: RealtimeMessage) => void; onReconnect: () => void };
+};
+
+/**
+ * One connection: its messages until it ends. "stop" when it mustn't be retried (aborted,
+ * or the app's to handle), "connected" when it opened, "failed" when it never did.
+ */
+async function listenOnce(
+  client: Client,
+  handlers: Handlers,
+  signal: AbortSignal,
+  reconnect: boolean,
+) {
+  let connected = false;
+  try {
+    const stream = await client.realtime.subscribe(undefined, { signal });
+    connected = true;
+    if (reconnect) {
+      handlers.current.onReconnect();
+    }
+    for await (const message of stream) {
+      handlers.current.onMessage(message);
+    }
+  } catch (error) {
+    if (signal.aborted) {
+      return "stop";
+    }
+    // Signed out or no workspace: the app handles those; don't hammer the API.
+    const code = errorCode(error);
+    if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") {
+      return "stop";
+    }
+  }
+  return connected ? "connected" : "failed";
+}
+
+/** Keeps a connection open until `signal` aborts, waiting longer after each failure. */
+async function follow(client: Client, handlers: Handlers, signal: AbortSignal) {
+  let delay = RETRY_MIN_MS;
+  let first = true;
+  while (!signal.aborted) {
+    const outcome = await listenOnce(client, handlers, signal, !first);
+    if (outcome === "stop") {
+      return;
+    }
+    if (outcome === "connected") {
+      first = false;
+      delay = RETRY_MIN_MS;
+    }
+    await abortableSleep(withJitter(delay), signal);
+    delay = Math.min(delay * 2, RETRY_MAX_MS);
+  }
+}
 
 /** Calls `onMessage` for every realtime message while mounted; `key` changes reopen the stream. */
 export function useRealtime(
@@ -30,34 +113,12 @@ export function useRealtime(
   });
 
   useEffect(() => {
-    if (key === null || key === undefined) return;
+    if (key === null || key === undefined) {
+      return;
+    }
     const controller = new AbortController();
-    const sleep = (ms: number) =>
-      new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, ms);
-        controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
-      });
 
-    void (async () => {
-      let delay = RETRY_MIN_MS;
-      let first = true;
-      while (!controller.signal.aborted) {
-        try {
-          const stream = await client.realtime.subscribe(undefined, { signal: controller.signal });
-          if (!first) handlers.current.onReconnect();
-          first = false;
-          delay = RETRY_MIN_MS;
-          for await (const message of stream) handlers.current.onMessage(message);
-        } catch (error) {
-          if (controller.signal.aborted) return;
-          // Signed out or no workspace: the app handles those; don't hammer the API.
-          const code = errorCode(error);
-          if (code === "UNAUTHENTICATED" || code === "NO_ACTIVE_ORGANIZATION") return;
-        }
-        await sleep(delay);
-        delay = Math.min(delay * 2, RETRY_MAX_MS);
-      }
-    })();
+    void follow(client, handlers, controller.signal);
     return () => controller.abort();
   }, [client, key]);
 }
@@ -77,7 +138,9 @@ export function useLiveUpdates(activeOrganizationId: string | null | undefined) 
   useRealtime(
     (message) => void refetch[message.type](),
     () => {
-      for (const run of Object.values(refetch)) void run();
+      for (const run of Object.values(refetch)) {
+        void run();
+      }
     },
     activeOrganizationId,
   );

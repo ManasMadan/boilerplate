@@ -7,7 +7,9 @@ self.addEventListener("push", (event) => {
   } catch {
     return;
   }
-  if (typeof message.title !== "string") return;
+  if (typeof message.title !== "string") {
+    return;
+  }
   event.waitUntil(
     self.registration.showNotification(message.title, {
       body: typeof message.body === "string" ? message.body : undefined,
@@ -20,11 +22,15 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = new URL(event.notification.data?.link ?? "/", self.location.origin);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin) {
+    return;
+  }
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       const open = windows.find((client) => new URL(client.url).origin === url.origin);
-      if (open) return open.focus().then(() => open.navigate(url.href));
+      if (open) {
+        return open.focus().then(() => open.navigate(url.href));
+      }
       return self.clients.openWindow(url.href);
     }),
   );

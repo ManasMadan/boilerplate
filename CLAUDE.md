@@ -10,22 +10,33 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | First-time setup (idempotent) | `bun run setup` |
 | Health check (tools, .env drift, services) | `bun run doctor` |
 | Develop (core profile: web, api, notifications, worker, webhooks) | `bun dev` |
-| Develop with every service (AI, files, billing, …) | `bun dev:full` |
+| Develop with every service (AI and its worker, RustFS, ClamAV, Stalwart, Jaeger, Expo, email previews) | `bun dev:full` |
 | Lint, formatting, architecture boundaries | `bun run lint` (`bun run format` to fix) |
-| Types | `bun run check-types` |
+| Types | `bun run check-types`; no `any` and no casts in the source: `bun run type-coverage [<workspace>]` |
 | Unit tests (fast, cached) | `bun run test` |
 | Integration tests (real Postgres/Valkey/Mailpit) | `bun run test:integration` |
+| Coverage: every suite merged, every file at 100% (needs the full profile) | `bun run test:coverage` |
+| Tests of `scripts/`, the Claude Code hooks and the rest of the tooling (build scripts, generators, load test) | `bun test ./scripts/ ./.claude/hooks/` |
+| Every check that applies to a change | the `verify` skill |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
 | New database migration | `bun run db:migrate` |
-| Set a secret in .env (you cannot read .env) | `bun run env:set KEY=value` |
+| Work on another branch in parallel (its own worktree, sharing the local services) | `wt switch --create <branch>` (`wt list` shows them) |
+| Set a secret in .env (never read or print it: the Read tool refuses, and so must you) | `bun run env:set KEY=value` (`env:unset KEY` removes one) |
 
 Run commands from the repo root. Never `cd` into a package to run tools directly; for one
 package use `bun run --filter @repo/<name> <script>` (or `bun run --cwd <dir> <script>`).
 
 Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025 (SMTP
-51025), RustFS 59000 (console 59001), ClamAV 53310; opt-in, the Stalwart mail server
-(`bun run db:up:mail`): submission 51465, management 58080. Web is on 3000, api 3001, worker
-3002, notifications 3003, webhooks 3004, ai 8000.
+51025); with `full`, RustFS 59000 (console 59001), ClamAV 53310 and Jaeger (OTLP 54318,
+UI 56686); the Stalwart mail server (`bun run db:up:mail`, and in `full`): submission
+51465, management 58080. Web is on 3000, api 3001, worker 3002, notifications 3003,
+webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and Expo's bundler
+8081. On demand: fake Stripe 12111 (`bun run stripe:fake`), the mobile web build 3005
+(`serve:web`, used by e2e), Storybook 6006. Those are the defaults: each is a `*_PORT` in
+`.env` (`WEB_PORT`, `API_PORT`, ...), and nothing else may fix a local port
+(`scripts/ports.test.ts`). Uploads stay off until `S3_BUCKET` is set,
+and billing until the Stripe variables are (docs/files-and-billing.md), even with
+`dev:full`.
 
 ## Principles (non-negotiable)
 
@@ -66,12 +77,21 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
   that bundle docs, read the installed version's docs first:
   `node_modules/next/dist/docs/`, `node_modules/turbo/docs/`.
 - Generated files (`**/generated/**`, `*.gen.ts`, `openapi.json`, `apps/ai/app/contracts/`),
-  applied migrations, lockfiles and `.env` are never edited by hand; hooks block most of
-  them. Change the source and regenerate.
-- When you finish a change, the Stop hook runs types and unit tests for affected
-  packages (plus ruff for `apps/ai`). It does not run Biome or the boundary checks: run
-  `bun run lint` yourself. For anything touching the database, queues or HTTP, also run
-  the `verify` skill.
+  shipped migrations, lockfiles, SOPS files and `.env` are never edited by hand: the edit
+  and Bash guards refuse them (`.claude/hooks/file-rules.ts`), and ask the user before
+  Claude changes its own guard rails (hooks, settings, commit hooks, lint rules). Change
+  the source and regenerate. A new suppression, skipped or focused test, or coverage
+  pragma is refused too, unless docs/testing.md lists it with its reason.
+- When you finish a change, the Stop hook runs the fast checks on what changed and sends
+  you back to fix what fails; what it runs, its limits and when it asks for the full
+  checks are in one place, the header of `.claude/hooks/verify-turn.ts`. It doesn't run
+  the boundary checks, integration or e2e tests: for anything touching the database,
+  queues or HTTP, run the `verify` skill.
+- Long-running commands go in the background (the Bash tool's `run_in_background`),
+  never in the foreground: `bun dev` and `bun dev:full` never exit, and
+  `test:integration`, `test:coverage`, `test:e2e`, `charts:check` and
+  `bun scripts/generators.ts` take longer than the tool's two-minute default. Wait for
+  them to finish before reporting a result.
 - Commits: Conventional Commits with a workspace scope, e.g. `feat(api): add todo sharing`.
 - New environment variables go in the service's `src/env.ts`, `.env.example`, and
   docs/environment.md, in the same change.
@@ -79,15 +99,48 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
 ## Claude Code setup
 
 - `.claude/rules/`: per-area rules that load when you open matching files (api,
-  contracts, client, web, db, jobs and events, notifications, python, infra, tests,
-  i18n, security). Each app and `packages/db` also has its own `CLAUDE.md`.
-- `.claude/agents/`: `reviewer`, `security-reviewer`, `migration-reviewer` and
-  `verifier`. Use them before calling a change done.
-- `.claude/skills/`: step-by-step procedures (setup, dev, verify, ...).
-- `.mcp.json`: Playwright for driving the local web app, and read-only Postgres on the
-  local `app` database. The Postgres server connects as `app_api` (a local-only
-  password equal to the role name, from `infra/postgres/init`) in restricted mode, so
-  it runs read-only transactions and sees only what RLS allows: tenant and per-user
-  tables show no rows unless `app.org_id` / `app.user_id` is set in the same
-  transaction. Use it for schemas, indexes and query plans. It needs `bun run db:up` and
-  `uv`.
+  contracts, client, web, ui, mobile, db, jobs and events, notifications, python, infra,
+  ci, scripts, generators, tests, i18n, security, docs, the Claude setup itself, and
+  coding standards for every TypeScript and Python file). Each app and `packages/db`
+  also has its own `CLAUDE.md`.
+- `.claude/agents/`: reviewers that read and never edit (`reviewer`,
+  `security-reviewer`, `migration-reviewer`, `python-reviewer`, `frontend-reviewer`,
+  `i18n-checker`, `ci-triager`), `verifier` (runs the checks), `test-writer` (adds tests,
+  raises coverage) and `docs-sync` (fixes docs that drifted). Each skill ends by naming
+  the ones to run; run them before calling a change done.
+- `.claude/skills/`: step-by-step procedures, also the humans' runbooks
+  (`docs/README.md` lists them). The `swap-*` skills, releases, rollbacks, secret
+  rotation, opening a pull request, adding an app and removing a feature are started by
+  the user (`/<name>`), never on your own.
+- `.claude/settings.json`: Bash commands run without a prompt only when listed (named
+  `bun run` scripts, the repo's tools, read-only git and gh); the Bash guard hook asks
+  before commits, pushes, GitHub changes, infrastructure, destructive scripts, stopping
+  or deleting Docker containers, volumes or images, new
+  dependencies and a `bunx` tool that isn't installed. Secrets files (`.env`, keys,
+  tfvars and tfstate, load-test sessions) are denied to the Read tool; a shell command
+  could still print them, so never try. There is no sandbox: Docker and the local
+  services need the socket and the network.
+- `.claude/hooks/`: the Stop hook runs the fast checks on what the turn changed,
+  including the unit coverage of the changed lines; a reviewer or the verifier that
+  ends without its verdict is sent back, and a verdict that isn't a pass is put in front
+  of you; after a compaction you're told which files the tree changes. The Stop hook
+  can't tell two sessions' edits apart, so run one session per checkout and a worktree
+  for the next.
+- `.claude-plugin/`: the same skills, agents and hooks as a plugin, for apps made from
+  this template (`docs/new-project.md`); a new agent or hook goes in `plugin.json` too.
+- Worktrees: parallel branches and agents use Worktrunk (`wt`, `.config/wt.toml`), whose
+  Claude Code plugin settings.json enables: an agent started with `isolation: worktree`
+  gets one through `wt switch --create`, with `.env` copied (`.worktreeinclude`),
+  dependencies installed and code generated. Never `git stash` (every worktree shares
+  one stash stack) and never `git worktree add` by hand. The worktrees share the
+  Docker services and the app ports unless one runs `bun run setup --stack <n>` (its own
+  compose project, and every service and app port moved; `docs/environment.md`): then
+  each runs its own `bun dev` and e2e suite at the same time. `wt merge` and `wt remove`
+  ask first.
+- `.mcp.json`: Playwright for driving the local web app, and Postgres on the local `app`
+  database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
+  only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and
+  past row-level security, so it sees every workspace's rows for debugging; nothing it
+  runs can write. Use it for data, schemas, indexes and query plans. It needs `uv` and
+  the local services: if Postgres isn't up it says so at once; start it with
+  `bun run db:up`, then reconnect with `/mcp`.

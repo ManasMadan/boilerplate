@@ -1,7 +1,6 @@
-import { Processor, WorkerHost } from "@nestjs/bullmq";
-import { type NotificationQueue, parseJob, queuePrefix } from "@repo/jobs";
-import { runWithContext } from "@repo/nest-common";
-import type { Job } from "bullmq";
+import { Processor } from "@nestjs/bullmq";
+import { idOf, type NotificationQueue, parseJob, queuePrefix, type UncheckedJob } from "@repo/jobs";
+import { JobProcessor, runJob } from "@repo/nest-common";
 import { DigestService } from "../digest/digest.service";
 import { env } from "../env";
 import { Dispatcher } from "./dispatcher";
@@ -12,20 +11,22 @@ import { Dispatcher } from "./dispatcher";
  * Failures throw: BullMQ retries with the queue's backoff and finally keeps the job in
  * the failed set for inspection and replay.
  */
-async function handle(queue: NotificationQueue, job: Job, dispatcher: Dispatcher) {
-  if (!job.id) throw new Error(`Job on ${queue} has no id; producers must set jobId`);
+async function handle(queue: NotificationQueue, job: UncheckedJob, dispatcher: Dispatcher) {
+  // Producers choose the id (createProducer requires one).
+  const jobId = idOf(job);
   if (job.name === "deferred") {
     const { meta, payload } = parseJob(queue, "deferred", job.data);
-    await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${job.id}` }, () =>
+    await runJob(meta, `job:${jobId}`, () =>
       dispatcher.deliverDeferred(payload.payload, payload.channel, payload.userId, payload.key),
     );
     return;
   }
-  if (job.name !== "send") throw new Error(`Unknown job "${job.name}" on ${queue}`);
+  if (job.name !== "send") {
+    throw new Error(`Unknown job "${job.name}" on ${queue}`);
+  }
   const { meta, payload } = parseJob(queue, "send", job.data);
-  const jobId = job.id;
   // Restore the producer's request context so these logs carry its request id.
-  await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${jobId}` }, () =>
+  await runJob(meta, `job:${jobId}`, () =>
     // The producer-chosen job id is stable across retries and Redis restarts.
     dispatcher.dispatch(payload, jobId),
   );
@@ -35,11 +36,11 @@ async function handle(queue: NotificationQueue, job: Job, dispatcher: Dispatcher
   concurrency: env.NOTIFICATIONS_CRITICAL_CONCURRENCY,
   prefix: queuePrefix("notifications-critical"),
 })
-export class CriticalNotificationsProcessor extends WorkerHost {
+export class CriticalNotificationsProcessor extends JobProcessor {
   constructor(private readonly dispatcher: Dispatcher) {
     super();
   }
-  process(job: Job) {
+  process(job: UncheckedJob) {
     return handle("notifications-critical", job, this.dispatcher);
   }
 }
@@ -48,14 +49,14 @@ export class CriticalNotificationsProcessor extends WorkerHost {
   concurrency: env.NOTIFICATIONS_BULK_CONCURRENCY,
   prefix: queuePrefix("notifications-bulk"),
 })
-export class BulkNotificationsProcessor extends WorkerHost {
+export class BulkNotificationsProcessor extends JobProcessor {
   constructor(
     private readonly dispatcher: Dispatcher,
     private readonly digests: DigestService,
   ) {
     super();
   }
-  async process(job: Job) {
+  async process(job: UncheckedJob) {
     if (job.name === "digests") {
       parseJob("notifications-bulk", "digests", job.data);
       await this.digests.scheduleDue();
@@ -63,9 +64,7 @@ export class BulkNotificationsProcessor extends WorkerHost {
     }
     if (job.name === "digest") {
       const { meta, payload } = parseJob("notifications-bulk", "digest", job.data);
-      await runWithContext({ ...meta, requestId: meta.requestId ?? `job:${job.id}` }, () =>
-        this.digests.send(payload.userId, payload.date),
-      );
+      await runJob(meta, `job:${job.id}`, () => this.digests.send(payload.userId, payload.date));
       return;
     }
     return handle("notifications-bulk", job, this.dispatcher);

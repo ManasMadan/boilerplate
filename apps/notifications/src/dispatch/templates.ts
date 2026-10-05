@@ -13,6 +13,7 @@
  * entry below. The `satisfies` clause makes a missing template a compile error.
  */
 import { Injectable } from "@nestjs/common";
+import type { OrgId } from "@repo/contracts/ids";
 import { formatMoney } from "@repo/contracts/money";
 import type { InAppNotificationType, NotificationCategory } from "@repo/contracts/notifications";
 import {
@@ -52,8 +53,8 @@ export interface InAppMessage {
   type: InAppNotificationType;
   data: Record<string, string>;
   /** A path on the web app. */
-  link?: string;
-  orgId?: string;
+  link: string;
+  orgId?: OrgId;
 }
 
 interface TemplateDefinition<T extends NotificationTemplate> {
@@ -103,6 +104,19 @@ const templates = {
         locale: recipient.locale,
         t,
         ...payload.data,
+      }),
+  },
+  "workspace.access-created": {
+    category: "security",
+    email: (payload, { recipient, t }) =>
+      renderEmail(SecurityAlertEmail, securityAlertSubject, {
+        locale: recipient.locale,
+        t,
+        event: payload.data.kind === "api-key" ? "api-key-created" : "webhook-endpoint-created",
+        label: payload.data.label,
+        securityUrl: url(
+          payload.data.kind === "api-key" ? "/settings/api-keys" : "/settings/webhooks",
+        ),
       }),
   },
   "webhooks.endpoint-disabled": {
@@ -155,7 +169,7 @@ const templates = {
       renderEmail(TodoReminderEmail, todoReminderSubject, {
         locale: recipient.locale,
         t,
-        name: recipient.name ?? recipient.email ?? "",
+        name: recipient.name?.trim() || null,
         title: payload.data.title,
         unsubscribeUrl,
       }),
@@ -176,31 +190,18 @@ export interface BoundTemplate {
   sms?: (context: RenderContext) => string;
 }
 
-/**
- * Pairs a definition with its payload. TypeScript can't relate `payload.template` to the
- * registry entry through the union, so that pairing is asserted here, once: the
- * registry is keyed by template and each payload was validated against its template.
- */
+/** Pairs a definition with its payload, so the dispatcher renders without knowing which. */
 function bind<T extends NotificationTemplate>(
   definition: TemplateDefinition<T>,
   payload: PayloadOf<T>,
 ): BoundTemplate {
+  const { email, inApp, push, sms } = definition;
   return {
     category: definition.category,
-    ...(definition.email && {
-      email: (context: RenderContext) =>
-        definition.email?.(payload, context) as Promise<RenderedEmail>,
-    }),
-    ...(definition.inApp && {
-      inApp: (context: RenderContext) => definition.inApp?.(payload, context) as InAppMessage,
-    }),
-    ...(definition.push && {
-      push: (context: RenderContext) =>
-        definition.push?.(payload, context) as ReturnType<NonNullable<BoundTemplate["push"]>>,
-    }),
-    ...(definition.sms && {
-      sms: (context: RenderContext) => definition.sms?.(payload, context) as string,
-    }),
+    ...(email && { email: (context: RenderContext) => email(payload, context) }),
+    ...(inApp && { inApp: (context: RenderContext) => inApp(payload, context) }),
+    ...(push && { push: (context: RenderContext) => push(payload, context) }),
+    ...(sms && { sms: (context: RenderContext) => sms(payload, context) }),
   };
 }
 
@@ -208,12 +209,21 @@ export abstract class TemplateSource {
   abstract bind(payload: NotificationPayload): Promise<BoundTemplate>;
 }
 
+/**
+ * The payload's own template, bound to it. Through the registry's mapped type TypeScript
+ * pairs a template with its payload, which a lookup on the union can't.
+ */
+function bindOwn<T extends NotificationTemplate>(
+  registry: TemplateRegistry,
+  template: T,
+  payload: PayloadOf<T>,
+): BoundTemplate {
+  return bind(registry[template], payload);
+}
+
 @Injectable()
 export class CodeTemplateSource extends TemplateSource {
   async bind(payload: NotificationPayload): Promise<BoundTemplate> {
-    const definition = (templates as TemplateRegistry)[payload.template] as TemplateDefinition<
-      typeof payload.template
-    >;
-    return bind(definition, payload as PayloadOf<typeof payload.template>);
+    return bindOwn(templates, payload.template, payload);
   }
 }

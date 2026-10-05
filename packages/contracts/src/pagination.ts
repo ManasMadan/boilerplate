@@ -6,7 +6,7 @@
  */
 import * as z from "zod";
 
-export const PAGE_SIZE_MAX = 100;
+const PAGE_SIZE_MAX = 100;
 
 export const pageInput = z.object({
   limit: z.coerce.number().int().min(1).max(PAGE_SIZE_MAX).default(20),

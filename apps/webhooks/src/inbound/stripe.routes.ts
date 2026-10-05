@@ -8,11 +8,13 @@
  * billing (apps/api, via the relay) gets every event exactly once. Stripe expects an
  * answer within seconds, so nothing is processed here.
  */
-import { type Prisma, transaction } from "@repo/db";
+import { transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";
+import { rawBodies, sendError } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import Stripe from "stripe";
 import { emitEvent } from "../outbox";
+import { jsonObject } from "./json";
 
 export function mountStripe(
   fastify: FastifyInstance,
@@ -22,23 +24,22 @@ export function mountStripe(
   fastify.register((scope, _options, done) => {
     // Raw bytes for this route only (this plugin scope): the signature covers the body
     // exactly as sent, so the JSON parser inherited from the app is replaced here.
-    scope.removeContentTypeParser("application/json");
-    scope.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) =>
-      done(null, body),
-    );
+    rawBodies(scope, "application/json");
 
     scope.post("/webhooks/stripe", async (request, reply) => {
-      if (!secret) return reply.status(404).send({ code: "NOT_FOUND" });
+      if (!secret) {
+        return sendError(reply, "NOT_FOUND");
+      }
       const signature = request.headers["stripe-signature"];
       if (typeof signature !== "string" || !Buffer.isBuffer(request.body)) {
-        return reply.status(400).send({ code: "BAD_REQUEST" });
+        return sendError(reply, "BAD_REQUEST");
       }
 
       let event: Stripe.Event;
       try {
         event = await Stripe.webhooks.constructEventAsync(request.body, signature, secret);
       } catch {
-        return reply.status(400).send({ code: "INVALID_SIGNATURE" });
+        return sendError(reply, "INVALID_SIGNATURE");
       }
 
       await transaction(database.write, async (tx) => {
@@ -48,16 +49,16 @@ export function mountStripe(
               provider: "stripe",
               providerEventId: event.id,
               type: event.type,
-              // Stripe events are plain JSON (they were parsed from it); Prisma's JSON input
-              // type just can't see that through the SDK's interfaces.
-              payload: event as unknown as Prisma.InputJsonObject,
+              payload: jsonObject.parse(event),
             },
           ],
           skipDuplicates: true,
           select: { id: true },
         });
         const row = inserted[0];
-        if (!row) return; // already received: acknowledge, don't process twice
+        if (!row) {
+          return; // already received: acknowledge, don't process twice
+        }
         await emitEvent(
           tx,
           "stripe.event_received.v1",
@@ -66,7 +67,7 @@ export function mountStripe(
             inboundEventId: row.id,
             stripeEventId: event.id,
             type: event.type,
-            object: event.data.object as unknown as Record<string, unknown>,
+            object: jsonObject.parse(event.data.object),
           },
           { actorId: null, orgId: null },
         );

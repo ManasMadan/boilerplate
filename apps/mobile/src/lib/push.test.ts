@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { devicePushToken, pushState } from "./push";
+import { devicePushToken, presentForegroundNotifications, pushState } from "./push";
 
 // Whether the app runs on a real device (false on simulators), read at call time.
 let mockIsDevice = true;
@@ -63,5 +63,18 @@ describe("push notifications", () => {
       "default",
       expect.objectContaining({ importance: 3 }),
     );
+  });
+});
+
+describe("a notification that arrives while the app is open", () => {
+  it("shows, sounds and badges as the system would", async () => {
+    presentForegroundNotifications();
+    const handler = notifications.setNotificationHandler.mock.calls[0]?.[0];
+    expect(await handler?.handleNotification({} as never)).toEqual({
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    });
   });
 });

@@ -9,7 +9,9 @@ import { expect, signIn, signOut, signUp, test } from "./support";
 
 /** Replaces PushManager's subscription with a stub; `permission` fakes the user's answer. */
 async function stubPush(context: BrowserContext, permission: "granted" | "denied" = "granted") {
-  if (permission === "granted") await context.grantPermissions(["notifications"]);
+  if (permission === "granted") {
+    await context.grantPermissions(["notifications"]);
+  }
   await context.addInitScript((answer) => {
     const KEY = "e2e-push-subscription";
     // Headless Chromium reports Notification.permission as "denied" even when granted
@@ -161,7 +163,9 @@ test("the service worker shows a pushed message, and ignores malformed ones", as
   const registrationId = new Promise<string>((resolve) => {
     cdp.on("ServiceWorker.workerRegistrationUpdated", ({ registrations }) => {
       const ours = registrations.find((r) => r.scopeURL.endsWith("/") && !r.isDeleted);
-      if (ours) resolve(ours.registrationId);
+      if (ours) {
+        resolve(ours.registrationId);
+      }
     });
   });
   await cdp.send("ServiceWorker.enable");

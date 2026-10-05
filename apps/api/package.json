@@ -9,13 +9,14 @@
     "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
     "check-types": "tsc",
     "gen": "bun scripts/openapi.ts openapi.json",
-    "test": "vitest run --project unit --passWithNoTests",
-    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration --tags-filter=!files",
+    "test:integration:files": "vitest run --project integration --tags-filter=files",
     "auth:schema": "bun --env-file=../../.env run auth generate --config src/auth/auth.cli.ts --adapter prisma --dialect postgresql --output ../../node_modules/.cache/auth-schema.prisma --yes",
     "seed": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/seed.mjs",
     "secrets:reencrypt": "node --env-file-if-exists=../../.env --enable-source-maps dist/reencrypt.mjs",
     "load:users": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/load-users.mjs",
-    "coverage": "bun --env-file=../../.env run vitest run --coverage"
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@better-auth/api-key": "catalog:",

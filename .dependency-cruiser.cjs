@@ -35,8 +35,11 @@ module.exports = {
       comment:
         "The web app only renders. Data and logic come from the API through packages/client. " +
         "Database, queue, server framework and auth-server code must never be bundled into it. " +
-        "(Test harnesses under e2e/ may reach the stack's services to simulate time.)",
-      from: { path: "^apps/(web|mobile)/", pathNot: "^apps/(web|mobile)/e2e/" },
+        "(Test harnesses under e2e/, and the web's browser-test harness under test/, may reach the stack's services to set data up.)",
+      from: {
+        path: "^apps/(web|mobile)/",
+        pathNot: ["^apps/(web|mobile)/e2e/", "^apps/web/test/"],
+      },
       to: {
         path: [
           "^packages/(db|nest-common|jobs|logger|email)/",
@@ -51,10 +54,12 @@ module.exports = {
       comment:
         "nest-common, logger and tsdown-config are framework plumbing; domain code lives in the owning service.",
       from: { path: "^packages/(nest-common|logger|tsdown-config)/" },
-      // The error-code catalog is platform vocabulary shared by every layer, so it is allowed.
+      // The error-code catalog, the unit-named durations and the typed object helpers
+      // (keysOf, fieldOf, required) are platform vocabulary with no domain in them, shared by
+      // every layer, so they are allowed.
       to: {
         path: "^packages/(contracts|jobs|email|client)/",
-        pathNot: "^packages/contracts/src/errors\\.ts$",
+        pathNot: "^packages/contracts/src/(errors|time|objects)\\.ts$",
       },
     },
     {
@@ -91,6 +96,10 @@ module.exports = {
         "/\\.next/",
         "/\\.venv/",
         "/storybook-static/",
+        // What test runs write: reports with their own scripts, rewritten while lint reads.
+        "/coverage/",
+        "/playwright-report/",
+        "/test-results/",
       ],
     },
     tsPreCompilationDeps: true,

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect } from "storybook/test";
 import { Skeleton } from "./skeleton";
 
 const meta = { component: Skeleton } satisfies Meta<typeof Skeleton>;
@@ -15,4 +16,12 @@ export const Row: Story = {
       </div>
     </div>
   ),
+  play: async ({ canvasElement }) => {
+    const shapes = canvasElement.querySelectorAll('[data-slot="skeleton"]');
+    await expect(shapes).toHaveLength(3);
+    // Placeholders only: nothing in them for a screen reader to read out.
+    for (const shape of shapes) {
+      await expect(shape).toBeEmptyDOMElement();
+    }
+  },
 };

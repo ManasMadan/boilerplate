@@ -87,7 +87,10 @@ test("an invalid number is caught before anything is sent", async ({ page }) => 
   await expect(card.getByText("No phone number yet.")).toBeVisible();
 });
 
-test("a number already on another account is refused", async ({ page, browser }) => {
+test("a number already on another account is refused once its code is entered", async ({
+  page,
+  browser,
+}) => {
   await signUp(page);
   await page.goto("/settings/security");
   const phone = newPhone();
@@ -97,12 +100,18 @@ test("a number already on another account is refused", async ({ page, browser })
   await phoneCard(page).getByLabel("Code from the text").fill(code);
   await phoneCard(page).getByRole("button", { name: "Verify" }).click();
   await expect(phoneCard(page).getByText(phone)).toBeVisible();
+  expect((await inbox.next()).Text).toContain("this number was added to your account");
 
+  // Asking for a code says nothing about whose number it is: only proving the texts
+  // arrive does, when the code is entered.
   const other = await browser.newContext();
   const otherPage = await other.newPage();
   await signUp(otherPage);
   await otherPage.goto("/settings/security");
   await requestCode(otherPage, phone);
+  const otherCode = /^(\d{6})/.exec((await inbox.next()).Text)?.[1] as string;
+  await phoneCard(otherPage).getByLabel("Code from the text").fill(otherCode);
+  await phoneCard(otherPage).getByRole("button", { name: "Verify" }).click();
   await expect(otherPage.getByText("That number is already on an account.")).toBeVisible();
   await other.close();
 });

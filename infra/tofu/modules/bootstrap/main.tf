@@ -23,6 +23,10 @@ locals {
     },
   )
   root = yamldecode(file("${path.module}/../../../../deploy/argocd/root.yaml"))
+  sops_keys = merge(
+    { "keys.txt" = var.sops_age_key },
+    var.previews ? { "preview.txt" = var.sops_preview_age_key } : {},
+  )
 }
 
 resource "kubernetes_namespace_v1" "argocd" {
@@ -37,8 +41,17 @@ resource "kubernetes_secret_v1" "sops_age" {
     name      = "sops-age"
     namespace = kubernetes_namespace_v1.argocd.metadata[0].name
   }
-  data = {
-    "keys.txt" = var.sops_age_key
+  data_wo          = local.sops_keys
+  data_wo_revision = var.sops_keys_version
+  lifecycle {
+    precondition {
+      condition     = !terraform.applying || var.sops_age_key != null
+      error_message = "Applying writes the cluster's age key: set sops_age_key (TF_VAR_sops_age_key)."
+    }
+    precondition {
+      condition     = !terraform.applying || !var.previews || strcontains(coalesce(var.sops_preview_age_key, "-"), "AGE-SECRET-KEY-1")
+      error_message = "A cluster hosting previews needs their age key (sops_preview_age_key), separate from its own."
+    }
   }
 }
 

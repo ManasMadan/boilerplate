@@ -10,9 +10,10 @@
   },
   "scripts": {
     "check-types": "tsc",
-    "test": "vitest run --project unit --passWithNoTests",
-    "test:integration": "bun --env-file=../../.env run vitest run --project integration",
-    "coverage": "bun --env-file=../../.env run vitest run --coverage"
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration --tags-filter=!files",
+    "test:integration:files": "vitest run --project integration --tags-filter=files",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1142.0",
@@ -20,6 +21,7 @@
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
     "@fastify/under-pressure": "^9.2.0",
+    "@nestjs/bullmq": "catalog:",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "@nestjs/platform-fastify": "catalog:",
@@ -38,6 +40,8 @@
     "@repo/db": "workspace:*",
     "@repo/i18n": "workspace:*",
     "@repo/logger": "workspace:*",
+    "bullmq": "catalog:",
+    "fastify": "catalog:",
     "ioredis": "catalog:",
     "ipaddr.js": "^2.5.0",
     "nestjs-pino": "^5.2.1",
@@ -50,6 +54,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",

@@ -15,7 +15,7 @@ export function totp(secret: string, at = Date.now()) {
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(Math.floor(at / 1000 / 30)));
   const hmac = createHmac("sha1", base32Decode(secret)).update(counter).digest();
-  const offset = (hmac.at(-1) ?? 0) & 0xf;
+  const offset = hmac.readUInt8(hmac.length - 1) & 0xf;
   const value = (hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
   return value.toString().padStart(6, "0");
 }

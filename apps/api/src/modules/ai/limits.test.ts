@@ -11,7 +11,7 @@ import {
   SENTIMENT_TEXT_MAX_LENGTH,
 } from "@repo/contracts/api";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 function maxLength(schema: z.ZodType, field: string) {
   const json = z.toJSONSchema(schema) as { properties: Record<string, { maxLength?: number }> };

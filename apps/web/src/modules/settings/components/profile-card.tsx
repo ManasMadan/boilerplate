@@ -34,8 +34,9 @@ import { useAuthErrorMessage } from "@/modules/auth";
 
 // Browsers list canonical zones only, without "UTC", which is our default for new users.
 const TIME_ZONES = ["UTC", ...Intl.supportedValuesOf("timeZone").filter((zone) => zone !== "UTC")];
+// A language code the browser doesn't know comes back as the code itself.
 const nativeName = (locale: string) =>
-  new Intl.DisplayNames([locale], { type: "language" }).of(locale) ?? locale;
+  String(new Intl.DisplayNames([locale], { type: "language" }).of(locale));
 
 export function ProfileCard() {
   const t = useTranslations("settings.profile");
@@ -60,6 +61,34 @@ export function ProfileCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** The languages, each named in itself. */
+function LanguageSelect({
+  value,
+  onChange,
+}: {
+  value: Locale;
+  onChange: (locale: Locale) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(chosen) => chosen && onChange(chosen)}
+      items={locales.map((locale) => ({ value: locale, label: nativeName(locale) }))}
+    >
+      <SelectTrigger id="locale" className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {locales.map((locale) => (
+          <SelectItem key={locale} value={locale}>
+            {nativeName(locale)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -110,22 +139,7 @@ function ProfileForm({ initial }: { initial: { name: string; locale: Locale; tim
           render={({ field }) => (
             <Field>
               <FieldLabel htmlFor="locale">{t("settings.profile.language")}</FieldLabel>
-              <Select
-                value={field.value}
-                onValueChange={(value) => value && field.onChange(value)}
-                items={locales.map((value) => ({ value, label: nativeName(value) }))}
-              >
-                <SelectTrigger id="locale" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {locales.map((locale) => (
-                    <SelectItem key={locale} value={locale}>
-                      {nativeName(locale)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LanguageSelect value={field.value} onChange={field.onChange} />
             </Field>
           )}
         />

@@ -9,7 +9,7 @@
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
-import { z } from "zod";
+import * as z from "zod";
 
 function nativeApiUrl() {
   const parsed = z.url().safeParse(process.env.EXPO_PUBLIC_API_URL);

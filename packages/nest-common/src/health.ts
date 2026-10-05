@@ -1,11 +1,14 @@
 /**
  * Kubernetes-style health endpoints for every service.
  *
- * - GET /health/live   the process is up (restart the pod if this fails)
- * - GET /health/ready  dependencies are reachable (stop routing traffic if this fails)
+ * - GET /health/live          the process is up (restart the pod if this fails)
+ * - GET /health/ready         it serves requests (route traffic to it)
+ * - GET /health/dependencies  each dependency it registered (Postgres, Redis, ...) answers
  *
- * Readiness checks each dependency the service registered (Postgres, Redis, ...), so a
- * database outage drains traffic instead of serving errors.
+ * Readiness doesn't check the dependencies: they're shared, so a Valkey restart would
+ * mark every pod unready at once and the whole site would answer the gateway's 503
+ * instead of the app's own errors. /health/dependencies is for dashboards, alerts and
+ * start-up scripts that must wait for them (scripts/e2e.ts).
  */
 import { Controller, type DynamicModule, Get, Inject, Module, Optional } from "@nestjs/common";
 import {
@@ -17,6 +20,7 @@ import {
 import type { Database } from "@repo/db";
 import type { Redis } from "ioredis";
 import { DATABASE } from "./database";
+import { asError } from "./job-processor";
 import { REDIS } from "./redis";
 
 export type Dependency = "db" | "redis";
@@ -40,8 +44,13 @@ class HealthController {
   }
 
   @Get("ready")
-  @HealthCheck()
   ready() {
+    return { status: "ok" };
+  }
+
+  @Get("dependencies")
+  @HealthCheck()
+  dependencies() {
     return this.health.check(this.deps.map((dep) => () => this.check(dep)));
   }
 
@@ -49,16 +58,21 @@ class HealthController {
     const status = this.indicator.check(dep);
     try {
       if (dep === "db") {
-        if (!this.database) throw new Error("DatabaseModule is not registered");
+        if (!this.database) {
+          throw new Error("DatabaseModule is not registered");
+        }
         await this.database.write.$queryRaw`SELECT 1`;
       }
       if (dep === "redis") {
-        if (!this.redis) throw new Error("RedisModule is not registered");
+        if (!this.redis) {
+          throw new Error("RedisModule is not registered");
+        }
         await this.redis.ping();
       }
       return status.up();
     } catch (error) {
-      return status.down({ message: error instanceof Error ? error.message : String(error) });
+      // Prisma, ioredis and the checks above all throw Errors.
+      return status.down({ message: asError(error).message });
     }
   }
 }

@@ -24,7 +24,9 @@ try {
   });
   console.log(seeded ? "Seeded." : "Already seeded. `bun run db:reset` starts over.");
   console.log(`Sign in at ${env.WEB_URL}/sign-in with any of:`);
-  for (const person of DEMO_PEOPLE) console.log(`  ${person.email} / ${DEMO_PASSWORD}`);
+  for (const person of DEMO_PEOPLE) {
+    console.log(`  ${person.email} / ${DEMO_PASSWORD}`);
+  }
 } finally {
   await app.close();
 }

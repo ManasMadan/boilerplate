@@ -52,10 +52,34 @@ describe("securityAlertFor", () => {
     expect(securityAlertFor({ path: "/two-factor/verify-totp", context: {} })).toBeUndefined();
   });
 
+  it("needs the address a password was reset for, and the new address of an email change", () => {
+    expect(
+      securityAlertFor({ path: "/email-otp/reset-password", body: {}, context: {} }),
+    ).toBeUndefined();
+    expect(
+      securityAlertFor({ path: "/email-otp/change-email", context: { session: session() } }),
+    ).toBeUndefined();
+  });
+
+  it("names the app a consent approved, only when it was approved", () => {
+    const consent = (body: unknown) =>
+      securityAlertFor({ path: "/oauth2/consent", body, context: { session: session() } });
+    expect(consent({ accept: true, oauth_query: "client_id=app-1&scope=openid" })).toEqual({
+      event: "app-connected",
+      email: "owner@example.com",
+      clientId: "app-1",
+    });
+    expect(consent({ accept: false, oauth_query: "client_id=app-1" })).toBeUndefined();
+    expect(consent({ accept: true })).toBeUndefined();
+  });
+
   it("ignores everything else", () => {
     expect(
       securityAlertFor({ path: "/sign-in/email", context: { session: session() } }),
     ).toBeUndefined();
     expect(securityAlertFor({ path: "/change-password", context: {} })).toBeUndefined();
+    // A request without a path, and one that names an object's own property.
+    expect(securityAlertFor({ context: { session: session() } })).toBeUndefined();
+    expect(securityAlertFor({ path: "toString", context: { session: session() } })).toBeUndefined();
   });
 });

@@ -5,21 +5,42 @@
  *
  *   export const env = createEnv({
  *     server: { ...coreEnv, ...databaseEnv, ...redisEnv, PORT: port(3001), MY_VAR: z.string() },
- *     runtimeEnv: process.env,
+ *     runtimeEnv: withServicePort("MY"),
  *     emptyStringAsUndefined: true,
  *   });
  *
  * so a shared variable has one name, one validation rule and one default everywhere.
  */
-import { z } from "zod";
+import * as z from "zod";
 
-export const nodeEnv = z.enum(["development", "test", "production"]).default("development");
-export const logLevel = z
+/**
+ * A comma-separated list: items trimmed, empty ones dropped ("a, b," → ["a", "b"]).
+ * `.prefault("…")` gives it a value when unset; `.pipe(...)` checks the items.
+ */
+export const csv = z.string().transform((value) =>
+  value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean),
+);
+
+const nodeEnv = z.enum(["development", "test", "production"]).default("development");
+const logLevel = z
   .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
   .default("info");
 
 export const port = (fallback: number) =>
   z.coerce.number().int().min(1).max(65_535).default(fallback);
+
+/**
+ * The environment a service's schema reads, with PORT where this service listens: PORT
+ * when it's set (the stack chart sets it), else the service's own variable from the
+ * shared local .env (`API_PORT` for "API"), which `bun run setup --stack <n>` moves with
+ * the checkout's other ports. With neither, the schema's `port(...)` default applies.
+ */
+export function withServicePort(service: string, env: NodeJS.ProcessEnv = process.env) {
+  return { ...env, PORT: env.PORT || env[`${service}_PORT`] };
+}
 
 export const coreEnv = {
   NODE_ENV: nodeEnv,
@@ -30,15 +51,7 @@ export const coreEnv = {
    * limits, lockout and audit logs, so trusting everyone would let any caller forge it.
    * Kubernetes: the gateway's pod range (the private `uniquelocal` ranges cover it).
    */
-  TRUSTED_PROXIES: z
-    .string()
-    .default("loopback")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean),
-    ),
+  TRUSTED_PROXIES: csv.prefault("loopback"),
   /**
    * Shed load (503) when the process is saturated. Off only where many instances share
    * one machine on purpose, like the integration tests, whose parallel test files would
@@ -62,14 +75,12 @@ const postgresUrl = z.url({ protocol: /^postgres(ql)?$/ });
  * only its own.
  */
 export function databaseEnv<const S extends string>(service: S) {
-  return {
+  return forService(service, {
     /** Pooled connection (PgBouncer in Kubernetes) used for all queries. */
-    [`${service}_DATABASE_URL`]: postgresUrl,
+    DATABASE_URL: postgresUrl,
     /** Connections this process may hold; the sum across replicas must stay under the server limit. */
-    [`${service}_DATABASE_POOL_MAX`]: z.coerce.number().int().positive().default(10),
-  } as { [K in `${S}_DATABASE_URL`]: typeof postgresUrl } & {
-    [K in `${S}_DATABASE_POOL_MAX`]: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
-  };
+    DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+  });
 }
 
 /**
@@ -77,9 +88,19 @@ export function databaseEnv<const S extends string>(service: S) {
  * silently drops. Only the worker's outbox relay needs it.
  */
 export function directDatabaseEnv<const S extends string>(service: S) {
-  return { [`${service}_DATABASE_DIRECT_URL`]: postgresUrl } as {
-    [K in `${S}_DATABASE_DIRECT_URL`]: typeof postgresUrl;
-  };
+  return forService(service, { DATABASE_DIRECT_URL: postgresUrl });
+}
+
+/** The variables, each named with the service in front (`API_` and `DATABASE_URL`). */
+function forService<const S extends string, V extends Record<string, z.ZodType>>(
+  service: S,
+  variables: V,
+) {
+  // TypeScript can't type a key built from a generic string, so this says what it is.
+  // type-coverage:ignore-next-line
+  return Object.fromEntries(
+    Object.entries(variables).map(([name, schema]) => [`${service}_${name}`, schema]),
+  ) as { [K in keyof V & string as `${S}_${K}`]: V[K] };
 }
 
 export const redisEnv = {

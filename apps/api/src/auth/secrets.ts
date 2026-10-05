@@ -27,15 +27,20 @@ export function parseAuthSecrets(value: string): AuthSecret[] {
       const colon = entry.indexOf(":");
       const version = Number(entry.slice(0, colon));
       const secret = entry.slice(colon + 1).trim();
-      if (colon === -1 || !Number.isInteger(version) || version < 0)
+      if (colon === -1 || !Number.isInteger(version) || version < 0) {
         throw new Error("BETTER_AUTH_SECRETS entries look like `<version>:<secret>`");
-      if (secret.length < 32)
+      }
+      if (secret.length < 32) {
         throw new Error(`BETTER_AUTH_SECRETS version ${version} must be at least 32 characters`);
+      }
       return { version, value: secret };
     });
-  if (secrets.length === 0) throw new Error("BETTER_AUTH_SECRETS lists no secrets");
-  if (new Set(secrets.map((secret) => secret.version)).size !== secrets.length)
+  if (secrets.length === 0) {
+    throw new Error("BETTER_AUTH_SECRETS lists no secrets");
+  }
+  if (new Set(secrets.map((secret) => secret.version)).size !== secrets.length) {
     throw new Error("BETTER_AUTH_SECRETS lists a version twice");
+  }
   return secrets;
 }
 
@@ -45,7 +50,9 @@ export function parseAuthSecrets(value: string): AuthSecret[] {
  */
 export function authEncryptionKey(secret: string, secrets: AuthSecret[] | undefined) {
   const [current] = secrets ?? [];
-  if (!secrets || !current) return secret;
+  if (!secrets || !current) {
+    return secret;
+  }
   return {
     keys: new Map(secrets.map(({ version, value }) => [version, value])),
     currentVersion: current.version,

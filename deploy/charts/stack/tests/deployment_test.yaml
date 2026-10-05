@@ -29,24 +29,49 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: RELEASE, value: sha-abc123 }
 
-  - it: gives each service its database role and Valkey
+  - it: gives each service its database role over verified TLS, and Valkey
     documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: DATABASE_SECRET_URL
+            valueFrom: { secretKeyRef: { name: db-app-worker, key: url } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: WORKER_DATABASE_URL
+            value: "$(DATABASE_SECRET_URL)?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt"
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: WORKER_DATABASE_DIRECT_URL
+            value: "$(DATABASE_SECRET_DIRECT_URL)?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt"
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: postgres-ca, secret: { secretName: boilerplate-postgres-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: REDIS_URL
+            valueFrom: { secretKeyRef: { name: valkey, key: url } }
+
+  - it: passes the Secret's URL through as it is without a certificate authority
+    documentSelector: { path: metadata.name, value: demo-worker }
+    set:
+      database.caSecret: ""
     asserts:
       - contains:
           path: "spec.template.spec.containers[0].env"
           content:
             name: WORKER_DATABASE_URL
             valueFrom: { secretKeyRef: { name: db-app-worker, key: url } }
-      - contains:
-          path: "spec.template.spec.containers[0].env"
-          content:
-            name: WORKER_DATABASE_DIRECT_URL
-            valueFrom: { secretKeyRef: { name: db-app-worker, key: directUrl } }
-      - contains:
-          path: "spec.template.spec.containers[0].env"
-          content:
-            name: REDIS_URL
-            valueFrom: { secretKeyRef: { name: valkey, key: url } }
+      - notContains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
 
   - it: loads a service's own Secret, and none for services without secrets
     documentSelector: { path: metadata.name, value: demo-notifications }
@@ -151,6 +176,26 @@ tests:
             name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
             value: "http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp/v1/metrics"
 
+  - it: points the api at Alertmanager with observability on, for system.alerting
+    set:
+      observability.enabled: true
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: ALERTMANAGER_URL
+            value: "http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093"
+
+  - it: leaves Alertmanager unset without observability, so system.alerting answers off
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: ALERTMANAGER_URL
+            value: "http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093"
+
   - it: lets an environment's own collector override the observability endpoints
     set:
       observability.enabled: true
@@ -170,7 +215,7 @@ tests:
           path: "spec.template.spec.containers[0].envFrom"
           value: [{ secretRef: { name: demo-ai } }]
       - notExists: { path: "spec.template.spec.containers[0].ports" }
-      - notExists: { path: "spec.template.spec.containers[0].livenessProbe" }
+      - notExists: { path: "spec.template.spec.containers[0].readinessProbe" }
 
   - it: leaves the replica count to the autoscaler when there is one
     documentSelector: { path: metadata.name, value: demo-api }
@@ -200,14 +245,30 @@ tests:
     asserts:
       - equal: { path: "spec.template.spec.containers[0].lifecycle.preStop.sleep.seconds", value: 5 }
 
-  - it: runs ClamAV from its own image with a TCP probe and a writable filesystem
+  - it: limits every service's CPU as well as its memory
+    set:
+      services.clamav.enabled: true
+    asserts:
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.memory" }
+
+  - it: runs ClamAV from its own image as our user, on a read-only root, with a TCP probe
     set:
       services.clamav.enabled: true
     documentSelector: { path: metadata.name, value: demo-clamav }
     asserts:
-      - equal: { path: "spec.template.spec.containers[0].image", value: docker.io/clamav/clamav:1.5 }
-      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: false }
-      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 100 }
+      - equal: { path: "spec.template.spec.containers[0].image", value: docker.io/clamav/clamav-debian:1.5.4@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578 }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - equal: { path: "spec.template.spec.containers[0].resources.limits.cpu", value: "2" }
+      # It starts ClamAV itself (the image's entrypoint needs root's rights over its
+      # files), with the signatures fetched into a directory of the pod's.
+      - equal: { path: "spec.template.spec.containers[0].command", value: [sh, -c] }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: "exec clamd --config-file=/tmp/clamd.conf" }
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: writable-0, mountPath: /var/lib/clamav }
       - exists: { path: "spec.template.spec.containers[0].readinessProbe.tcpSocket" }
       - notExists: { path: "spec.template.spec.containers[0].envFrom" }
 
@@ -237,6 +298,16 @@ tests:
       - contains:
           path: spec.template.spec.volumes
           content: { name: ca-bundle, secret: { secretName: local-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+
+  - it: restarts the AI worker when its heartbeat goes stale
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - equal:
+          path: "spec.template.spec.containers[0].livenessProbe.exec.command"
+          value: [python, -m, app.heartbeat]
+      - equal:
+          path: "spec.template.spec.containers[0].startupProbe.exec.command"
+          value: [python, -m, app.heartbeat]
 
   - it: loads no Secret into services with nothing secret
     documentSelector: { path: metadata.name, value: demo-worker }

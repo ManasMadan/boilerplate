@@ -15,27 +15,37 @@
  * files), fed by the same `files` queue.
  */
 import { createHash } from "node:crypto";
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
 import { Inject } from "@nestjs/common";
-import { type FileRejection, type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
+import {
+  type FileRejection,
+  type UploadPurpose,
+  uploadPurposeNames,
+  uploadPurposes,
+} from "@repo/contracts/files";
+import { type FileId, userIdSchema } from "@repo/contracts/ids";
 import { realtimeChannel } from "@repo/contracts/realtime";
-import { parseJob, queuePrefix } from "@repo/jobs";
+import { parseJob, queuePrefix, type UncheckedJob } from "@repo/jobs";
 import {
   type Database,
   InjectDatabase,
   InjectPinoLogger,
   InjectRedis,
+  JobProcessor,
   PinoLogger,
   type Redis,
+  runJob,
   STORAGE,
   type Storage,
 } from "@repo/nest-common";
-import type { Job } from "bullmq";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
+import * as z from "zod";
 import { env } from "../env";
 import { publishRealtime } from "../realtime/publish";
 import { FILE_SCANNER, type FileScanner } from "./file-scanner";
+
+const uploadPurpose = z.enum(uploadPurposeNames);
 
 const AVATAR_SIZE = 512;
 // Decoding bombs: refuse images claiming more pixels than a large photo has.
@@ -48,7 +58,7 @@ class Rejected extends Error {
 }
 
 @Processor("files", { concurrency: env.FILES_CONCURRENCY, prefix: queuePrefix("files") })
-export class FilesProcessor extends WorkerHost {
+export class FilesProcessor extends JobProcessor {
   constructor(
     @InjectDatabase() private readonly database: Database,
     @Inject(STORAGE) private readonly storage: Storage | null,
@@ -59,27 +69,40 @@ export class FilesProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job) {
-    const { payload } = parseJob("files", "process", job.data);
-    await this.check(payload.fileId);
+  async process(job: UncheckedJob) {
+    const { meta, payload } = parseJob("files", "process", job.data);
+    await runJob(meta, `job:${job.id}`, () => this.check(payload.fileId));
   }
 
-  async check(fileId: string) {
-    if (!this.storage) throw new Error("files are off (no S3_BUCKET) but a file was queued");
+  async check(fileId: FileId) {
+    if (!this.storage) {
+      throw new Error("files are off (no S3_BUCKET) but a file was queued");
+    }
     const db = this.database.write;
     const file = await db.file.findUnique({ where: { id: fileId } });
-    if (!file || (file.status !== "pending" && file.status !== "processing")) return;
+    const quarantine = `quarantine/${fileId}`;
+    if (!file) {
+      return;
+    }
+    // Decided already, maybe by an attempt that crashed before removing the original:
+    // only the cleanup is left (deleting is idempotent).
+    if (file.status === "ready" || file.status === "rejected") {
+      await this.storage.delete(quarantine);
+      return;
+    }
+    // Pending or processing, the only other statuses (a check constraint says so).
     await db.file.update({ where: { id: fileId }, data: { status: "processing" } });
 
-    const quarantine = `quarantine/${fileId}`;
     try {
       const stored = await this.inspect(
-        file.purpose as UploadPurpose,
+        this.storage,
+        uploadPurpose.parse(file.purpose),
         quarantine,
         file.declaredSize,
       );
+      // Stored, then recorded, then the original removed: a crash at any point leaves a
+      // retry either the original to check again or nothing but the cleanup.
       await this.storage.write(`files/${fileId}`, stored.body, stored.contentType);
-      await this.storage.delete(quarantine);
       await db.file.update({
         where: { id: fileId },
         data: {
@@ -90,26 +113,41 @@ export class FilesProcessor extends WorkerHost {
           readyAt: new Date(),
         },
       });
+      await this.storage.delete(quarantine);
       this.log.info({ fileId, purpose: file.purpose }, "upload accepted");
     } catch (error) {
-      if (!(error instanceof Rejected)) throw error;
-      await this.storage.delete(quarantine);
+      if (!(error instanceof Rejected)) {
+        throw error;
+      }
       await db.file.update({
         where: { id: fileId },
         data: { status: "rejected", rejectReason: error.reason },
       });
+      await this.storage.delete(quarantine);
       this.log.warn({ fileId, purpose: file.purpose, reason: error.reason }, "upload rejected");
     }
-    await publishRealtime(this.redis, realtimeChannel.user(file.userId), { type: "files.changed" });
+    const owner = userIdSchema.parse(file.userId);
+    await publishRealtime(this.redis, realtimeChannel.user(owner), { type: "files.changed" });
   }
 
-  private async inspect(purpose: UploadPurpose, key: string, declaredSize: number) {
+  private async inspect(
+    storage: Storage,
+    purpose: UploadPurpose,
+    key: string,
+    declaredSize: number,
+  ) {
     const rules = uploadPurposes[purpose];
-    const storage = this.storage as Storage;
     const head = await storage.head(key);
-    if (!head) throw new Rejected("FILE_UNREADABLE");
-    if (head.size !== declaredSize || head.size > rules.maxBytes)
+    if (!head) {
+      throw new Rejected("FILE_UNREADABLE");
+    }
+    if (head.size > rules.maxBytes) {
       throw new Rejected("FILE_TOO_LARGE");
+    }
+    // Not what the client said it would upload (smaller or larger): refused as such.
+    if (head.size !== declaredSize) {
+      throw new Rejected("FILE_SIZE_MISMATCH");
+    }
     const bytes = await storage.read(key, rules.maxBytes);
 
     const scan = await this.scanner.scan(bytes);

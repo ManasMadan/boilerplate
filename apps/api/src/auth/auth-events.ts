@@ -7,6 +7,7 @@
  * transaction). A crash in between loses the audit entry, never the change.
  */
 import type { EventPayload } from "@repo/contracts/events";
+import type { UserId } from "@repo/contracts/ids";
 import type { AnyEvent } from "../outbox";
 import type { SecurityChange } from "./security-alerts";
 
@@ -15,13 +16,27 @@ type SessionEndReason = EventPayload<"auth.session_ended.v1">["reason"];
 
 /** How a new session was obtained, from the endpoint that created it. */
 export function sessionMethod(path: string | undefined): SessionMethod {
-  if (!path) return "other";
-  if (path === "/sign-in/email" || path === "/sign-up/email") return "password";
-  if (path.startsWith("/passkey/")) return "passkey";
-  if (path.startsWith("/callback/") || path.startsWith("/sign-in/social")) return "social";
-  if (path.startsWith("/two-factor/")) return "two-factor";
-  if (path.startsWith("/email-otp/")) return "email-code";
-  if (path.startsWith("/admin/impersonate")) return "impersonation";
+  if (!path) {
+    return "other";
+  }
+  if (path === "/sign-in/email" || path === "/sign-up/email") {
+    return "password";
+  }
+  if (path.startsWith("/passkey/")) {
+    return "passkey";
+  }
+  if (path.startsWith("/callback/") || path.startsWith("/sign-in/social")) {
+    return "social";
+  }
+  if (path.startsWith("/two-factor/")) {
+    return "two-factor";
+  }
+  if (path.startsWith("/email-otp/")) {
+    return "email-code";
+  }
+  if (path.startsWith("/admin/impersonate")) {
+    return "impersonation";
+  }
   return "other";
 }
 
@@ -51,7 +66,7 @@ export function sessionEndReason(path: string | undefined): SessionEndReason {
 }
 
 /** The audit event for a security alert (both describe the same account change). */
-export function auditEventForAlert(change: SecurityChange, userId: string): AnyEvent {
+export function auditEventForAlert(change: SecurityChange, userId: UserId): AnyEvent {
   switch (change.event) {
     case "password-changed":
       return { name: "auth.password_changed.v1", payload: { userId } };

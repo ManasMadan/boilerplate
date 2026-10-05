@@ -16,7 +16,10 @@ const server = createServer(async (_request, response) => {
   response.end("ok");
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-await fetch(`http://127.0.0.1:${server.address().port}/work`).then((response) => response.text());
+// A query like an OAuth callback's, whose values must not reach a trace.
+await fetch(`http://127.0.0.1:${server.address().port}/work?code=secret-code&state=s1`).then(
+  (response) => response.text(),
+);
 
 server.close();
 await database.end();

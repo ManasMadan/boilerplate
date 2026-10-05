@@ -1,10 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  useCreateWebhookEndpointMutation,
-  useWebhookEndpointsQuery,
-} from "@repo/client/api/webhooks/endpoints";
+import { useApiErrorMessage } from "@repo/client";
+import { useCreateWebhookEndpointMutation } from "@repo/client/api/webhooks/create-endpoint";
+import { useWebhookEndpointsQuery } from "@repo/client/api/webhooks/list-endpoints";
 import { webhookEvents } from "@repo/contracts/events";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -32,7 +31,6 @@ import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 import { TextField } from "@/components/form-fields";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { UpgradeHint, useHasWebhooks } from "@/modules/billing";
 import { EndpointStatus } from "../components/endpoint-status";
 import { SecretDialog } from "../components/secret-dialog";
@@ -52,13 +50,16 @@ export function WorkspaceWebhooksPage() {
           <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {endpoints.isPending ? (
-            <Skeleton className="h-16" />
-          ) : endpoints.isError ? (
+          {endpoints.isPending ? <Skeleton className="h-16" /> : null}
+          {endpoints.isError ? (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(endpoints.error)}
             </p>
-          ) : endpoints.data?.length ? (
+          ) : null}
+          {endpoints.isSuccess && endpoints.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("empty")}</p>
+          ) : null}
+          {endpoints.isSuccess && endpoints.data.length > 0 ? (
             <ul className="flex flex-col divide-y">
               {endpoints.data.map((endpoint) => (
                 <li key={endpoint.id} className="flex items-center justify-between gap-3 py-2">
@@ -72,9 +73,7 @@ export function WorkspaceWebhooksPage() {
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("empty")}</p>
-          )}
+          ) : null}
         </CardContent>
       </Card>
       {hasWebhooks ? (

@@ -20,38 +20,64 @@
  * Debezium reading the outbox tables) can replace polling and feed the same EventBus;
  * emitEvent and every consumer stay as they are.
  */
+
+import { Socket } from "node:net";
 import {
   Injectable,
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
-import type { EventEnvelope } from "@repo/contracts/events";
+import { eventEnvelope } from "@repo/contracts/events";
 import { Prisma } from "@repo/db";
-import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import {
+  type Database,
+  InjectDatabase,
+  InjectPinoLogger,
+  PinoLogger,
+  rows,
+} from "@repo/nest-common";
 import pg from "pg";
+import * as z from "zod";
 import { env } from "../env";
 import { EventBus } from "./event-bus";
 import { OUTBOX_SOURCES, type OutboxSource } from "./sources";
 
-interface OutboxRow {
-  id: string;
+/**
+ * An outbox row's columns. Parsed, so a migration that renames or retypes one fails here;
+ * whether the row is a valid event is checked after (eventEnvelope), one row at a time.
+ */
+const outboxRow = z.object({
+  id: z.string(),
   /** Possibly an event this build doesn't know yet (see eventEnvelope). */
-  name: string;
-  key: string;
-  payload: unknown;
-  org_id: string | null;
-  actor_id: string | null;
-  request_id: string | null;
-  occurred_at: Date;
-}
+  name: z.string(),
+  key: z.string(),
+  payload: z.unknown(),
+  org_id: z.string().nullable(),
+  actor_id: z.string().nullable(),
+  request_id: z.string().nullable(),
+  occurred_at: z.date(),
+});
+type OutboxRow = z.infer<typeof outboxRow>;
 
-const RECONNECT_DELAY_MS = 2_000;
+/** Between 1 and 3 seconds: replicas that lost the database together don't return together. */
+const reconnectDelayMs = () => 1_000 + Math.random() * 2_000;
+
+/** Ends a listener connection, which may be gone already (its error then says nothing new). */
+async function closeQuietly(client: pg.Client | undefined) {
+  try {
+    await client?.end();
+  } catch {
+    // Already closed.
+  }
+}
 
 @Injectable()
 export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdown {
   private listener: pg.Client | undefined;
   private poller: NodeJS.Timeout | undefined;
   private reconnect: NodeJS.Timeout | undefined;
+  /** The listener connection being made, and how to abandon it. */
+  private connecting: { done: Promise<void>; cancel: () => void } | undefined;
   private draining: Promise<void> | undefined;
   private rerun = false;
   private stopped = false;
@@ -63,8 +89,9 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
   ) {}
 
   async onApplicationBootstrap() {
-    await this.listen();
+    // Polling starts first, so a shutdown while the listener connects stops it too.
     this.poller = setInterval(() => this.kick(), env.RELAY_POLL_INTERVAL_MS);
+    await this.listen();
     this.kick();
   }
 
@@ -72,14 +99,20 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     this.stopped = true;
     clearInterval(this.poller);
     clearTimeout(this.reconnect);
-    await this.listener?.end().catch(() => undefined);
+    // A connection still being made (at startup, or reconnecting) is dropped, not left
+    // to finish and listen after the relay has stopped.
+    this.connecting?.cancel();
+    await this.connecting?.done;
+    await closeQuietly(this.listener);
     // Let the batch in flight commit, so it isn't republished by the next replica.
     await this.draining;
   }
 
   /** Starts a drain, or asks the running one to go round again. Never runs two at once. */
   kick() {
-    if (this.stopped) return;
+    if (this.stopped) {
+      return;
+    }
     if (this.draining !== undefined) {
       this.rerun = true;
       return;
@@ -112,58 +145,97 @@ export class OutboxRelay implements OnApplicationBootstrap, OnApplicationShutdow
     const table = Prisma.raw(`"${source}"."outbox_event"`);
     return this.database.write.$transaction(
       async (tx) => {
-        const rows = await tx.$queryRaw<OutboxRow[]>`
-          SELECT id, name, key, payload, org_id, actor_id, request_id, occurred_at
-          FROM ${table}
-          WHERE published_at IS NULL
-          ORDER BY occurred_at
-          LIMIT ${env.RELAY_BATCH_SIZE}
-          FOR UPDATE SKIP LOCKED`;
-        if (rows.length === 0) return 0;
-        await this.bus.publish(rows.map((row) => toEnvelope(row, source)));
+        const claimed = await rows(
+          outboxRow,
+          tx.$queryRaw`
+            SELECT id, name, key, payload, org_id, actor_id, request_id, occurred_at
+            FROM ${table}
+            WHERE published_at IS NULL
+            ORDER BY occurred_at
+            LIMIT ${env.RELAY_BATCH_SIZE}
+            FOR UPDATE SKIP LOCKED`,
+        );
+        if (claimed.length === 0) {
+          return 0;
+        }
+        // A row that isn't a valid event never will be: publishing it would fail this
+        // batch, and every batch after it, forever. It's logged and set aside (marked
+        // published, so it stays in the table until retention, for someone to look at).
+        const envelopes = claimed.map((row) => ({
+          row,
+          parsed: eventEnvelope.safeParse(toEnvelope(row, source)),
+        }));
+        for (const { row, parsed } of envelopes) {
+          if (!parsed.success) {
+            this.log.error(
+              { source, eventId: row.id, name: row.name, issues: parsed.error.issues },
+              "outbox row isn't a valid event; set aside",
+            );
+          }
+        }
+        await this.bus.publish(
+          envelopes.flatMap(({ parsed }) => (parsed.success ? [parsed.data] : [])),
+        );
         await tx.$executeRaw`
           UPDATE ${table} SET published_at = now()
-          WHERE id = ANY(${rows.map((row) => row.id)}::uuid[])`;
-        return rows.length;
+          WHERE id = ANY(${claimed.map((row) => row.id)}::uuid[])`;
+        return claimed.length;
       },
       { maxWait: 5_000, timeout: 15_000 },
     );
   }
 
-  private async listen() {
+  private listen() {
+    // The relay's own socket: pg can't end a connection it's still making, and waits for
+    // an answer that may never come, but destroying the socket fails the connect at once.
+    const socket = new Socket();
     const client = new pg.Client({
       connectionString: env.WORKER_DATABASE_DIRECT_URL,
       application_name: "worker-outbox-listener",
+      stream: () => socket,
     });
     client.on("notification", () => this.kick());
     client.on("error", (error) => {
       this.log.warn({ err: error }, "outbox listener lost its connection; reconnecting");
       this.scheduleReconnect();
     });
+    const done = this.connect(client).finally(() => {
+      this.connecting = undefined;
+    });
+    this.connecting = { done, cancel: () => socket.destroy() };
+    return done;
+  }
+
+  private async connect(client: pg.Client) {
     try {
       await client.connect();
       await client.query("LISTEN outbox");
       this.listener = client;
     } catch (error) {
-      this.log.warn({ err: error }, "outbox listener could not connect; polling meanwhile");
-      await client.end().catch(() => undefined);
+      if (!this.stopped) {
+        this.log.warn({ err: error }, "outbox listener could not connect; polling meanwhile");
+      }
+      await closeQuietly(client);
       this.scheduleReconnect();
     }
   }
 
   private scheduleReconnect() {
-    if (this.stopped || this.reconnect) return;
+    if (this.stopped || this.reconnect) {
+      return;
+    }
     const previous = this.listener;
     this.listener = undefined;
-    void previous?.end().catch(() => undefined);
+    void closeQuietly(previous);
     this.reconnect = setTimeout(() => {
       this.reconnect = undefined;
       void this.listen();
-    }, RECONNECT_DELAY_MS);
+    }, reconnectDelayMs());
   }
 }
 
-function toEnvelope(row: OutboxRow, source: OutboxSource): EventEnvelope {
+/** The envelope a row would be, still to be checked against the contract (drainBatch). */
+function toEnvelope(row: OutboxRow, source: OutboxSource): z.input<typeof eventEnvelope> {
   return {
     id: row.id,
     name: row.name,

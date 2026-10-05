@@ -1,5 +1,6 @@
 output "argocd_namespace" {
-  value = helm_release.argocd.namespace
+  description = "The namespace Argo CD runs in."
+  value       = helm_release.argocd.namespace
 }
 
 output "cluster_labels" {

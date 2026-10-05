@@ -6,8 +6,10 @@ so one request can be followed across services; with telemetry on, also the trac
 """
 
 import logging
+from typing import cast
 
 import structlog
+from structlog.typing import FilteringBoundLogger
 
 from app.telemetry import add_trace_ids
 
@@ -34,4 +36,5 @@ def configure_logging(level: str, json: bool) -> None:
     )
 
 
-log = structlog.get_logger()
+# structlog.get_logger() is untyped; configure_logging makes it a filtering bound logger.
+log = cast(FilteringBoundLogger, structlog.get_logger())

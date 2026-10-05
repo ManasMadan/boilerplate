@@ -2,8 +2,8 @@
 
 Everything runs on k3s on machines you rent or own, anywhere: one root, `envs/k3s`,
 used once per environment (staging, production) with its own variables and state. It
-installs k3s on the machines, puts Cloudflare in front, and hands the cluster to Argo
-CD, which deploys the rest from this repository (see `deploy/README.md`): Postgres
+installs k3s on the machines, publishes its DNS (Cloudflare in front by default, or a
+name server of your own), and hands the cluster to Argo CD, which deploys the rest from this repository (see `deploy/README.md`): Postgres
 (CloudNativePG), Valkey, object storage (RustFS), the mail server (Stalwart) and the
 services all run in the cluster.
 
@@ -13,6 +13,8 @@ modules/
   cloudflare   zone TLS settings, optional WAF, the site's and the mail server's DNS
                records, an API token for the zone's DNS (cert-manager) and the
                Turnstile widget
+  rfc2136      the same records on a name server of your own, through TSIG-signed
+               dynamic updates (dns.provider = "rfc2136"): no Cloudflare at all
   bootstrap    Argo CD with the SOPS age key, the cluster's registration (labels and
                annotations the ApplicationSets read) and the root Application
 envs/k3s
@@ -35,11 +37,20 @@ private network between them, use it (`private_address`).
 - **Three servers** keep the cluster up when one fails (embedded etcd needs a
   majority, so two is no better than one). Add **agents** for more capacity.
 
+How much memory: the application and its data ask for about 7 GB on staging and about
+14 GB on production (`resources.requests` in `deploy/environments/<env>/`, summed over
+their replicas), the platform (Argo CD, cert-manager, Envoy Gateway, KEDA, Kyverno,
+CloudNativePG, the mail server) for about 2.5 GB more, observability for about 2 GB,
+and k3s itself for about 1 GB. So staging fits one machine of 16 GB (each preview it
+hosts can take up to 8 GB more, its quota), and production needs about 20 GB in all:
+three machines of 8 GB, or one of 32 GB. Four vCPUs per machine is a sensible floor.
+Pods that don't fit stay Pending; `kubectl describe pod` says which resource ran out.
+
 Open these ports in the provider's firewall:
 
 | Port | From | For |
 |---|---|---|
-| 80, 443 | anywhere (Cloudflare, and previews directly) | the gateway |
+| 80, 443 | anywhere (Cloudflare, and previews directly) | the gateway (the site's hosts only answer Cloudflare, see below) |
 | 25, 465, 587, 993 | anywhere, on the mail node | the mail server |
 | 22, 6443 | where OpenTofu runs (your machine, the CI runner) | installing k3s, the Kubernetes API |
 | 6443, 10250, 8472/udp (vxlan) or 51820/udp (wireguard-native) | the other nodes | k3s |
@@ -58,11 +69,12 @@ secrets are encrypted to its public key, see `deploy/README.md`). Then:
 
 ```sh
 cd infra/tofu/envs/k3s
-cp backend-staging.hcl.example backend-staging.hcl
+cp backend-staging.hcl.example backend-staging.hcl   # backend-production.hcl.example for production
 cp staging.tfvars.example staging.tfvars          # your machines, domain, …
 export CLOUDFLARE_API_TOKEN=…                     # see modules/cloudflare for its permissions
 export TF_VAR_ssh_private_key="$(cat ~/.ssh/boilerplate)"
 export TF_VAR_sops_age_key="$(cat staging.agekey)"
+export TF_VAR_sops_preview_age_key="$(cat preview.agekey)"   # with previews = true
 export TF_VAR_state_passphrase=…
 tofu init -backend-config=backend-staging.hcl
 tofu apply -var-file=staging.tfvars
@@ -73,13 +85,19 @@ State holds the cluster's certificate authorities, join tokens and admin key; it
 encrypted with the passphrase before it leaves your machine, and without the passphrase
 the environment can't be managed any more, so keep it safe.
 
+The SSH key and the age keys are only needed to apply: they're ephemeral, so they're in
+neither the state nor a saved plan, and the age keys go to the cluster as write-only
+data. A plan runs without them (pull request plans do, see
+`.github/workflows/infra.yml`). Because OpenTofu can't see a write-only value change,
+replacing an age key means raising `sops_keys_version` too (the rotate-secrets skill).
+
 Then put what OpenTofu made into the environment's SOPS secrets (see
 `deploy/README.md`): `tofu output -raw cloudflare_dns_api_token` for cert-manager and
 `tofu output -json turnstile` for the api. Point `site.host` in
 `deploy/environments/<env>/stack.yaml` at `site_host`, and Argo CD takes it from there.
 Set `previews = true` on the environment whose cluster also runs pull-request previews
 (normally staging), and `observability = true` where Jaeger, Prometheus and Grafana
-should run.
+should run, with `alert_email` for where their alerts go (required in production).
 
 ### Machines made with cloud-init
 
@@ -126,6 +144,16 @@ If it has expired, renew it first: `tofu apply -target=module.k3s.tls_locally_si
 
 ## DNS
 
+`dns.provider` chooses where the records live: `cloudflare` (the default) or `rfc2136`
+(a name server of your own that accepts dynamic updates signed with a TSIG key: BIND,
+Knot, PowerDNS; `dns.rfc2136` names it and the key, `TF_VAR_dns_tsig_secret` is the
+key's secret). Either way the same records are published, and OpenTofu tells the cluster
+(its `dns-*`, `trusted-hops` and `origin-pulls` annotations), so cert-manager validates
+certificates on the same DNS, external-dns writes there, and the gateway trusts
+Cloudflare's hop and certificate only when Cloudflare is in front. Moving an environment
+is the `swap-dns` skill. With RFC 2136 nothing is proxied: the site's records point at
+the nodes, there's no WAF or CDN in front, and the captcha (Turnstile) isn't created.
+
 The cloudflare module sets up, in the environment's zone:
 
 | Record | Proxied | What |
@@ -154,6 +182,16 @@ Two things for mail aren't in Cloudflare:
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out dkim.pem
   openssl pkey -in dkim.pem -pubout -outform DER | base64 | tr -d '\n'   # dkim_public_key
   ```
+
+Cloudflare presents its origin-pull client certificate on every request (the module
+turns on authenticated origin pulls), and the gateway refuses the TLS handshake for the
+site's hosts without it. So someone who finds a node's address can't skip Cloudflare,
+and the client address the services rate-limit on (from `X-Forwarded-For`) is the one
+Cloudflare saw. Previews are reached directly, so the gateway drops any
+`X-Forwarded-For` their visitors send. Apply the module before the platform chart
+first requires the certificate, or the site is refused in between. Restricting 80 and
+443 to Cloudflare's ranges at the provider's firewall is a further option, but only on
+a cluster without previews.
 
 Anything that bypasses Cloudflare (previews, the mail host) shows the nodes' real
 addresses; the proxy hides the site's origin only if the site runs on nodes that serve

@@ -5,13 +5,14 @@
  *
  * It's written through better-auth's internal adapter so every cached session sees the
  * new picture at once. Clients can't set `image` themselves (see the user update hook
- * in auth.ts), so it only ever points at a checked file.
+ * in auth-hooks.ts), so it only ever points at a checked file.
  */
 import { Injectable } from "@nestjs/common";
 import { fileContentPath } from "@repo/contracts/files";
-import { type Database, InjectDatabase } from "@repo/nest-common";
+import { type FileId, fileIdSchema, type UserId } from "@repo/contracts/ids";
 import { type Auth, InjectAuth } from "../../auth/auth.module";
 import { FilesService } from "../files";
+import { UserRepository } from "./user.repository";
 
 const AVATAR_PATH = /^\/api\/v1\/files\/([0-9a-f-]{36})\/content$/;
 
@@ -19,21 +20,22 @@ const AVATAR_PATH = /^\/api\/v1\/files\/([0-9a-f-]{36})\/content$/;
 export class AvatarService {
   constructor(
     @InjectAuth() private readonly auth: Auth,
-    @InjectDatabase() private readonly database: Database,
+    private readonly users: UserRepository,
     private readonly files: FilesService,
   ) {}
 
-  async set(userId: string, fileId: string | null) {
-    if (fileId) await this.files.ready(userId, fileId, "avatar");
-    const current = await this.database.read.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { image: true },
-    });
-    const previous = AVATAR_PATH.exec(current.image ?? "")?.[1];
+  async set(userId: UserId, fileId: FileId | null) {
+    if (fileId) {
+      await this.files.ready(userId, fileId, "avatar");
+    }
+    const current = await this.users.image(userId);
+    const previous = fileIdSchema.safeParse(AVATAR_PATH.exec(current.image ?? "")?.[1]).data;
     const context = await this.auth.$context;
     await context.internalAdapter.updateUser(userId, {
       image: fileId ? fileContentPath(fileId) : null,
     });
-    if (previous && previous !== fileId) await this.files.remove(userId, previous);
+    if (previous && previous !== fileId) {
+      await this.files.remove(userId, previous);
+    }
   }
 }

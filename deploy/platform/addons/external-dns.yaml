@@ -1,4 +1,4 @@
-# DNS records for the gateway's hosts (Cloudflare by default).
+# DNS records for the gateway's hosts (Cloudflare by default, or RFC 2136).
 addon: external-dns
 namespace: external-dns
 repoURL: https://kubernetes-sigs.github.io/external-dns/
@@ -9,3 +9,5 @@ wave: "-10"
 clusterParameters:
   txtOwnerId: name
   domainFilters[0]: domain
+  # cloudflare or rfc2136 (OpenTofu's `dns`).
+  provider.name: dns-provider|cloudflare

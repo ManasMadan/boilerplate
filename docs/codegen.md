@@ -13,7 +13,8 @@ the Python service's routes and models, and commit what changes.
 | Package | Source | Output | Committed |
 |---|---|---|---|
 | `packages/db` | `prisma/schema/*.prisma` | `src/generated/prisma` (the Prisma client, `prisma generate`) | no |
-| `packages/jobs` | zod schemas in `src/queues.ts` and `packages/contracts/src/realtime.ts` | `generated/schemas/*.json` (JSON Schema), `generated/queue-settings.json` | yes |
+| `packages/jobs` | zod schemas in `src/queues.ts` and `packages/contracts/src/realtime.ts` | `generated/schemas/*.json` (JSON Schema), `generated/queue-settings.json`; every event's schema in `generated/events.json` (the compatibility check) | yes |
+| `packages/i18n` | `messages/en.json` | `messages/en.d.json.ts` (the catalog's type, each message as its literal text, so ICU arguments are type-checked) | yes |
 | `apps/ai` | its FastAPI app, and the JSON Schemas above | `openapi.json`; `app/contracts/*.py` (Pydantic models) and `app/contracts/queue_settings.json` | yes |
 | `packages/ai-client` | `apps/ai/openapi.json` | `src/generated` (typed fetch client, zod schemas, SDK) | yes |
 | `apps/api` | the oRPC contract in `packages/contracts/src/api` | `openapi.json` (the public REST API, `/api/v1`) | yes |
@@ -28,11 +29,14 @@ sequence.
 A job the Python service consumes is defined once, in zod:
 
 1. `packages/jobs/scripts/export-schemas.ts` writes each entry of its `schemas` map as
-   JSON Schema (`ai_ingest_job.json` is `{ meta, payload }` of the `ai-ingest` queue;
-   `realtime_message.json` is the realtime message), and the shared queues' Redis prefix
-   and job options to `queue-settings.json`.
+   JSON Schema, one per job (`ai_ingest_ingest_job.json` and
+   `ai_ingest_summarize_job.json` are `{ meta, payload }` of the `ai-ingest` queue's two
+   jobs; `realtime_message.json` is the realtime message), the job and queue names as
+   Literals, the error response and codes, and the shared queues' Redis prefix and job
+   options to `queue-settings.json`. It clears stale files first.
 2. `apps/ai`'s `gen` turns them into Pydantic v2 models with `datamodel-codegen`
-   (`app/contracts/ai_ingest_job.py`, `realtime_message.py`), formats them with ruff and
+   (`app/contracts/ai_ingest_ingest_job.py`, `ai_ingest_summarize_job.py`,
+   `realtime_message.py`, `error_response.py`, ...), formats them with ruff and
    copies the queue settings next to them.
 
 Both languages then validate the same shape, and Python uses the same prefix and retry

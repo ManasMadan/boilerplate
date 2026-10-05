@@ -26,6 +26,8 @@ coverage
 playwright-report
 storybook-static
 test-results
+# vitest's browser mode: screenshots of failed tests.
+.vitest
 logs
 __pycache__
 .pytest_cache
@@ -40,6 +42,8 @@ CLAUDE.local.md
 
 # Session cookies of the load-test users (apps/api/src/load-users.ts).
 load/.sessions.json
+# Schemathesis's record of the failures it found (scripts/fuzz.ts), for `st replay`.
+.schemathesis/
 
 # OpenTofu: providers, state and plans stay local (state lives in each env's backend).
 # Lock files are committed for the env roots only.
@@ -51,3 +55,6 @@ infra/tofu/modules/**/.terraform.lock.hcl
 # Environment inputs can hold provider keys; only the examples are committed.
 infra/tofu/envs/*/*.tfvars
 infra/tofu/envs/*/backend-*.hcl
+
+# The charts rendered for the misconfiguration scan (scripts/misconfig.ts).
+deploy/.rendered/

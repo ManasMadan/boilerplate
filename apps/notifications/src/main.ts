@@ -2,7 +2,8 @@ import { bootstrap } from "@repo/nest-common";
 import { AppModule } from "./app.module";
 import { env } from "./env";
 
-await bootstrap(AppModule, {
+/** The running service (exported for the test that starts it). */
+export const app = await bootstrap(AppModule, {
   port: env.PORT,
   service: "notifications",
   logLevel: env.LOG_LEVEL,

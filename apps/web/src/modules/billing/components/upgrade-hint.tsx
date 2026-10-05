@@ -1,6 +1,6 @@
 "use client";
 
-import { useBillingOverviewQuery } from "@repo/client/api/billing";
+import { useBillingOverviewQuery } from "@repo/client/api/billing/overview";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -12,19 +12,23 @@ import { useTranslations } from "next-intl";
 export function UpgradeHint({ entitlement }: { entitlement: "webhooks" | "members" }) {
   const t = useTranslations("billing");
   const { data } = useBillingOverviewQuery();
-  if (!data?.enabled) return null;
+  if (!data?.enabled) {
+    return null;
+  }
   const limit = data.entitlements.members;
   const blocked =
     entitlement === "webhooks"
       ? !data.entitlements.webhooks
       : limit !== null && data.members >= limit;
-  if (!blocked) return null;
+  if (!blocked) {
+    return null;
+  }
   return (
     <Alert>
       <AlertDescription className="flex flex-col items-start gap-2">
         {entitlement === "webhooks"
           ? t("upgradeForWebhooks")
-          : t("limitReached", { limit: limit ?? 0 })}
+          : t("limitReached", { limit: Number(limit) })}
         <Link href="/settings/billing" className="font-medium underline underline-offset-4">
           {t("upgrade.title")}
         </Link>

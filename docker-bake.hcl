@@ -44,6 +44,8 @@ target "node-service" {
   }
   args = {
     SERVICE = service
+    # Each service's default port, as its src/env.ts has it (scripts/dockerfiles.test.ts).
+    PORT    = { api = "3001", worker = "3002", notifications = "3003", webhooks = "3004" }[service]
     RELEASE = RELEASE
   }
   tags = ["${REGISTRY}/${service}:${TAG}"]

@@ -1,5 +1,6 @@
 output "api_url" {
-  value = local.api_url
+  description = "The address of the cluster's Kubernetes API."
+  value       = local.api_url
 }
 
 output "kubernetes" {

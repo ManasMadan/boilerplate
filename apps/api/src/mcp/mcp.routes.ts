@@ -10,15 +10,17 @@
  */
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { MCP_PATH, mcpResource } from "@repo/contracts/mcp";
+import type { Locale } from "@repo/i18n";
 import {
   type AppError,
   createRateLimiter,
   type Redis,
+  rawBodies,
   runWithContext,
   updateContext,
 } from "@repo/nest-common";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { contextFor, toHeaders } from "../http-context";
+import { contextFor, fromWebResponse, toWebRequest } from "../http-context";
 import { createMcpServer, type McpServerDependencies } from "./mcp.server";
 import type { TokenVerifierOptions } from "./mcp.tokens";
 import { createTokenVerifier } from "./mcp.tokens";
@@ -30,11 +32,46 @@ export interface McpRouteOptions {
   grantActive: TokenVerifierOptions["grantActive"];
   redis: Redis;
   server: Omit<McpServerDependencies, "describeError">;
-  describeError: (error: AppError, locale: string | undefined) => Promise<string>;
+  describeError: (error: AppError, locale: Locale) => Promise<string>;
 }
 
 /** Tool calls per app and user per minute. */
 const CALLS_PER_MINUTE = 60;
+
+/** Answers one request for a verified caller, with an MCP server of its own (stateless). */
+async function answer(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  caller: Parameters<typeof createMcpServer>[0],
+  options: McpRouteOptions,
+) {
+  const locale = contextFor(request).locale;
+  const server = createMcpServer(caller, {
+    ...options.server,
+    describeError: (error) => options.describeError(error, locale),
+  });
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  await server.connect(transport);
+  try {
+    const response = await transport.handleRequest(
+      toWebRequest(request, new URL(request.url, options.siteUrl)),
+      {
+        authInfo: {
+          token: caller.token,
+          clientId: caller.clientId,
+          scopes: [...caller.scopes],
+          resource: new URL(mcpResource(options.siteUrl, MCP_PATH)),
+        },
+      },
+    );
+    return reply.send(await fromWebResponse(reply, response));
+  } finally {
+    await server.close();
+  }
+}
 
 export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
   const resource = mcpResource(options.siteUrl, MCP_PATH);
@@ -63,9 +100,13 @@ export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
     runWithContext(contextFor(request), async () => {
       const header = request.headers.authorization;
       const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
-      if (!token) return challenge(reply);
+      if (!token) {
+        return challenge(reply);
+      }
       const verified = await verify(token);
-      if (!verified.ok) return challenge(reply, verified.description);
+      if (!verified.ok) {
+        return challenge(reply, verified.description);
+      }
       const { caller } = verified;
       updateContext({ userId: caller.userId, orgId: caller.orgId });
 
@@ -77,47 +118,12 @@ export function mountMcp(fastify: FastifyInstance, options: McpRouteOptions) {
           .send({ error: "rate_limited" });
       }
 
-      const locale = contextFor(request).locale;
-      const server = createMcpServer(caller, {
-        ...options.server,
-        describeError: (error) => options.describeError(error, locale),
-      });
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-      });
-      await server.connect(transport);
-      try {
-        const body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : undefined;
-        const response = await transport.handleRequest(
-          new Request(new URL(request.url, options.siteUrl), {
-            method: request.method,
-            headers: toHeaders(request),
-            ...(body && { body }),
-          }),
-          {
-            authInfo: {
-              token: caller.token,
-              clientId: caller.clientId,
-              scopes: [...caller.scopes],
-              resource: new URL(resource),
-            },
-          },
-        );
-        reply.status(response.status);
-        for (const [key, value] of response.headers) reply.header(key, value);
-        return reply.send(response.body ? Buffer.from(await response.arrayBuffer()) : null);
-      } finally {
-        await server.close();
-      }
+      return answer(request, reply, caller, options);
     });
 
   fastify.register((scope, _options, done) => {
     // The transport reads the JSON-RPC body itself, exactly as sent.
-    scope.removeAllContentTypeParsers();
-    scope.addContentTypeParser("*", { parseAs: "buffer" }, (_request, body, next) =>
-      next(null, body),
-    );
+    rawBodies(scope);
     scope.route({ method: ["GET", "POST", "DELETE"], url: MCP_PATH, handler: handle });
     done();
   });

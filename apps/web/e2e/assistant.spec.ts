@@ -111,7 +111,9 @@ test("an empty question isn't sent", async ({ page }) => {
   await page.goto("/assistant");
   const requests: string[] = [];
   page.on("request", (request) => {
-    if (request.url().includes("/ai/ask")) requests.push(request.url());
+    if (request.url().includes("/ai/ask")) {
+      requests.push(request.url());
+    }
   });
   await page.getByRole("button", { name: "Ask" }).click();
   await page.waitForTimeout(300);

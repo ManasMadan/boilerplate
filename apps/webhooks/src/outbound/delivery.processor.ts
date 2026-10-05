@@ -2,31 +2,39 @@
  * Consumes webhook-deliveries. Retries use the Standard Webhooks schedule through a
  * custom backoff (WEBHOOK_RETRY_DELAYS_MS), so a job's attempts map to delivery attempts.
  */
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { randomUUID } from "node:crypto";
+import { Processor } from "@nestjs/bullmq";
+import type { OrgId, WebhookDeliveryId } from "@repo/contracts/ids";
 import {
   createProducer,
   type JobName,
+  jobName,
   parseJob,
   queuePrefix,
+  type UncheckedJob,
   WEBHOOK_RETRY_DELAYS_MS,
 } from "@repo/jobs";
-import { InjectRedis, type Redis, runWithContext } from "@repo/nest-common";
-import type { Job } from "bullmq";
+import { InjectRedis, JobProcessor, type Redis, runJob } from "@repo/nest-common";
 import { env } from "../env";
 import { DeliveryService } from "./delivery.service";
 
 /** Thrown to make BullMQ schedule the next attempt; the outcome is already recorded. */
 class DeliveryFailed extends Error {}
 
+/** How long to wait after a failed attempt: the schedule's step, never past its longest. */
+export const retryDelayMs = (attemptsMade: number) =>
+  WEBHOOK_RETRY_DELAYS_MS[attemptsMade - 1] ?? Math.max(...WEBHOOK_RETRY_DELAYS_MS);
+
+/** Whether this attempt is the job's last. BullMQ's default is 0 attempts (one try). */
+export const isLastAttempt = (job: Pick<UncheckedJob, "attemptsMade" | "opts">) =>
+  job.attemptsMade + 1 >= (job.opts.attempts ?? 0);
+
 @Processor("webhook-deliveries", {
   concurrency: env.WEBHOOK_DELIVERY_CONCURRENCY,
   prefix: queuePrefix("webhook-deliveries"),
-  settings: {
-    backoffStrategy: (attemptsMade: number) =>
-      WEBHOOK_RETRY_DELAYS_MS[attemptsMade - 1] ?? (WEBHOOK_RETRY_DELAYS_MS.at(-1) as number),
-  },
+  settings: { backoffStrategy: retryDelayMs },
 })
-export class DeliveryProcessor extends WorkerHost {
+export class DeliveryProcessor extends JobProcessor {
   private readonly queue;
 
   constructor(
@@ -37,22 +45,20 @@ export class DeliveryProcessor extends WorkerHost {
     this.queue = createProducer("webhook-deliveries", redis);
   }
 
-  async process(job: Job) {
-    const meta = {
-      requestId: `job:${job.id}`,
-      ...parseJob("webhook-deliveries", job.name as JobName<"webhook-deliveries">, job.data).meta,
-    };
-    await runWithContext(meta, () => this.handle(job));
+  async process(job: UncheckedJob) {
+    const name = jobName("webhook-deliveries", job.name);
+    const { meta } = parseJob("webhook-deliveries", name, job.data);
+    await runJob(meta, `job:${job.id}`, () => this.handle(job, name));
   }
 
-  private async handle(job: Job) {
-    switch (job.name as JobName<"webhook-deliveries">) {
+  private async handle(job: UncheckedJob, name: JobName<"webhook-deliveries">) {
+    switch (name) {
       case "deliver": {
         const { deliveryId, orgId } = parseJob("webhook-deliveries", "deliver", job.data).payload;
-        const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-        const outcome = await this.deliveries.attempt(orgId, deliveryId, isLastAttempt);
-        if (outcome === "retry")
+        const outcome = await this.deliveries.attempt(orgId, deliveryId, isLastAttempt(job));
+        if (outcome === "retry") {
           throw new DeliveryFailed(`delivery ${deliveryId} failed; retrying`);
+        }
         return;
       }
       case "redeliver": {
@@ -65,14 +71,15 @@ export class DeliveryProcessor extends WorkerHost {
       }
       case "send-test": {
         const { endpointId, orgId } = parseJob("webhook-deliveries", "send-test", job.data).payload;
-        const deliveryId = await this.deliveries.createTest(orgId, endpointId);
+        // Keyed on the job: a retried send-test finds its delivery instead of adding one.
+        const deliveryId = await this.deliveries.createTest(orgId, endpointId, testEventId(job.id));
         await this.enqueue(deliveryId, orgId, deliveryId);
         return;
       }
     }
   }
 
-  private enqueue(deliveryId: string, orgId: string, jobId: string) {
+  private enqueue(deliveryId: WebhookDeliveryId, orgId: OrgId, jobId: string) {
     return this.queue.add("deliver", { deliveryId, orgId }, { jobId, meta: { orgId } });
   }
 
@@ -80,3 +87,8 @@ export class DeliveryProcessor extends WorkerHost {
     await this.queue.close();
   }
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The test event's id: the job's own (the api gives each send-test a UUID), else a new one. */
+const testEventId = (jobId: string | undefined) =>
+  jobId && UUID.test(jobId) ? jobId : randomUUID();

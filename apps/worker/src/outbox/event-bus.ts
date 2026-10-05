@@ -13,6 +13,7 @@
  */
 import { Injectable, type OnModuleDestroy } from "@nestjs/common";
 import type { EventEnvelope } from "@repo/contracts/events";
+import { keysOf } from "@repo/contracts/objects";
 import { createProducer, type EventQueue, eventSubscribers, type Producer } from "@repo/jobs";
 import { InjectRedis, type Redis } from "@repo/nest-common";
 
@@ -26,17 +27,16 @@ export class BullMqEventBus extends EventBus implements OnModuleDestroy {
 
   constructor(@InjectRedis() redis: Redis) {
     super();
-    this.producers = (Object.keys(eventSubscribers) as EventQueue[]).map((queue) => [
-      queue,
-      createProducer(queue, redis),
-    ]);
+    this.producers = keysOf(eventSubscribers).map((queue) => [queue, createProducer(queue, redis)]);
   }
 
   async publish(events: EventEnvelope[]) {
     await Promise.all(
       this.producers.map(async ([queue, producer]) => {
         const accepted = events.filter((event) => eventSubscribers[queue](event.name));
-        if (accepted.length === 0) return;
+        if (accepted.length === 0) {
+          return;
+        }
         await producer.addBulk(
           accepted.map((event) => ({
             name: "event" as const,

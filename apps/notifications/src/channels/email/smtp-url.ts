@@ -11,12 +11,16 @@
 export function productionSmtpProblem(value: string): string | undefined {
   const url = new URL(value);
   const query = url.searchParams;
-  if (!url.username || !url.password) return "needs the submission account's credentials";
+  if (!url.username || !url.password) {
+    return "needs the submission account's credentials";
+  }
   // Without requireTLS, nodemailer sends in the clear when the server doesn't offer STARTTLS.
   if (url.protocol !== "smtps:" && query.get("requireTLS") !== "true") {
     return "must use TLS: smtps:// (implicit TLS) or smtp:// with requireTLS=true (STARTTLS)";
   }
-  if (query.get("ignoreTLS") === "true") return "must not set ignoreTLS";
+  if (query.get("ignoreTLS") === "true") {
+    return "must not set ignoreTLS";
+  }
   if (query.get("tls.rejectUnauthorized") === "false") {
     return "must verify the server's certificate (no tls.rejectUnauthorized=false)";
   }

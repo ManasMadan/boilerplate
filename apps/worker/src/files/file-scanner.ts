@@ -41,12 +41,18 @@ export class ClamdScanner implements FileScanner {
         reply += data.toString();
       });
       socket.on("close", () => {
-        if (failure) return reject(failure);
+        if (failure) {
+          return reject(failure);
+        }
         // "stream: OK", "stream: Eicar-Test-Signature FOUND", or "... ERROR".
         const answer = reply.replace(/\0/g, "").trim();
-        if (answer.endsWith("OK")) return resolve({ clean: true });
+        if (answer.endsWith("OK")) {
+          return resolve({ clean: true });
+        }
         const found = /^stream: (.+) FOUND$/.exec(answer);
-        if (found?.[1]) return resolve({ clean: false, signature: found[1] });
+        if (found?.[1]) {
+          return resolve({ clean: false, signature: found[1] });
+        }
         reject(new Error(`clamd: ${answer || "no answer"}`));
       });
       socket.on("connect", () => {

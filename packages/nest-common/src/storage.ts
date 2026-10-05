@@ -24,8 +24,9 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { fieldOf, required } from "@repo/contracts/objects";
 
-export interface PresignedUpload {
+interface PresignedUpload {
   url: string;
   /** Headers the client must send with the PUT, exactly as given. */
   headers: Record<string, string>;
@@ -65,6 +66,8 @@ export interface S3StorageOptions {
   secretAccessKey?: string;
   /** Needed by RustFS/MinIO-style servers without virtual-hosted buckets. */
   forcePathStyle?: boolean;
+  /** How long one request may take, connecting included (default 30 s). */
+  timeoutMs?: number;
 }
 
 export class S3Storage implements Storage {
@@ -75,6 +78,13 @@ export class S3Storage implements Storage {
       region: options.region,
       ...(options.endpoint && { endpoint: options.endpoint }),
       forcePathStyle: options.forcePathStyle ?? false,
+      // The SDK's own default waits forever on a server that stops answering, and its
+      // requestTimeout only logs a warning unless told to throw.
+      requestHandler: {
+        connectionTimeout: Math.min(5_000, options.timeoutMs ?? 30_000),
+        requestTimeout: options.timeoutMs ?? 30_000,
+        throwOnRequestTimeout: true,
+      },
       ...(options.accessKeyId &&
         options.secretAccessKey && {
           credentials: {
@@ -130,9 +140,15 @@ export class S3Storage implements Storage {
       const result = await this.client.send(
         new HeadObjectCommand({ Bucket: this.options.bucket, Key: key }),
       );
-      return { size: result.ContentLength ?? 0, contentType: result.ContentType };
+      // S3 always sends Content-Length for an object; the SDK's types just allow none.
+      return {
+        size: required(result.ContentLength, "Content-Length"),
+        contentType: result.ContentType,
+      };
     } catch (error) {
-      if ((error as { name?: string }).name === "NotFound") return null;
+      if (fieldOf(error, "name") === "NotFound") {
+        return null;
+      }
       throw error;
     }
   }
@@ -141,11 +157,12 @@ export class S3Storage implements Storage {
     const result = await this.client.send(
       new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
     );
-    if ((result.ContentLength ?? 0) > maxBytes)
+    if (required(result.ContentLength, "Content-Length") > maxBytes) {
       throw new Error(`${key} is larger than ${maxBytes} bytes`);
-    const bytes = await result.Body?.transformToByteArray();
-    if (!bytes) throw new Error(`${key} has no body`);
-    return Buffer.from(bytes);
+    }
+    // A GetObject that succeeded always has a body (possibly empty).
+    const body = required(result.Body, `${key}'s body`);
+    return Buffer.from(await body.transformToByteArray());
   }
 
   async write(key: string, body: Buffer, contentType: string) {
@@ -184,7 +201,9 @@ export function createStorage(env: {
   S3_SECRET_ACCESS_KEY?: string | undefined;
   S3_FORCE_PATH_STYLE: boolean;
 }): Storage | null {
-  if (!env.S3_BUCKET) return null;
+  if (!env.S3_BUCKET) {
+    return null;
+  }
   return new S3Storage({
     bucket: env.S3_BUCKET,
     region: env.S3_REGION,

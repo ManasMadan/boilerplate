@@ -10,16 +10,16 @@
     "./theme.css": "./src/styles/theme.css",
     "./postcss.config": "./postcss.config.mjs",
     "./lib/*": "./src/lib/*.ts",
-    "./hooks/*": "./src/hooks/*.ts",
     "./components/*": "./src/components/*.tsx"
   },
   "scripts": {
     "check-types": "tsc",
     "test:stories": "vitest run",
-    "storybook": "storybook dev -p 6006 --no-open",
+    "storybook": "bun --env-file=../../.env run sh -c 'exec storybook dev -p \"$STORYBOOK_PORT\" --no-open'",
     "build-storybook": "storybook build -o storybook-static",
-    "test:visual": "bun run build-storybook && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts",
-    "test:visual:update": "bun run build-storybook && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts --update-snapshots"
+    "test:visual": "turbo run build-storybook --filter=@repo/ui --output-logs=new-only && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts",
+    "test:visual:update": "turbo run build-storybook --filter=@repo/ui --output-logs=new-only && docker run --rm --ipc=host --memory=1536m -v \"$(git rev-parse --show-toplevel)\":/work -w /work/packages/ui mcr.microsoft.com/playwright:v1.63.0-noble node /work/node_modules/@playwright/test/cli.js test -c visual/playwright.config.ts --update-snapshots",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -35,6 +35,7 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-themes": "^10.6.0",
     "@storybook/addon-vitest": "^10.6.0",

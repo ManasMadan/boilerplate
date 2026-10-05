@@ -1,7 +1,9 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { useAuditLogInfiniteQuery } from "@repo/client/api/audit/list";
 import type { AuditEntry } from "@repo/contracts/api";
+import { loosely } from "@repo/i18n";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -12,14 +14,16 @@ import {
 } from "@repo/ui/components/card";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useFormatter, useTranslations } from "next-intl";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 
 /** ICU arguments from an event payload: strings and numbers as they are, the rest as text. */
 function paramsOf(payload: Record<string, unknown>) {
   const params: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(payload)) {
-    params[key] =
-      typeof value === "number" ? value : Array.isArray(value) ? value.join(", ") : String(value);
+    if (typeof value === "number") {
+      params[key] = value;
+    } else {
+      params[key] = Array.isArray(value) ? value.join(", ") : String(value);
+    }
   }
   return params;
 }
@@ -39,15 +43,16 @@ export function WorkspaceAuditPage() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {log.isPending ? (
-          <Skeleton className="h-32" />
-        ) : log.isError ? (
+        {log.isPending ? <Skeleton className="h-32" /> : null}
+        {log.isError ? (
           <p role="alert" className="text-sm text-destructive">
             {errorMessage(log.error)}
           </p>
-        ) : entries.length === 0 ? (
+        ) : null}
+        {log.isSuccess && entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
+        ) : null}
+        {log.isSuccess && entries.length > 0 ? (
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>
@@ -60,11 +65,8 @@ export function WorkspaceAuditPage() {
               {entries.map((entry) => (
                 <tr key={entry.id}>
                   <td className="py-2 pe-3">
-                    {tEvents.has(entry.name as Parameters<typeof tEvents>[0])
-                      ? tEvents(
-                          entry.name as Parameters<typeof tEvents>[0],
-                          paramsOf(entry.payload),
-                        )
+                    {loosely(tEvents).has(entry.name)
+                      ? loosely(tEvents)(entry.name, paramsOf(entry.payload))
                       : entry.name}
                   </td>
                   <td className="py-2 pe-3 text-muted-foreground">
@@ -82,7 +84,7 @@ export function WorkspaceAuditPage() {
               ))}
             </tbody>
           </table>
-        )}
+        ) : null}
         {log.hasNextPage ? (
           <Button
             variant="outline"

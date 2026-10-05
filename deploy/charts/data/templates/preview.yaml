@@ -34,7 +34,8 @@ spec:
     {{ $key }}: {{ $value | quote }}
     {{- end }}
 ---
-# Defaults for containers that don't set their own (the quota requires every pod to).
+# Defaults for containers that don't set their own (the quota requires every pod to),
+# and the most and least one container may ask for (`preview.limits`).
 apiVersion: v1
 kind: LimitRange
 metadata:
@@ -47,6 +48,5 @@ metadata:
 spec:
   limits:
     - type: Container
-      defaultRequest: { cpu: 50m, memory: 128Mi }
-      default: { memory: 512Mi }
+      {{- toYaml .Values.preview.limits | nindent 6 }}
 {{- end }}

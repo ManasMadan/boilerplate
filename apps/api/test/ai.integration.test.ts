@@ -5,7 +5,7 @@
  * own tests (apps/ai) and end to end by the web suite.
  */
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
 import { jwtVerify } from "jose";
@@ -39,91 +39,153 @@ let ai: Server;
 const documents: Doc[] = [];
 const calls: { path: string; org: string; user: string; requestId: string | undefined }[] = [];
 /** Per organization: what the next answer does. */
-const behaviour = new Map<string, "answer" | "budget" | "stream-error" | "down">();
+const behaviour = new Map<string, Mode>();
+/** Organizations whose hanging answer the API stopped reading (the connection closed). */
+const closed = new Set<string>();
 
-async function body(request: IncomingMessage) {
+/** A request's JSON body, as far as the stand-in reads it. */
+async function body(request: IncomingMessage): Promise<{ title?: string } | undefined> {
   const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(chunk as Buffer);
-  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+  for await (const chunk of request) {
+    chunks.push(chunk as Buffer);
+  }
+  return chunks.length
+    ? (JSON.parse(Buffer.concat(chunks).toString()) as { title?: string })
+    : undefined;
+}
+
+type Mode = "answer" | "budget" | "off" | "stream-error" | "down" | "drop" | "hang";
+type Reply = (status: number, payload?: unknown) => void;
+type Fail = (status: number, code: string, params?: Record<string, string>) => void;
+
+/** The caller named by the token the API signed, or undefined when it doesn't verify. */
+async function verifiedCaller(request: IncomingMessage) {
+  try {
+    const token = String(request.headers.authorization ?? "").replace(/^Bearer /, "");
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(SECRET), {
+      issuer: "api",
+      audience: "ai",
+      maxTokenAge: 120,
+    });
+    return { org: String(payload.org), user: String(payload.sub) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** The assistant's answer in the organization's mode: refused, broken, or streamed. */
+function answer(mode: Mode, org: string, response: ServerResponse, fail: Fail) {
+  if (mode === "budget") {
+    return fail(429, "AI_BUDGET_EXCEEDED");
+  }
+  if (mode === "off") {
+    return fail(404, "FEATURE_DISABLED", { feature: "assistant" });
+  }
+  if (mode === "down") {
+    return fail(500, "INTERNAL");
+  }
+  response.writeHead(200, { "content-type": "text/event-stream" });
+  const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
+  // The connection breaks midway (closed without ending the response), or the answer
+  // never ends.
+  if (mode === "drop") {
+    return response.write(
+      `data: ${JSON.stringify({ event: { type: "text", text: "Refunds take " } })}\n\n`,
+      () => response.socket?.end(),
+    );
+  }
+  send({ type: "text", text: "Refunds take " });
+  if (mode === "hang") {
+    return response.on("close", () => closed.add(org));
+  }
+  send({ type: "text", text: "five days." });
+  if (mode === "stream-error") {
+    send({ type: "error", code: "AI_RUN_LIMIT" });
+    return response.end();
+  }
+  send({ type: "sources", sources: [{ documentId: randomUUID(), title: "Handbook" }] });
+  send({ type: "done", usage: { inputTokens: 10, outputTokens: 5 } });
+  return response.end();
+}
+
+/** The documents endpoints, for the caller's organization; false for another path. */
+function documentsRoute(
+  route: string,
+  caller: { org: string; user: string },
+  input: { title?: string } | undefined,
+  reply: Reply,
+  fail: Fail,
+) {
+  const { org, user } = caller;
+  if (route === "GET /v1/documents") {
+    reply(
+      200,
+      documents.filter((d) => d.org === org),
+    );
+    return true;
+  }
+  if (route === "POST /v1/documents") {
+    const doc: Doc = {
+      id: randomUUID(),
+      org,
+      title: input?.title ?? "",
+      status: "pending",
+      error: null,
+      chunkCount: 0,
+      summary: null,
+      createdBy: user,
+      createdAt: new Date().toISOString(),
+    };
+    documents.push(doc);
+    reply(201, doc);
+    return true;
+  }
+  const remove = /^DELETE \/v1\/documents\/([0-9a-f-]{36})$/.exec(route);
+  if (!remove) {
+    return false;
+  }
+  const index = documents.findIndex((d) => d.id === remove[1] && d.org === org);
+  if (index === -1) {
+    fail(404, "DOCUMENT_NOT_FOUND");
+  } else {
+    documents.splice(index, 1);
+    reply(204);
+  }
+  return true;
 }
 
 beforeAll(async () => {
   ai = createServer(async (request, response) => {
-    const reply = (status: number, payload?: unknown) => {
+    const reply: Reply = (status, payload) => {
       response.writeHead(status, { "content-type": "application/json" });
       response.end(payload === undefined ? undefined : JSON.stringify(payload));
     };
-    let claims: { sub?: string; org?: unknown };
-    try {
-      const token = String(request.headers.authorization ?? "").replace(/^Bearer /, "");
-      ({ payload: claims } = await jwtVerify(token, new TextEncoder().encode(SECRET), {
-        issuer: "api",
-        audience: "ai",
-        maxTokenAge: 120,
-      }));
-    } catch {
-      return reply(401, { code: "UNAUTHENTICATED", status: 401, params: {} });
+    // The service's error body: the contract's shape (packages/contracts errorResponse).
+    const fail: Fail = (status, code, params = {}) =>
+      reply(status, { defined: true, code, status, message: code, data: { params } });
+    const caller = await verifiedCaller(request);
+    if (!caller) {
+      return fail(401, "UNAUTHENTICATED");
     }
-    const org = String(claims.org);
-    const user = String(claims.sub);
     const path = new URL(request.url ?? "/", "http://ai").pathname;
     calls.push({
       path,
-      org,
-      user,
+      ...caller,
       requestId: request.headers["x-request-id"] as string | undefined,
     });
     const input = await body(request);
+    const route = `${request.method} ${path}`;
 
-    if (request.method === "POST" && path === "/v1/sentiment") {
+    if (route === "POST /v1/sentiment") {
       return reply(200, { label: "positive", score: 0.9, model: "fake" });
     }
-    if (request.method === "GET" && path === "/v1/documents") {
-      return reply(
-        200,
-        documents.filter((d) => d.org === org),
-      );
+    if (documentsRoute(route, caller, input, reply, fail)) {
+      return;
     }
-    if (request.method === "POST" && path === "/v1/documents") {
-      const doc: Doc = {
-        id: randomUUID(),
-        org,
-        title: input.title,
-        status: "pending",
-        error: null,
-        chunkCount: 0,
-        summary: null,
-        createdBy: user,
-        createdAt: new Date().toISOString(),
-      };
-      documents.push(doc);
-      return reply(201, doc);
+    if (route === "POST /v1/assistant/answers") {
+      return answer(behaviour.get(caller.org) ?? "answer", caller.org, response, fail);
     }
-    const remove = /^\/v1\/documents\/([0-9a-f-]{36})$/.exec(path);
-    if (request.method === "DELETE" && remove) {
-      const index = documents.findIndex((d) => d.id === remove[1] && d.org === org);
-      if (index === -1) return reply(404, { code: "DOCUMENT_NOT_FOUND", status: 404, params: {} });
-      documents.splice(index, 1);
-      return reply(204);
-    }
-    if (request.method === "POST" && path === "/v1/assistant/answers") {
-      const mode = behaviour.get(org) ?? "answer";
-      if (mode === "budget")
-        return reply(429, { code: "AI_BUDGET_EXCEEDED", status: 429, params: {} });
-      if (mode === "down") return reply(500, { code: "INTERNAL", status: 500, params: {} });
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      const send = (event: unknown) => response.write(`data: ${JSON.stringify({ event })}\n\n`);
-      send({ type: "text", text: "Refunds take " });
-      send({ type: "text", text: "five days." });
-      if (mode === "stream-error") {
-        send({ type: "error", code: "AI_RUN_LIMIT" });
-        return response.end();
-      }
-      send({ type: "sources", sources: [{ documentId: randomUUID(), title: "Handbook" }] });
-      send({ type: "done", usage: { inputTokens: 10, outputTokens: 5 } });
-      return response.end();
-    }
-    reply(404, { code: "NOT_FOUND", status: 404, params: {} });
+    fail(404, "NOT_FOUND");
   });
   await new Promise<void>((resolve) => ai.listen(0, "127.0.0.1", resolve));
   harness = await startApi(5, {
@@ -158,7 +220,9 @@ async function expectError(promise: Promise<unknown>, code: string) {
 /** Every event of a stream, from the promise that starts it. */
 async function collect(start: Promise<AsyncIterable<unknown>>) {
   const events: unknown[] = [];
-  for await (const event of await start) events.push(event);
+  for await (const event of await start) {
+    events.push(event);
+  }
   return events;
 }
 
@@ -268,6 +332,10 @@ describe("AI features", () => {
       member.session.rpc.ai.removeDocument({ documentId: ownersDoc.id }),
       "FORBIDDEN",
     );
+    await expectError(
+      member.session.rpc.ai.removeDocument({ documentId: randomUUID() }),
+      "DOCUMENT_NOT_FOUND",
+    );
     await member.session.rpc.ai.removeDocument({ documentId: membersDoc.id });
     const again = await member.session.rpc.ai.addDocument({
       title: "Member's again",
@@ -298,15 +366,63 @@ describe("AI features", () => {
     expect(events.at(-1)).toEqual({ type: "error", code: "AI_RUN_LIMIT" });
   });
 
+  it("ends an answer whose connection breaks with an error event", async () => {
+    const { session, me } = await signedIn();
+    behaviour.set(me.activeOrganizationId as string, "drop");
+    expect(await collect(session.rpc.ai.ask({ question: "Hi?" }))).toEqual([
+      { type: "text", text: "Refunds take " },
+      { type: "error", code: "UPSTREAM_UNAVAILABLE" },
+    ]);
+  });
+
+  it("stops reading the service's answer when the client goes away", async () => {
+    const { session, me } = await signedIn();
+    const org = me.activeOrganizationId as string;
+    behaviour.set(org, "hang");
+    const controller = new AbortController();
+    const stream = await session.rpc.ai.ask({ question: "Hi?" }, { signal: controller.signal });
+    for await (const event of stream) {
+      expect(event).toEqual({ type: "text", text: "Refunds take " });
+      break;
+    }
+    controller.abort();
+    await expect.poll(() => closed.has(org), { timeout: 5_000 }).toBe(true);
+  });
+
+  it("passes on what the service's error says, params included", async () => {
+    const { session, me } = await signedIn();
+    behaviour.set(me.activeOrganizationId as string, "off");
+    const error = await collect(session.rpc.ai.ask({ question: "Hi?" })).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ORPCError);
+    expect(error).toMatchObject({
+      code: "FEATURE_DISABLED",
+      defined: true,
+      data: { params: { feature: "assistant" } },
+    });
+  });
+
   it("hides the service's own failures behind UPSTREAM_UNAVAILABLE", async () => {
     const { session, me } = await signedIn();
     behaviour.set(me.activeOrganizationId as string, "down");
     await expectError(collect(session.rpc.ai.ask({ question: "Hi?" })), "UPSTREAM_UNAVAILABLE");
   });
 
+  it("limits sentiment checks per user", async () => {
+    const { session } = await signedIn();
+    for (let i = 0; i < 60; i++) {
+      await session.rpc.ai.sentiment({ text: "great" });
+    }
+    await expectError(session.rpc.ai.sentiment({ text: "great" }), "RATE_LIMITED");
+  });
+
   it("limits questions per user", async () => {
     const { session } = await signedIn();
-    for (let i = 0; i < 20; i++) await collect(session.rpc.ai.ask({ question: `Q${i}?` }));
+    for (let i = 0; i < 20; i++) {
+      await collect(session.rpc.ai.ask({ question: `Q${i}?` }));
+    }
     await expectError(collect(session.rpc.ai.ask({ question: "One more?" })), "RATE_LIMITED");
   });
 

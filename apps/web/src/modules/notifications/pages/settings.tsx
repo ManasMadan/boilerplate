@@ -1,9 +1,8 @@
 "use client";
 
-import {
-  useNotificationPreferencesQuery,
-  useUpdateNotificationPreferencesMutation,
-} from "@repo/client/api/notifications/preferences";
+import { useApiErrorMessage } from "@repo/client";
+import { useNotificationPreferencesQuery } from "@repo/client/api/notifications/preferences";
+import { useUpdateNotificationPreferencesMutation } from "@repo/client/api/notifications/update-preferences";
 import type { NotificationPreferences } from "@repo/contracts/api";
 import {
   Card,
@@ -18,7 +17,6 @@ import { Input } from "@repo/ui/components/input";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { useApiErrorMessage } from "@/lib/use-api-error";
 import { BrowserPushCard } from "../components/browser-push-card";
 
 const toTime = (minutes: number) =>
@@ -39,8 +37,11 @@ export function NotificationSettingsPage() {
       onError: (error) => toast.error(errorMessage(error)),
     });
 
-  if (!preferences.data) return <Skeleton className="h-64" />;
+  if (!preferences.data) {
+    return <Skeleton className="h-64" />;
+  }
   const data: NotificationPreferences = preferences.data;
+  const quiet = data.quietHours;
 
   return (
     <>
@@ -122,7 +123,7 @@ export function NotificationSettingsPage() {
               {t("quietHours.enable")}
             </FieldLabel>
           </Field>
-          {data.quietHours ? (
+          {quiet ? (
             <div className="flex gap-4">
               {(["start", "end"] as const).map((edge) => (
                 <Field key={edge} className="w-36">
@@ -130,13 +131,15 @@ export function NotificationSettingsPage() {
                   <Input
                     id={`quiet-${edge}`}
                     type="time"
-                    defaultValue={toTime(data.quietHours?.[edge] ?? 0)}
+                    defaultValue={toTime(quiet[edge])}
                     onBlur={(event) => {
-                      const current = data.quietHours;
-                      if (!current || !event.target.value) return;
+                      if (!event.target.value) {
+                        return;
+                      }
                       const minutes = toMinutes(event.target.value);
-                      if (minutes !== current[edge])
-                        save({ quietHours: { ...current, [edge]: minutes } });
+                      if (minutes !== quiet[edge]) {
+                        save({ quietHours: { ...quiet, [edge]: minutes } });
+                      }
                     }}
                   />
                 </Field>

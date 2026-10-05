@@ -28,35 +28,27 @@ export async function renderEmail<P extends object>(
 }
 
 export {
-  type AuthOtpEmailProps,
   authOtpSubject,
   default as AuthOtpEmail,
-  type OtpPurpose,
 } from "./templates/auth-otp";
-export { type DigestEmailProps, default as DigestEmail, digestSubject } from "./templates/digest";
+export { default as DigestEmail, digestSubject } from "./templates/digest";
 export {
   default as OrgInvitationEmail,
-  type OrgInvitationEmailProps,
   orgInvitationSubject,
 } from "./templates/org-invitation";
 export {
   default as PaymentFailedEmail,
-  type PaymentFailedEmailProps,
   paymentFailedSubject,
 } from "./templates/payment-failed";
 export {
   default as SecurityAlertEmail,
-  type SecurityAlertEmailProps,
-  type SecurityEventName,
   securityAlertSubject,
 } from "./templates/security-alert";
 export {
   default as TodoReminderEmail,
-  type TodoReminderEmailProps,
   todoReminderSubject,
 } from "./templates/todo-reminder";
 export {
   default as WebhookDisabledEmail,
-  type WebhookDisabledEmailProps,
   webhookDisabledSubject,
 } from "./templates/webhook-disabled";
