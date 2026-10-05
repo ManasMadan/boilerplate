@@ -1019,3 +1019,24 @@ describe("the checks a merge waits for", () => {
     expect(required.sort()).toEqual(Object.values(GATES).sort());
   });
 });
+
+describe("a job acting as the GitHub App", () => {
+  // Until the App is set up, its token step fails: such a job is skipped instead, so a
+  // fresh copy of the template keeps master's runs green (the staging bump did fail).
+  it("is skipped while BOT_APP_CLIENT_ID isn't set", () => {
+    const files = readdirSync(join(ROOT, ".github/workflows")).filter((f) => f.endsWith(".yml"));
+    const unguarded = files.flatMap((file) =>
+      Object.entries(workflow(file).jobs)
+        .filter(([, job]) =>
+          (job.steps ?? []).some(
+            (step) =>
+              step.uses === "./.github/actions/bot" ||
+              step.uses?.startsWith("actions/create-github-app-token@"),
+          ),
+        )
+        .filter(([, job]) => !String(job.if ?? "").includes("vars.BOT_APP_CLIENT_ID != ''"))
+        .map(([id]) => `${file}:${id}`),
+    );
+    expect(unguarded).toEqual([]);
+  });
+});
