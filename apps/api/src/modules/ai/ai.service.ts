@@ -11,6 +11,13 @@ import { Injectable } from "@nestjs/common";
 import { type AiCaller, AiServiceError, createAiClient } from "@repo/ai-client";
 import type { AiDocument, AssistantEvent } from "@repo/contracts/api";
 import type { ErrorCode } from "@repo/contracts/errors";
+import {
+  type DocumentId,
+  documentIdSchema,
+  type OrgId,
+  type UserId,
+  userIdSchema,
+} from "@repo/contracts/ids";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
@@ -43,7 +50,7 @@ export class AiService {
     return this.client;
   }
 
-  private caller(userId: string, orgId: string): AiCaller {
+  private caller(userId: UserId, orgId: OrgId): AiCaller {
     return { userId, orgId, requestId: currentContext()?.requestId };
   }
 
@@ -55,22 +62,22 @@ export class AiService {
     }
   }
 
-  async sentiment(userId: string, orgId: string, text: string) {
+  async sentiment(userId: UserId, orgId: OrgId, text: string) {
     return this.call(() => this.ai.sentiment(this.caller(userId, orgId), text));
   }
 
-  async documents(userId: string, orgId: string): Promise<AiDocument[]> {
+  async documents(userId: UserId, orgId: OrgId): Promise<AiDocument[]> {
     const rows = await this.call(() => this.ai.listDocuments(this.caller(userId, orgId)));
     return rows.map(toDocument);
   }
 
-  async addDocument(userId: string, orgId: string, input: { title: string; content: string }) {
+  async addDocument(userId: UserId, orgId: OrgId, input: { title: string; content: string }) {
     const row = await this.call(() => this.ai.createDocument(this.caller(userId, orgId), input));
     return toDocument(row);
   }
 
   /** A member may remove their own documents; owners and admins any. */
-  async removeDocument(userId: string, orgId: string, role: OrgRole, documentId: string) {
+  async removeDocument(userId: UserId, orgId: OrgId, role: OrgRole, documentId: DocumentId) {
     if (!canManageWorkspace(role)) {
       const document = (await this.documents(userId, orgId)).find((d) => d.id === documentId);
       if (!document) throw new AppError("DOCUMENT_NOT_FOUND");
@@ -85,8 +92,8 @@ export class AiService {
    * ends the stream with an `error` event, which the contract has for exactly that.
    */
   async ask(
-    userId: string,
-    orgId: string,
+    userId: UserId,
+    orgId: OrgId,
     question: string,
     signal?: AbortSignal,
   ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
@@ -117,7 +124,12 @@ function toDocument(row: {
   createdBy: string | null;
   createdAt: string;
 }): AiDocument {
-  return { ...row, createdAt: new Date(row.createdAt) };
+  return {
+    ...row,
+    id: documentIdSchema.parse(row.id),
+    createdBy: userIdSchema.nullable().parse(row.createdBy),
+    createdAt: new Date(row.createdAt),
+  };
 }
 
 /**

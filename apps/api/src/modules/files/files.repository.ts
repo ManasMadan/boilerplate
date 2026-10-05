@@ -3,6 +3,7 @@
  * scopes it to the caller (who may also read anyone's ready avatar).
  */
 import { Injectable } from "@nestjs/common";
+import type { FileId, UserId } from "@repo/contracts/ids";
 import { withUser } from "@repo/db";
 import { type Database, InjectDatabase } from "@repo/nest-common";
 
@@ -22,9 +23,9 @@ export class FilesRepository {
   constructor(@InjectDatabase() private readonly database: Database) {}
 
   create(
-    userId: string,
+    userId: UserId,
     data: {
-      id: string;
+      id: FileId;
       purpose: string;
       filename: string;
       declaredType: string;
@@ -37,7 +38,7 @@ export class FilesRepository {
     });
   }
 
-  find(userId: string, fileId: string) {
+  find(userId: UserId, fileId: FileId) {
     return withUser(this.database.read, userId).file.findFirst({
       where: { id: fileId, userId },
       select,
@@ -45,14 +46,14 @@ export class FilesRepository {
   }
 
   /** A ready file the viewer may read, or null. */
-  findReadable(viewerId: string, fileId: string) {
+  findReadable(viewerId: UserId, fileId: FileId) {
     return withUser(this.database.read, viewerId).file.findFirst({
       where: { id: fileId, status: "ready" },
       select: { purpose: true, filename: true },
     });
   }
 
-  async remove(userId: string, fileId: string) {
+  async remove(userId: UserId, fileId: FileId) {
     await withUser(this.database.write, userId).file.deleteMany({ where: { id: fileId, userId } });
   }
 }

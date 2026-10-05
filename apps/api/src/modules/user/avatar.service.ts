@@ -9,6 +9,7 @@
  */
 import { Injectable } from "@nestjs/common";
 import { fileContentPath } from "@repo/contracts/files";
+import { type FileId, fileIdSchema, type UserId } from "@repo/contracts/ids";
 import { type Auth, InjectAuth } from "../../auth/auth.module";
 import { FilesService } from "../files";
 import { UserRepository } from "./user.repository";
@@ -23,10 +24,10 @@ export class AvatarService {
     private readonly files: FilesService,
   ) {}
 
-  async set(userId: string, fileId: string | null) {
+  async set(userId: UserId, fileId: FileId | null) {
     if (fileId) await this.files.ready(userId, fileId, "avatar");
     const current = await this.users.image(userId);
-    const previous = AVATAR_PATH.exec(current.image ?? "")?.[1];
+    const previous = fileIdSchema.safeParse(AVATAR_PATH.exec(current.image ?? "")?.[1]).data;
     const context = await this.auth.$context;
     await context.internalAdapter.updateUser(userId, {
       image: fileId ? fileContentPath(fileId) : null,

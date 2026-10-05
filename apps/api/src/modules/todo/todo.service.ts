@@ -4,6 +4,7 @@
  */
 import { Injectable } from "@nestjs/common";
 import { API_KEY_REQUESTS_PER_MINUTE } from "@repo/contracts/api";
+import { type OrgId, type TodoId, todoIdSchema, type UserId } from "@repo/contracts/ids";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
 import { tenantTx } from "@repo/db";
 import {
@@ -37,20 +38,21 @@ export class TodoService {
     });
   }
 
-  async list(orgId: string, page: PageInput) {
+  async list(orgId: OrgId, page: PageInput) {
     return toPage(await this.todos.list(orgId, page), page.limit);
   }
 
-  async create(orgId: string, userId: string, title: string) {
+  async create(orgId: OrgId, userId: UserId, title: string) {
     await this.writes.take(orgId);
     return tenantTx(this.database.write, orgId, async (tx) => {
       const todo = await this.todos.create(tx, { orgId, createdById: userId, title });
-      await emitEvent(tx, "todo.created.v1", todo.id, { todoId: todo.id, title: todo.title });
-      return todo;
+      const todoId = todoIdSchema.parse(todo.id);
+      await emitEvent(tx, "todo.created.v1", todoId, { todoId, title: todo.title });
+      return { ...todo, id: todoId };
     });
   }
 
-  async setCompleted(orgId: string, input: { id: string; completed: boolean; version: number }) {
+  async setCompleted(orgId: OrgId, input: { id: TodoId; completed: boolean; version: number }) {
     await this.writes.take(orgId);
     return tenantTx(this.database.write, orgId, async (tx) => {
       const todo = await this.todos.setCompleted(tx, input);
@@ -62,13 +64,13 @@ export class TodoService {
         });
       }
       if (todo.completed) {
-        await emitEvent(tx, "todo.completed.v1", todo.id, { todoId: todo.id, title: todo.title });
+        await emitEvent(tx, "todo.completed.v1", input.id, { todoId: input.id, title: todo.title });
       }
       return todo;
     });
   }
 
-  async delete(orgId: string, id: string) {
+  async delete(orgId: OrgId, id: TodoId) {
     await this.writes.take(orgId);
     return tenantTx(this.database.write, orgId, async (tx) => {
       if (!(await this.todos.delete(tx, id)))

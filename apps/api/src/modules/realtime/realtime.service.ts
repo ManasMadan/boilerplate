@@ -7,6 +7,7 @@
  * API process (a tab each), so one account can't exhaust connections.
  */
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
+import type { OrgId, UserId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { MINUTE_MS } from "@repo/contracts/time";
@@ -34,7 +35,7 @@ export class RealtimeService implements OnApplicationShutdown {
    * Checks before the stream starts, so a refusal is an ordinary typed error (oRPC maps
    * errors from the handler, not ones thrown while iterating).
    */
-  stream(userId: string, orgId: string, signal: AbortSignal | undefined) {
+  stream(userId: UserId, orgId: OrgId, signal: AbortSignal | undefined) {
     if ((this.open.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) {
       // A slot frees as soon as another tab closes its stream: worth trying again soon.
       throw new AppError("RATE_LIMITED", { params: { retryAfterSeconds: 5 } });
@@ -42,7 +43,7 @@ export class RealtimeService implements OnApplicationShutdown {
     return this.messages(userId, orgId, signal);
   }
 
-  private async *messages(userId: string, orgId: string, signal: AbortSignal | undefined) {
+  private async *messages(userId: UserId, orgId: OrgId, signal: AbortSignal | undefined) {
     this.open.set(userId, (this.open.get(userId) ?? 0) + 1);
     const lifetime = AbortSignal.timeout(STREAM_LIFETIME_MS);
     const done = signal ? AbortSignal.any([signal, lifetime]) : lifetime;

@@ -12,6 +12,13 @@ import {
   webhookEndpointSchema,
 } from "@repo/contracts/api";
 import type { EventPayload, WebhookEventName } from "@repo/contracts/events";
+import {
+  type OrgId,
+  type UserId,
+  type WebhookDeliveryId,
+  type WebhookEndpointId,
+  webhookEndpointIdSchema,
+} from "@repo/contracts/ids";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
 import { HOUR_MS } from "@repo/contracts/time";
 import { tenantTx } from "@repo/db";
@@ -40,7 +47,7 @@ const toEndpoint = (row: EndpointRow): WebhookEndpoint => webhookEndpointSchema.
 type Changed = EventPayload<"webhook.endpoint_updated.v1">["changed"];
 
 interface EndpointUpdate {
-  id: string;
+  id: WebhookEndpointId;
   url?: string | undefined;
   description?: string | undefined;
   events?: WebhookEventName[] | undefined;
@@ -79,13 +86,13 @@ export class WebhooksService implements OnApplicationShutdown {
     private readonly billing: BillingService,
   ) {}
 
-  async listEndpoints(orgId: string) {
+  async listEndpoints(orgId: OrgId) {
     return (await this.repository.listEndpoints(orgId)).map(toEndpoint);
   }
 
   async createEndpoint(
-    orgId: string,
-    userId: string,
+    orgId: OrgId,
+    userId: UserId,
     input: {
       url: string;
       description?: string | undefined;
@@ -97,7 +104,7 @@ export class WebhooksService implements OnApplicationShutdown {
     await assertDeliverableUrl(input.url);
     const secret = newWebhookSecret();
     // Chosen here, not by the database: the secret is encrypted for its row.
-    const id = randomUUID();
+    const id = webhookEndpointIdSchema.parse(randomUUID());
     return tenantTx(this.database.write, orgId, async (tx) => {
       if ((await this.repository.countEndpoints(tx)) >= WEBHOOK_ENDPOINT_LIMIT) {
         throw new AppError("WEBHOOK_ENDPOINT_LIMIT", { params: { max: WEBHOOK_ENDPOINT_LIMIT } });
@@ -111,15 +118,12 @@ export class WebhooksService implements OnApplicationShutdown {
         secret: this.box.encrypt(secret, webhookSecretContext(id)),
         createdById: userId,
       });
-      await emitEvent(tx, "webhook.endpoint_created.v1", endpoint.id, {
-        endpointId: endpoint.id,
-        url: endpoint.url,
-      });
+      await emitEvent(tx, "webhook.endpoint_created.v1", id, { endpointId: id, url: endpoint.url });
       return { endpoint: toEndpoint(endpoint), secret };
     });
   }
 
-  async updateEndpoint(orgId: string, input: EndpointUpdate) {
+  async updateEndpoint(orgId: OrgId, input: EndpointUpdate) {
     if (input.url !== undefined) await assertDeliverableUrl(input.url);
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findEndpoint(tx, input.id);
@@ -132,8 +136,8 @@ export class WebhooksService implements OnApplicationShutdown {
         ...(changed.includes("enabled") && enabling(input.enabled === true)),
       });
       if (changed.length > 0) {
-        await emitEvent(tx, "webhook.endpoint_updated.v1", endpoint.id, {
-          endpointId: endpoint.id,
+        await emitEvent(tx, "webhook.endpoint_updated.v1", input.id, {
+          endpointId: input.id,
           changed,
         });
       }
@@ -141,7 +145,7 @@ export class WebhooksService implements OnApplicationShutdown {
     });
   }
 
-  deleteEndpoint(orgId: string, id: string) {
+  deleteEndpoint(orgId: OrgId, id: WebhookEndpointId) {
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findEndpoint(tx, id);
       if (!current) throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id } });
@@ -155,7 +159,7 @@ export class WebhooksService implements OnApplicationShutdown {
    * (WEBHOOK_SECRET_OVERLAP_HOURS); rotating again inside that window drops the older
    * one, since its replacement was never put to use.
    */
-  rotateSecret(orgId: string, id: string) {
+  rotateSecret(orgId: OrgId, id: WebhookEndpointId) {
     const secret = newWebhookSecret();
     return tenantTx(this.database.write, orgId, async (tx) => {
       const current = await this.repository.findSecret(tx, id);
@@ -171,7 +175,7 @@ export class WebhooksService implements OnApplicationShutdown {
     });
   }
 
-  async sendTest(orgId: string, endpointId: string) {
+  async sendTest(orgId: OrgId, endpointId: WebhookEndpointId) {
     if (!(await this.repository.endpointExists(orgId, endpointId))) {
       throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: endpointId } });
     }
@@ -182,7 +186,7 @@ export class WebhooksService implements OnApplicationShutdown {
     );
   }
 
-  async listDeliveries(orgId: string, endpointId: string, page: PageInput) {
+  async listDeliveries(orgId: OrgId, endpointId: WebhookEndpointId, page: PageInput) {
     if (!(await this.repository.endpointExists(orgId, endpointId))) {
       throw new AppError("WEBHOOK_ENDPOINT_NOT_FOUND", { params: { id: endpointId } });
     }
@@ -201,7 +205,7 @@ export class WebhooksService implements OnApplicationShutdown {
     );
   }
 
-  async redeliver(orgId: string, deliveryId: string) {
+  async redeliver(orgId: OrgId, deliveryId: WebhookDeliveryId) {
     if (!(await this.repository.deliveryExists(orgId, deliveryId))) {
       throw new AppError("WEBHOOK_DELIVERY_NOT_FOUND", { params: { id: deliveryId } });
     }

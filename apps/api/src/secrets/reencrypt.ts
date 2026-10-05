@@ -8,6 +8,7 @@
  * holds the value that was read (a token refreshed meanwhile is left alone and is
  * already on the newest key), and values already on the newest key are skipped.
  */
+import { type OrgId, orgIdSchema } from "@repo/contracts/ids";
 import { type Database, tenantTx } from "@repo/db";
 import { type SecretBox, webhookSecretContext } from "@repo/nest-common";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
@@ -120,7 +121,7 @@ class AuthValues {
 }
 
 /** One workspace's webhook endpoint secrets, the current and the previous one, on `box`'s key. */
-async function reencryptWebhookEndpoints(db: Db, orgId: string, box: SecretBox) {
+async function reencryptWebhookEndpoints(db: Db, orgId: OrgId, box: SecretBox) {
   // Webhook endpoints are tenant rows: each workspace's inside its own tenant context.
   return tenantTx(db, orgId, async (tx) => {
     let count = 0;
@@ -171,7 +172,7 @@ export async function reencryptSecrets(
   for await (const org of pages((cursor) =>
     db.organization.findMany({ select: { id: true }, ...cursor }),
   )) {
-    result.webhookEndpoints += await reencryptWebhookEndpoints(db, org.id, box);
+    result.webhookEndpoints += await reencryptWebhookEndpoints(db, orgIdSchema.parse(org.id), box);
   }
   return result;
 }

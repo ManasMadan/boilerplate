@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
+import { type OrgId, orgIdSchema } from "@repo/contracts/ids";
 import { type FakeStripe, startFakeStripe } from "@repo/fake-stripe";
 import { createProducer, queuePrefix } from "@repo/jobs";
 import { eventually } from "@repo/testing/eventually";
@@ -87,12 +88,7 @@ afterAll(async () => {
   await new Promise((resolve) => receiver?.close(resolve));
 });
 
-async function queueEvent(
-  name: string,
-  key: string,
-  payload: unknown,
-  orgId: string | null = null,
-) {
+async function queueEvent(name: string, key: string, payload: unknown, orgId: OrgId | null = null) {
   const id = randomUUID();
   return events.add(
     "event",
@@ -122,7 +118,7 @@ async function sql<T = Record<string, unknown>>(query: string, params: unknown[]
 }
 
 /** What the relay does for membership changes: pass the outbox's events to billing. */
-async function relayMembership(orgId: string) {
+async function relayMembership(orgId: OrgId) {
   const rows = await sql<{ id: string; name: string; key: string; payload: unknown }>(
     `SELECT id, name, key, payload FROM app.outbox_event
      WHERE org_id = $1 AND name IN ('org.member_added.v1', 'org.member_removed.v1')`,
@@ -189,7 +185,7 @@ async function workspace() {
     slug: `acme-${randomUUID().slice(0, 8)}`,
   });
   await owner.session.auth("/organization/set-active", { organizationId: org.body.id });
-  return { owner, orgId: org.body.id };
+  return { owner, orgId: orgIdSchema.parse(org.body.id) };
 }
 
 async function invite(session: ReturnType<typeof createSession>, orgId: string, email: string) {

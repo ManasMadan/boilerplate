@@ -3,8 +3,11 @@
  * todos, created through the app's own auth configuration and services. Returns what it
  * created, or null when the data is already there.
  */
+import { type OrgId, orgIdSchema, type UserId } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import type { Database } from "@repo/nest-common";
 import type { Auth } from "../auth/auth.module";
+import { orgIdOf, userIdOf } from "../auth/ids";
 import type { TodoService } from "../modules/todo";
 
 /** Known credentials, printed by the seed; unlikely to be in any breach list. */
@@ -15,8 +18,8 @@ export const DEMO_PEOPLE = [
 ] as const;
 
 interface DemoUser {
-  id: string;
-  personalOrgId: string;
+  id: UserId;
+  personalOrgId: OrgId;
 }
 
 export async function seedDemo({
@@ -42,14 +45,21 @@ export async function seedDemo({
       where: { userId: user.id },
       select: { organizationId: true },
     });
-    return { id: user.id, personalOrgId: personal.organizationId };
+    return { id: userIdOf(user), personalOrgId: orgIdSchema.parse(personal.organizationId) };
   };
   const [demo, teammate] = await Promise.all([signUp(DEMO_PEOPLE[0]), signUp(DEMO_PEOPLE[1])]);
 
   // better-auth throws when it can't create one.
-  const team = (await auth.api.createOrganization({
-    body: { name: "Acme", slug: "acme", userId: demo.id },
-  })) as { id: string };
+  const team = {
+    id: orgIdOf(
+      required(
+        await auth.api.createOrganization({
+          body: { name: "Acme", slug: "acme", userId: demo.id },
+        }),
+        "the team workspace",
+      ),
+    ),
+  };
   await auth.api.addMember({
     body: { organizationId: team.id, userId: teammate.id, role: "member" },
   });

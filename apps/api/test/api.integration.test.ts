@@ -6,6 +6,8 @@ import http from "node:http";
 import { ORPCError } from "@orpc/client";
 import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
 import { ORGANIZATION_LIMIT, PENDING_INVITATION_LIMIT } from "@repo/contracts/auth";
+import { orgIdSchema } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
 import { AppError, createSignedTokens, S3Storage } from "@repo/nest-common";
@@ -1359,7 +1361,11 @@ describe("realtime", () => {
     /** Whether the server would open another stream for this user now (opening none). */
     const full = () => {
       try {
-        realtime.stream(me.id, me.activeOrganizationId as string, undefined);
+        realtime.stream(
+          me.id,
+          required(me.activeOrganizationId, "the active workspace"),
+          undefined,
+        );
         return false;
       } catch {
         return true;
@@ -1398,12 +1404,12 @@ describe("realtime", () => {
   it("streams messages for the user and their active workspace only", async () => {
     const { session } = await signedInUser();
     const me = await session.rpc.user.me();
-    const orgId = me.activeOrganizationId as string;
+    const orgId = required(me.activeOrganizationId, "the active workspace");
     const controller = new AbortController();
     const stream = await session.rpc.realtime.subscribe(undefined, { signal: controller.signal });
     const reading = read(stream, 2);
     await subscribed(realtimeChannel.user(me.id), realtimeChannel.org(orgId));
-    await publishRealtime(harness.redis, realtimeChannel.org(randomUUID()), {
+    await publishRealtime(harness.redis, realtimeChannel.org(orgIdSchema.parse(randomUUID())), {
       type: "todos.changed",
     });
     await publishRealtime(harness.redis, realtimeChannel.org(orgId), {
@@ -1424,7 +1430,7 @@ describe("realtime", () => {
     // In-process, without a signal: the stream ends when its reader stops.
     const stream = harness.app
       .get(RealtimeService)
-      .stream(me.id, me.activeOrganizationId as string, undefined);
+      .stream(me.id, required(me.activeOrganizationId, "the active workspace"), undefined);
     const first = stream.next();
     await subscribed(realtimeChannel.user(me.id));
     await harness.redis.publish(
@@ -2366,7 +2372,10 @@ describe("account deletion", () => {
   it("removes the personal workspace and its data", async () => {
     const { session, password } = await signedInUser();
     await session.rpc.todo.create({ title: "Private" });
-    const orgId = (await session.rpc.user.me()).activeOrganizationId as string;
+    const orgId = required(
+      (await session.rpc.user.me()).activeOrganizationId,
+      "the active workspace",
+    );
     expect(await orgState(orgId)).toMatchObject({ exists: true, todos: 1 });
 
     expect((await session.auth("/delete-user", { password })).status).toBe(200);
@@ -2427,7 +2436,7 @@ describe("events outside a request", () => {
     const { session } = await signedInUser();
     const { id: userId } = await session.rpc.user.me();
     const [personal] = await session.authGet<{ id: string }[]>("/organization/list");
-    const orgId = personal?.id as string;
+    const orgId = orgIdSchema.parse(personal?.id);
     const { TodoService } = await import("../src/modules/todo");
     // Called directly: no request, so no organization in the request context.
     const todo = await harness.app.get(TodoService).create(orgId, userId, "From a job");

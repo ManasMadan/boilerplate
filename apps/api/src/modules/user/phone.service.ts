@@ -20,6 +20,7 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { PHONE_CODE_EXPIRES_IN, PHONE_CODE_LENGTH } from "@repo/contracts/auth";
+import type { UserId } from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { transaction } from "@repo/db";
 import { localeOrDefault } from "@repo/i18n";
@@ -44,8 +45,8 @@ import { UserRepository } from "./user.repository";
 
 const MAX_ATTEMPTS = 5;
 
-const codeKey = (userId: string) => `phone-code:${userId}`;
-const hashCode = (userId: string, code: string) =>
+const codeKey = (userId: UserId) => `phone-code:${userId}`;
+const hashCode = (userId: UserId, code: string) =>
   createHash("sha256").update(`${userId}:${code}`).digest("hex");
 
 @Injectable()
@@ -69,12 +70,12 @@ export class PhoneService {
     });
   }
 
-  async current(userId: string) {
+  async current(userId: UserId) {
     const user = await this.users.phoneNumber(userId);
     return user?.phoneNumber ?? null;
   }
 
-  async sendCode(userId: string, locale: string | null | undefined, phoneNumber: string) {
+  async sendCode(userId: UserId, locale: string | null | undefined, phoneNumber: string) {
     await this.perNumber.take(phoneNumber);
     // Its own number again: nothing to verify (and nothing learned about anyone else's).
     if ((await this.current(userId)) === phoneNumber) throw new AppError("PHONE_NUMBER_TAKEN");
@@ -100,7 +101,7 @@ export class PhoneService {
     return { expiresInSeconds: PHONE_CODE_EXPIRES_IN };
   }
 
-  async verify(userId: string, phoneNumber: string, code: string) {
+  async verify(userId: UserId, phoneNumber: string, code: string) {
     const key = codeKey(userId);
     // Count the attempt before looking, atomically: of any number of parallel guesses,
     // only MAX_ATTEMPTS get compared. (On a missing key this creates a lone counter; it
@@ -131,11 +132,11 @@ export class PhoneService {
     return this.change(userId, phoneNumber);
   }
 
-  remove(userId: string) {
+  remove(userId: UserId) {
     return this.change(userId, null);
   }
 
-  private async change(userId: string, phoneNumber: string | null) {
+  private async change(userId: UserId, phoneNumber: string | null) {
     return transaction(this.database.write, async (tx) => {
       const before = await this.users.phoneNumberIn(tx, userId);
       const updated = await this.users

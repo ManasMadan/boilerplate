@@ -23,6 +23,7 @@ import {
   subscriptionStatuses,
   unlimited,
 } from "@repo/contracts/billing";
+import { type OrgId, orgIdSchema } from "@repo/contracts/ids";
 import { fieldOf, required } from "@repo/contracts/objects";
 import { DAY_S, HOUR_MS } from "@repo/contracts/time";
 import { tenantTx } from "@repo/db";
@@ -66,7 +67,9 @@ export async function fromStripe<T>(work: () => Promise<T>): Promise<T> {
 
 /** How long Stripe keeps a checkout session open (its default, 24 hours). */
 const CHECKOUT_SESSION_SECONDS = DAY_S;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The workspace a Stripe object's metadata names, if it's one of ours. */
+const orgIdIn = (metadata: Stripe.Metadata) => orgIdSchema.safeParse(metadata.orgId).data;
 
 /** The plan a subscription row gives (free unless it's a paid status). */
 function planOf(subscription: { status: string; plan: string } | null): PlanName {
@@ -105,19 +108,19 @@ export class BillingService {
     };
   }
 
-  async entitlements(orgId: string): Promise<Entitlements> {
+  async entitlements(orgId: OrgId): Promise<Entitlements> {
     if (!this.enabled) return unlimited;
     return plans[planOf(await this.repository.current(orgId))].entitlements;
   }
 
   /** Throws ENTITLEMENT_REQUIRED unless the organization's plan includes `entitlement`. */
-  async require(orgId: string, entitlement: Exclude<Entitlement, "members">) {
+  async require(orgId: OrgId, entitlement: Exclude<Entitlement, "members">) {
     if (!(await this.entitlements(orgId))[entitlement]) {
       throw new AppError("ENTITLEMENT_REQUIRED", { params: { entitlement } });
     }
   }
 
-  async overview(orgId: string): Promise<BillingOverview> {
+  async overview(orgId: OrgId): Promise<BillingOverview> {
     // One read of the subscription, the plan and its entitlements taken from that same
     // row: separate reads could straddle a sync and show a plan with no subscription.
     const [members, subscription] = await Promise.all([
@@ -142,7 +145,7 @@ export class BillingService {
     };
   }
 
-  async checkout(orgId: string, interval: BillingInterval) {
+  async checkout(orgId: OrgId, interval: BillingInterval) {
     const stripe = this.client;
     const current = await this.repository.current(orgId);
     if (current && paid.has(current.status)) {
@@ -205,7 +208,7 @@ export class BillingService {
     return { url: required(session.url, "the checkout session's URL") };
   }
 
-  async portal(orgId: string) {
+  async portal(orgId: OrgId) {
     const stripe = this.client;
     const row = await this.repository.customer(orgId);
     if (!row) throw new AppError("NO_SUBSCRIPTION");
@@ -218,7 +221,7 @@ export class BillingService {
     return { url: session.url };
   }
 
-  async invoices(orgId: string) {
+  async invoices(orgId: OrgId) {
     const stripe = this.client;
     const row = await this.repository.customer(orgId);
     if (!row) return [];
@@ -238,7 +241,7 @@ export class BillingService {
   }
 
   /** The organization's Stripe customer, created once (concurrent first calls agree). */
-  private async customer(orgId: string) {
+  private async customer(orgId: OrgId) {
     const stripe = this.client;
     const existing = await this.repository.customer(orgId);
     if (existing) return existing.stripeCustomerId;
@@ -259,10 +262,10 @@ export class BillingService {
   async sync(subscriptionId: string) {
     const stripe = this.client;
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const orgId = subscription.metadata.orgId;
+    const orgId = orgIdIn(subscription.metadata);
     const item = subscription.items.data[0];
     const price = item && this.prices()[item.price.id];
-    if (!orgId || !UUID.test(orgId) || !item || !price) {
+    if (!orgId || !item || !price) {
       this.log.warn({ subscriptionId }, "ignoring a subscription that isn't ours");
       return;
     }
@@ -317,7 +320,7 @@ export class BillingService {
   }
 
   /** Paid plans are per seat: keeps the subscription's quantity at the member count. */
-  async syncSeats(orgId: string) {
+  async syncSeats(orgId: OrgId) {
     const stripe = this.client;
     const current = await this.repository.current(orgId);
     if (!current || !paid.has(current.status)) return;
@@ -334,7 +337,7 @@ export class BillingService {
   }
 
   /** Before an organization is deleted: nothing may keep charging for it. */
-  async cancelFor(orgId: string) {
+  async cancelFor(orgId: OrgId) {
     if (!this.stripe) return;
     const live = await this.repository.live(orgId);
     for (const { id } of live) {
@@ -345,8 +348,7 @@ export class BillingService {
   /** The organization a subscription belongs to (by its metadata), if it still exists. */
   async orgFor(subscriptionId: string) {
     const subscription = await this.client.subscriptions.retrieve(subscriptionId);
-    const orgId = subscription.metadata.orgId;
-    if (!orgId || !UUID.test(orgId)) return null;
-    return this.repository.organization(orgId);
+    const orgId = orgIdIn(subscription.metadata);
+    return orgId ? this.repository.organization(orgId) : null;
   }
 }

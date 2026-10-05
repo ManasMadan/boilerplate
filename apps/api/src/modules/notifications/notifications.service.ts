@@ -11,6 +11,7 @@ import {
   notificationSchema,
   type PushDeviceInput,
 } from "@repo/contracts/api";
+import { type NotificationId, type UserId, userIdSchema } from "@repo/contracts/ids";
 import {
   mutableCategories,
   type NotificationCategory,
@@ -63,7 +64,7 @@ export class NotificationsService {
     @InjectRedis() private readonly redis: Redis,
   ) {}
 
-  async list(userId: string, page: PageInput) {
+  async list(userId: UserId, page: PageInput) {
     const rows = await this.repository.list(userId, page);
     const items: AppNotification[] = rows.map((row) =>
       notificationSchema.parse({ ...row, type: row.template, data: row.data ?? {} }),
@@ -71,11 +72,11 @@ export class NotificationsService {
     return toPage(items, page.limit);
   }
 
-  async unreadCount(userId: string) {
+  async unreadCount(userId: UserId) {
     return { count: await this.repository.unreadCount(userId) };
   }
 
-  async markRead(userId: string, ids?: string[]) {
+  async markRead(userId: UserId, ids?: NotificationId[]) {
     await this.repository.markRead(userId, ids);
     // The user's other tabs and devices update their badge.
     await publishRealtime(this.redis, realtimeChannel.user(userId), {
@@ -83,7 +84,7 @@ export class NotificationsService {
     });
   }
 
-  async preferences(userId: string): Promise<NotificationPreferences> {
+  async preferences(userId: UserId): Promise<NotificationPreferences> {
     const [rows, settings] = await Promise.all([
       this.repository.preferences(userId),
       this.repository.settings(userId),
@@ -105,7 +106,7 @@ export class NotificationsService {
     };
   }
 
-  async updatePreferences(userId: string, changes: PreferenceChanges) {
+  async updatePreferences(userId: UserId, changes: PreferenceChanges) {
     for (const { category, channel } of changes.channels ?? []) {
       const known = notificationCategories[category];
       // Transactional email can't be turned off, and only a category's own channels exist.
@@ -137,7 +138,7 @@ export class NotificationsService {
    * user's notifications).
    */
   async registerDevice(
-    session: { userId: string; id: string; impersonatedBy?: string | null | undefined },
+    session: { userId: UserId; id: string; impersonatedBy?: string | null | undefined },
     device: PushDeviceInput,
     appVersion?: string,
   ) {
@@ -155,13 +156,14 @@ export class NotificationsService {
     });
   }
 
-  async unregisterDevice(userId: string, device: PushDeviceInput) {
+  async unregisterDevice(userId: UserId, device: PushDeviceInput) {
     await this.repository.removeDevice(userId, deviceToken(device));
   }
 
   /** Turns off a category's email for the user a signed unsubscribe link names. */
   async unsubscribe(token: string) {
-    const [userId, category] = this.tokens.verify("unsubscribe", token) ?? [];
+    const [signed, category] = this.tokens.verify("unsubscribe", token) ?? [];
+    const userId = userIdSchema.safeParse(signed).data;
     const parsed = notificationCategorySchema.safeParse(category);
     if (!userId || !parsed.success || !notificationCategories[parsed.data].mutable)
       throw new AppError("UNSUBSCRIBE_LINK_INVALID");

@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { type FileInfo, fileSchema } from "@repo/contracts/api";
 import { type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
+import { type FileId, fileIdSchema, type UserId } from "@repo/contracts/ids";
 import type { Producer } from "@repo/jobs";
 import { AppError, STORAGE, type Storage } from "@repo/nest-common";
 import { FilesRepository } from "./files.repository";
@@ -17,8 +18,8 @@ export const FILES_QUEUE = Symbol("FILES_QUEUE");
 const UPLOAD_EXPIRES_IN = 10 * 60;
 const DOWNLOAD_EXPIRES_IN = 5 * 60;
 
-const quarantineKey = (fileId: string) => `quarantine/${fileId}`;
-const storedKey = (fileId: string) => `files/${fileId}`;
+const quarantineKey = (fileId: FileId) => `quarantine/${fileId}`;
+const storedKey = (fileId: FileId) => `files/${fileId}`;
 
 interface FileRow {
   id: string;
@@ -49,7 +50,7 @@ export class FilesService {
   }
 
   async createUpload(
-    userId: string,
+    userId: UserId,
     input: { purpose: UploadPurpose; filename: string; contentType: string; size: number },
   ) {
     const storage = this.storage;
@@ -60,7 +61,7 @@ export class FilesService {
     if (input.size > rules.maxBytes) {
       throw new AppError("FILE_TOO_LARGE", { params: { maxBytes: rules.maxBytes } });
     }
-    const id = randomUUID();
+    const id = fileIdSchema.parse(randomUUID());
     const row = await this.files.create(userId, {
       id,
       purpose: input.purpose,
@@ -78,7 +79,7 @@ export class FilesService {
   }
 
   /** Queues the check. Idempotent: completing twice (or after it's checked) is fine. */
-  async complete(userId: string, fileId: string) {
+  async complete(userId: UserId, fileId: FileId) {
     const storage = this.storage;
     const row = await this.find(userId, fileId);
     if (row.status !== "pending") return toInfo(row);
@@ -87,12 +88,12 @@ export class FilesService {
     return toInfo(row);
   }
 
-  async get(userId: string, fileId: string) {
+  async get(userId: UserId, fileId: FileId) {
     return toInfo(await this.find(userId, fileId));
   }
 
   /** A ready file of the user's, for `purpose` (FILE_NOT_READY / FILE_NOT_FOUND). */
-  async ready(userId: string, fileId: string, purpose: UploadPurpose) {
+  async ready(userId: UserId, fileId: FileId, purpose: UploadPurpose) {
     const row = await this.find(userId, fileId);
     if (row.purpose !== purpose) throw new AppError("FILE_NOT_FOUND");
     if (row.status !== "ready") throw new AppError("FILE_NOT_READY");
@@ -100,7 +101,7 @@ export class FilesService {
   }
 
   /** Deletes the row; the database queues its stored objects for removal. */
-  async remove(userId: string, fileId: string) {
+  async remove(userId: UserId, fileId: FileId) {
     await this.files.remove(userId, fileId);
   }
 
@@ -108,7 +109,7 @@ export class FilesService {
    * A short-lived URL for a ready file the viewer may read (their own, or anyone's
    * avatar: row-level security decides). Null when there's no such file.
    */
-  async downloadUrl(viewerId: string, fileId: string) {
+  async downloadUrl(viewerId: UserId, fileId: FileId) {
     const row = await this.files.findReadable(viewerId, fileId);
     if (!row) return null;
     return this.storage.presignDownload(storedKey(fileId), {
@@ -118,7 +119,7 @@ export class FilesService {
     });
   }
 
-  private async find(userId: string, fileId: string) {
+  private async find(userId: UserId, fileId: FileId) {
     const row = await this.files.find(userId, fileId);
     if (!row) throw new AppError("FILE_NOT_FOUND");
     return row;

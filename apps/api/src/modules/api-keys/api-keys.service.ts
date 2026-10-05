@@ -17,6 +17,14 @@ import {
   type createApiKeyInput,
   MAX_API_KEY_DAYS,
 } from "@repo/contracts/api";
+import {
+  type ApiKeyId,
+  apiKeyIdSchema,
+  type OrgId,
+  orgIdSchema,
+  type UserId,
+  userIdSchema,
+} from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import type { OrgRole } from "@repo/contracts/roles";
 import { DAY_S } from "@repo/contracts/time";
@@ -29,15 +37,15 @@ import { type ApiKeyRow, ApiKeysRepository } from "./api-keys.repository";
 
 /** Who a verified key acts as, for the procedure it called. */
 export interface ApiKeyCaller {
-  apiKeyId: string;
-  orgId: string;
-  userId: string;
+  apiKeyId: ApiKeyId;
+  orgId: OrgId;
+  userId: UserId;
   role: OrgRole;
   /** A key never counts as a fresh sign-in. */
   signedInAt: null;
 }
 
-const metadataSchema = z.object({ createdBy: z.uuid() });
+const metadataSchema = z.object({ createdBy: userIdSchema });
 const permissionsSchema = z.record(z.string(), z.array(z.string()));
 const rateLimitDetails = z.object({ details: z.object({ tryAgainIn: z.number() }) });
 
@@ -65,7 +73,7 @@ function toScopes(permissions: unknown): ApiKeyScope[] {
   return API_KEY_SCOPES.filter((scope) => granted.has(scope));
 }
 
-function createdBy(metadata: unknown): string | null {
+function createdBy(metadata: unknown): UserId | null {
   const parsed = metadataSchema.safeParse(
     typeof metadata === "string" ? safeJson(metadata) : metadata,
   );
@@ -89,12 +97,12 @@ export class ApiKeysService {
     private readonly keys: ApiKeysRepository,
   ) {}
 
-  async list(orgId: string): Promise<ApiKey[]> {
+  async list(orgId: OrgId): Promise<ApiKey[]> {
     const rows = await this.keys.list(orgId);
     return this.present(rows);
   }
 
-  async create(orgId: string, userId: string, input: z.infer<typeof createApiKeyInput>) {
+  async create(orgId: OrgId, userId: UserId, input: z.infer<typeof createApiKeyInput>) {
     // A count, not a lock: two admins creating keys at the same moment can both pass it
     // and end a key or two over the limit, which is harmless for a cap this size. A hard
     // cap would need a lock on the organization's row for the duration of the create.
@@ -113,22 +121,23 @@ export class ApiKeysService {
         metadata: { createdBy: userId },
       },
     });
+    const apiKeyId = apiKeyIdSchema.parse(created.id);
     // The plugin commits the key itself, so the event is recorded just after, like
     // better-auth's other writes (see auth.ts).
     await transaction(this.database.write, (tx) =>
       emitEvent(
         tx,
         "org.api_key_created.v1",
-        created.id,
-        { apiKeyId: created.id, name: input.name, scopes: [...input.scopes] },
+        apiKeyId,
+        { apiKeyId, name: input.name, scopes: [...input.scopes] },
         { actorId: userId, orgId },
       ),
     );
-    const [apiKey] = await this.present([await this.keys.find(orgId, created.id)]);
+    const [apiKey] = await this.present([await this.keys.find(orgId, apiKeyId)]);
     return { apiKey: required(apiKey, "the new key"), key: created.key };
   }
 
-  revoke(orgId: string, userId: string, id: string) {
+  revoke(orgId: OrgId, userId: UserId, id: ApiKeyId) {
     return transaction(this.database.write, async (tx) => {
       const key = await this.keys.findForRevoke(tx, orgId, id);
       if (!key) throw new AppError("API_KEY_NOT_FOUND");
@@ -136,8 +145,8 @@ export class ApiKeysService {
       await emitEvent(
         tx,
         "org.api_key_revoked.v1",
-        key.id,
-        { apiKeyId: key.id, name: key.name ?? "" },
+        id,
+        { apiKeyId: id, name: key.name ?? "" },
         { actorId: userId, orgId },
       );
     });
@@ -159,14 +168,14 @@ export class ApiKeysService {
       }
       throw new AppError("UNAUTHENTICATED");
     }
-    const orgId = result.key.referenceId;
+    const orgId = orgIdSchema.parse(result.key.referenceId);
     const userId = createdBy(result.key.metadata);
     const role = userId ? await this.memberships.role(orgId, userId) : null;
     if (!userId || !role) throw new AppError("UNAUTHENTICATED");
     if (!toScopes(result.key.permissions).includes(scope)) {
       throw new AppError("API_KEY_SCOPE_MISSING", { params: { scope } });
     }
-    return { apiKeyId: result.key.id, orgId, userId, role, signedInAt: null };
+    return { apiKeyId: apiKeyIdSchema.parse(result.key.id), orgId, userId, role, signedInAt: null };
   }
 
   private async present(rows: ApiKeyRow[]): Promise<ApiKey[]> {
@@ -174,12 +183,13 @@ export class ApiKeysService {
     const users = new Map((await this.keys.users(creators)).map((user) => [user.id, user]));
     return rows.map((row) => {
       const creator = createdBy(row.metadata);
+      const user = creator && users.get(creator);
       return {
-        id: row.id,
+        id: apiKeyIdSchema.parse(row.id),
         name: row.name ?? "",
         start: row.start ?? "",
         scopes: toScopes(row.permissions),
-        createdBy: (creator && users.get(creator)) || null,
+        createdBy: user ? { id: userIdSchema.parse(user.id), name: user.name } : null,
         createdAt: row.createdAt,
         expiresAt: row.expiresAt,
         lastUsedAt: row.lastRequest,

@@ -3,6 +3,7 @@
  * which the old keys can go and everything still decrypts.
  */
 import { randomBytes, randomUUID } from "node:crypto";
+import type { OrgId } from "@repo/contracts/ids";
 import { createDatabase, type Database, tenantTx } from "@repo/db";
 import { createTestDatabase, factories, type TestDatabase } from "@repo/db/testing";
 import { keysFromEnv, SecretBox, webhookSecretContext } from "@repo/nest-common";
@@ -19,14 +20,15 @@ const BACKUP_CODES = JSON.stringify(["aaaaa-11111", "bbbbb-22222"]);
 
 let testDb: TestDatabase;
 let database: Database;
-const ids = { account: "", twoFactor: "", jwks: "", endpoint: "", org: "" };
+const ids = { account: "", twoFactor: "", jwks: "", endpoint: "" };
+let orgId: OrgId;
 
 beforeAll(async () => {
   testDb = await createTestDatabase();
   database = createDatabase({ url: testDb.urlFor("app_api"), poolMax: 2, service: "test" });
   const db = database.write;
   const { user, org } = await factories(db).userWithWorkspace();
-  ids.org = org.id;
+  orgId = org.id;
   // Written before rotation: better-auth with its single secret, and the old data key.
   const legacy = (data: string) => symmetricEncrypt({ key: OLD_AUTH, data });
   ids.account = (
@@ -114,7 +116,7 @@ describe("re-encrypting secrets", () => {
     const jwks = await db.jwks.findUniqueOrThrow({ where: { id: ids.jwks } });
     expect(await open(JSON.parse(jwks.privateKey) as string)).toBe('{"d":"private"}');
 
-    const endpoint = await tenantTx(db, ids.org, (tx) =>
+    const endpoint = await tenantTx(db, orgId, (tx) =>
       tx.webhookEndpoint.findUniqueOrThrow({ where: { id: ids.endpoint } }),
     );
     const newBox = new SecretBox(keysFromEnv(newKey));

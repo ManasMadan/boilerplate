@@ -4,6 +4,7 @@
  * caller's userTx, so row-level security scopes every query to the user.
  */
 import { Injectable } from "@nestjs/common";
+import type { NotificationId, UserId } from "@repo/contracts/ids";
 import type { NotificationCategory, NotificationChannel } from "@repo/contracts/notifications";
 import type { PageInput } from "@repo/contracts/pagination";
 import { type Tx, withUser } from "@repo/db";
@@ -21,7 +22,7 @@ export class NotificationsRepository {
   constructor(@InjectDatabase() private readonly database: Database) {}
 
   /** Newest first, `limit + 1` rows so the caller can tell whether another page exists. */
-  list(userId: string, { limit, cursor }: PageInput) {
+  list(userId: UserId, { limit, cursor }: PageInput) {
     return withUser(this.database.read, userId).notification.findMany({
       where: { userId, ...(cursor && { id: { lt: cursor } }) },
       orderBy: { id: "desc" },
@@ -30,35 +31,35 @@ export class NotificationsRepository {
     });
   }
 
-  unreadCount(userId: string) {
+  unreadCount(userId: UserId) {
     return withUser(this.database.read, userId).notification.count({
       where: { userId, readAt: null },
     });
   }
 
   /** Marks the given unread notifications read, or all of them without `ids`. */
-  async markRead(userId: string, ids?: string[]) {
+  async markRead(userId: UserId, ids?: NotificationId[]) {
     await withUser(this.database.write, userId).notification.updateMany({
       where: { userId, readAt: null, ...(ids && { id: { in: ids } }) },
       data: { readAt: new Date() },
     });
   }
 
-  preferences(userId: string) {
+  preferences(userId: UserId) {
     return withUser(this.database.read, userId).notificationPreference.findMany({
       where: { userId },
       select: { category: true, channel: true, enabled: true },
     });
   }
 
-  settings(userId: string) {
+  settings(userId: UserId) {
     return withUser(this.database.read, userId).notificationSettings.findUnique({
       where: { userId },
       select: { quietStart: true, quietEnd: true, dailyDigest: true },
     });
   }
 
-  async setPreference(tx: Tx, userId: string, preference: Preference) {
+  async setPreference(tx: Tx, userId: UserId, preference: Preference) {
     const { category, channel, enabled } = preference;
     await tx.notificationPreference.upsert({
       where: { userId_category_channel: { userId, category, channel } },
@@ -69,7 +70,7 @@ export class NotificationsRepository {
 
   async setSettings(
     tx: Tx,
-    userId: string,
+    userId: UserId,
     settings: { dailyDigest?: boolean; quietStart?: number | null; quietEnd?: number | null },
   ) {
     await tx.notificationSettings.upsert({
@@ -95,7 +96,7 @@ export class NotificationsRepository {
   }
 
   /** Forgets the user's devices past the `keep` seen most recently. */
-  async pruneDevices(tx: Tx, userId: string, keep: number) {
+  async pruneDevices(tx: Tx, userId: UserId, keep: number) {
     const stale = await tx.notificationDevice.findMany({
       where: { userId },
       orderBy: { lastSeenAt: "desc" },
@@ -107,7 +108,7 @@ export class NotificationsRepository {
     }
   }
 
-  async removeDevice(userId: string, token: string) {
+  async removeDevice(userId: UserId, token: string) {
     await withUser(this.database.write, userId).notificationDevice.deleteMany({
       where: { userId, token },
     });
