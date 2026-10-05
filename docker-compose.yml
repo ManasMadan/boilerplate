@@ -34,7 +34,7 @@ services:
   postgres:
     # The official Postgres image plus pgvector, on the same Debian (trixie) base as the
     # CloudNativePG image used in Kubernetes, so extensions and collation match.
-    image: pgvector/pgvector:0.8.6-pg18-trixie
+    image: pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -52,7 +52,7 @@ services:
       retries: 30
 
   valkey:
-    image: valkey/valkey:9.1.2-alpine
+    image: valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
     # Queued jobs live here: never evict keys (noeviction) and persist with AOF.
     # A memory ceiling below the container's limit: when full, writes fail with an error
     # instead of the container being killed. 32 logical databases: the test suites each
@@ -80,7 +80,7 @@ services:
 
   # RustFS: Apache-2.0, S3-compatible object storage (MinIO stopped publishing images).
   rustfs:
-    image: rustfs/rustfs:1.0.0
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
     profiles: [files, full]
     environment:
       RUSTFS_ACCESS_KEY: rustfs
@@ -97,7 +97,7 @@ services:
 
   # Creates the uploads bucket once storage is up, so `bun dev` needs no manual step.
   s3-init:
-    image: amazon/aws-cli:2.37.5
+    image: amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224
     profiles: [files, full]
     depends_on:
       rustfs: { condition: service_healthy }
@@ -119,7 +119,7 @@ services:
 
   # clamd scans every upload before it's accepted. The Debian image has arm64 builds.
   clamav:
-    image: clamav/clamav-debian:1.5
+    image: clamav/clamav-debian:1.5.4@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578
     profiles: [files, full]
     ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${CLAMAV_PORT:-53310}:3310"]
     # Signatures take about 1 GB in memory. Loading the new set before dropping the old
@@ -138,7 +138,7 @@ services:
       start_period: 6m
 
   mailpit:
-    image: axllent/mailpit:v1.31.3
+    image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
     ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_SMTP_PORT:-51025}:1025", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_UI_PORT:-58025}:8025"]
     mem_limit: 128m
     # Keeps more than the default 500: a full e2e run sends hundreds of emails.
@@ -165,7 +165,7 @@ services:
   # address that doesn't exist, so bounces work offline. Delivery failures are posted to the webhooks
   # service on the host (/webhooks/stalwart), signed with STALWART_WEBHOOK_SECRET.
   stalwart:
-    image: stalwartlabs/stalwart:v0.16.24
+    image: stalwartlabs/stalwart:v0.16.24@sha256:ec011be228596e37e65f41aab17deed573859614430472f7eeb42178c50d87b7
     profiles: [mail, full]
     environment:
       # Signs in to the management API (the init service below and the tests use it).
@@ -191,7 +191,7 @@ services:
   # runs it after `up`). Upserts, singleton updates and one reconcile, so every start
   # converges on the same state instead of failing the second time.
   stalwart-init:
-    image: stalwartlabs/cli:1.0.13
+    image: stalwartlabs/cli:1.0.13@sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd
     profiles: [mail, full]
     depends_on:
       stalwart: { condition: service_healthy }
@@ -210,7 +210,7 @@ services:
   # OTLP and shows traces at http://localhost:56686. Point the services at it with
   # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:54318 (see .env.example).
   jaeger:
-    image: jaegertracing/jaeger:2.21.0
+    image: jaegertracing/jaeger:2.21.0@sha256:3d0ac795ff98aa04d1be04311d2dac6c25b4bfc8322dc02e53bc5b170c5018c3
     profiles: [telemetry, full]
     ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${JAEGER_OTLP_PORT:-54318}:4318", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${JAEGER_UI_PORT:-56686}:16686"]
     mem_limit: 256m

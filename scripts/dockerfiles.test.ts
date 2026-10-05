@@ -35,6 +35,37 @@ describe("the Dockerfiles", () => {
   });
 });
 
+describe("the dev container's Dockerfile", () => {
+  it("pins every image by digest", () => {
+    const refs = references(readFileSync(join(ROOT, ".devcontainer/Dockerfile"), "utf8"));
+    expect(refs.length).toBeGreaterThan(1);
+    expect(refs.filter((ref) => !DIGEST.test(ref))).toEqual([]);
+  });
+});
+
+describe("the images the manifests and compose run", () => {
+  // Every image reference in deploy/ (the charts' values, the local and Argo CD manifests)
+  // and the compose files, as Renovate's deploy manager and Compose's read them: by tag
+  // and digest, so a moved tag changes nothing until Renovate proposes it. The images we
+  // build locally (<name>:dev) are the one exception: they have no digest to pin.
+  const IMAGE = /^\s*(?:-\s+)?(?:image|imageName|imageRef):\s*["']?([^\s"'{]+:[^\s"']+)["']?\s*$/gm;
+  const files = [
+    ...readdirSync(join(ROOT, "deploy"), { recursive: true, encoding: "utf8" })
+      .filter((path) => /\.ya?ml$/.test(path) && !/(^|\/)(\.rendered|tests)\//.test(path))
+      .map((path) => join("deploy", path)),
+    ...readdirSync(ROOT).filter((file) => /^docker-compose.*\.ya?ml$/.test(file)),
+  ];
+
+  it("pins each by digest", () => {
+    const refs = files.flatMap((file) =>
+      [...readFileSync(join(ROOT, file), "utf8").matchAll(IMAGE)].map((m) => `${file}: ${m[1]}`),
+    );
+    expect(refs.length).toBeGreaterThan(10);
+    const loose = refs.filter((ref) => !DIGEST.test(ref) && !/:dev$/.test(ref));
+    expect(loose).toEqual([]);
+  });
+});
+
 describe("the Node service images' health check", () => {
   // The image's PORT is the one the health check calls when nothing else sets it, so it
   // must be the port the service listens on by default.

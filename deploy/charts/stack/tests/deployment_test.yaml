@@ -237,7 +237,7 @@ tests:
       services.clamav.enabled: true
     documentSelector: { path: metadata.name, value: demo-clamav }
     asserts:
-      - equal: { path: "spec.template.spec.containers[0].image", value: docker.io/clamav/clamav-debian:1.5 }
+      - equal: { path: "spec.template.spec.containers[0].image", value: docker.io/clamav/clamav-debian:1.5.4@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578 }
       - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
       - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
       - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }

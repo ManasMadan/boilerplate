@@ -315,7 +315,7 @@ services:
     enabled: false
     image: ""
     # The Debian image, as locally: it has arm64 builds too.
-    imageRef: docker.io/clamav/clamav-debian:1.5
+    imageRef: docker.io/clamav/clamav-debian:1.5.4@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578
     port: 3310
     tcpProbe: true
     replicas: 1

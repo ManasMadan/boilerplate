@@ -32,7 +32,7 @@ configs:
 repoServer:
   extraContainers:
     - name: sops
-      image: quay.io/getsops/sops:v3.13.3-alpine
+      image: quay.io/getsops/sops:v3.13.3-alpine@sha256:ae501277bf742f1662e0f881f43dd8fd6798b489a8058e921dbf6cda597140ea
       # The plugin server Argo CD copies into var-files; it runs the command above.
       command: [/var/run/argocd/argocd-cmp-server]
       securityContext:

@@ -16,13 +16,13 @@ database:
 # cluster, so they never need to be in git; everything else secret is (SOPS, see
 # deploy/README.md).
 credentials:
-  image: docker.io/curlimages/curl:8.22.0
+  image: docker.io/curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
 
 # Postgres with CloudNativePG.
 postgres:
   instances: 2
   # PostgreSQL 18 with pgvector.
-  imageName: ghcr.io/cloudnative-pg/postgresql:18-standard-trixie
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-trixie@sha256:79be0d10e78b7ac4520cf6c5db199a8bb7f6de53b3229f47e90cab5865528a0d
   storage:
     size: 20Gi
     # k3s's default: a directory on the node. Replicas on other nodes are what keeps
@@ -64,7 +64,7 @@ postgres:
     # How old the restored data may be: older means WAL isn't reaching the backups.
     maxAgeHours: 26
     timeoutMinutes: 60
-    image: docker.io/alpine/kubectl:1.35.4
+    image: docker.io/alpine/kubectl:1.35.4@sha256:9ccd823647622b620dce092d0f1406b8b41d152ce08ac963e3d4683770b14dfd
   restore:
     enabled: false
     serverName: ""
@@ -74,7 +74,7 @@ postgres:
 # Valkey (queues, sessions, rate limits, caches; one node unless `replication` is on).
 # Its connection details are in the `secretName` Secret (host, port, password, url).
 valkey:
-  image: docker.io/valkey/valkey:9.1.2-alpine
+  image: docker.io/valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
   secretName: valkey
   storage:
     size: 5Gi
@@ -95,7 +95,7 @@ valkey:
     # Odd, so a majority of Sentinels can always agree.
     replicas: 3
     proxy:
-      image: docker.io/haproxy:3.4.6-alpine
+      image: docker.io/haproxy:3.4.6-alpine@sha256:7af8255207ee9964ccb4eec8ce4b7a40b777769665e3ae83897fb01b24d8a43a
       replicas: 2
       resources:
         requests: { cpu: 20m, memory: 32Mi }
@@ -106,10 +106,10 @@ valkey:
 # only Postgres reaches. Separate servers with their own root keys, so the application's
 # keys can't touch the backups.
 storage:
-  image: docker.io/rustfs/rustfs:1.0.0
+  image: docker.io/rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
   # Creates the buckets and sets their CORS rules after every install and upgrade.
   buckets:
-    image: docker.io/amazon/aws-cli:2.37.5
+    image: docker.io/amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224
   region: us-east-1
   uploads:
     enabled: true
@@ -176,7 +176,7 @@ offsite:
   prefix: ""
   secretName: offsite-storage
   schedule: "17 * * * *"
-  image: docker.io/rclone/rclone:1.75.1
+  image: docker.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: "1", memory: 256Mi }
@@ -204,7 +204,7 @@ preview:
   # Where a preview's mail goes instead of out (templates/preview-mail.yaml).
   mailpit:
     enabled: true
-    image: docker.io/axllent/mailpit:v1.31.3
+    image: docker.io/axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
     # Its certificate, with the authority the notifications service trusts (ca.crt).
     tlsSecret: mailpit-tls
     resources:

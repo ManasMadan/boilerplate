@@ -137,7 +137,7 @@ tests:
       - contains:
           path: "spec.template.spec.initContainers[1].env"
           content: { name: STALWART_RECOVERY_ADMIN, value: admin:$(ADMIN_PASSWORD) }
-      - equal: { path: "spec.template.spec.initContainers[2].image", value: docker.io/stalwartlabs/cli:1.0.13 }
+      - equal: { path: "spec.template.spec.initContainers[2].image", value: docker.io/stalwartlabs/cli:1.0.13@sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd }
       - equal: { path: "spec.template.spec.initContainers[2].args", value: [apply, --file, /run/provision/plan.ndjson] }
       - notContains:
           path: "spec.template.spec.containers[0].env"

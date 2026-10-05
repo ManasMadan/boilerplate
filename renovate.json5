@@ -60,13 +60,23 @@
       datasourceTemplate: "docker",
     },
     {
-      description: "Images in the charts' values and the local manifests",
+      description: "Images in the charts' values and the local manifests, each pinned by digest too (scripts/dockerfiles.test.ts)",
       customType: "regex",
       managerFilePatterns: ["/^deploy/.+\\.ya?ml$/"],
       matchStrings: [
-        "(?:image|imageName|imageRef): [\"']?(?<depName>[a-z0-9][a-z0-9.-]*(?:/[a-z0-9][a-z0-9._-]*)+):(?<currentValue>\\w[\\w.-]*)[\"']?\\s",
+        "(?:image|imageName|imageRef): [\"']?(?<depName>[a-z0-9][a-z0-9.-]*(?:/[a-z0-9][a-z0-9._-]*)+):(?<currentValue>\\w[\\w.-]*)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?[\"']?\\s",
       ],
       datasourceTemplate: "docker",
+    },
+    {
+      description: "The CRD schema catalog kubeconform reads (scripts/charts.ts), at a commit of its main branch",
+      customType: "regex",
+      managerFilePatterns: ["/^scripts/charts\\.ts$/"],
+      matchStrings: ["datreeio/CRDs-catalog/(?<currentDigest>[0-9a-f]{40})/"],
+      depNameTemplate: "datreeio/CRDs-catalog",
+      packageNameTemplate: "https://github.com/datreeio/CRDs-catalog",
+      currentValueTemplate: "main",
+      datasourceTemplate: "git-refs",
     },
     {
       description: "Platform add-on charts from Helm repositories (deploy/platform/addons)",
