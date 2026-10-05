@@ -225,9 +225,10 @@ file below 100%, or one no test loads.
   `@ts-expect-error`, `# pyright: ignore`, `# noqa`, Python's `typing.cast()` (it checks
   nothing), `-- squawk-ignore` in a migration, `# shellcheck disable`,
   `# hadolint ignore`, `# zizmor: ignore`, `# tflint-ignore`, and a rule turned off (or
-  down to a warning) in `biome.jsonc` or another linter's configuration. `bun scripts/suppressions.ts`, part of `bun run lint`, fails on any that
-  no row allows, and a Claude Code hook refuses a new one as it's written. A row allows
-  one kind in one file: a skipped test needs its file under Skipped tests, a coverage
+  down to a warning) in `biome.jsonc` or another linter's configuration.
+  `bun scripts/suppressions.ts`, part of `bun run lint`, fails on any that no row
+  allows, and a Claude Code hook refuses a new one as it's written. A row allows one
+  kind in one file: a skipped test needs its file under Skipped tests, a coverage
   pragma under Coverage exceptions, a type-coverage ignore under Type-coverage
   exceptions, and a suppression a row under Suppressions that names it (a rule turned
   off is named by the rule). A focused test (`.only`) is never allowed. Listing a file
@@ -447,7 +448,7 @@ The evals run on every change with the local stand-ins; see
 | `bun run lint:tflint` | the OpenTofu modules and environment, with every rule of the Terraform ruleset bundled with tflint (`infra/tofu/.tflint.hcl`) |
 | `bun run lint:unused` | knip (`knip.jsonc`): unused files, exports and dependencies, and dependencies used but not declared |
 | `bun run lint:markers` | no `ponytail:` markers in tracked source (`scripts/check-markers.ts`): a comment says why in plain words |
-| `bun run lint:patterns` | code shapes Biome can't see (`scripts/check-patterns.ts`): in services' and packages' `src/`, parsed JSON cast to a type, a type argument on `$queryRaw`, an optional chain three deep, a role compared with `"member"`, an error sent without `sendError`; in tests, a fixed sleep outside a polling loop |
+| `bun run lint:patterns` | code shapes Biome can't see (`scripts/check-patterns.ts`): in services' and packages' `src/`, `scripts/`, `load/` and `turbo/generators/`, parsed JSON cast to a type, a type argument on `$queryRaw`, an optional chain three deep, a role compared with `"member"`, an error sent without `sendError`; in tests, a fixed sleep outside a polling loop |
 | `bun run check-types` | tsc everywhere, basedpyright (strict) for Python |
 | `bun run db:lint` | Squawk on new migrations |
 | `bun run --cwd apps/web budget` | first-load JavaScript per route, after `next build` |
@@ -468,7 +469,7 @@ for those areas.
 | Job | Runs |
 |---|---|
 | Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, suppressions, the linters of the workflows, shell scripts, Dockerfiles and OpenTofu, each package's lint) |
-| Type-check | `bun run check-types`, then `bun run type-coverage` (strict: no `any`, type assertion or non-null `!` in any workspace's source, but the Type-coverage exceptions) |
+| Type-check | `bun run check-types`, then `bun run type-coverage` (strict: no `any`, type assertion or non-null `!` in any workspace's source, the repo's scripts, the load test or the code generators, but the Type-coverage exceptions) |
 | Unit tests | `bun run test` |
 | Components | the stories with coverage, `test:visual` |
 | Integration tests | migrations, the drift check, then every package's `coverage` except Python's and the stories', and the scripts' and hooks' |

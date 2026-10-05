@@ -76,10 +76,13 @@ export function areasOf(file: string): Area[] {
 /** Every area and whether the files touch it. */
 export function areas(files: string[]): Record<Area, boolean> {
   const touched = new Set(files.flatMap(areasOf));
-  return Object.fromEntries(AREAS.map((area) => [area, touched.has(area)])) as Record<
-    Area,
-    boolean
-  >;
+  return {
+    app: touched.has("app"),
+    charts: touched.has("charts"),
+    infra: touched.has("infra"),
+    images: touched.has("images"),
+    scripts: touched.has("scripts"),
+  };
 }
 
 /**

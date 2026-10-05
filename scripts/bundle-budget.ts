@@ -15,6 +15,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
+import * as z from "zod";
 import { ROOT, runMain } from "./lib";
 
 /**
@@ -41,6 +42,9 @@ function manifests(dir: string): string[] {
   });
 }
 
+const clientManifest = z.object({ entryJSFiles: z.record(z.string(), z.array(z.string())) });
+const buildManifest = z.object({ rootMainFiles: z.array(z.string()).nonempty() });
+
 /** A route's own chunks. The manifest is a script assigning one JSON object: `… = {…};`. */
 function entryFiles(path: string): string[] {
   const source = readFileSync(path, "utf8");
@@ -48,13 +52,13 @@ function entryFiles(path: string): string[] {
   if (start === -1) {
     throw changed(`${path} no longer assigns a JSON object`);
   }
-  const manifest = JSON.parse(source.slice(start + 2, source.lastIndexOf("}") + 1)) as {
-    entryJSFiles?: Record<string, string[]>;
-  };
-  if (typeof manifest.entryJSFiles !== "object") {
+  const manifest = clientManifest.safeParse(
+    JSON.parse(source.slice(start + 2, source.lastIndexOf("}") + 1)),
+  );
+  if (!manifest.success) {
     throw changed(`${path} has no entryJSFiles`);
   }
-  return Object.values(manifest.entryJSFiles).flat();
+  return Object.values(manifest.data.entryJSFiles).flat();
 }
 
 /** First-load sizes in kB, gzipped, of the build in `next` (a `.next` folder). */
@@ -68,16 +72,15 @@ export function firstLoad(next: string) {
     }
     return size;
   };
-  const total = (files: Iterable<string>) =>
-    [...files].reduce((sum, f) => sum + gzipped(f), 0) / 1024;
+  const total = (files: Set<string>) => [...files].reduce((sum, f) => sum + gzipped(f), 0) / 1024;
 
-  const build = JSON.parse(readFileSync(join(next, "build-manifest.json"), "utf8")) as {
-    rootMainFiles?: unknown;
-  };
-  if (!Array.isArray(build.rootMainFiles) || build.rootMainFiles.length === 0) {
+  const build = buildManifest.safeParse(
+    JSON.parse(readFileSync(join(next, "build-manifest.json"), "utf8")),
+  );
+  if (!build.success) {
     throw changed("build-manifest.json lists no rootMainFiles");
   }
-  const shared = new Set(build.rootMainFiles as string[]);
+  const shared = new Set(build.data.rootMainFiles);
   const app = join(next, "server/app");
   const routes = manifests(app)
     .map((path) => {

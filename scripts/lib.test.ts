@@ -7,6 +7,7 @@ import {
   envLine,
   fail,
   listening,
+  messageOf,
   ok,
   parseEnv,
   readEnv,
@@ -116,6 +117,13 @@ describe("whether a port listens", () => {
     const started = Date.now();
     expect(await listening(port, 500)).toBe(false);
     expect(Date.now() - started).toBeLessThan(1500);
+  });
+});
+
+describe("what an error says", () => {
+  it("is an Error's message, or the thrown value itself", () => {
+    expect(messageOf(new Error("broken"))).toBe("broken");
+    expect(messageOf("plain")).toBe("plain");
   });
 });
 

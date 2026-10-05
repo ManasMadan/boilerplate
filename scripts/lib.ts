@@ -114,6 +114,10 @@ export function removeEnvValue(path: string, key: string): boolean {
   }
 }
 
+/** What a thrown value says: its message, or the value itself when it isn't an Error. */
+export const messageOf = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 export const ok = (message: string) => console.log(`  \x1b[32m✔\x1b[0m ${message}`);
 export const warn = (message: string) => console.log(`  \x1b[33m!\x1b[0m ${message}`);
 export const fail = (message: string) => console.log(`  \x1b[31m✖\x1b[0m ${message}`);

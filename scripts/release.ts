@@ -11,6 +11,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as z from "zod";
 import { HOUR_MS } from "../packages/contracts/src/time";
 import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
@@ -132,11 +133,10 @@ const REAL: Tools = {
   write: process.stdout.write.bind(process.stdout),
 };
 
-interface WorkflowRun {
-  workflowName: string;
-  status: string;
-  conclusion: string;
-}
+const workflowRuns = z.array(
+  z.object({ workflowName: z.string(), status: z.string(), conclusion: z.string() }),
+);
+const stagingValues = z.object({ image: z.object({ tag: z.unknown() }).optional() });
 
 /** git and gh in the checkout, and the facts about a release they answer. */
 function helpers({ run, root }: Tools) {
@@ -150,9 +150,11 @@ function helpers({ run, root }: Tools) {
   const git = command("git");
   const gh = command("gh");
   const runsOf = (commit: string) =>
-    JSON.parse(
-      gh(["run", "list", "--commit", commit, "--json", "workflowName,status,conclusion"]),
-    ) as WorkflowRun[];
+    workflowRuns.parse(
+      JSON.parse(
+        gh(["run", "list", "--commit", commit, "--json", "workflowName,status,conclusion"]),
+      ),
+    );
   const facts: ReleaseFacts = {
     deployed: (commit) =>
       runsOf(commit).some((run) => run.workflowName === "Deploy" && run.conclusion === "success"),
@@ -160,9 +162,7 @@ function helpers({ run, root }: Tools) {
       git(["diff-tree", "--no-commit-id", "--name-only", "-r", commit]).split("\n").filter(Boolean),
     parent: (commit) => git(["rev-parse", `${commit}^`]),
     stagingTag: (commit) => {
-      const values = Bun.YAML.parse(git(["show", `${commit}:${STAGING}`])) as {
-        image?: { tag?: unknown };
-      };
+      const values = stagingValues.parse(Bun.YAML.parse(git(["show", `${commit}:${STAGING}`])));
       return typeof values.image?.tag === "string" ? values.image.tag : undefined;
     },
   };

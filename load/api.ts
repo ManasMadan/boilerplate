@@ -31,10 +31,14 @@ const PROFILE = __ENV.PROFILE ?? "smoke";
 const TARGET_RPS = Number(__ENV.TARGET_RPS ?? 200);
 const DURATION = __ENV.DURATION ?? "5m";
 
-const sessions = new SharedArray(
-  "sessions",
-  () => JSON.parse(open("./.sessions.json")) as string[],
-);
+const sessions = new SharedArray("sessions", () => {
+  const parsed: unknown = JSON.parse(open("./.sessions.json"));
+  const cookies = isList(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  if (!isList(parsed) || cookies.length !== parsed.length) {
+    throw new Error("load/.sessions.json must be a JSON list of session cookies");
+  }
+  return cookies;
+});
 
 // Reads outnumber writes about 4 to 1 in a todo app; each write iteration makes 4 requests.
 const profiles: Record<string, Record<string, Scenario>> = {
@@ -105,16 +109,46 @@ interface Todo {
   version: number;
 }
 
+// k6 can't load zod, so the API's answers are checked by hand.
+function isList(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isTodo(value: unknown): value is Todo {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.completed === "boolean" &&
+    typeof value.version === "number"
+  );
+}
+
+/** The response's body as a todo; the iteration fails (and counts) when it isn't one. */
+function todoOf(response: RefinedResponse<"text">): Todo {
+  const body: unknown = JSON.parse(response.body);
+  return isTodo(body) ? body : fail(`not a todo: ${response.body}`);
+}
+
+/** The response's body as a page of todos. */
+function todosOf(response: RefinedResponse<"text">): Todo[] {
+  const body: unknown = JSON.parse(response.body);
+  const items = isRecord(body) && isList(body.items) ? body.items.filter(isTodo) : [];
+  return isRecord(body) && isList(body.items) && items.length === body.items.length
+    ? items
+    : fail(`not a page of todos: ${response.body}`);
+}
+
 /** The virtual user's account: one of the prepared sessions, the same one every time. */
 function user(index = (exec.vu.idInTest - 1) % sessions.length) {
   return {
     prefix: `load-${index + 1} `,
-    headers: { cookie: sessions[index] as string },
+    headers: { cookie: sessions[index] ?? fail(`no session ${index}`) },
   };
-}
-
-function json<T>(response: RefinedResponse<"text">): T {
-  return JSON.parse(response.body as string) as T;
 }
 
 export function setup() {
@@ -139,8 +173,7 @@ export function read() {
     "list: 200": (r) => r.status === 200,
     // Row-level security under concurrency: only this user's workspace, ever.
     "list: only this workspace": (r) =>
-      r.status === 200 &&
-      json<{ items: Todo[] }>(r).items.every((todo) => todo.title.startsWith(prefix)),
+      r.status === 200 && todosOf(r).every((todo) => todo.title.startsWith(prefix)),
   });
 }
 
@@ -154,14 +187,14 @@ export function write() {
   if (!check(created, { "create: 201": (r) => r.status === 201 })) {
     return;
   }
-  const todo = json<Todo>(created);
+  const todo = todoOf(created);
 
   const done = http.patch(
     `${BASE_URL}/api/v1/todos/${todo.id}`,
     JSON.stringify({ completed: true, version: todo.version }),
     { headers: { ...headers, ...JSON_BODY }, tags: { name: "complete" } },
   );
-  check(done, { "complete: 200": (r) => r.status === 200 && json<Todo>(r).completed });
+  check(done, { "complete: 200": (r) => r.status === 200 && todoOf(r).completed });
 
   // A stale version is refused, not applied: optimistic concurrency holds under load.
   const stale = http.patch(

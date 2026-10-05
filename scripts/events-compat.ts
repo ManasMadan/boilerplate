@@ -13,12 +13,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import * as z from "zod";
 import { runMain } from "./lib";
 
 const CATALOG = "packages/jobs/generated/events.json";
 
-type Schema = { properties?: Record<string, unknown>; [key: string]: unknown };
-type Catalog = Record<string, Schema>;
+/** generated/events.json: each event's JSON Schema, by name. */
+const catalog = z.record(
+  z.string(),
+  z.looseObject({ properties: z.record(z.string(), z.unknown()).optional() }),
+);
+type Catalog = z.infer<typeof catalog>;
 
 /** How each event in `base` changed in `head` in a way its consumers can't take. */
 export function breakingChanges(base: Catalog, head: Catalog): string[] {
@@ -52,7 +57,7 @@ export function check(
     return { problems: [], note: "The base branch has no event catalog yet." };
   }
   return {
-    problems: breakingChanges(JSON.parse(base) as Catalog, JSON.parse(head()) as Catalog),
+    problems: breakingChanges(catalog.parse(JSON.parse(base)), catalog.parse(JSON.parse(head()))),
   };
 }
 

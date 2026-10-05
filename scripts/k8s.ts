@@ -33,8 +33,9 @@ import {
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as z from "zod";
 import { MINUTE_MS } from "../packages/contracts/src/time";
-import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
+import { fail, messageOf, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 const CLUSTER = "boilerplate";
 const NAMESPACE = "boilerplate";
@@ -49,19 +50,24 @@ const IMAGES = ["api", "worker", "notifications", "webhooks", "web", "ai", "migr
 const MIN_DOCKER_MEMORY_GB = 8;
 const BUILDER = "boilerplate";
 
+const addonFile = z.object({
+  repoURL: z.string().min(1),
+  chart: z.string().min(1),
+  version: z.string().min(1),
+  namespace: z.string().min(1),
+});
+
 /**
  * Where to install an add-on from, as the clusters install it (deploy/platform/addons),
  * so kind runs the same chart at the same version.
  */
 export function addon(name: string, root = ROOT) {
   const file = `deploy/platform/addons/${name}.yaml`;
-  const spec = Bun.YAML.parse(readFileSync(join(root, file), "utf8")) as Partial<
-    Record<"repoURL" | "chart" | "version" | "namespace", string>
-  >;
-  const { repoURL, chart, version, namespace } = spec;
-  if (!repoURL || !chart || !version || !namespace) {
+  const spec = addonFile.safeParse(Bun.YAML.parse(readFileSync(join(root, file), "utf8")));
+  if (!spec.success) {
     throw new Error(`${file} needs repoURL, chart, version and namespace`);
   }
+  const { repoURL, chart, version, namespace } = spec.data;
   const source = repoURL.startsWith("https://")
     ? [chart, "--repo", repoURL]
     : [`oci://${repoURL}/${chart}`];
@@ -307,7 +313,7 @@ class KindCluster {
         problem = result.stderr;
       }
     } catch (error) {
-      problem = (error as Error).message;
+      problem = messageOf(error);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

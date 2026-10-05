@@ -21,6 +21,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as z from "zod";
 import { fail, ok, ROOT, runMain, runSync } from "./lib";
 import { recipientsFor, unsafeSecret } from "./secrets-check";
 
@@ -92,9 +93,21 @@ const OPTIONAL: [label: string, chart: string, values: string[]][] = [
   ["Valkey replication", "deploy/charts/data", ["--set", "valkey.replication.enabled=true"]],
 ];
 
-/** An add-on's definition (deploy/platform/addons). */
-const fields = (file: string) =>
-  Bun.YAML.parse(readFileSync(file, "utf8")) as Partial<Record<string, string>>;
+/**
+ * An add-on's definition (deploy/platform/addons): a chart from a repository, or one of
+ * ours by its path.
+ */
+const addonFile = z
+  .object({
+    addon: z.string(),
+    namespace: z.string(),
+    repoURL: z.string(),
+    chart: z.string(),
+    version: z.string(),
+    path: z.string(),
+  })
+  .partial();
+const fields = (file: string) => addonFile.parse(Bun.YAML.parse(readFileSync(file, "utf8")));
 
 type Result = { ok: boolean; output: string };
 
@@ -156,9 +169,11 @@ function kubeconformWith(exec: Checks["exec"], root: string) {
   };
 }
 
+const prometheusRule = z.object({ spec: z.object({ groups: z.unknown() }) });
+
 /** `promtool check rules` on a rendered PrometheusRule. */
 function promtool(exec: Checks["exec"], manifest: string) {
-  const { spec } = Bun.YAML.parse(manifest) as { spec: { groups: unknown } };
+  const { spec } = prometheusRule.parse(Bun.YAML.parse(manifest));
   const script = "cat > /tmp/rules.yaml && promtool check rules /tmp/rules.yaml";
   return exec(
     "docker",

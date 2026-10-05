@@ -69,11 +69,18 @@ describe("the code pattern check, in source", () => {
     expect(problems(SOURCE, "reply.header(200).send({ code }); send({ code });")).toEqual([]);
   });
 
-  it("leaves tests, generated code and everything outside src alone", () => {
+  it("applies to the repo's scripts, load test and code generators too", () => {
+    const cast = "const a = JSON.parse(text) as A;";
+    for (const path of ["scripts/x.ts", "load/api.ts", "turbo/generators/config.ts"]) {
+      expect(problems(path, cast)).toEqual(["parsed JSON cast to a type"]);
+    }
+  });
+
+  it("leaves tests, generated code and everything else alone", () => {
     const cast = "const a = JSON.parse(text) as A;";
     expect(problems("apps/api/src/x.test.ts", cast)).toEqual([]);
+    expect(problems("scripts/x.test.ts", cast)).toEqual([]);
     expect(problems("apps/api/src/generated/x.ts", cast)).toEqual([]);
-    expect(problems("scripts/x.ts", cast)).toEqual([]);
     expect(problems("docs/x.md", cast)).toEqual([]);
   });
 });

@@ -5,6 +5,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as z from "zod";
 import {
   ENV_EXAMPLE_PATH,
   ENV_PATH,
@@ -41,10 +42,9 @@ function checkRuntimes({ version, problem }: Doctor, bunVersion: string) {
 
   // package.json pins the Bun that CI, the images and bun.lock use (packageManager), and
   // the oldest one the scripts work with (engines).
-  const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
-    packageManager: string;
-    engines: { bun: string };
-  };
+  const manifest = z
+    .object({ packageManager: z.string(), engines: z.object({ bun: z.string() }) })
+    .parse(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")));
   const pinnedBun = manifest.packageManager.replace(/^bun@/, "");
   if (!Bun.semver.satisfies(bunVersion, manifest.engines.bun)) {
     problem(
@@ -190,8 +190,8 @@ export function doctor({
 } = {}): number {
   let problems = 0;
   const checks: Doctor = {
-    version: (command) => {
-      const result = run(command[0] as string, command.slice(1));
+    version: ([name = "", ...args]) => {
+      const result = run(name, args);
       return result.status === 0 ? result.stdout.trim() : null;
     },
     problem: (message) => {

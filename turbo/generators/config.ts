@@ -13,11 +13,28 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PlopTypes } from "@turbo/gen";
+import * as z from "zod";
 
 const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const CAMEL = /^[a-z][a-zA-Z0-9]*$/;
 
 type Format = (paths: (answers: PlopTypes.Answers) => string[]) => PlopTypes.CustomActionFunction;
+
+/** The answers code reads (plop leaves them untyped). */
+const named = z.object({ name: z.string() });
+const itemized = z.object({ item: z.string() });
+
+/** One of plop's case helpers, the ones the templates use, as a typed function. */
+const helper = (plop: PlopTypes.NodePlopAPI, name: string) => (value: string) =>
+  z.string().parse(plop.getHelper(name)(value));
+
+/** The part of a translation catalog the audit log's event labels live in. */
+const catalog = z.object({
+  workspace: z.object({ audit: z.object({ events: z.record(z.string(), z.unknown()) }) }),
+});
+// A guard rather than a parse: the catalog is written back with its keys in their order.
+const isCatalog = (value: unknown): value is z.infer<typeof catalog> =>
+  catalog.safeParse(value).success;
 
 /** The contract, its export and its deletion event. */
 const CONTRACT_ACTIONS: PlopTypes.ActionType[] = [
@@ -137,7 +154,7 @@ function apiFeaturePrompts(plop: PlopTypes.NodePlopAPI, root: string): PlopTypes
       type: "input",
       name: "item",
       message: "One item, singular (names the schema and type), e.g. project:",
-      default: (answers: PlopTypes.Answers) => String(answers.name).replace(/s$/, ""),
+      default: (answers: PlopTypes.Answers) => named.parse(answers).name.replace(/s$/, ""),
       validate: (value: string) => KEBAB.test(value) || "Use kebab-case, e.g. time-entry",
     },
     {
@@ -145,7 +162,8 @@ function apiFeaturePrompts(plop: PlopTypes.NodePlopAPI, root: string): PlopTypes
       name: "model",
       message:
         "Prisma client accessor of its table (already in packages/db/prisma/schema, with org_id and RLS), e.g. project:",
-      default: (answers: PlopTypes.Answers) => plop.getHelper("camelCase")(answers.item),
+      default: (answers: PlopTypes.Answers) =>
+        helper(plop, "camelCase")(itemized.parse(answers).item),
       validate: (value: string) => CAMEL.test(value) || "The camelCase accessor, e.g. timeEntry",
     },
     {
@@ -170,16 +188,18 @@ function apiFeaturePrompts(plop: PlopTypes.NodePlopAPI, root: string): PlopTypes
 
 /** The audit log describes every event in every language: English, and a Spanish draft. */
 function describeEvent(plop: PlopTypes.NodePlopAPI, root: string): PlopTypes.CustomActionFunction {
-  return ({ item }) => {
-    const words = plop.getHelper("lowerCase")(plop.getHelper("sentenceCase")(item));
+  return (answers) => {
+    const { item } = itemized.parse(answers);
+    const words = helper(plop, "lowerCase")(helper(plop, "sentenceCase")(item));
     const article = /^[aeiou]/.test(words) ? "an" : "a";
     const labels = { en: `Deleted ${article} ${words}`, es: `Eliminó «${words}»` };
     for (const [locale, label] of Object.entries(labels)) {
       const path = join(root, `packages/i18n/messages/${locale}.json`);
-      const messages = JSON.parse(readFileSync(path, "utf8")) as {
-        workspace: { audit: { events: Record<string, unknown> } };
-      };
-      messages.workspace.audit.events[plop.getHelper("snakeCase")(item)] = {
+      const messages: unknown = JSON.parse(readFileSync(path, "utf8"));
+      if (!isCatalog(messages)) {
+        throw new Error(`${path} has no workspace.audit.events`);
+      }
+      messages.workspace.audit.events[helper(plop, "snakeCase")(item)] = {
         deleted: { v1: label },
       };
       writeFileSync(path, `${JSON.stringify(messages, null, 2)}\n`);
@@ -197,8 +217,8 @@ function apiFeature(plop: PlopTypes.NodePlopAPI, root: string, format: Format) {
       ...CONTRACT_ACTIONS,
       describeEvent(plop, root),
       ...MODULE_ACTIONS,
-      format(({ name }) => {
-        const kebab = plop.getHelper("kebabCase")(name);
+      format((answers) => {
+        const kebab = helper(plop, "kebabCase")(named.parse(answers).name);
         return [
           `packages/contracts/src/api/${kebab}.ts`,
           "packages/contracts/src/api/index.ts",
@@ -270,7 +290,7 @@ function packageGenerator(
         path: "packages/{{kebabCase name}}/src/index.ts",
         templateFile: "templates/package/index.ts.hbs",
       },
-      format(({ name }) => [`packages/${plop.getHelper("kebabCase")(name)}`]),
+      format((answers) => [`packages/${helper(plop, "kebabCase")(named.parse(answers).name)}`]),
       // Links the new workspace so other packages can depend on it.
       () => {
         run("bun", ["install"]);

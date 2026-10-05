@@ -18,6 +18,7 @@
  * already use. If they don't, it starts nothing: running out of memory makes Docker kill
  * containers, and not necessarily ours.
  */
+import * as z from "zod";
 import { fail, ok, ROOT, type Run, runMain, runSync, warn } from "./lib";
 
 /** Kept free for Docker itself and the growth of what's already running. */
@@ -42,6 +43,17 @@ function bytes(text: string) {
 }
 
 /** What starting the profile needs and what Docker has; null (said why) when unknown. */
+/** What the budget reads of `docker compose config`. */
+const composeConfig = z.object({
+  services: z.record(
+    z.string(),
+    z.object({
+      mem_limit: z.union([z.number(), z.string()]).optional(),
+      restart: z.string().optional(),
+    }),
+  ),
+});
+
 function budget(run: Run, profileArgs: string[]) {
   const docker = (args: string[]) => run("docker", args, { cwd: ROOT });
   const config = docker(["compose", ...profileArgs, "config", "--format", "json"]);
@@ -50,11 +62,7 @@ function budget(run: Run, profileArgs: string[]) {
     console.error(config.stderr);
     return null;
   }
-  const services = (
-    JSON.parse(config.stdout) as {
-      services: Record<string, { mem_limit?: number | string; restart?: string }>;
-    }
-  ).services;
+  const { services } = composeConfig.parse(JSON.parse(config.stdout));
   const running = new Set(
     docker(["compose", "ps", "--format", "{{.Service}}", "--status", "running"])
       .stdout.split("\n")

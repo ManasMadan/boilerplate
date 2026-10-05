@@ -6,7 +6,8 @@
  */
 import { readFileSync } from "node:fs";
 import { basename, relative } from "node:path";
-import { runMain } from "./lib";
+import * as z from "zod";
+import { messageOf, runMain } from "./lib";
 
 /**
  * Why a file in a secrets directory isn't safe to commit, or null when it is: a
@@ -33,24 +34,34 @@ export function unsafeSecret(
   try {
     doc = Bun.YAML.parse(text);
   } catch (error) {
-    return `not YAML: ${(error as Error).message}`;
+    return `not YAML: ${messageOf(error)}`;
   }
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+  const secret = mapping.safeParse(doc);
+  if (!secret.success) {
     return "not one YAML document";
   }
-  const { kind, metadata, sops, data, stringData } = doc as Record<string, unknown>;
+  const { kind, metadata, sops, data, stringData } = secret.data;
   if (kind !== "Secret") {
     return "not a Secret";
   }
   return (
-    namespaceProblem((metadata ?? {}) as Record<string, unknown>, platform) ??
+    namespaceProblem(fieldsOf(metadata), platform) ??
     encryptionProblem(sops, recipients) ??
-    valuesProblem({
-      ...((data ?? {}) as Record<string, unknown>),
-      ...((stringData ?? {}) as Record<string, unknown>),
-    })
+    valuesProblem({ ...fieldsOf(data), ...fieldsOf(stringData) })
   );
 }
+
+/** A YAML mapping, by its keys. */
+const mapping = z.record(z.string(), z.unknown());
+
+/** A mapping's fields, or none when it's missing or isn't one. */
+const fieldsOf = (value: unknown) => mapping.safeParse(value).data ?? {};
+
+/** What sops writes into a file it encrypted with age. */
+const sopsMetadata = z.object({
+  mac: z.string().min(1),
+  age: z.array(z.object({ recipient: z.unknown() })).nonempty(),
+});
 
 /** Platform Secrets name their namespace; application ones go to their Application's. */
 function namespaceProblem(meta: Record<string, unknown>, platform: boolean) {
@@ -65,14 +76,14 @@ function namespaceProblem(meta: Record<string, unknown>, platform: boolean) {
 
 /** Encrypted by sops with age, to exactly `recipients` when they're given. */
 function encryptionProblem(sops: unknown, recipients: string[] | undefined) {
-  const encryption = sops as { mac?: unknown; age?: { recipient?: unknown }[] } | undefined;
-  if (!encryption?.mac || !Array.isArray(encryption.age) || encryption.age.length === 0) {
+  const encryption = sopsMetadata.safeParse(sops);
+  if (!encryption.success) {
     return "not encrypted with sops and age (sops --encrypt --in-place)";
   }
   if (!recipients) {
     return null;
   }
-  const actual = encryption.age.map((entry) => String(entry.recipient)).sort();
+  const actual = encryption.data.age.map((entry) => String(entry.recipient)).sort();
   if (actual.join() === [...recipients].sort().join()) {
     return null;
   }
@@ -89,14 +100,19 @@ function valuesProblem(values: Record<string, unknown>) {
   return plain.length > 0 ? `values in plain text: ${plain.map(([key]) => key).join(", ")}` : null;
 }
 
+/** `.sops.yaml`: the rules that pick the age keys for a path. */
+const sopsConfigFile = z.object({
+  creation_rules: z
+    .array(z.object({ path_regex: z.string().optional(), age: z.string().optional() }))
+    .default([]),
+});
+
 /**
  * The age keys `.sops.yaml` (its text) names for a path relative to the repository: the
  * first creation rule whose path_regex matches, as sops picks it. Undefined when none does.
  */
 export function recipientsFor(path: string, sopsConfig: string): string[] | undefined {
-  const { creation_rules: rules = [] } = Bun.YAML.parse(sopsConfig) as {
-    creation_rules?: { path_regex?: string; age?: string }[];
-  };
+  const { creation_rules: rules } = sopsConfigFile.parse(Bun.YAML.parse(sopsConfig));
   const rule = rules.find((candidate) => new RegExp(candidate.path_regex ?? "").test(path));
   return rule?.age
     ?.split(",")

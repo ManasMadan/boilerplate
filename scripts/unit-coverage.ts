@@ -17,6 +17,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as z from "zod";
 import { type FileCoverage, isSource, mergeLcov } from "./coverage";
 import { fail, ok, ROOT, runMain } from "./lib";
 import { coverageExceptions } from "./suppressions";
@@ -105,9 +106,9 @@ function vitestPackage(dir: string, root: string) {
   if (!existsSync(manifest)) {
     return null;
   }
-  const { scripts } = JSON.parse(readFileSync(manifest, "utf8")) as {
-    scripts?: Record<string, string>;
-  };
+  const { scripts } = z
+    .object({ scripts: z.record(z.string(), z.string()).optional() })
+    .parse(JSON.parse(readFileSync(manifest, "utf8")));
   if (scripts?.["test:integration"]) {
     return null;
   }
@@ -123,7 +124,8 @@ export function unitCovered(path: string, root = ROOT) {
     return true;
   }
   const inPackage = PACKAGE_FILE.exec(path);
-  if (!inPackage || !vitestPackage(inPackage[1] as string, root)) {
+  const dir = inPackage?.[1];
+  if (!dir || !vitestPackage(dir, root)) {
     return false;
   }
   const sibling = path.replace(/\.tsx?$/, "");
@@ -231,7 +233,7 @@ export async function unitCoverage(
   const short = inScope
     .map((path) => ({
       path,
-      lines: uncovered(path, coverage.get(path), changed.get(path) as Set<number>),
+      lines: uncovered(path, coverage.get(path), changed.get(path) ?? new Set()),
     }))
     .filter(({ lines }) => lines.length > 0);
   for (const { path, lines } of short) {

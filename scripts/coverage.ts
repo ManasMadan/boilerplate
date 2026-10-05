@@ -16,7 +16,7 @@
  * without a test either.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { runMain } from "./lib";
 import { coverageExceptions } from "./suppressions";
 
@@ -146,7 +146,7 @@ export function reports(root = ROOT): { path: string; base: string; owns?: RegEx
       existsSync(join(root, dir))
         ? [...new Bun.Glob("*/coverage/lcov.info").scanSync(join(root, dir))].map((path) => ({
             path: join(dir, path),
-            base: join(root, dir, path.split("/")[0] as string),
+            base: join(root, dir, dirname(dirname(path))),
           }))
         : [],
     ),

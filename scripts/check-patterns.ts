@@ -3,7 +3,8 @@
  * TypeScript syntax tree of every tracked source file: `bun run lint:patterns` (part of
  * `bun run lint`, so CI's lint job).
  *
- * In the services' and packages' source (src/, tests left out):
+ * In the services' and packages' source (src/), the repo's scripts, the load test and the
+ * code generators (tests left out):
  *   - a cast of parsed JSON (`JSON.parse(text) as T`, `(await response.json()) as T`):
  *     parse it with a schema;
  *   - a type argument on raw SQL (`$queryRaw<T>`): it asserts the columns, parse them
@@ -23,8 +24,11 @@ import { join } from "node:path";
 import ts from "typescript";
 import { fail, ok, ROOT, runMain } from "./lib";
 
-/** Source of the services and packages, where the rules for source apply. */
-const SOURCE = /^(apps|packages)\/[^/]+\/src\/.+\.tsx?$/;
+/**
+ * Where the rules for source apply: the services' and packages' source, and the repo's
+ * own scripts, load test and code generators.
+ */
+const SOURCE = /^((apps|packages)\/[^/]+\/src\/.+|(scripts|load|turbo\/generators)\/[^/]+)\.tsx?$/;
 const TEST = /\.(test|spec)\.tsx?$|(^|\/)(test|e2e)\//;
 const GENERATED = /\/generated\/|\.gen\.ts$|\.d\.ts$/;
 /** The one place an error reply is built by hand. */

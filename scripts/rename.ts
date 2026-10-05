@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { fail, ok, ROOT, runMain, runSync } from "./lib";
+import { fail, messageOf, ok, ROOT, runMain, runSync } from "./lib";
 
 export interface Identity {
   name: string;
@@ -125,7 +125,7 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
   try {
     identity = identityFrom(argv);
   } catch (error) {
-    fail((error as Error).message);
+    fail(messageOf(error));
     return 1;
   }
   const { changed, left } = rename(root, identity);

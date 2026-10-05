@@ -15,7 +15,8 @@ import { stripVTControlCharacters } from "node:util";
 import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 /** An api feature over the todo table, and a package: names nothing else uses. */
-const FEATURE = ["smoke-notes", "smoke-note", "todo", '{"title":"Smoke"}'];
+const FEATURE_NAME = "smoke-notes";
+const FEATURE = [FEATURE_NAME, "smoke-note", "todo", '{"title":"Smoke"}'];
 const PACKAGE = ["smoke-kit", "A package the generators check makes."];
 
 /** Runs a command that must pass, and returns its output; throws when it fails. */
@@ -89,7 +90,7 @@ function check(run: Run, dir: string) {
         "integration",
         "test/api.integration.test.ts",
         "-t",
-        FEATURE[0] as string,
+        FEATURE_NAME,
       ],
     ],
   ];

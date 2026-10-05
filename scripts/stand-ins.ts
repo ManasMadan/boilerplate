@@ -25,7 +25,13 @@ export function fakeRun(answer: (line: string) => Partial<Ran> | undefined = () 
 
 /** Captures console.log and console.error (mock.restore() puts them back); what was printed. */
 export function captureOutput(): () => string {
-  const log = spyOn(console, "log").mockImplementation(() => undefined);
-  const error = spyOn(console, "error").mockImplementation(() => undefined);
-  return () => [...log.mock.calls, ...error.mock.calls].flat().join("\n");
+  const logged: unknown[] = [];
+  const errors: unknown[] = [];
+  spyOn(console, "log").mockImplementation((...data: unknown[]) => {
+    logged.push(...data);
+  });
+  spyOn(console, "error").mockImplementation((...data: unknown[]) => {
+    errors.push(...data);
+  });
+  return () => [...logged, ...errors].join("\n");
 }

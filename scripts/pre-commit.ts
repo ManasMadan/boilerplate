@@ -52,10 +52,11 @@ export function start([command = "", ...args]: string[]): Promise<Finished> {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
-    child.stdout.on("data", (chunk) => {
+    // No encoding is set, so each chunk is a Buffer.
+    child.stdout.on("data", (chunk: Buffer) => {
       output += chunk;
     });
-    child.stderr.on("data", (chunk) => {
+    child.stderr.on("data", (chunk: Buffer) => {
       output += chunk;
     });
     child.on("error", (error) => resolve({ status: null, output: `${error.message}\n` }));

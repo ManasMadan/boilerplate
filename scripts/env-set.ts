@@ -7,7 +7,7 @@
  * Claude is not allowed to read .env (it holds secrets), so this is how a prompt like
  * "use my Stripe test key" gets applied.
  */
-import { ENV_PATH, ok, runMain, writeEnvValue } from "./lib";
+import { ENV_PATH, messageOf, ok, runMain, writeEnvValue } from "./lib";
 
 /** Sets `KEY=value` (or KEY to what `stdin` holds) in the file at `path`; the exit code. */
 export async function envSet(
@@ -31,7 +31,7 @@ export async function envSet(
   try {
     writeEnvValue(path, key, value);
   } catch (error) {
-    console.error((error as Error).message);
+    console.error(messageOf(error));
     return 1;
   }
   ok(`${key} updated in .env`);

@@ -34,16 +34,25 @@ const alerting = z.object({ status: z.enum(["ok", "stale", "off"]) });
 /** Unset, or one of RFC 2606's reserved domains, which the values hold until set. */
 const placeholder = (host: string) => !host || /(^|\.)example\.(com|net|org)$/.test(host);
 
+/** What hosts reads of an environment's values; what's unset is empty. */
+const stackValues = z.object({
+  site: z.object({ host: z.string().default("") }).prefault({}),
+  services: z
+    .object({
+      notifications: z
+        .object({ env: z.object({ EMAIL_FROM: z.string().default("") }).prefault({}) })
+        .prefault({}),
+    })
+    .prefault({}),
+});
+
 /** An environment's site host and email domain, from its values. */
 export function hosts(env: string, root = ROOT) {
-  const values = Bun.YAML.parse(
-    readFileSync(join(root, "deploy/environments", env, "stack.yaml"), "utf8"),
-  ) as {
-    site?: { host?: string };
-    services?: { notifications?: { env?: { EMAIL_FROM?: string } } };
-  };
-  const from = values.services?.notifications?.env?.EMAIL_FROM ?? "";
-  return { site: values.site?.host ?? "", mail: /@([^>\s]+)>?\s*$/.exec(from)?.[1] ?? "" };
+  const { site, services } = stackValues.parse(
+    Bun.YAML.parse(readFileSync(join(root, "deploy/environments", env, "stack.yaml"), "utf8")),
+  );
+  const from = services.notifications.env.EMAIL_FROM;
+  return { site: site.host, mail: /@([^>\s]+)>?\s*$/.exec(from)?.[1] ?? "" };
 }
 
 type Connect = (options: ConnectionOptions) => Socket;

@@ -13,18 +13,11 @@
  * Security (docs/testing.md).
  */
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  createReadStream,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-} from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { homedir, tmpdir, totalmem } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
+import * as z from "zod";
 import { errno, fail, ok, ROOT, type Run, runMain, runSync, warn } from "./lib";
 
 // The CodeQL bundle's checksums are per platform: update them with the version.
@@ -50,15 +43,25 @@ export type Deps = {
   bundles?: typeof BUNDLES;
 };
 
+const securityWorkflow = z.object({
+  jobs: z.object({
+    codeql: z.object({
+      strategy: z.object({ matrix: z.object({ language: z.array(z.string()) }) }),
+      steps: z.array(
+        z.object({
+          uses: z.string().optional(),
+          with: z.object({ queries: z.string().optional() }).optional(),
+        }),
+      ),
+    }),
+  }),
+});
+
 /** The languages and query suite security.yml's CodeQL job scans with. */
 export function ciScan(root = ROOT) {
-  type Job = {
-    strategy: { matrix: { language: string[] } };
-    steps: { uses?: string; with?: { queries?: string } }[];
-  };
-  const workflow = Bun.YAML.parse(
-    readFileSync(join(root, ".github/workflows/security.yml"), "utf8"),
-  ) as { jobs: { codeql: Job } };
+  const workflow = securityWorkflow.parse(
+    Bun.YAML.parse(readFileSync(join(root, ".github/workflows/security.yml"), "utf8")),
+  );
   const job = workflow.jobs.codeql;
   const init = job.steps.find((step) => step.uses?.startsWith("github/codeql-action/init@"));
   return { languages: job.strategy.matrix.language, queries: init?.with?.queries ?? "default" };
@@ -67,7 +70,7 @@ export function ciScan(root = ROOT) {
 /** A file's SHA-256, read in pieces (the bundle is over a gigabyte). */
 export async function sha256(file: string) {
   const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file)) {
+  for await (const chunk of Bun.file(file).stream()) {
     hash.update(chunk);
   }
   return hash.digest("hex");
@@ -135,24 +138,40 @@ export function sourceTree(run: Run, root: string, to: string) {
   }
 }
 
-type Rule = {
-  id: string;
-  defaultConfiguration?: { level?: string };
-  properties?: { "security-severity"?: string };
-};
-type Sarif = {
-  runs: {
-    tool: { driver: { rules?: Rule[] }; extensions?: { rules?: Rule[] }[] };
-    results: {
-      ruleId: string;
-      level?: string;
-      message: { text: string };
-      locations?: {
-        physicalLocation?: { artifactLocation?: { uri?: string }; region?: { startLine?: number } };
-      }[];
-    }[];
-  }[];
-};
+const rule = z.object({
+  id: z.string(),
+  defaultConfiguration: z.object({ level: z.string().optional() }).optional(),
+  properties: z.object({ "security-severity": z.string().optional() }).optional(),
+});
+const rules = z.object({ rules: z.array(rule).optional() });
+/** The parts of a SARIF report the findings need. */
+const sarifReport = z.object({
+  runs: z.array(
+    z.object({
+      tool: z.object({ driver: rules, extensions: z.array(rules).optional() }),
+      results: z.array(
+        z.object({
+          ruleId: z.string(),
+          level: z.string().optional(),
+          message: z.object({ text: z.string() }),
+          locations: z
+            .array(
+              z.object({
+                physicalLocation: z
+                  .object({
+                    artifactLocation: z.object({ uri: z.string().optional() }).optional(),
+                    region: z.object({ startLine: z.number().optional() }).optional(),
+                  })
+                  .optional(),
+              }),
+            )
+            .optional(),
+        }),
+      ),
+    }),
+  ),
+});
+type Sarif = z.infer<typeof sarifReport>;
 
 /** Where one run works: its scratch directory, the copied source, CI's query suite. */
 type Scan = { work: string; source: string; queries: string };
@@ -206,7 +225,7 @@ function analyze(run: Run, codeql: string, language: string, scan: Scan) {
       return undefined;
     }
   }
-  return findings(JSON.parse(readFileSync(sarif, "utf8")) as Sarif);
+  return findings(sarifReport.parse(JSON.parse(readFileSync(sarif, "utf8"))));
 }
 
 /** Scans `languages` (security.yml's, by default); the exit code. */
