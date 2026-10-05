@@ -239,6 +239,8 @@ better-typed call can say it instead.
 
 | File | Line | Why |
 |---|---|---|
+| `packages/i18n/src/index.ts` | `bundledMessages`' `catalogs[locale] as Messages` | a translation has English's keys and arguments in other words, and TypeScript can only read a message's arguments from English's literal text; the ICU test checks every catalog's arguments against English |
+| `packages/i18n/src/index.ts` | `loosely`'s `t as LooseTranslate` | a key known only at run time can't be paired with its arguments at compile time; the ICU test checks them instead |
 | `packages/contracts/src/api/base.ts` | `errorsOf`'s `Object.fromEntries(...) as {...}` | TypeScript can't type an object built from a list of keys, and oRPC clients need each code's own entry to type its error |
 
 ## End to end

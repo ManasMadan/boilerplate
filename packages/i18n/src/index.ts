@@ -47,6 +47,7 @@ const catalogs = { en, es: es satisfies Catalog } satisfies Record<Locale, Catal
 export const bundledMessages: MessageSource = {
   // Typed as English, whose literal text gives each key's arguments: every catalog has
   // English's keys (Catalog, above) and the same arguments (index.test.ts), in its words.
+  // type-coverage:ignore-next-line
   load: async (locale) => catalogs[locale] as Messages,
 };
 
@@ -56,6 +57,7 @@ export const bundledMessages: MessageSource = {
  * every message's arguments against English instead. Everywhere else, call `t` itself.
  */
 export type LooseTranslate = (key: string, values?: Record<string, string | number>) => string;
+// type-coverage:ignore-next-line
 export const loosely = (t: object) => t as LooseTranslate;
 
 export type Translator = ReturnType<typeof createTranslator<Messages>>;
