@@ -4,9 +4,18 @@
 # installs the version in apps/ai/.python-version on the first `uv sync`.
 FROM oven/bun:1.3.6@sha256:f20d9cf365ab35529384f1717687c739c92e6f39157a35a95ef06f4049a10e4a AS bun
 FROM ghcr.io/astral-sh/uv:0.12.17@sha256:10787c682e4184e4f290de1171fd4703dc63de99221f10fe1c99002ce7fa9acc AS uv
-FROM ghcr.io/opentofu/opentofu:1.11.6-minimal@sha256:3e11ca509319257e46ea6fb1b98cf77d185a1e370cc8dd1bf187f6b8515a73d9 AS tofu
+FROM ghcr.io/opentofu/opentofu:1.11.10-minimal@sha256:b7e7856c6575cd2c38132d6fea0512bd0562ab7fd2e645d4868205e9dba4a1cb AS tofu
 
 FROM mcr.microsoft.com/devcontainers/javascript-node:5.2.1-24-trixie@sha256:7a81958053c4e3b5b20fa122f7a422d32dd0eebe87a6726f7b14483585ea60fd
+# renovate: datasource=npm depName=npm
+ARG NPM_VERSION=11.21.0
+# Debian's security updates, which the base image is weeks behind on between its own
+# releases (as the ai image does), and a current npm in place of the one it bundles; the
+# base's global eslint and pnpm go (Biome and Bun do their jobs here). scripts/image-scan.ts
+# scans the result.
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/* \
+ && npm install --global --prefix /usr/local "npm@${NPM_VERSION}" \
+ && npm uninstall --global --prefix /usr/local/share/npm-global eslint pnpm
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 COPY --from=uv /uv /uvx /usr/local/bin/

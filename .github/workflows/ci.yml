@@ -199,7 +199,7 @@ jobs:
     permissions: { contents: read }
     services:
       postgres:
-        image: pgvector/pgvector:0.8.6-pg18-trixie
+        image: pgvector/pgvector:0.8.7-pg18-trixie
         env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
@@ -311,7 +311,7 @@ jobs:
         shard: [1, 2, 3, 4]
     services:
       postgres:
-        image: pgvector/pgvector:0.8.6-pg18-trixie
+        image: pgvector/pgvector:0.8.7-pg18-trixie
         env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
@@ -465,7 +465,7 @@ jobs:
     permissions: { contents: read }
     services:
       postgres:
-        image: pgvector/pgvector:0.8.6-pg18-trixie
+        image: pgvector/pgvector:0.8.7-pg18-trixie
         env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
@@ -726,7 +726,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with: { tofu_version: 1.11.6, tofu_wrapper: false }
+        with: { tofu_version: 1.11.10, tofu_wrapper: false }
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules/.cache/tofu-plugins
@@ -752,7 +752,7 @@ jobs:
     # What the smoke test's services connect to.
     services:
       postgres:
-        image: pgvector/pgvector:0.8.6-pg18-trixie
+        image: pgvector/pgvector:0.8.7-pg18-trixie
         env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
@@ -829,7 +829,7 @@ jobs:
     permissions: { contents: read }
     services:
       postgres:
-        image: pgvector/pgvector:0.8.6-pg18-trixie
+        image: pgvector/pgvector:0.8.7-pg18-trixie
         env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30

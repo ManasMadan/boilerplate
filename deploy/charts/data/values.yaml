@@ -65,7 +65,7 @@ postgres:
     # How old the restored data may be: older means WAL isn't reaching the backups.
     maxAgeHours: 26
     timeoutMinutes: 60
-    image: docker.io/alpine/kubectl:1.35.4@sha256:9ccd823647622b620dce092d0f1406b8b41d152ce08ac963e3d4683770b14dfd
+    image: docker.io/alpine/kubectl:1.37.1@sha256:b57b3bd3cd9f4f02dd444281857126aa78efa4b7b7e6ec57579dd927bf146fc3
   restore:
     enabled: false
     serverName: ""
@@ -110,7 +110,7 @@ storage:
   image: docker.io/rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
   # Creates the buckets and sets their CORS rules after every install and upgrade.
   buckets:
-    image: docker.io/amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224
+    image: docker.io/amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780
   region: us-east-1
   uploads:
     enabled: true

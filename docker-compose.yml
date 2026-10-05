@@ -34,7 +34,7 @@ services:
   postgres:
     # The official Postgres image plus pgvector, on the same Debian (trixie) base as the
     # CloudNativePG image used in Kubernetes, so extensions and collation match.
-    image: pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff
+    image: pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -97,7 +97,7 @@ services:
 
   # Creates the uploads bucket once storage is up, so `bun dev` needs no manual step.
   s3-init:
-    image: amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224
+    image: amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780
     profiles: [files, full]
     depends_on:
       rustfs: { condition: service_healthy }

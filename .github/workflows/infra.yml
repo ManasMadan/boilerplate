@@ -133,7 +133,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with: { tofu_version: 1.11.6, tofu_wrapper: false }
+        with: { tofu_version: 1.11.10, tofu_wrapper: false }
       - name: Environment files
         env:
           BACKEND: ${{ secrets.TOFU_BACKEND }}
@@ -255,7 +255,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
-        with: { tofu_version: 1.11.6, tofu_wrapper: false }
+        with: { tofu_version: 1.11.10, tofu_wrapper: false }
       - name: Environment files
         env:
           BACKEND: ${{ secrets.TOFU_BACKEND }}
