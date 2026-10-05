@@ -3,6 +3,7 @@
  * (uninstalled apps, expired browser subscriptions) are deleted when a provider says so.
  */
 import { Inject, Injectable } from "@nestjs/common";
+import { required } from "@repo/contracts/objects";
 import { withUser } from "@repo/db";
 import { type Database, InjectDatabase, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import {
@@ -10,7 +11,6 @@ import {
   type PushMessage,
   type PushPlatform,
   type PushResult,
-  type PushTransport,
   type PushTransports,
 } from "./push-transport";
 
@@ -39,7 +39,7 @@ export class PushChannel {
 
   async send(userId: string, device: PushDevice, message: PushMessage): Promise<PushResult> {
     // devices() only returns devices on platforms that have a transport.
-    const transport = this.transports[device.platform] as PushTransport;
+    const transport = required(this.transports[device.platform], `a ${device.platform} transport`);
     const result = await transport.send(device.token, message);
     if (!result.ok && result.gone) {
       await withUser(this.database.write, userId).notificationDevice.deleteMany({

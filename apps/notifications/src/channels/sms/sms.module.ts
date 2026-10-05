@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { required } from "@repo/contracts/objects";
 import { env } from "../../env";
 import { SmtpTransport } from "../email/email-transport";
 import { EmailSinkSmsTransport } from "./email-sink";
@@ -11,9 +12,9 @@ function createTransport(): SmsTransport | null {
     case "twilio":
       // Presence is checked at boot in env.ts.
       return new TwilioTransport({
-        accountSid: env.TWILIO_ACCOUNT_SID as string,
-        authToken: env.TWILIO_AUTH_TOKEN as string,
-        from: env.TWILIO_FROM as string,
+        accountSid: required(env.TWILIO_ACCOUNT_SID, "TWILIO_ACCOUNT_SID"),
+        authToken: required(env.TWILIO_AUTH_TOKEN, "TWILIO_AUTH_TOKEN"),
+        from: required(env.TWILIO_FROM, "TWILIO_FROM"),
         apiUrl: env.TWILIO_API_URL,
       });
     case "email":

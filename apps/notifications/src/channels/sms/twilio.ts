@@ -4,6 +4,7 @@
  */
 
 import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
+import { asError } from "@repo/nest-common";
 import * as z from "zod";
 import type { SmsResult, SmsTransport } from "./sms-transport";
 
@@ -55,7 +56,7 @@ export class TwilioTransport implements SmsTransport {
         ok: false,
         permanent: false,
         suppress: null,
-        error: `Twilio: ${(error as Error).message}`,
+        error: `Twilio: ${asError(error).message}`,
       };
     }
     const result = twilioResult.parse(await response.json().catch(() => ({})));

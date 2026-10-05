@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import { type NotificationChannel, notificationCategories } from "@repo/contracts/notifications";
+import { required } from "@repo/contracts/objects";
 import { withUser } from "@repo/db";
 import {
   createProducer,
@@ -28,6 +29,7 @@ import {
   type Producer,
 } from "@repo/jobs";
 import {
+  asError,
   createSignedTokens,
   type Database,
   type I18n,
@@ -124,7 +126,7 @@ export class Dispatcher implements OnApplicationShutdown {
       return await this.deliverPush({
         ...delivery,
         // reaches() has checked it: push goes only to a recipient with an account.
-        userId: delivery.recipient.userId as string,
+        userId: required(delivery.recipient.userId, "the push recipient's user id"),
         deferred: false,
       });
     } catch (error) {
@@ -143,7 +145,7 @@ export class Dispatcher implements OnApplicationShutdown {
       await this.send(channel, key, recipient, template, context, policy);
       return [];
     } catch (error) {
-      await this.log.finish(key, "failed", { error: (error as Error).message });
+      await this.log.finish(key, "failed", { error: asError(error).message });
       return [error];
     }
   }
@@ -164,19 +166,19 @@ export class Dispatcher implements OnApplicationShutdown {
     const { userId } = recipient;
     switch (channel) {
       case "in_app": {
-        const inApp = template.inApp as NonNullable<BoundTemplate["inApp"]>;
-        const id = await this.inApp.send(userId as string, inApp(context));
+        const inApp = required(template.inApp, "the template's in-app message");
+        const id = await this.inApp.send(required(userId, "the user id"), inApp(context));
         await this.log.finish(key, "sent", { providerMessageId: id });
         return;
       }
       case "sms": {
-        const sms = template.sms as NonNullable<BoundTemplate["sms"]>;
-        await this.sendSms(key, recipient.phone as string, sms(context));
+        const sms = required(template.sms, "the template's text");
+        await this.sendSms(key, required(recipient.phone, "the phone number"), sms(context));
         return;
       }
       case "email": {
-        const email = recipient.email as string;
-        const render = template.email as NonNullable<BoundTemplate["email"]>;
+        const email = required(recipient.email, "the email address");
+        const render = required(template.email, "the template's email");
         if (await this.policy.isSuppressed("email", email)) {
           await this.log.finish(key, "suppressed");
           return;
@@ -185,8 +187,9 @@ export class Dispatcher implements OnApplicationShutdown {
         // unsubscribe link means a known user (see deliverTo).
         if (policy?.dailyDigest && context.unsubscribeUrl && template.inApp) {
           const message = template.inApp(context);
-          await withUser(this.database.write, userId as string).notificationDigestItem.create({
-            data: { userId: userId as string, template: message.type, data: message.data },
+          const user = required(userId, "the user id");
+          await withUser(this.database.write, user).notificationDigestItem.create({
+            data: { userId: user, template: message.type, data: message.data },
           });
           await this.log.finish(key, "skipped", { error: "queued for the daily digest" });
           return;
@@ -196,7 +199,7 @@ export class Dispatcher implements OnApplicationShutdown {
           await render(context),
           key,
           context.unsubscribeUrl
-            ? this.listUnsubscribeHeaders(userId as string, template.category)
+            ? this.listUnsubscribeHeaders(required(userId, "the user id"), template.category)
             : undefined,
         );
         await this.log.finish(key, "sent", { providerMessageId });
@@ -253,7 +256,7 @@ export class Dispatcher implements OnApplicationShutdown {
       return [];
     }
     // Only templates that push get here (renders(), or a deferred push).
-    const push = template.push as NonNullable<BoundTemplate["push"]>;
+    const push = required(template.push, "the template's push");
     const message = { ...push(context), collapseKey: name };
     const failures: unknown[] = [];
     for (const device of devices) {
@@ -277,7 +280,7 @@ export class Dispatcher implements OnApplicationShutdown {
       result = await this.push.send(userId, device, message);
     } catch (error) {
       // A provider that throws (network) fails this device only; the others still go.
-      await this.log.finish(deviceKey, "failed", { error: (error as Error).message });
+      await this.log.finish(deviceKey, "failed", { error: asError(error).message });
       return error;
     }
     if (result.ok) {

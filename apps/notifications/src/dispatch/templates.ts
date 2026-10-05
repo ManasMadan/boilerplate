@@ -208,12 +208,21 @@ export abstract class TemplateSource {
   abstract bind(payload: NotificationPayload): Promise<BoundTemplate>;
 }
 
+/**
+ * The payload's own template, bound to it. Through the registry's mapped type TypeScript
+ * pairs a template with its payload, which a lookup on the union can't.
+ */
+function bindOwn<T extends NotificationTemplate>(
+  registry: TemplateRegistry,
+  template: T,
+  payload: PayloadOf<T>,
+): BoundTemplate {
+  return bind(registry[template], payload);
+}
+
 @Injectable()
 export class CodeTemplateSource extends TemplateSource {
   async bind(payload: NotificationPayload): Promise<BoundTemplate> {
-    const definition = (templates as TemplateRegistry)[payload.template] as TemplateDefinition<
-      typeof payload.template
-    >;
-    return bind(definition, payload as PayloadOf<typeof payload.template>);
+    return bindOwn(templates, payload.template, payload);
   }
 }

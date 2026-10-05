@@ -6,6 +6,7 @@
  */
 import { isWebPushEndpoint } from "@repo/contracts/notifications";
 import { DAY_S, PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
+import { asError } from "@repo/nest-common";
 import webPush from "web-push";
 import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
@@ -74,7 +75,7 @@ export class WebPushTransport implements PushTransport {
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
     } catch (error) {
-      return { ok: false, gone: false, error: `Web Push: ${(error as Error).message}` };
+      return { ok: false, gone: false, error: `Web Push: ${asError(error).message}` };
     }
     if (response.ok)
       return { ok: true, providerMessageId: response.headers.get("location") ?? undefined };
