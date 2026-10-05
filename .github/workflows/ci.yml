@@ -141,8 +141,9 @@ jobs:
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - run: bun run test
-      # The repo's own scripts and the Claude Code hooks, outside the workspaces turbo runs.
-      - run: bun test ./scripts/ ./.claude/hooks/
+      # The repo's own scripts and the Claude Code hooks, outside the workspaces turbo runs,
+      # each file at 100%: a change to them alone skips the coverage job below.
+      - run: bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts scripts .claude/hooks
 
   components:
     name: Components (stories, a11y, screenshots)
