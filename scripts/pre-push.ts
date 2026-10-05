@@ -282,18 +282,6 @@ export function codeqlLanguages(files: string[]) {
   return languages.filter(([, pattern]) => files.some((f) => pattern.test(f))).map(([l]) => l);
 }
 
-/** OSV over both lockfiles, with the image and arguments security.yml's osv job uses. */
-async function osv(ctx: Context) {
-  const version = /osv-scanner-action\/osv-scanner-action@\w+ # (v\S+)/.exec(
-    workflow("security.yml", ctx.root).text,
-  )?.[1];
-  return passes(ctx, "docker", [
-    ...["run", "--rm", "--memory=512m", "-v", `${ctx.root}:/src:ro`, "-w", "/src"],
-    ...["--entrypoint", "osv-scanner", `ghcr.io/google/osv-scanner-action:${version}`],
-    ...["--config=osv-scanner.toml", "--lockfile=bun.lock", "--lockfile=apps/ai/uv.lock"],
-  ]);
-}
-
 /** Every package bun.lock installs, `name@version` by install path; workspaces left out. */
 export function lockedPackages(lock: string) {
   const packages = new Map<string, string>();
@@ -440,7 +428,16 @@ export const STEPS: Step[] = [
     areas: [],
     memory: 0.2,
     docker: 0.5,
-    run: osv,
+    run: (ctx) => passes(ctx, "bun", ["scripts/osv.ts"]),
+  },
+  {
+    name: "misconfigurations",
+    jobs: ["security.yml:misconfig"],
+    areas: [],
+    cores: 2,
+    memory: 1,
+    docker: 0.5,
+    run: (ctx) => passes(ctx, "bun", ["scripts/misconfig.ts"]),
   },
   {
     name: "migration safety",
@@ -490,6 +487,9 @@ export const STEPS: Step[] = [
     needs: ["python dependencies", "generated code"],
     cores: 4,
     memory: 3,
+    // The pinned linters (actionlint, zizmor, shellcheck, hadolint, tflint) run in Docker
+    // when they aren't installed.
+    docker: 0.25,
     run: (ctx) => passes(ctx, "bun", ["run", "lint"]),
   },
   {
@@ -580,7 +580,7 @@ export const CI_ONLY: Record<string, string> = {
   "ci.yml:evals": "measures a real model with the provider's keys, nightly",
   "ci.yml:pr-title":
     "there's no pull request yet; the commit-msg hook checked every commit's header",
-  "security.yml:misconfig": "reports to the Security tab and never fails",
+  "infra.yml:drift": "plans every environment nightly against the real cloud accounts",
   "claude-review.yml:review":
     "a model's review of the pull request, with its key; advice, not a check",
   "infra.yml:plan": "plans against the real cloud accounts, which needs their secrets",
@@ -588,6 +588,22 @@ export const CI_ONLY: Record<string, string> = {
   "kind.yml:kind": "deploys to a kind cluster, which needs 8 GB of Docker memory",
   "preview.yml:images": "a preview environment, for a pull request labelled preview",
   "preview.yml:cleanup": "removes a preview environment when its pull request closes",
+};
+
+/**
+ * Jobs that never run on a pull request: they ship what merged, or watch what's running.
+ * Listed so that every job of every workflow is decided (scripts/pre-push.test.ts).
+ */
+export const AFTER_MERGE: Record<string, string> = {
+  "deploy.yml:build": "builds the images of a commit on master",
+  "deploy.yml:publish": "publishes them to the registry",
+  "deploy.yml:attest": "attests each published image's SBOM, with the registry's digests",
+  "deploy.yml:staging": "deploys them to staging",
+  "mobile.yml:eas": "builds the mobile app in Expo's cloud after a release",
+  "release.yml:release": "tags a release from master",
+  "renovate.yml:renovate": "opens dependency updates on a schedule",
+  "stripe.yml:contract": "checks the fake Stripe against Stripe's real test API, weekly",
+  "uptime.yml:probe": "probes the running environments from outside",
 };
 
 /** Jobs that check nothing themselves: they find the areas or gather the others' results. */

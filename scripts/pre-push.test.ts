@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type { Area } from "./changes";
 import { PLACEHOLDER, type Ran, ROOT } from "./lib";
 import {
+  AFTER_MERGE,
   allowedLicense,
   BOOKKEEPING,
   CI_ONLY,
@@ -81,32 +82,44 @@ const step = (name: string) => {
   return found;
 };
 
-describe("every CI job that can block a pull request", () => {
+describe("every job of every workflow", () => {
   const dir = join(ROOT, ".github/workflows");
-  const gating = readdirSync(dir).filter((file) => {
-    const { on } = Bun.YAML.parse(readFileSync(join(dir, file), "utf8")) as { on: object };
-    return "pull_request" in on || "merge_group" in on;
-  });
-  const jobs = gating.flatMap((file) =>
+  const files = readdirSync(dir).filter((file) => file.endsWith(".yml"));
+  const triggers = (file: string) =>
+    Object.keys((Bun.YAML.parse(readFileSync(join(dir, file), "utf8")) as { on: object }).on);
+  const jobs = files.flatMap((file) =>
     Object.keys(workflow(file).jobs).map((job) => `${file}:${job}`),
   );
   const mirrored = new Set(STEPS.flatMap((s) => s.jobs));
+  const decided = (job: string) =>
+    mirrored.has(job) || job in CI_ONLY || job in AFTER_MERGE || BOOKKEEPING.has(job);
 
-  it("has a pre-push step, or a reason in CI_ONLY why only CI runs it", () => {
-    expect(jobs.length).toBeGreaterThan(20);
-    const undecided = jobs.filter(
-      (job) => !mirrored.has(job) && !(job in CI_ONLY) && !BOOKKEEPING.has(job),
-    );
-    expect(undecided).toEqual([]);
+  it("has a pre-push step, or a reason why only CI runs it", () => {
+    expect(jobs.length).toBeGreaterThan(30);
+    expect(jobs.filter((job) => !decided(job))).toEqual([]);
   });
 
-  it("is named only as it exists, and either mirrored or CI-only, never both", () => {
-    const named = [...mirrored, ...Object.keys(CI_ONLY), ...BOOKKEEPING];
+  it("is named only as it exists, in one list, with a reason", () => {
+    const named = [
+      ...mirrored,
+      ...Object.keys(CI_ONLY),
+      ...Object.keys(AFTER_MERGE),
+      ...BOOKKEEPING,
+    ];
     expect(named.filter((job) => !jobs.includes(job))).toEqual([]);
-    expect(Object.keys(CI_ONLY).filter((job) => mirrored.has(job) || BOOKKEEPING.has(job))).toEqual(
-      [],
+    expect(named.filter((job, index) => named.indexOf(job) !== index)).toEqual([]);
+    const reasons = [...Object.values(CI_ONLY), ...Object.values(AFTER_MERGE)];
+    expect(reasons.filter((reason) => reason.length < 20)).toEqual([]);
+  });
+
+  it("runs after merging only in a workflow no pull request starts", () => {
+    const onPullRequests = files.filter((file) =>
+      ["pull_request", "merge_group"].some((trigger) => triggers(file).includes(trigger)),
     );
-    expect(Object.values(CI_ONLY).every((reason) => reason.length > 20)).toBe(true);
+    const wrong = Object.keys(AFTER_MERGE).filter((job) =>
+      onPullRequests.includes(job.split(":")[0] ?? ""),
+    );
+    expect(wrong).toEqual([]);
   });
 });
 
@@ -192,6 +205,10 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
   },
   "security.yml:secrets": { "gitleaks/gitleaks-action": "secrets" },
   "security.yml:dependencies": { "actions/dependency-review-action": "dependency licenses" },
+  "security.yml:misconfig": {
+    "bun scripts/misconfig.ts --format sarif --output trivy-config.sarif": "misconfigurations",
+    "github/codeql-action/upload-sarif": "setup: sends the findings to the Security tab",
+  },
   "security.yml:osv": {
     "google/osv-scanner-action/osv-scanner-action": "known vulnerabilities",
     "github/codeql-action/upload-sarif": "setup: sends the findings to the Security tab",
@@ -200,7 +217,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
 
 /** What only sets a runner up: the toolchain, caches, artifacts. */
 const RUNNER_SETUP =
-  /^(step-security\/harden-runner|actions\/(checkout|cache|upload-artifact|download-artifact)|\.\/\.github\/actions\/(setup|free-disk)|azure\/setup-helm|opentofu\/setup-opentofu)@?/;
+  /^(step-security\/harden-runner|actions\/(checkout|cache|upload-artifact|download-artifact)|\.\/\.github\/actions\/(setup|free-disk)|azure\/setup-helm|opentofu\/setup-opentofu|oven-sh\/setup-bun|aquasecurity\/setup-trivy)@?/;
 
 describe("every step of a job the hook mirrors", () => {
   type CiStep = { name?: string; run?: string; uses?: string };
@@ -267,6 +284,8 @@ describe("the steps", () => {
         "docker compose --profile mail run --rm stalwart-init",
       ],
       secrets: ["bun scripts/secret-scan.ts --range=abc..HEAD"],
+      "known vulnerabilities": ["bun scripts/osv.ts"],
+      misconfigurations: ["bun scripts/misconfig.ts"],
       "migration safety": ["bun run db:lint"],
       charts: ["bun run charts:check"],
       coverage: ["bun scripts/push-coverage.ts --concurrency=3"],
@@ -438,18 +457,6 @@ describe("the database steps", () => {
     expect(await step("e2e").run(ctx)).toBe(false);
     expect(calls.some((c) => c.includes("budget"))).toBe(false);
     expect(closed).toEqual(["clamd"]);
-  });
-});
-
-describe("known vulnerabilities", () => {
-  it("scans both lockfiles with security.yml's OSV image and config", async () => {
-    const version = /osv-scanner-action@\w+ # (v\S+)/.exec(workflow("security.yml").text)?.[1];
-    const { ctx, calls } = context();
-    expect(await step("known vulnerabilities").run(ctx)).toBe(true);
-    expect(calls[0]).toContain(`ghcr.io/google/osv-scanner-action:${version}`);
-    expect(calls[0]).toEndWith(
-      "--config=osv-scanner.toml --lockfile=bun.lock --lockfile=apps/ai/uv.lock",
-    );
   });
 });
 

@@ -71,7 +71,8 @@ with the job's own commands:
 | `bun scripts/generators.ts` | generators | the app |
 | `bun scripts/e2e.ts --workers=2` with CI's e2e environment and two Playwright workers, as on a CI runner, then the bundle budget and the restore drill | e2e | the app |
 | `bun run codeql --languages …` | CodeQL | the languages the push changes |
-| OSV (CI's image) on `bun.lock` and `apps/ai/uv.lock` | OSV | every push |
+| `bun scripts/osv.ts`: OSV on `bun.lock` and `apps/ai/uv.lock` | OSV | every push |
+| `bun scripts/misconfig.ts`: Trivy's misconfiguration scan, the charts rendered first | misconfig | every push |
 | the licenses of the npm packages the push adds or upgrades, against `security.yml`'s list | dependency review | a `bun.lock` change |
 | gitleaks over the pushed commits | secrets | every push |
 
@@ -104,13 +105,15 @@ to decide.
 
 What only CI checks, with the reason, is the `CI_ONLY` list in `scripts/pre-push.ts`,
 printed after the summary: the container images and their smoke test (more than a 2 GB
-Docker VM holds), the kind deploy (8 GB of Docker memory), the OpenTofu plans (the cloud
-accounts' secrets), the pull request title (the commit-msg hook checks every commit's
-header), the nightly evals against a real model, the misconfiguration scan (it only
-reports), the Claude review and the preview environments. `scripts/pre-push.test.ts`
-fails when a workflow that can block a pull request gains a job that is neither run by a
-step nor listed there, and when a job the hook mirrors gains a step that its
-`COUNTERPARTS` table doesn't map to a pre-push step (or to runner setup).
+Docker VM holds), the kind deploy (8 GB of Docker memory), the OpenTofu plans and the
+nightly drift check (the cloud accounts' secrets), the pull request title (the
+commit-msg hook checks every commit's header), the nightly evals against a real model,
+the Claude review and the preview environments. The jobs that never run on a pull
+request (deploy, SBOM attestation, release, the mobile builds, Renovate, the Stripe
+contract check, the uptime probe) are in its `AFTER_MERGE` list. `scripts/pre-push.test.ts`
+fails when any workflow gains a job that is in none of these lists, and when a job the
+hook mirrors gains a step that its `COUNTERPARTS` table doesn't map to a pre-push step
+(or to runner setup).
 
 ## Unit
 

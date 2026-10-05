@@ -42,9 +42,9 @@ paths:
   (`scripts/workflows.test.ts` fails when the two disagree). Jobs run the same commands a developer runs locally
   (`bun run lint`, `bun run test:integration`, …), never a CI-only variant.
 - The pre-push hook (`scripts/pre-push.ts`) runs the same checks before a push, gated on
-  the same areas. A new job in a workflow that can block a pull request gets a step there
-  running its commands, or an entry in its `CI_ONLY` list saying why it can't run on a
-  developer's machine (`scripts/pre-push.test.ts` fails otherwise). A new step in a job the
+  the same areas. A new job in any workflow gets a step there running its commands, or an
+  entry in its `CI_ONLY` list saying why it can't run on a developer's machine, or in
+  `AFTER_MERGE` when no pull request runs it (`scripts/pre-push.test.ts` fails otherwise). A new step in a job the
   hook mirrors goes into that job's pre-push step and into `COUNTERPARTS` in
   `scripts/pre-push.test.ts`, which fails until it's there.
 - Commit and pull request title scopes are the workspace folder names plus a few
