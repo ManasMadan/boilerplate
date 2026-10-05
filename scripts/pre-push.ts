@@ -253,7 +253,9 @@ async function endToEnd(ctx: Context) {
         NODE_ENV: "test",
       };
       return (
-        (await passes(ctx, "bun", ["scripts/e2e.ts"], env)) &&
+        // Two Playwright workers, as on each CI runner: the local default of four, next to
+        // the other steps, measures the machine rather than the app.
+        (await passes(ctx, "bun", ["scripts/e2e.ts", "--workers=2"], env)) &&
         (await passes(ctx, "bun", ["run", "--cwd", "apps/web", "budget"])) &&
         (await passes(ctx, "bun", ["run", "db:restore-drill", name]))
       );

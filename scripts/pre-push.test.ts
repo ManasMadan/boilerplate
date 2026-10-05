@@ -412,7 +412,7 @@ describe("the database steps", () => {
     const { ctx, calls, options, closed } = context();
     expect(await step("e2e").run(ctx)).toBe(true);
     expect(calls.slice(3, 6)).toEqual([
-      "bun scripts/e2e.ts",
+      "bun scripts/e2e.ts --workers=2",
       "bun run --cwd apps/web budget",
       `bun run db:restore-drill ${database}_e2e`,
     ]);
@@ -432,7 +432,7 @@ describe("the database steps", () => {
 
   it("stop the e2e run at its first failure, and close ClamAV's stand-in", async () => {
     const { ctx, calls, closed } = context((l) =>
-      l === "bun scripts/e2e.ts" ? { status: 1 } : undefined,
+      l === "bun scripts/e2e.ts --workers=2" ? { status: 1 } : undefined,
     );
     expect(await step("e2e").run(ctx)).toBe(false);
     expect(calls.some((c) => c.includes("budget"))).toBe(false);

@@ -69,7 +69,7 @@ with the job's own commands:
 | `bun run charts:check` | charts | the charts |
 | `bun run infra:check` (needs `tofu`) | infra | the infrastructure |
 | `bun scripts/generators.ts` | generators | the app |
-| `bun scripts/e2e.ts` with CI's e2e environment, then the bundle budget and the restore drill | e2e | the app |
+| `bun scripts/e2e.ts --workers=2` with CI's e2e environment and two Playwright workers, as on a CI runner, then the bundle budget and the restore drill | e2e | the app |
 | `bun run codeql --languages …` | CodeQL | the languages the push changes |
 | OSV (CI's image) on `bun.lock` and `apps/ai/uv.lock` | OSV | every push |
 | the licenses of the npm packages the push adds or upgrades, against `security.yml`'s list | dependency review | a `bun.lock` change |
