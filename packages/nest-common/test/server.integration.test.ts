@@ -80,10 +80,14 @@ const get = (app: NestFastifyApplication, url: string) =>
 
 describe("bootstrap", () => {
   it("listens, answers health checks, and echoes a request id", async () => {
+    // Load shedding off: it measures event loop use since it was registered, and on a busy
+    // runner booting the app alone can push that past its limit, so a request here could
+    // be shed. Shedding is tested on its own below.
     const app = await bootstrap(HealthyModule, {
       ...options,
       port: 0,
       corsOrigins: ["https://app.example"],
+      loadShedding: false,
     });
     apps.push(app);
     const base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
