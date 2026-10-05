@@ -286,11 +286,7 @@ class Fake {
     ["POST", /^\/v1\/customers$/, (_, form) => this.createCustomer(form)],
     ["POST", /^\/v1\/checkout\/sessions$/, (_, form) => this.createCheckout(form)],
     ["GET", /^\/v1\/checkout\/sessions\/(cs_\w+)$/, ([, cs]) => this.checkout(cs)],
-    [
-      "GET",
-      /^\/v1\/payment_methods\/(pm_\w+)$/,
-      ([, pm]) => this.paymentMethods.get(pm ?? "") ?? notFound("payment method"),
-    ],
+    ["GET", /^\/v1\/payment_methods\/(pm_\w+)$/, ([, pm]) => this.paymentMethod(pm)],
     ["POST", /^\/v1\/checkout\/sessions\/(cs_\w+)\/expire$/, ([, cs]) => this.expire(cs)],
     ["POST", /^\/v1\/billing_portal\/sessions$/, (_, form) => this.createPortal(form)],
     [
@@ -325,6 +321,10 @@ class Fake {
     const session = { ...form, id: id("cs"), object: "checkout.session", status: "open" };
     this.sessions.set(session.id, session);
     return { ...session, url: `${this.baseUrl}/checkout/${session.id}` };
+  }
+
+  private paymentMethod(paymentMethodId = "") {
+    return this.paymentMethods.get(paymentMethodId) ?? notFound("payment method");
   }
 
   private checkout(sessionId = "") {
