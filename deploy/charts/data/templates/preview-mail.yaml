@@ -102,10 +102,15 @@ spec:
             {{- include "data.containerSecurity" . | nindent 12 }}
           volumeMounts:
             - { name: tls, mountPath: /tls, readOnly: true }
+            # Its message database is a file in the temp directory: without a writable
+            # one under the read-only root it exits at once.
+            - { name: tmp, mountPath: /tmp }
       volumes:
         - name: tls
           secret:
             secretName: {{ $m.tlsSecret }}
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
 ---
 apiVersion: v1
 kind: Service

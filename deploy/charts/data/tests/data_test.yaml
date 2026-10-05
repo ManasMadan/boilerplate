@@ -513,6 +513,15 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: MP_SMTP_REQUIRE_TLS, value: "true" }
         documentIndex: 4
+      # Mailpit keeps its database in the temp directory, and the root is read-only.
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: tmp, mountPath: /tmp }
+        documentIndex: 4
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: tmp, emptyDir: { sizeLimit: 64Mi } }
+        documentIndex: 4
 
   - it: runs no Mailpit outside a preview
     template: preview-mail.yaml

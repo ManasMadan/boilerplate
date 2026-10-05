@@ -472,3 +472,27 @@ describe("the add-ons kind installs", () => {
     );
   });
 });
+
+describe("kind's Mailpit", () => {
+  it("has a writable temp directory for its database, under its read-only root", async () => {
+    const [deployment] = Bun.YAML.parse(
+      await Bun.file(join(ROOT, "deploy/local/mailpit.yaml")).text(),
+    ) as {
+      spec: {
+        template: {
+          spec: {
+            containers: {
+              securityContext: { readOnlyRootFilesystem: boolean };
+              volumeMounts: { name: string; mountPath: string }[];
+            }[];
+            volumes: { name: string; emptyDir?: object }[];
+          };
+        };
+      };
+    }[];
+    const pod = deployment?.spec.template.spec;
+    const tmp = pod?.containers[0]?.volumeMounts.find((mount) => mount.mountPath === "/tmp");
+    expect(pod?.containers[0]?.securityContext.readOnlyRootFilesystem).toBe(true);
+    expect(pod?.volumes.find((volume) => volume.name === tmp?.name)?.emptyDir).toBeDefined();
+  });
+});
