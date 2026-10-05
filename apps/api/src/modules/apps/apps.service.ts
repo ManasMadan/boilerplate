@@ -5,6 +5,7 @@
  */
 import { Injectable } from "@nestjs/common";
 import type { ConnectedApp } from "@repo/contracts/api";
+import { required } from "@repo/contracts/objects";
 import { transaction } from "@repo/db";
 import { AppError, type Database, InjectDatabase } from "@repo/nest-common";
 import { emitEvent } from "../../outbox";
@@ -28,7 +29,7 @@ export class AppsService {
       name: grant.client.name,
       uri: grant.client.uri,
       // Listed grants name a workspace, and deleting one deletes its grants (cascade).
-      workspace: grant.organization as NonNullable<typeof grant.organization>,
+      workspace: required(grant.organization, "the grant's workspace"),
       scopes: grant.scopes,
       connectedAt: grant.createdAt,
       lastUsedAt: lastUsed.get(`${grant.clientId}:${grant.referenceId}`) ?? null,

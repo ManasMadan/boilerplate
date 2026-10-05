@@ -10,6 +10,7 @@
  * spending its attempts; a passkey or an existing session still works meanwhile.
  */
 import { createHash } from "node:crypto";
+import { fieldOf } from "@repo/contracts/objects";
 import { HOUR_S } from "@repo/contracts/time";
 import { createRateLimiter, type Redis } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
@@ -56,7 +57,7 @@ export function accountKey(limit: Limit, request: LimitedRequest): string | unde
       ? createHash("sha256").update(request.secondFactor).digest("hex")
       : undefined;
   }
-  const email = (request.body as { email?: unknown } | undefined)?.email;
+  const email = fieldOf(request.body, "email");
   return typeof email === "string" && email.trim() ? email.trim().toLowerCase() : undefined;
 }
 

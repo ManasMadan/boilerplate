@@ -1,4 +1,5 @@
 import { fileContentPath } from "@repo/contracts/files";
+import { required } from "@repo/contracts/objects";
 import type { Procedures } from "../../rpc/procedures";
 import type { AvatarService } from "./avatar.service";
 import type { PhoneService } from "./phone.service";
@@ -19,8 +20,8 @@ const toMe = (user: UserRow, activeOrganizationId: string | null | undefined) =>
   email: user.email,
   image: user.image ?? null,
   // NOT NULL columns; better-auth types its optional fields as nullable.
-  locale: user.locale as string,
-  timezone: user.timezone as string,
+  locale: required(user.locale, "the locale"),
+  timezone: required(user.timezone, "the time zone"),
   activeOrganizationId: activeOrganizationId ?? null,
   phoneNumber: user.phoneNumber ?? null,
 });

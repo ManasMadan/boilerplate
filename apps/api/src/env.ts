@@ -8,6 +8,7 @@
  * docs/environment.md in the same change.
  */
 import {
+  asError,
   coreEnv,
   csv,
   databaseEnv,
@@ -39,7 +40,7 @@ export const envSchema = {
       try {
         return parseAuthSecrets(value);
       } catch (error) {
-        ctx.addIssue({ code: "custom", message: (error as Error).message });
+        ctx.addIssue({ code: "custom", message: asError(error).message });
         return z.NEVER;
       }
     }),

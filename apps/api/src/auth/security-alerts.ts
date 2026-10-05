@@ -2,6 +2,8 @@
  * Which account changes email the owner a security alert. Kept apart from the auth config
  * so the rules are unit-testable; auth-hooks.ts calls this from an after-hook on every request.
  */
+
+import { hasKey } from "@repo/contracts/objects";
 import type { SecurityEvent } from "@repo/jobs";
 
 interface AfterHookContext {
@@ -52,6 +54,7 @@ const ALERTS: Record<string, (user: User | undefined, body: Body) => SecurityAle
 
 /** Which security alert (if any) a successful auth request should send, and to whom. */
 export function securityAlertFor(ctx: AfterHookContext): SecurityAlert | undefined {
-  const alert = Object.hasOwn(ALERTS, ctx.path ?? "") ? ALERTS[ctx.path as string] : undefined;
+  const path = ctx.path ?? "";
+  const alert = hasKey(ALERTS, path) ? ALERTS[path] : undefined;
   return alert?.(ctx.context.session?.user, (ctx.body ?? {}) as Body);
 }

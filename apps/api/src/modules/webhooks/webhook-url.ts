@@ -4,6 +4,8 @@
  * gives the admin an immediate answer; apps/webhooks checks again on every delivery,
  * since DNS can change after this.
  */
+
+import { fieldOf } from "@repo/contracts/objects";
 import { AppError, isAppError, resolvePermitted } from "@repo/nest-common";
 import { env } from "../../env";
 
@@ -16,7 +18,7 @@ export async function assertDeliverableUrl(raw: string) {
   await resolvePermitted(host, env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES).catch((error: unknown) => {
     // A private address, or no such host, is the admin's to fix; DNS failing is ours,
     // and worth a retry.
-    const code = (error as { code?: string })?.code;
+    const code = fieldOf(error, "code");
     if (isAppError(error) || code === "ENOTFOUND" || code === "ENODATA")
       throw new AppError("WEBHOOK_URL_NOT_ALLOWED");
     throw new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "dns" }, cause: error });

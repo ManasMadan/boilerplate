@@ -7,6 +7,7 @@
  * API process (a tab each), so one account can't exhaust connections.
  */
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
+import { required } from "@repo/contracts/objects";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { MINUTE_MS } from "@repo/contracts/time";
 import { AppError, InjectPinoLogger, InjectRedis, PinoLogger, type Redis } from "@repo/nest-common";
@@ -49,7 +50,7 @@ export class RealtimeService implements OnApplicationShutdown {
       yield* this.hub.stream([realtimeChannel.user(userId), realtimeChannel.org(orgId)], done);
     } finally {
       // Counted up when this stream started.
-      const remaining = (this.open.get(userId) as number) - 1;
+      const remaining = required(this.open.get(userId), "the user's stream count") - 1;
       if (remaining > 0) this.open.set(userId, remaining);
       else this.open.delete(userId);
     }

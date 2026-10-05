@@ -5,11 +5,13 @@
  */
 import { NAME_MAX_LENGTH } from "@repo/contracts/auth";
 import type { AuthErrorCode } from "@repo/contracts/errors";
+import { fieldOf, required } from "@repo/contracts/objects";
 import { parseOrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
 import { isLocale, isTimeZone, negotiateLocale } from "@repo/i18n";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import * as z from "zod";
 import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
 import type { AuthContext, RemovedMember } from "./auth-context";
@@ -56,14 +58,20 @@ const requestOf = (ctx: { body?: unknown; query?: unknown }) => ({
   query: ctx.query,
 });
 
+/** The member better-auth returns from leaving an organization (other fields kept). */
+const removedMember = z.looseObject({
+  id: z.string(),
+  userId: z.string(),
+  role: z.string(),
+  organizationId: z.string(),
+}) satisfies z.ZodType<RemovedMember>;
+
 /**
  * The mobile app's sign-in goes through this redirect; left alone it sends anyone
  * anywhere over https from our own domain (phishing, planted OAuth state).
  */
 function checkAuthorizationProxy(query: unknown) {
-  const target = String(
-    (query as { authorizationURL?: unknown } | undefined)?.authorizationURL ?? "",
-  );
+  const target = String(fieldOf(query, "authorizationURL") ?? "");
   if (!URL.canParse(target) || !PROVIDER_ORIGINS.has(new URL(target).origin)) {
     throw new APIError("BAD_REQUEST", {
       message: "Not a sign-in provider's address.",
@@ -124,7 +132,7 @@ export function requestHooks(context: AuthContext) {
       // taken here, for new invitations and resends alike.
       if (ctx.path === "/organization/invite-member") {
         const session = await getSessionFromCtx(ctx);
-        const email = (requestOf(ctx).body as { email?: unknown } | undefined)?.email;
+        const email = fieldOf(requestOf(ctx).body, "email");
         if (session && typeof email === "string")
           await emailLimits.invitation(session.user.id, email);
       }
@@ -139,7 +147,7 @@ export function requestHooks(context: AuthContext) {
       if (isAPIError(ctx.context.returned)) return;
       // Hooks get no session; the member who left is the one returned.
       if (ctx.path === "/organization/leave") {
-        const member = ctx.context.returned as RemovedMember;
+        const member = removedMember.parse(ctx.context.returned);
         await memberRemoved(member, member.userId);
         return;
       }
@@ -338,7 +346,7 @@ export function accountDeletion(context: AuthContext): DeleteUser {
     // hooks: end them the same way a removal does.
     afterDelete: async (user) => {
       // beforeDelete ran first, in the same request.
-      const left = leavingWithAccount.get(user.id) as RemovedMember[];
+      const left = required(leavingWithAccount.get(user.id), "the memberships the account left");
       leavingWithAccount.delete(user.id);
       for (const member of left) await memberRemoved(member, user.id);
     },

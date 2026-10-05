@@ -32,6 +32,7 @@ import {
   jobMetaFromContext,
   type Redis,
 } from "@repo/nest-common";
+import * as z from "zod";
 import { env } from "../../env";
 import {
   type CriticalNotifications,
@@ -104,11 +105,12 @@ export class PhoneService {
     // Count the attempt before looking, atomically: of any number of parallel guesses,
     // only MAX_ATTEMPTS get compared. (On a missing key this creates a lone counter; it
     // has no hash, so it verifies nothing, and it expires below.)
-    const [[, attempt], [, pending]] = (await this.redis
-      .multi()
-      .hincrby(key, "attempts", 1)
-      .hgetall(key)
-      .exec()) as [[null, number], [null, Record<string, string>]];
+    const [[, attempt], [, pending]] = z
+      .tuple([
+        z.tuple([z.null(), z.number()]),
+        z.tuple([z.null(), z.record(z.string(), z.string())]),
+      ])
+      .parse(await this.redis.multi().hincrby(key, "attempts", 1).hgetall(key).exec());
     if (!pending.hash) {
       await this.redis.expire(key, PHONE_CODE_EXPIRES_IN);
       throw new AppError("PHONE_CODE_INVALID");
@@ -153,6 +155,8 @@ export class PhoneService {
           { userId, change: phoneNumber ? "added" : "removed" },
           origin,
         );
+        // The number that was on the account: after a change, the old one hears of it.
+        const notified = previous ?? phoneNumber;
         // With the change, in its transaction: sent exactly when it commits.
         await requestNotification(
           tx,
@@ -162,8 +166,7 @@ export class PhoneService {
             to: {
               email: updated.email,
               locale: localeOrDefault(updated.locale),
-              // The number that was on the account: after a change, the old one hears of it.
-              ...((previous ?? phoneNumber) && { phone: (previous ?? phoneNumber) as string }),
+              ...(notified && { phone: notified }),
             },
             data: {
               event: phoneNumber ? "phone-added" : "phone-removed",

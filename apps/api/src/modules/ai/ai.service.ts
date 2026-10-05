@@ -89,7 +89,7 @@ export class AiService {
     orgId: string,
     question: string,
     signal?: AbortSignal,
-  ): Promise<AsyncGenerator<AssistantEvent>> {
+  ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
     const stream = await this.call(() =>
       this.ai.answer(this.caller(userId, orgId), question, signal),
     );

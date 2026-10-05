@@ -41,6 +41,7 @@ describe("errors from procedures", () => {
   it("sends validation problems as codes and paths, never English messages", () => {
     const issues = [
       { message: "Too short", path: ["items", { key: "title" }, 0], code: "too_small" },
+      { message: "Not JSON", path: [Symbol("hidden")], code: "custom" },
       { message: "Something's off" },
     ];
     const invalid = new ORPCError("BAD_REQUEST", {
@@ -52,6 +53,7 @@ describe("errors from procedures", () => {
       params: {},
       issues: [
         { path: ["items", "title", 0], code: "too_small" },
+        { path: ["Symbol(hidden)"], code: "custom" },
         { path: [], code: "invalid" },
       ],
     });

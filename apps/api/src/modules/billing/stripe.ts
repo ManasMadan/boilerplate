@@ -1,5 +1,6 @@
 /** The Stripe client, or null when billing is off. */
 import Stripe from "stripe";
+import * as z from "zod";
 import { env } from "../../env";
 import { features } from "../../features";
 
@@ -16,7 +17,7 @@ export function createStripe(): Stripe | null {
     ...(api && {
       host: api.hostname,
       port: Number(api.port),
-      protocol: api.protocol.replace(":", "") as "http" | "https",
+      protocol: z.enum(["http", "https"]).parse(api.protocol.replace(":", "")),
     }),
   });
 }

@@ -1,3 +1,4 @@
+import { required } from "@repo/contracts/objects";
 import { env } from "../../env";
 import { features } from "../../features";
 import type { Procedures } from "../../rpc/procedures";
@@ -8,7 +9,9 @@ export const systemRouter = ({ base }: Procedures) => ({
     features,
     minimumClientVersion: env.MINIMUM_CLIENT_VERSION,
     // The captcha is on only with its site key set (src/features.ts).
-    captchaSiteKey: features.captcha ? (env.TURNSTILE_SITE_KEY as string) : null,
+    captchaSiteKey: features.captcha
+      ? required(env.TURNSTILE_SITE_KEY, "TURNSTILE_SITE_KEY")
+      : null,
     webPushPublicKey: env.VAPID_PUBLIC_KEY ?? null,
   })),
 });

@@ -31,21 +31,20 @@ export async function seedDemo({
   if (await database.write.user.findUnique({ where: { email: DEMO_PEOPLE[0].email } })) {
     return null;
   }
-  const [demo, teammate] = (await Promise.all(
-    DEMO_PEOPLE.map(async (person) => {
-      // Signs up exactly as the app does (personal workspace, audit event); the emailed
-      // code is skipped by marking the address verified.
-      const { user } = await auth.api.signUpEmail({
-        body: { ...person, password: DEMO_PASSWORD, locale: "en", timezone: "UTC" },
-      });
-      await database.write.user.update({ where: { id: user.id }, data: { emailVerified: true } });
-      const personal = await database.write.member.findFirstOrThrow({
-        where: { userId: user.id },
-        select: { organizationId: true },
-      });
-      return { id: user.id, personalOrgId: personal.organizationId };
-    }),
-  )) as [DemoUser, DemoUser];
+  const signUp = async (person: (typeof DEMO_PEOPLE)[number]): Promise<DemoUser> => {
+    // Signs up exactly as the app does (personal workspace, audit event); the emailed
+    // code is skipped by marking the address verified.
+    const { user } = await auth.api.signUpEmail({
+      body: { ...person, password: DEMO_PASSWORD, locale: "en", timezone: "UTC" },
+    });
+    await database.write.user.update({ where: { id: user.id }, data: { emailVerified: true } });
+    const personal = await database.write.member.findFirstOrThrow({
+      where: { userId: user.id },
+      select: { organizationId: true },
+    });
+    return { id: user.id, personalOrgId: personal.organizationId };
+  };
+  const [demo, teammate] = await Promise.all([signUp(DEMO_PEOPLE[0]), signUp(DEMO_PEOPLE[1])]);
 
   // better-auth throws when it can't create one.
   const team = (await auth.api.createOrganization({

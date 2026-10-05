@@ -23,6 +23,7 @@ import {
   subscriptionStatuses,
   unlimited,
 } from "@repo/contracts/billing";
+import { fieldOf, required } from "@repo/contracts/objects";
 import { DAY_S, HOUR_MS } from "@repo/contracts/time";
 import { tenantTx } from "@repo/db";
 import {
@@ -55,7 +56,7 @@ export async function fromStripe<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
-    const type = (error as { type?: unknown })?.type;
+    const type = fieldOf(error, "type");
     if (typeof type === "string" && type.startsWith("Stripe")) {
       throw new AppError("UPSTREAM_UNAVAILABLE", { cause: error });
     }
@@ -93,8 +94,14 @@ export class BillingService {
 
   private prices(): Record<string, { plan: PlanName; interval: BillingInterval }> {
     return {
-      [env.STRIPE_PRICE_PRO_MONTHLY as string]: { plan: "pro", interval: "month" },
-      [env.STRIPE_PRICE_PRO_YEARLY as string]: { plan: "pro", interval: "year" },
+      [required(env.STRIPE_PRICE_PRO_MONTHLY, "STRIPE_PRICE_PRO_MONTHLY")]: {
+        plan: "pro",
+        interval: "month",
+      },
+      [required(env.STRIPE_PRICE_PRO_YEARLY, "STRIPE_PRICE_PRO_YEARLY")]: {
+        plan: "pro",
+        interval: "year",
+      },
     };
   }
 
@@ -157,7 +164,7 @@ export class BillingService {
       // instead, and that call surfaces an outage.
       const open = await stripe.checkout.sessions.retrieve(previous).catch(() => null);
       if (open?.status === "open" && open.metadata?.offer === offer) {
-        return { url: open.url as string };
+        return { url: required(open.url, "the checkout session's URL") };
       }
     }
     const settings = new URL("/settings/billing", env.WEB_URL);
@@ -169,7 +176,7 @@ export class BillingService {
           customer,
           client_reference_id: orgId,
           metadata: { orgId, offer },
-          line_items: [{ price: price as string, quantity: seats }],
+          line_items: [{ price: required(price, "the plan's price"), quantity: seats }],
           subscription_data: {
             metadata: { orgId },
             ...(trial && { trial_period_days: env.STRIPE_TRIAL_DAYS }),
@@ -195,7 +202,7 @@ export class BillingService {
       });
     }
     // A hosted checkout session always has one.
-    return { url: session.url as string };
+    return { url: required(session.url, "the checkout session's URL") };
   }
 
   async portal(orgId: string) {
@@ -222,7 +229,7 @@ export class BillingService {
       id: invoice.id as string,
       number: invoice.number ?? null,
       // Always set on a listed invoice (draft, open, paid, uncollectible or void).
-      status: invoice.status as Stripe.Invoice.Status,
+      status: required(invoice.status, "the invoice's status"),
       amount: invoice.amount_due,
       currency: invoice.currency,
       createdAt: new Date(invoice.created * 1000),
@@ -266,7 +273,7 @@ export class BillingService {
       priceId: item.price.id,
       interval: price.interval,
       // Per-seat (licensed) prices always carry one.
-      quantity: item.quantity as number,
+      quantity: required(item.quantity, "the subscription's seats"),
       currentPeriodEnd: new Date(item.current_period_end * 1000),
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,

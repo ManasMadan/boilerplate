@@ -17,6 +17,7 @@ import {
   type createApiKeyInput,
   MAX_API_KEY_DAYS,
 } from "@repo/contracts/api";
+import { required } from "@repo/contracts/objects";
 import type { OrgRole } from "@repo/contracts/roles";
 import { DAY_S } from "@repo/contracts/time";
 import { transaction } from "@repo/db";
@@ -43,7 +44,8 @@ const rateLimitDetails = z.object({ details: z.object({ tryAgainIn: z.number() }
 function toPermissions(scopes: readonly ApiKeyScope[]) {
   const permissions: Record<string, string[]> = {};
   for (const scope of scopes) {
-    const [resource, action] = scope.split(":") as [string, string];
+    const separator = scope.indexOf(":");
+    const [resource, action] = [scope.slice(0, separator), scope.slice(separator + 1)];
     permissions[resource] = [...(permissions[resource] ?? []), action];
   }
   return permissions;
@@ -122,8 +124,8 @@ export class ApiKeysService {
         { actorId: userId, orgId },
       ),
     );
-    const [apiKey] = (await this.present([await this.keys.find(orgId, created.id)])) as [ApiKey];
-    return { apiKey, key: created.key };
+    const [apiKey] = await this.present([await this.keys.find(orgId, created.id)]);
+    return { apiKey: required(apiKey, "the new key"), key: created.key };
   }
 
   revoke(orgId: string, userId: string, id: string) {

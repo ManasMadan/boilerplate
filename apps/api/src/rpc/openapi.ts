@@ -4,11 +4,12 @@
  * pull request shows every change to the public API as a diff and CI can refuse the
  * breaking ones (oasdiff, in ci.yml).
  */
-import { type AnyContractProcedure, isContractProcedure } from "@orpc/contract";
+import { type HTTPMethod, type HTTPPath, isContractProcedure } from "@orpc/contract";
 import { type OpenAPI, OpenAPIGenerator, toOpenAPISchema } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
-import { API_KEY_HEADER, contract, errorData, type ProcedureMeta } from "@repo/contracts/api";
+import { API_KEY_HEADER, API_KEY_SCOPES, contract, errorData } from "@repo/contracts/api";
 import { events, webhookEvents } from "@repo/contracts/events";
+import { fieldOf } from "@repo/contracts/objects";
 import * as z from "zod";
 
 export async function openApiDocument({
@@ -74,16 +75,31 @@ function addWebhooks(spec: Spec, converter: ZodToJsonSchemaConverter) {
 
 type Spec = Awaited<ReturnType<OpenAPIGenerator["generate"]>>;
 
-/** A procedure's meta: the contract types it `any` once it's any procedure. */
-const metaOf = (procedure: { "~orpc": { meta: unknown } }) =>
-  procedure["~orpc"].meta as ProcedureMeta;
+/** What an operation needs of its procedure: its route, and the API key scope in its meta. */
+interface Operation {
+  "~orpc": { route: { path?: HTTPPath; method?: HTTPMethod }; meta: unknown };
+}
+// oRPC types any procedure's schemas as any, so the check names only what's read here.
+const isOperation = (value: unknown): value is Operation => isContractProcedure(value);
+
+/** An OpenAPI path item's key for each method. */
+const METHODS = {
+  GET: "get",
+  POST: "post",
+  PUT: "put",
+  PATCH: "patch",
+  DELETE: "delete",
+  HEAD: "head",
+} as const satisfies Record<HTTPMethod, string>;
+
+const apiKeyScope = z.enum(API_KEY_SCOPES).optional();
 
 /**
  * Every operation takes a signed-in session; those whose contract names an API key scope
  * take a key with that scope too, and say so.
  */
 export function markApiKeyOperations(spec: Spec, router: unknown) {
-  if (isContractProcedure(router)) return markOperation(spec, router);
+  if (isOperation(router)) return markOperation(spec, router);
   if (typeof router === "object" && router !== null) {
     const children: unknown[] = Object.values(router);
     for (const child of children) markApiKeyOperations(spec, child);
@@ -91,14 +107,12 @@ export function markApiKeyOperations(spec: Spec, router: unknown) {
 }
 
 /** One procedure's operation: its security, and its scope in the description. */
-function markOperation(spec: Spec, procedure: AnyContractProcedure) {
-  const { route } = procedure["~orpc"];
+function markOperation(spec: Spec, procedure: Operation) {
+  const { route, meta } = procedure["~orpc"];
   const operation =
-    route.path && route.method
-      ? spec.paths?.[route.path]?.[route.method.toLowerCase() as "get"]
-      : undefined;
+    route.path && route.method ? spec.paths?.[route.path]?.[METHODS[route.method]] : undefined;
   if (!operation) return;
-  const scope = metaOf(procedure).apiKeyScope;
+  const scope = apiKeyScope.parse(fieldOf(meta, "apiKeyScope"));
   operation.security = scope ? [{ session: [] }, { apiKey: [] }] : [{ session: [] }];
   if (scope) {
     const note = `API keys need the \`${scope}\` scope.`;

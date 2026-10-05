@@ -35,6 +35,7 @@ import {
 } from "@repo/contracts/api";
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import { required } from "@repo/contracts/objects";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
@@ -103,9 +104,7 @@ export function toContractError(thrown: unknown, log: LogError): ORPCError<Error
     // Input validation failures carry the zod issues; send codes and paths, not English messages.
     if (error.code === "BAD_REQUEST" && error.cause instanceof ValidationError) {
       const issues = error.cause.issues.map((issue) => ({
-        path: (issue.path ?? []).map((segment) =>
-          typeof segment === "object" ? String(segment.key) : segment,
-        ) as (string | number)[],
+        path: (issue.path ?? []).map(pathKey),
         code: "code" in issue && typeof issue.code === "string" ? issue.code : "invalid",
       }));
       return new ORPCError("VALIDATION_FAILED", {
@@ -125,6 +124,12 @@ export function toContractError(thrown: unknown, log: LogError): ORPCError<Error
   return new ORPCError("INTERNAL", { status: 500, data: { params: {} as ErrorParams, requestId } });
 }
 
+/** A validation path's segment as the contract sends it; JSON can't carry a symbol, so its name. */
+function pathKey(segment: PropertyKey | { key: PropertyKey }): string | number {
+  if (typeof segment === "object") return String(segment.key);
+  return typeof segment === "symbol" ? String(segment) : segment;
+}
+
 const VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/;
 
 /**
@@ -134,7 +139,7 @@ const VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/;
  */
 function isOlderVersion(version: string, minimum: string) {
   // The environment only accepts major.minor.patch for the minimum (src/env.ts).
-  const [a, b] = [VERSION.exec(version), VERSION.exec(minimum) as RegExpExecArray];
+  const [a, b] = [VERSION.exec(version), required(VERSION.exec(minimum), "a minimum version")];
   if (!a) return true;
   for (let i = 1; i <= 3; i++) {
     const diff = Number(a[i]) - Number(b[i]);
@@ -197,7 +202,7 @@ function orgCallerFor(
     }
     const result = await auth.api.getSession({ headers });
     if (!result) throw new AppError("UNAUTHENTICATED");
-    updateContext({ userId: result.user.id, locale: result.user.locale as string });
+    updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });
     const orgId = result.session.activeOrganizationId;
     if (!orgId) throw new AppError("NO_ACTIVE_ORGANIZATION");
     const role = await memberships.role(orgId, result.user.id);
@@ -232,14 +237,22 @@ export function createProcedures(
     return next();
   });
 
-  const authed = base.use(async ({ context, next, procedure }) => {
-    const result = await auth.api.getSession({ headers: context.headers });
-    if (!result) throw new AppError("UNAUTHENTICATED");
-    // The column is NOT NULL; better-auth types optional fields as nullable.
-    updateContext({ userId: result.user.id, locale: result.user.locale as string });
-    await spendLimit(procedure["~orpc"].meta, { user: result.user.id });
-    return next({ context: { user: result.user, session: result.session } });
-  });
+  const authed = base.use(
+    async ({
+      context,
+      next,
+      procedure: {
+        "~orpc": { meta },
+      },
+    }) => {
+      const result = await auth.api.getSession({ headers: context.headers });
+      if (!result) throw new AppError("UNAUTHENTICATED");
+      // The column is NOT NULL; better-auth types optional fields as nullable.
+      updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });
+      await spendLimit(meta, { user: result.user.id });
+      return next({ context: { user: result.user, session: result.session } });
+    },
+  );
 
   // Sensitive account changes, like better-auth's own fresh-session rule.
   const fresh = authed.use(async ({ context, next }) => {
@@ -248,12 +261,20 @@ export function createProcedures(
     return next();
   });
 
-  const inOrg = base.use(async ({ context, next, procedure }) => {
-    const caller = await orgCaller(context.headers, procedure["~orpc"].meta.apiKeyScope);
-    updateContext({ userId: caller.userId, orgId: caller.orgId });
-    await spendLimit(procedure["~orpc"].meta, { user: caller.userId, org: caller.orgId });
-    return next({ context: caller });
-  });
+  const inOrg = base.use(
+    async ({
+      context,
+      next,
+      procedure: {
+        "~orpc": { meta },
+      },
+    }) => {
+      const caller = await orgCaller(context.headers, meta.apiKeyScope);
+      updateContext({ userId: caller.userId, orgId: caller.orgId });
+      await spendLimit(meta, { user: caller.userId, org: caller.orgId });
+      return next({ context: caller });
+    },
+  );
 
   /** Organization owners and admins only (settings, members, audit log). */
   const orgAdmin = inOrg.use(async ({ context, next }) => {
