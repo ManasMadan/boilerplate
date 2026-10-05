@@ -459,8 +459,9 @@ On every pull request, push to `master` and merge group (`.github/workflows/ci.y
 Branch protection requires **CI passed**, which succeeds only when all of these do. On a
 pull request, the first job (`scripts/changes.ts`) says which areas it touches (the app,
 the charts, OpenTofu, the Dockerfiles, the scripts), and a job for an area it doesn't
-touch is skipped: a docs-only change runs only lint and the title check, and a change
-to `deploy/` only the charts and the scripts' tests. **CI passed** accepts a skip only
+touch is skipped: a docs-only change runs lint, the title check and the scripts' tests
+(some read docs by name, and the rename test reads every tracked file), and a change to
+`deploy/` only the charts and the scripts' tests. **CI passed** accepts a skip only
 for those areas.
 
 | Job | Runs |

@@ -10,7 +10,10 @@
  *   charts   deploy/ and what checks it (charts:check)
  *   infra    infra/tofu and what checks it (infra:check)
  *   images   the Dockerfiles and the images' smoke test, besides the app itself
- *   scripts  scripts/ and the Claude Code hooks, whose tests read all of the above
+ *   scripts  scripts/ and the Claude Code hooks, whose tests read all of the above, and
+ *            the docs: some of those tests read a doc by name (docs/environment.md,
+ *            docs/deploy.md, docs/repository-settings.md, docs/testing.md's exceptions)
+ *            and one reads every tracked file (rename's), so no doc is reading matter only
  *
  * A change to CI itself, the toolchain or the lockfile runs everything. Outside pull
  * requests (master, the merge queue, nightly) CI runs everything without asking.
@@ -30,19 +33,14 @@ const EVERYTHING = [
   /^\.nvmrc$/,
   /^scripts\/(changes|lib)\.ts$/,
 ];
-/** Reading matter: no job checks it (the Claude setup's own files are checked, below). */
-const DOCS = [/\.md$/, /^LICENSE$/];
 
 /** The areas one changed file touches. */
 export function areasOf(file: string): Area[] {
   if (EVERYTHING.some((pattern) => pattern.test(file))) {
     return AREAS;
   }
-  if (file.startsWith(".claude/")) {
+  if (file.startsWith(".claude/") || /\.md$/.test(file) || file === "LICENSE") {
     return ["scripts"];
-  }
-  if (DOCS.some((pattern) => pattern.test(file))) {
-    return [];
   }
   if (file.startsWith("deploy/docker/") || file === "docker-bake.hcl") {
     return ["images"];

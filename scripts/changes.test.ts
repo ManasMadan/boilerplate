@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { areas, areasOf, main } from "./changes";
+import { ROOT } from "./lib";
 import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -7,8 +10,31 @@ afterEach(() => mock.restore());
 const none = { app: false, charts: false, infra: false, images: false, scripts: false };
 
 describe("which CI jobs a pull request needs", () => {
-  it("runs none of the heavy ones for docs", () => {
-    expect(areas(["docs/deploy.md", "README.md", "deploy/README.md", "LICENSE"])).toEqual(none);
+  it("runs only the scripts' tests for docs, which some of them read", () => {
+    expect(areas(["docs/deploy.md", "README.md", "deploy/README.md", "LICENSE"])).toEqual({
+      ...none,
+      scripts: true,
+    });
+  });
+
+  it("runs the scripts' tests for every doc a test of theirs reads by name", () => {
+    const tests = ["scripts", ".claude/hooks"].flatMap((dir) =>
+      readdirSync(join(ROOT, dir))
+        .filter((file) => file.endsWith(".test.ts"))
+        .map((file) => readFileSync(join(ROOT, dir, file), "utf8")),
+    );
+    const docs = new Set(
+      tests.flatMap((text) => [...text.matchAll(/"([\w./-]+\.md)"/g)].map((m) => m[1] as string)),
+    );
+    const read = [...docs].filter((doc) => existsSync(join(ROOT, doc)));
+    expect(read).toEqual(
+      expect.arrayContaining([
+        "docs/environment.md",
+        "docs/deploy.md",
+        "docs/repository-settings.md",
+      ]),
+    );
+    expect(read.filter((doc) => !areasOf(doc).includes("scripts"))).toEqual([]);
   });
 
   it("runs the charts and the scripts' tests, not the app's, for a promotion", () => {

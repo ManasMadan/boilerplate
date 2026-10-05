@@ -424,7 +424,7 @@ describe("ci.yml's path filters", () => {
     }
   });
 
-  it("passes a docs-only pull request that ran only lint and the title check", () => {
+  it("passes a pull request touching no area that ran only lint and the title check", () => {
     expect(
       passes("pull_request", areas([]), {
         lint: "success",
@@ -696,6 +696,13 @@ describe("stripe.yml", () => {
 });
 
 describe("ci.yml's unit job", () => {
+  it("runs the packages' unit tests only for the app, so docs alone run only the scripts'", () => {
+    const steps = workflow("ci.yml").jobs.unit?.steps ?? [];
+    expect(steps.find((step) => step.run === "bun run test")?.if).toBe(
+      "needs.changes.outputs.app == 'true'",
+    );
+  });
+
   it("holds the scripts and hooks to 100% on its own, since a change to them alone skips the coverage job", () => {
     const steps = workflow("ci.yml").jobs.unit?.steps ?? [];
     expect(steps.map((step) => step.run ?? "")).toContain(

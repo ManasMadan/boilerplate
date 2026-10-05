@@ -141,7 +141,10 @@ jobs:
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
         with: { python: "true" }
-      - run: bun run test
+      # The packages' unit tests only when the app changed: a docs-only change runs the
+      # scripts' tests below, which read the docs, and nothing else.
+      - if: needs.changes.outputs.app == 'true'
+        run: bun run test
       # The repo's own scripts and the Claude Code hooks, outside the workspaces turbo runs,
       # each file at 100%: a change to them alone skips the coverage job below.
       - run: bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts scripts .claude/hooks
