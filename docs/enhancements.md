@@ -82,3 +82,17 @@ To do it: turn the sandbox on in `.claude/settings.json` with Docker's socket al
 package registries allowed on the network, and the hooks kept as they are; then run a
 full `bun run dev`, `bun run test:integration` and an e2e run under it to find what it
 still blocks before making it the default.
+
+## Search
+
+There is no search across a workspace's own data (todos, documents, files). The AI
+service's pgvector search covers the assistant's passages, which is a different job.
+
+Not done because what to search, and how results should rank, depends on the product
+built on the template; a generic search over every table would mostly be in the way.
+
+To do it: start with Postgres full-text search, a generated `tsvector` column with a GIN
+index on each table worth searching, queried inside the tenant context so row-level
+security still applies. Add a `search` procedure to the contracts, a client hook and a
+command palette in the web and mobile shells. Move to a dedicated engine only once
+Postgres measurably can't keep up.
