@@ -8,3 +8,6 @@
 # A fake EC key in the k3s module's test mocks, never a real key; the mock is no longer
 # PEM-shaped, but full-history scans still see this commit.
 b76d414661e92dd8eb2665d3ec8cbdaf49fd6c4c:infra/tofu/modules/k3s/tests/k3s.tftest.hcl:private-key:12
+# A made-up encrypted webhook secret under a key id no service has (the webhooks suite's
+# botched-rotation case), never a real secret.
+2dcb141b8aaa82522727d08df36b645f632bcd43:apps/webhooks/test/webhooks.integration.test.ts:generic-api-key:321
