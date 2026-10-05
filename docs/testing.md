@@ -192,9 +192,9 @@ file below 100%, or one no test loads.
 - A file may be below 100% only if the table below lists it, with the reason and the
   test that covers its behaviour another way. The same goes for skipped tests and for
   lint or type suppressions (`biome-ignore`, `@ts-expect-error`, `# pyright: ignore`,
-  `# noqa`, coverage pragmas): `bun scripts/suppressions.ts`, part of `bun run lint`,
-  fails on any in a file these tables don't list, and a Claude Code hook refuses a new
-  one as it's written. Listing a file here is a decision for review, never a way round.
+  `# noqa`, a type-coverage ignore, coverage pragmas): `bun scripts/suppressions.ts`,
+  part of `bun run lint`, fails on any in a file these tables don't list, and a Claude
+  Code hook refuses a new one as it's written. Listing a file here is a decision for review, never a way round.
 
 ## Coverage exceptions
 
@@ -229,6 +229,16 @@ file below 100%, or one no test loads.
 | `apps/ai/tests/conftest.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/tests/support.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options and handlers are untyped |
 | `apps/ai/tests/test_evals.py` | `# pyright: ignore[reportArgumentType]` | these checks never read spans, so none are passed |
+
+## Type-coverage exceptions
+
+`bun run type-coverage` counts every type assertion and non-null `!` as well as every
+`any`. A line it may skip (`// type-coverage:ignore-next-line` above it) is one where
+TypeScript can't express a type the code already guarantees, and no parse, guard or
+better-typed call can say it instead.
+
+| File | Line | Why |
+|---|---|---|
 
 ## End to end
 

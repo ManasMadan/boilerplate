@@ -1,7 +1,8 @@
 /**
  * Suppressions, skipped tests and coverage pragmas: each one hides a problem instead of
  * fixing it, so one is refused unless docs/testing.md lists its file with the reason
- * (the "Coverage exceptions", "Skipped tests" and "Suppressions" tables). The Claude Code
+ * (the "Coverage exceptions", "Skipped tests", "Suppressions" and "Type-coverage exceptions"
+ * tables). The Claude Code
  * hook (.claude/hooks/suppressions.ts) applies this to every edit, and
  * `bun scripts/suppressions.ts` (in `bun run lint`, so in CI, and in the Stop hook, which
  * catches what a shell command wrote) to every file.
@@ -21,6 +22,7 @@ export const SUPPRESSIONS: Record<string, RegExp> = {
   "# type: ignore": /#\s*type:\s*ignore/g,
   "# pyright: ignore": /#\s*pyright:\s*ignore/g,
   "# noqa": /#\s*noqa\b/g,
+  "type-coverage:ignore": /type-coverage:ignore/g,
   "a skipped test (.skip, xit, @pytest.mark.skip)":
     /\b(it|test|describe|suite)\.skip(If)?\s*\(|\bx(it|describe|test)\s*\(|@pytest\.mark\.skip/g,
   "a focused test (.only, fit)": /\b(it|test|describe|suite)\.only\s*\(|\bf(it|describe)\s*\(/g,
@@ -55,7 +57,12 @@ export function addedSuppressions(before: string, after: string): string[] {
 }
 
 /** The sections of docs/testing.md whose tables allow a suppression. */
-export const EXCEPTION_SECTIONS = ["## Coverage exceptions", "## Skipped tests", "## Suppressions"];
+export const EXCEPTION_SECTIONS = [
+  "## Coverage exceptions",
+  "## Skipped tests",
+  "## Suppressions",
+  "## Type-coverage exceptions",
+];
 
 /**
  * The files the exceptions tables in docs/testing.md name (a backticked path in a row
@@ -107,7 +114,7 @@ export function checkSuppressions(root = join(import.meta.dir, "..")): number {
     console.error(`  \x1b[31m✖\x1b[0m ${path}: ${kinds.join(", ")}`);
   if (found.length === 0) return 0;
   console.error(
-    "\nFix the cause, or list the file with the reason in docs/testing.md (Coverage exceptions, Skipped tests or Suppressions).",
+    "\nFix the cause, or list the file with the reason in docs/testing.md (Coverage exceptions, Skipped tests, Suppressions or Type-coverage exceptions).",
   );
   return 1;
 }

@@ -23,6 +23,7 @@ describe("suppressions", () => {
     ["x = f()  # type: ignore[attr]", "# type: ignore"],
     ["x = f()  # pyright: ignore[reportAny]", "# pyright: ignore"],
     ["import os  # noqa: F401", "# noqa"],
+    ["// type-coverage:ignore-next-line", "type-coverage:ignore"],
     ["it.skip('x', () => {})", "a skipped test (.skip, xit, @pytest.mark.skip)"],
     ["test.skipIf(!env)('x', () => {})", "a skipped test (.skip, xit, @pytest.mark.skip)"],
     ["@pytest.mark.skip(reason='x')", "a skipped test (.skip, xit, @pytest.mark.skip)"],
@@ -57,11 +58,15 @@ describe("suppressions", () => {
         "| File | Why |",
         "|---|---|",
         "| `apps/notifications/test/fake-push.ts:25` | untyped module |",
+        "## Type-coverage exceptions",
+        "| `packages/contracts/src/api/base.ts` | an object built from keys |",
         "## Not tested automatically",
         "| `apps/y.test.ts` | a table that allows nothing |",
       ].join("\n"),
     );
-    expect(listedFiles(root)).toEqual(new Set(["apps/notifications/test/fake-push.ts"]));
+    expect(listedFiles(root)).toEqual(
+      new Set(["apps/notifications/test/fake-push.ts", "packages/contracts/src/api/base.ts"]),
+    );
     expect(listedFiles(mkdtempSync(join(tmpdir(), "none-")))).toEqual(new Set());
   });
 });
