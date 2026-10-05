@@ -55,3 +55,6 @@ infra/tofu/modules/**/.terraform.lock.hcl
 # Environment inputs can hold provider keys; only the examples are committed.
 infra/tofu/envs/*/*.tfvars
 infra/tofu/envs/*/backend-*.hcl
+
+# The charts rendered for the misconfiguration scan (scripts/misconfig.ts).
+deploy/.rendered/

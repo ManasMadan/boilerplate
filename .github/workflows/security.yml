@@ -121,7 +121,8 @@ jobs:
           category: osv
 
   # Misconfigurations in the infrastructure code (Dockerfiles, Kubernetes manifests, Helm
-  # charts, OpenTofu), with trivy.yaml's settings, which the pre-commit hook uses too
+  # charts, the application charts as every environment renders them, OpenTofu), with
+  # trivy.yaml's settings, through the script the pre-commit hook runs
   # (scripts/misconfig.ts). Any finding fails, unless .trivyignore.yaml records why it
   # doesn't apply. The checks are the ones built into the pinned Trivy, so the weekly run
   # finds what the pull request did.
@@ -135,15 +136,17 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with: { bun-version-file: package.json }
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with: { version: v4.3.0 }
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
-          scan-type: config
-          scan-ref: .
           # renovate: datasource=github-releases depName=aquasecurity/trivy
           version: v0.74.0
-          trivy-config: trivy.yaml
-          format: sarif
-          output: trivy-config.sarif
+      # The pre-commit hook's scan: the application charts rendered as each environment
+      # has them (Trivy can't render them without their values), then Trivy with trivy.yaml.
+      - run: bun scripts/misconfig.ts --format sarif --output trivy-config.sarif
       # The findings reach the Security tab whether the scan passed or not.
       - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         if: always()

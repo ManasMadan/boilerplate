@@ -36,3 +36,37 @@ misconfigurations:
   - id: DS-0026
     paths: [".devcontainer/Dockerfile"]
     statement: A development container; nothing in it runs until a developer starts it
+
+  # The application charts, as scripts/misconfig.ts renders them into deploy/.rendered
+  # (<environment>-<chart>.yaml, and optional-<feature>.yaml).
+  - id: KSV-0113
+    paths: ["deploy/.rendered/*-data.yaml", "deploy/.rendered/optional-*.yaml"]
+    statement: >-
+      The credentials Job creates the data services' Secrets, so its Role must be allowed
+      to create Secrets; it can do nothing else (no get, list, update or delete), and
+      Kubernetes can't narrow create by name, since the object doesn't exist yet
+  - id: KSV-0053
+    paths: ["deploy/.rendered/staging-data.yaml"]
+    statement: >-
+      The restore drill runs psql in the live and the scratch database pods to compare
+      them; CloudNativePG names those pods with a counter, so they can't be listed by
+      name. Its Role is in its own namespace and only staging turns the drill on
+  - id: KSV-0125
+    paths: ["deploy/.rendered/local-stack.yaml"]
+    statement: >-
+      The kind cluster's images (boilerplate/<image>:dev) are built on the machine and
+      loaded into kind by `bun run k8s:up`; nothing pulls them from a registry
+  # KSV-0039 and KSV-0040 ask that every namespace have a complete LimitRange and
+  # ResourceQuota. Trivy only runs them once a scan includes either kind (here, the
+  # preview's own), and then checks every manifest in the repository as if it were one,
+  # reporting each Deployment, Service and Argo CD Application as a LimitRange missing
+  # its limits. None of those findings is about the manifest it names.
+  - id: KSV-0039
+    statement: >-
+      Applied by Trivy to every manifest, not only LimitRanges; the one LimitRange here is
+      the preview's (the data chart's templates/preview.yaml), defaults for its containers
+  - id: KSV-0040
+    statement: >-
+      Applied by Trivy to every manifest, not only ResourceQuotas; the one quota here is
+      the preview's (the data chart's templates/preview.yaml), which bounds what a preview
+      may take from the shared cluster

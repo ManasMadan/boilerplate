@@ -38,14 +38,16 @@ a real cluster or cloud account. The checks below are offline.
   `# renovate: datasource=<docker|helm|github-releases|npm> depName=<name>` (see
   `infra/tofu/modules/bootstrap/variables.tf` and `.github/workflows/ci.yml`). A new
   file pattern needs a custom manager in `renovate.json5`.
-- `bun scripts/misconfig.ts` (Trivy's `config` scan with `trivy.yaml`, as the Security
-  workflow and the pre-commit hook run it) fails on any finding in the Dockerfiles,
-  manifests, platform charts and OpenTofu: containers run as a UID and GID above 10000
-  with CPU and memory limits, a chart's resources name `{{ .Release.Namespace }}`,
-  images come from a registry in `deploy/trivy/registries.yaml`, and a long-running image
-  has a HEALTHCHECK. A finding that doesn't apply goes under `misconfigurations` in
-  `.trivyignore.yaml`, with its reason, for that one file. Trivy skips the stack and data
-  charts (they need values it doesn't pass); `charts:check` validates those.
+- `bun scripts/misconfig.ts` (as the Security workflow and the pre-commit hook run it)
+  renders the stack and data charts for every environment and optional feature into
+  `deploy/.rendered` (git ignores it), then runs Trivy's `config` scan with `trivy.yaml`,
+  and fails on any finding in those, the Dockerfiles, the other manifests and charts and
+  OpenTofu: containers run as UID and GID 10001 on a read-only root, with CPU and memory
+  limits, every object names `{{ .Release.Namespace }}`, images come from a registry in
+  `deploy/trivy/registries.yaml`, and a long-running image has a HEALTHCHECK. A finding
+  that doesn't apply goes under `misconfigurations` in `.trivyignore.yaml`, with its
+  reason, for the files it applies to. A new chart under `deploy/charts` must be rendered
+  there too (`scripts/misconfig.test.ts` fails otherwise).
 - Secrets never go in values files or tfvars. They're SOPS-encrypted Secrets in
   `deploy/environments/<env>/secrets/` and `deploy/platform/secrets/<env>/`, or generated
   in the cluster by the data chart; never decrypt one (rotate-secrets skill).

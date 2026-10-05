@@ -164,33 +164,73 @@ function checkOwnCharts({ root, exec, check }: Checks) {
   }
 }
 
+/** The application charts, rendered for every environment and optional feature. */
+export const APPLICATION_CHARTS = ["data", "stack"] as const;
+
+/** A `helm template` run of one application chart: its name and its arguments. */
+export type Render = { name: string; args: string[] };
+
+/** One environment's release of `chart`, as Argo CD renders it, or none without its values. */
+export function environmentRender(
+  root: string,
+  env: string,
+  chart: (typeof APPLICATION_CHARTS)[number],
+): Render | undefined {
+  const extra = RELEASE_VALUES[env];
+  if (!extra) {
+    return undefined;
+  }
+  const values = join(root, "deploy/environments", env, `${chart}.yaml`);
+  const args = ["template", env, join(root, "deploy/charts", chart), "--namespace", env];
+  return { name: `${env}-${chart}`, args: [...args, "-f", values, ...extra[chart]] };
+}
+
+/** An optional feature's render: its chart with the values a cluster always sets, and it on. */
+export function optionalRender(root: string, [label, chart, values]: (typeof OPTIONAL)[number]) {
+  const slug = label.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
+  const args = ["template", "optional", join(root, chart), "--namespace", "optional"];
+  return { name: `optional-${slug}`, args: [...args, ...(OWN_CHARTS[chart] ?? []), ...values] };
+}
+
+/** The environments, as deploy/environments has them. */
+export const environments = (root: string) => readdirSync(join(root, "deploy/environments")).sort();
+
+/**
+ * Every render of the application charts: each environment's, then each optional
+ * feature's. Throws for an environment missing from RELEASE_VALUES.
+ */
+export function applicationRenders(root = ROOT): Render[] {
+  return [
+    ...environments(root).flatMap((env) =>
+      APPLICATION_CHARTS.map((chart) => {
+        const render = environmentRender(root, env, chart);
+        if (!render) {
+          throw new Error(`${env}: add it to RELEASE_VALUES in scripts/charts.ts`);
+        }
+        return render;
+      }),
+    ),
+    ...OPTIONAL.map((optional) => optionalRender(root, optional)),
+  ];
+}
+
 /** Both application charts rendered for every environment, then validated together. */
 function checkEnvironments({ root, exec, kubeconform, check, refuse }: Checks) {
-  const environments = join(root, "deploy/environments");
-  for (const env of readdirSync(environments).sort()) {
-    const extra = RELEASE_VALUES[env];
-    if (!extra) {
-      refuse(`${env}: add it to RELEASE_VALUES in scripts/charts.ts`);
-      continue;
-    }
+  for (const env of environments(root)) {
     const rendered: string[] = [];
-    for (const chart of ["data", "stack"] as const) {
-      const result = exec("helm", [
-        "template",
-        env,
-        join(root, "deploy/charts", chart),
-        "--namespace",
-        env,
-        "-f",
-        join(environments, env, `${chart}.yaml`),
-        ...extra[chart],
-      ]);
+    for (const chart of APPLICATION_CHARTS) {
+      const render = environmentRender(root, env, chart);
+      if (!render) {
+        refuse(`${env}: add it to RELEASE_VALUES in scripts/charts.ts`);
+        break;
+      }
+      const result = exec("helm", render.args);
       check(`${env}: ${chart} renders`, result);
       if (result.ok) {
         rendered.push(result.output);
       }
     }
-    if (rendered.length === 2) {
+    if (rendered.length === APPLICATION_CHARTS.length) {
       check(`${env}: manifests are valid Kubernetes`, kubeconform(rendered.join("\n---\n")));
     }
   }
@@ -198,19 +238,11 @@ function checkEnvironments({ root, exec, kubeconform, check, refuse }: Checks) {
 
 /** The optional features no environment turns on, rendered and validated the same way. */
 function checkOptional({ root, exec, kubeconform, check }: Checks) {
-  for (const [label, chart, values] of OPTIONAL) {
-    const result = exec("helm", [
-      "template",
-      "optional",
-      join(root, chart),
-      "--namespace",
-      "optional",
-      ...(OWN_CHARTS[chart] ?? []),
-      ...values,
-    ]);
-    check(`${label} renders`, result);
+  for (const optional of OPTIONAL) {
+    const result = exec("helm", optionalRender(root, optional).args);
+    check(`${optional[0]} renders`, result);
     if (result.ok) {
-      check(`${label} is valid Kubernetes`, kubeconform(result.output));
+      check(`${optional[0]} is valid Kubernetes`, kubeconform(result.output));
     }
   }
 }
