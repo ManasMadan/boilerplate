@@ -234,7 +234,8 @@ const drift = (ctx: Context) =>
  */
 async function endToEnd(ctx: Context) {
   const local = testEnvironment(join(ctx.root, ".env.example"));
-  const clamd = await ctx.clamd(local.CLAMAV_URL ?? "tcp://localhost:53310");
+  // .env.example sets CLAMAV_URL; without it the URL fails to parse and the step says so.
+  const clamd = await ctx.clamd(local.CLAMAV_URL ?? "");
   try {
     return await withDatabase(ctx, "e2e", async (database, name) => {
       const unset = Object.fromEntries(
