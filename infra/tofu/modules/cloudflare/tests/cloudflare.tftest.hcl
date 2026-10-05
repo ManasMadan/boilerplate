@@ -8,7 +8,7 @@ mock_provider "cloudflare" {
   }
   override_data {
     target = data.cloudflare_api_token_permission_groups_list.this
-    values = { result = [{ id = "perm-id", name = "permission", scopes = [] }] }
+    values = { result = [{ id = "perm-id", name = "permission", category = "Zone", is_selectable = true, scopes = [] }] }
   }
   mock_resource "cloudflare_api_token" {
     defaults = { id = "token-id", value = "token-value" }
