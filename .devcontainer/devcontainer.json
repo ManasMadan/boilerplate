@@ -1,5 +1,7 @@
 // Everything to develop, test and ship this repository, in a container (VS Code Dev
-// Containers or Codespaces). `bun run setup` runs once it's created; then `bun dev`.
+// Containers or Codespaces): the toolchain and the shipping tools are in the Dockerfile,
+// kubectl and Helm come from the feature below. `bun run setup` runs once it's created;
+// then `bun dev`.
 {
   "name": "boilerplate",
   "build": { "dockerfile": "Dockerfile" },

@@ -15,7 +15,8 @@ You need Node 24 (`nvm use`), Bun 1.3, Docker, and [uv](https://docs.astral.sh/u
 code generation runs the Python service's exporter, so setup, `bun dev`, types and tests
 need it even if you never touch Python. `bun run doctor` checks all of it. Nothing to
 install: with VS Code or Codespaces, the devcontainer (`.devcontainer/`) has Node, Bun,
-uv, OpenTofu, Helm and Docker, and runs setup when it's created.
+uv, Docker and what shipping needs (OpenTofu, kubectl, Helm with helm-unittest, kind,
+sops, age and gh), and runs setup when it's created.
 
 ```sh
 bun run setup     # once: .env with fresh secrets, dependencies, local services, migrations

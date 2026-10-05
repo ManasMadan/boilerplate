@@ -6,8 +6,9 @@ tick them off in your own copy of this file or in an issue.
 ## 0. Tools
 
 Beyond what local development needs (Node, Bun, Docker, uv; `bun run doctor` checks
-those), shipping needs these on your machine. The doctor doesn't check them, and the
-devcontainer has only OpenTofu, kubectl and Helm of them.
+those), shipping needs these on your machine. The doctor doesn't check them; the
+devcontainer (`.devcontainer/`) has all of them but Worktrunk, pinned and checked
+against their checksums.
 
 | Tool | For |
 |---|---|

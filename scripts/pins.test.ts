@@ -21,7 +21,7 @@ describe("a tool pinned in two places", () => {
     const setup = /astral-sh\/setup-uv@[\s\S]*?\n\s+version: (\S+)/.exec(
       read(".github/actions/setup/action.yml"),
     )?.[1];
-    const devcontainer = /ghcr\.io\/astral-sh\/uv:(\S+)/.exec(
+    const devcontainer = /ghcr\.io\/astral-sh\/uv:([^@\s]+)/.exec(
       read(".devcontainer/Dockerfile"),
     )?.[1];
     expect(setup).toMatch(/^\d+\.\d+\.\d+$/);
