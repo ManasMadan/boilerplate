@@ -73,6 +73,7 @@ with the job's own commands:
 | `bun run codeql --languages …` | CodeQL | the languages the push changes |
 | `bun scripts/osv.ts`: OSV on `bun.lock` and `apps/ai/uv.lock` | OSV | every push |
 | `bun scripts/misconfig.ts`: Trivy's misconfiguration scan, the charts rendered first | misconfig | every push |
+| `bun scripts/image-scan.ts`: Trivy on every third-party image the renders, compose and the dev container run | Third-party images | every push |
 | the licenses of the npm packages the push adds or upgrades, against `security.yml`'s list | dependency review | a `bun.lock` change |
 | gitleaks over the pushed commits | secrets | every push |
 

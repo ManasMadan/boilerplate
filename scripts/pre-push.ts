@@ -440,6 +440,13 @@ export const STEPS: Step[] = [
     run: (ctx) => passes(ctx, "bun", ["scripts/misconfig.ts"]),
   },
   {
+    name: "third-party images",
+    jobs: ["security.yml:images"],
+    areas: [],
+    memory: 0.5,
+    run: (ctx) => passes(ctx, "bun", ["scripts/image-scan.ts"]),
+  },
+  {
     name: "migration safety",
     jobs: ["ci.yml:migrations"],
     areas: ["app"],

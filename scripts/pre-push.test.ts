@@ -133,8 +133,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
   "ci.yml:types": { "bun run check-types": "types", "bun run type-coverage": "type coverage" },
   "ci.yml:unit": {
     "bun run test": "coverage",
-    "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts scripts .claude/hooks":
-      "coverage",
+    "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun": "coverage",
   },
   "ci.yml:components": {
     "Install the browser": "setup: Playwright's Chromium, already on a developer's machine",
@@ -142,6 +141,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
     "Screenshots match the baselines": "screenshots",
   },
   "ci.yml:integration": {
+    "The repo's tooling (scripts, hooks and the rest Bun's runner owns), with coverage": "coverage",
     "The day, for the signatures' cache key": "setup: a cache key",
     "Start object storage and virus scanning": "services",
     "Start Valkey": "services",
@@ -152,7 +152,6 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
     "Start the mail server": "mail server",
     "Install Chromium": "setup: Playwright's Chromium, already on a developer's machine",
     "Tests with coverage": "coverage",
-    "The repo's scripts and Claude Code hooks, with coverage": "coverage",
   },
   "ci.yml:e2e": {
     "The day, for the signatures' cache key": "setup: a cache key",
@@ -208,6 +207,10 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
   "security.yml:misconfig": {
     "bun scripts/misconfig.ts --format sarif --output trivy-config.sarif": "misconfigurations",
     "github/codeql-action/upload-sarif": "setup: sends the findings to the Security tab",
+  },
+  "security.yml:images": {
+    "The day, for the database's cache key": "setup: a cache key",
+    "bun scripts/image-scan.ts": "third-party images",
   },
   "security.yml:osv": {
     "google/osv-scanner-action/osv-scanner-action": "known vulnerabilities",
