@@ -158,6 +158,11 @@
       groupName: "kubernetes",
     },
     {
+      description: "Envoy Gateway and the Envoy proxy image it defaults to, which the platform config chart names (deploy/platform/config/values.yaml): one version pair",
+      matchPackageNames: ["gateway-helm", "registry-1.docker.io/envoyproxy/gateway-helm", "docker.io/envoyproxy/envoy"],
+      groupName: "envoy-gateway",
+    },
+    {
       description: "Trivy: the image scan and the configuration scan",
       matchPackageNames: ["aquasec/trivy", "aquasecurity/trivy"],
       groupName: "trivy",

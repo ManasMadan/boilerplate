@@ -28,6 +28,16 @@ tests:
     asserts:
       - equal: { path: spec.provider.kubernetes.envoyService.externalTrafficPolicy, value: Cluster }
 
+  - it: runs the proxies from the image it names, by digest, with CPU and memory limits
+    template: gateway.yaml
+    documentSelector: { path: kind, value: EnvoyProxy }
+    asserts:
+      - matchRegex:
+          path: spec.provider.kubernetes.envoyDeployment.container.image
+          pattern: '^docker\.io/envoyproxy/envoy:distroless-v[0-9.]+@sha256:[0-9a-f]{64}$'
+      - exists: { path: spec.provider.kubernetes.envoyDeployment.container.resources.limits.cpu }
+      - exists: { path: spec.provider.kubernetes.envoyDeployment.container.resources.limits.memory }
+
   - it: trusts one proxy hop (Cloudflare) for the client's address on the site's hosts
     template: gateway.yaml
     documentSelector: { path: metadata.name, value: public, matchMany: true }

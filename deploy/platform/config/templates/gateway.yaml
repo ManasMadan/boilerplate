@@ -24,6 +24,12 @@ spec:
         {{- end }}
       envoyDeployment:
         replicas: 2
+        # The proxy image named, not left to Envoy Gateway's built-in default: the image
+        # scan (scripts/image-scan.ts) reads it here, and the clusters run what it scanned.
+        container:
+          image: {{ .Values.gateway.proxy.image }}
+          resources:
+            {{- toYaml .Values.gateway.proxy.resources | nindent 12 }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass

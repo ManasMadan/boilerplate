@@ -16,6 +16,14 @@ gateway:
   # cluster with no Cloudflare in front (and then trustedHops: 0); the cluster's
   # origin-pulls annotation.
   originPulls: true
+  # The gateway's proxies (Envoy). The image is Envoy Gateway's own default for its
+  # version (Renovate moves the two together); CPU and memory requested and limited, as
+  # for every container here.
+  proxy:
+    image: docker.io/envoyproxy/envoy:distroless-v1.39.1@sha256:eb2c01c13125d1629637cb4e4cce7207009fb7cc2c8027f9742758549d15b6f4
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }
 
 # Let's Encrypt certificates, validated through DNS (works for wildcards and before the
 # gateway is reachable): Cloudflare's, or a name server of your own (RFC 2136). The

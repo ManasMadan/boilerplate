@@ -14,7 +14,16 @@
       "properties": {
         "serviceAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
         "trustedHops": { "type": ["integer", "string"] },
-        "originPulls": { "type": ["boolean", "string"] }
+        "originPulls": { "type": ["boolean", "string"] },
+        "proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image", "resources"],
+          "properties": {
+            "image": { "type": "string", "minLength": 1 },
+            "resources": { "type": "object" }
+          }
+        }
       }
     },
     "tls": {
