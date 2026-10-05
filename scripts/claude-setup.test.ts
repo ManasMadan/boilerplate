@@ -159,6 +159,13 @@ describe("settings.json", () => {
     );
   });
 
+  it("drives a browser with Playwright's CLI, not its MCP server", () => {
+    const { mcpServers } = JSON.parse(readFileSync(join(ROOT, ".mcp.json"), "utf8")) as {
+      mcpServers: Record<string, unknown>;
+    };
+    expect(Object.keys(mcpServers)).toEqual(["postgres"]);
+  });
+
   it("lets Playwright's official skills run their commands", () => {
     const { permissions } = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8")) as {
       permissions: { allow: string[] };

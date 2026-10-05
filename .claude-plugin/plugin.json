@@ -1,6 +1,6 @@
 {
   "name": "boilerplate",
-  "description": "This template's Claude Code setup: its skills, reviewer and verifier agents, guard and check hooks, output style and MCP servers.",
+  "description": "This template's Claude Code setup: its skills, reviewer and verifier agents, guard and check hooks, output style and Postgres MCP server.",
   "author": {
     "name": "Manas Madan"
   },

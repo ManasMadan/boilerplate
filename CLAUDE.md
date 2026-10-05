@@ -154,11 +154,9 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   e2e suites' Chromium, and sign in as a seeded user (docs/database.md). Snapshots go
   to `.playwright-cli/`, which git ignores. A flow that must keep working becomes an
   e2e spec (the write-tests skill).
-- `.mcp.json`: Playwright for driving the local web app (the `playwright-cli` skill
-  does the same for fewer tokens: prefer it), and Postgres on the local `app`
-  database (`scripts/mcp-postgres.ts`). It connects as `app_readonly`, a role that exists
-  only in the local database (`infra/postgres/init/02-readonly-role.sql`): read-only, and
-  past row-level security, so it sees every workspace's rows for debugging; nothing it
-  runs can write. Use it for data, schemas, indexes and query plans. It needs `uv` and
+- `.mcp.json`: Postgres on the local `app` database (`scripts/mcp-postgres.ts`). It
+  connects as `app_readonly`, a role that exists only in the local database
+  (`infra/postgres/init/02-readonly-role.sql`): read-only, and past row-level security,
+  so it sees every workspace's rows for debugging; nothing it runs can write. Use it for data, schemas, indexes and query plans. It needs `uv` and
   the local services: if Postgres isn't up it says so at once; start it with
   `bun run db:up`, then reconnect with `/mcp`.
