@@ -6,7 +6,10 @@
  * (`site.host` in deploy/environments/<env>/stack.yaml), and the mail server's
  * submission port (465, implicit TLS) on the host the email domain's MX record names
  * (the domain of the notifications service's `EMAIL_FROM`), which must greet with 220.
- * Each check gets three tries, so one dropped request doesn't count. Hosts still on the
+ * And whether the cluster's own alerting is alive: the API's `system.alerting` must not
+ * be `stale`, which it is once Alertmanager has no recent Watchdog, the alert Prometheus
+ * always fires (apps/api src/modules/system/alerting.ts); `off` where there's no
+ * alerting to watch. Each check gets three tries, so one dropped request doesn't count. Hosts still on the
  * placeholders (example.com) are skipped. Prints what failed and exits 1 if anything
  * did; uptime.yml runs it every half hour and keeps an issue open while it fails.
  */
@@ -16,12 +19,17 @@ import type { Socket } from "node:net";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { type ConnectionOptions, connect } from "node:tls";
+import * as z from "zod";
 import { fail, ok, ROOT, runMain, warn } from "./lib";
 
 export const ENVIRONMENTS = ["staging", "production"];
 
 /** The public paths each site must answer 200 on: the web app's and the API's. */
 export const PATHS = ["/healthz", "/api/v1/system"];
+
+/** The API's verdict on the cluster's alerting. */
+export const ALERTING = "/api/v1/system/alerting";
+const alerting = z.object({ status: z.enum(["ok", "stale", "off"]) });
 
 /** Unset, or one of RFC 2606's reserved domains, which the values hold until set. */
 const placeholder = (host: string) => !host || /(^|\.)example\.(com|net|org)$/.test(host);
@@ -54,7 +62,7 @@ export function greeting(host: string, port: number, timeoutMs = 10_000, open: C
 }
 
 export type Probes = {
-  fetch: (url: string) => Promise<{ status: number }>;
+  fetch: (url: string) => Promise<{ status: number; json: () => Promise<unknown> }>;
   mx: (domain: string) => Promise<{ exchange: string; priority: number }[]>;
   greeting: (host: string, port: number) => Promise<string>;
 };
@@ -83,6 +91,22 @@ export function checks(env: string, probe: Probes = probes, root = ROOT) {
         },
       ]);
     }
+    list.push([
+      `${env}: alerting (Prometheus and Alertmanager)`,
+      async () => {
+        const response = await probe.fetch(`https://${site}${ALERTING}`);
+        if (response.status !== 200) {
+          throw new Error(`${ALERTING} answered ${response.status}`);
+        }
+        const { status } = alerting.parse(await response.json());
+        if (status === "stale") {
+          throw new Error("no recent Watchdog in Alertmanager: Prometheus or Alertmanager is down");
+        }
+        if (status === "off") {
+          warn(`${env}: no alerting there (observability is off)`);
+        }
+      },
+    ]);
   }
   if (placeholder(mail)) {
     warn(`${env}: EMAIL_FROM's domain isn't set (${mail || "empty"}): mail skipped`);

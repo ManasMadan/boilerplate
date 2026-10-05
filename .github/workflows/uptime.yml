@@ -1,7 +1,8 @@
 # The dead man's switch: every half hour, from GitHub's runners (outside every cluster),
 # scripts/uptime.ts asks each environment's site, API and mail server whether they
-# answer. A cluster, its gateway or its mail server going down can't alert through the
-# cluster's own Alertmanager and mail server, so this does: it fails, and keeps the
+# answer, and the API whether Prometheus's Watchdog alert still reaches Alertmanager. A
+# cluster, its gateway, its mail server or its alerting going down can't alert through
+# the cluster's own Alertmanager and mail server, so this does: it fails, and keeps the
 # issue "Uptime: an environment is down" open (with what failed) until everything
 # answers again, then closes it. GitHub notifies the repository's watchers of the new
 # issue, and whoever last changed this schedule of the failed run.

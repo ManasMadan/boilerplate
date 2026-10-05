@@ -4,7 +4,7 @@ import { connect, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { captureOutput } from "./stand-ins";
-import { attempt, checks, greeting, hosts, type Probes, probes, uptime } from "./uptime";
+import { ALERTING, attempt, checks, greeting, hosts, type Probes, probes, uptime } from "./uptime";
 
 afterEach(() => mock.restore());
 
@@ -21,13 +21,16 @@ function root(values: Record<string, string>) {
 const live = (site: string, from: string) =>
   `site:\n  host: ${site}\nservices:\n  notifications:\n    env:\n      EMAIL_FROM: ${from}\n`;
 
+/** An HTTP answer: `status`, with `body` as its JSON. */
+const answer = (status: number, body: unknown = {}) => ({ status, json: async () => body });
+
 /** Probes that answer as everything up, unless `down` says otherwise. */
-function fake(down: Partial<Probes> = {}) {
+function fake(down: Partial<Probes> = {}, alerting = "ok") {
   const asked: string[] = [];
   const probe: Probes = {
     fetch: async (url) => {
       asked.push(url);
-      return { status: 200 };
+      return answer(200, url.endsWith(ALERTING) ? { status: alerting } : {});
     },
     mx: async (domain) => {
       asked.push(`mx ${domain}`);
@@ -90,6 +93,7 @@ describe("checks", () => {
     expect(list.map(([name]) => name)).toEqual([
       "production: https://app.acme.dev/healthz",
       "production: https://app.acme.dev/api/v1/system",
+      "production: alerting (Prometheus and Alertmanager)",
       "production: mail for acme.dev",
     ]);
     for (const [, check] of list) {
@@ -98,6 +102,7 @@ describe("checks", () => {
     expect(asked).toEqual([
       "https://app.acme.dev/healthz",
       "https://app.acme.dev/api/v1/system",
+      "https://app.acme.dev/api/v1/system/alerting",
       "mx acme.dev",
       "mail.acme.dev:465",
     ]);
@@ -115,13 +120,41 @@ describe("checks", () => {
   });
 
   it("fails a site that answers anything but 200", async () => {
-    const { probe } = fake({ fetch: async () => ({ status: 502 }) });
+    const { probe } = fake({ fetch: async () => answer(502) });
     const [[, check] = ["", async () => undefined]] = checks(
       "production",
       probe,
       root({ production: live("app.acme.dev", "x") }),
     );
     await expect(check()).rejects.toThrow("answered 502");
+  });
+
+  describe("the cluster's alerting", () => {
+    const dir = root({ production: live("app.acme.dev", "x") });
+    const alertingCheck = (probe: Probes) =>
+      checks("production", probe, dir).find(([name]) => name.includes("alerting"))?.[1] ??
+      (async () => undefined);
+
+    it("fails while Alertmanager has no recent Watchdog", async () => {
+      await expect(alertingCheck(fake({}, "stale").probe)()).rejects.toThrow(
+        "Prometheus or Alertmanager is down",
+      );
+    });
+
+    it("passes where there's no alerting, saying so", async () => {
+      const output = captureOutput();
+      await alertingCheck(fake({}, "off").probe)();
+      expect(output()).toContain("production: no alerting there");
+    });
+
+    it("fails when the API doesn't answer, or answers something else", async () => {
+      await expect(alertingCheck(fake({ fetch: async () => answer(404) }).probe)()).rejects.toThrow(
+        `${ALERTING} answered 404`,
+      );
+      await expect(
+        alertingCheck(fake({ fetch: async () => answer(200, { status: "fine" }) }).probe)(),
+      ).rejects.toThrow();
+    });
   });
 
   it("fails a domain with no MX record, or a mail server that doesn't greet", async () => {

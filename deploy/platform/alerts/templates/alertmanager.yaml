@@ -2,9 +2,9 @@
 Where alerts go: email to `email`, sent through the cluster's mail server as its
 submission account. Matched to every alert (the Alertmanager's matcher strategy is
 None, deploy/platform/values/kube-prometheus-stack.yaml) except kube-prometheus-stack's
-always-firing Watchdog and its informational ones. Watchdog has nowhere outside the
-cluster to go: the dead man's switch is GitHub's uptime.yml probing each environment
-from outside instead (deploy/README.md, Observability).
+always-firing Watchdog and its informational ones. Watchdog needs no receiver: the api
+reads it from Alertmanager (system.alerting), and the uptime check outside the cluster
+fails when it stops arriving (deploy/README.md, Observability).
 */}}
 {{- if and (eq .Values.environment "production") (not .Values.email) }}
 {{- fail "email is required in production: set alert_email in OpenTofu (the cluster's boilerplate.dev/alert-email annotation)" }}

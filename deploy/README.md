@@ -416,14 +416,19 @@ GitHub Actions: every half hour `.github/workflows/uptime.yml` runs
 `scripts/uptime.ts`, which asks each environment's site (`/healthz`) and API
 (`/api/v1/system`) at `site.host` for a 200, and the mail server, found through the
 email domain's MX record (the domain of `EMAIL_FROM`), for its greeting on port 465.
-Each check gets three tries. When one still fails, the run fails and opens the issue
+It also watches the alerting itself, since Prometheus or Alertmanager can die while the
+site stays up: kube-prometheus-stack's `Watchdog` alert always fires, and Prometheus
+resends it to Alertmanager every minute or so. The api asks Alertmanager for it
+(`ALERTMANAGER_URL`, which the stack chart sets with observability on) and answers
+`/api/v1/system/alerting` with `ok` while one arrived in the last ten minutes, `stale`
+when none did or Alertmanager doesn't answer, and `off` without observability; nothing
+else of Alertmanager's answer leaves the cluster, and the verdict is cached for 30
+seconds. The check fails on `stale`. Each check gets three tries. When one still fails, the run fails and opens the issue
 "Uptime: an environment is down" listing what's down, which it keeps current and closes
 once everything answers again; GitHub notifies the repository's watchers. Hosts left on
 the `example.com` placeholders are skipped, so it does nothing until they're set. It
 sees what users see, through Cloudflare, so it can't tell a dead cluster from a broken
-gateway, and it doesn't watch Prometheus or Alertmanager themselves: kube-prometheus-stack's
-always-firing `Watchdog` alert stays unrouted, since nothing outside the cluster could
-receive it without a service in between. GitHub turns off scheduled workflows in a
+gateway. GitHub turns off scheduled workflows in a
 repository with no activity for 60 days; re-enable it from the Actions tab.
 
 ## DNS
