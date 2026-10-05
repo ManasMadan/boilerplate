@@ -9,6 +9,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "data.name" . }}-default-deny
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -19,6 +20,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "data.postgres" . }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:

@@ -198,8 +198,6 @@
         "tolerations": { "type": "array", "items": { "type": "object" } },
         "podAnnotations": { "$ref": "#/$defs/stringMap" },
         "topologySpread": { "type": "boolean" },
-        "readOnlyRootFilesystem": { "type": "boolean" },
-        "runAsUser": { "type": "integer", "minimum": 1 },
         "pdb": {
           "type": "object",
           "additionalProperties": false,

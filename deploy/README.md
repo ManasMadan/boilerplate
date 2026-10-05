@@ -49,6 +49,20 @@ the database. The migration Job runs on every sync of the stack, a self-heal inc
 not only when there's a new migration: `prisma migrate deploy` with nothing new to apply
 changes nothing, so a rerun costs one short-lived pod and a line in Argo CD's history.
 
+## How every pod runs
+
+Every container of both charts runs as user and group 10001 (never root, never an id of
+the node's own users), on a read-only root filesystem with every capability dropped,
+writing only to its volumes and an empty `/tmp`, and with a CPU limit as well as a
+memory one: a busy or runaway process slows itself down rather than its node's other
+pods. The limits are in each chart's `values.yaml` (`defaults.resources` for the
+services, one CPU each; two for ClamAV and Postgres), and an environment's values
+override them. Every object names its release's namespace. ClamAV starts itself rather
+than through its image's entrypoint, which needs root's rights over its own files: each
+new pod fetches the signatures (about 110 MB, from database.clamav.net) before it takes
+connections, then keeps them current. `bun scripts/misconfig.ts` renders both charts for
+every environment and fails on any setting Trivy finds that breaks these rules.
+
 ## Network policies
 
 Each environment's namespace accepts nothing a policy doesn't allow (the data chart's

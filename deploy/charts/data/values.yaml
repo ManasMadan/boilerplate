@@ -28,9 +28,13 @@ postgres:
     # k3s's default: a directory on the node. Replicas on other nodes are what keeps
     # the data when one is lost, so run at least two instances on a multi-node cluster.
     storageClass: local-path
+  # Every container here has a CPU limit as well as a memory one (the misconfiguration
+  # scan, scripts/misconfig.ts, fails without), so a runaway process slows itself down
+  # instead of its node's neighbours; set an environment's own with its load.
+  # CloudNativePG applies these to each instance.
   resources:
     requests: { cpu: 250m, memory: 512Mi }
-    limits: { memory: 1Gi }
+    limits: { cpu: "2", memory: 1Gi }
   parameters:
     max_connections: "200"
   # Continuous backups with the Barman Cloud plugin: WAL archived as it's written and a
@@ -77,7 +81,7 @@ valkey:
     storageClass: local-path
   resources:
     requests: { cpu: 100m, memory: 256Mi }
-    limits: { memory: 512Mi }
+    limits: { cpu: "1", memory: 512Mi }
   # BullMQ needs every key kept: never evict, and persist to disk. At most 60% of the
   # memory limit: the append-only rewrite forks, and copies what's written meanwhile.
   maxmemory: 300mb
@@ -95,7 +99,7 @@ valkey:
       replicas: 2
       resources:
         requests: { cpu: 20m, memory: 32Mi }
-        limits: { memory: 128Mi }
+        limits: { cpu: 500m, memory: 128Mi }
 
 # Object storage with RustFS (S3 API). Two separate servers: `uploads`, which the
 # browser reaches at `host` through the gateway (presigned URLs), and `backups`, which
@@ -124,7 +128,7 @@ storage:
       storageClass: local-path
     resources:
       requests: { cpu: 100m, memory: 256Mi }
-      limits: { memory: 1Gi }
+      limits: { cpu: "1", memory: 1Gi }
   # On with postgres.backups. Pin it to another node with nodeSelector where there is
   # one, so losing a node's disk doesn't take the database and its backups together.
   backups:
@@ -135,7 +139,7 @@ storage:
       storageClass: local-path
     resources:
       requests: { cpu: 100m, memory: 256Mi }
-      limits: { memory: 1Gi }
+      limits: { cpu: "1", memory: 1Gi }
 
 # The gateway the uploads host is routed through (as in the stack chart), and where its
 # proxies run, allowed through RustFS's network policy.
@@ -175,7 +179,7 @@ offsite:
   image: docker.io/rclone/rclone:1.75.1
   resources:
     requests: { cpu: 50m, memory: 64Mi }
-    limits: { memory: 256Mi }
+    limits: { cpu: "1", memory: 256Mi }
 
 # A pull-request preview: this release owns its namespace (so deleting the preview
 # deletes everything in it) with quotas that keep one preview from starving others.
@@ -195,4 +199,4 @@ preview:
     tlsSecret: mailpit-tls
     resources:
       requests: { cpu: 10m, memory: 32Mi }
-      limits: { memory: 128Mi }
+      limits: { cpu: 200m, memory: 128Mi }

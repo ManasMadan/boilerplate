@@ -225,14 +225,30 @@ tests:
     asserts:
       - equal: { path: "spec.template.spec.containers[0].lifecycle.preStop.sleep.seconds", value: 5 }
 
-  - it: runs ClamAV from its own image with a TCP probe and a writable filesystem
+  - it: limits every service's CPU as well as its memory
+    set:
+      services.clamav.enabled: true
+    asserts:
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.memory" }
+
+  - it: runs ClamAV from its own image as our user, on a read-only root, with a TCP probe
     set:
       services.clamav.enabled: true
     documentSelector: { path: metadata.name, value: demo-clamav }
     asserts:
       - equal: { path: "spec.template.spec.containers[0].image", value: docker.io/clamav/clamav-debian:1.5 }
-      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: false }
-      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 1000 }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - equal: { path: "spec.template.spec.containers[0].resources.limits.cpu", value: "2" }
+      # It starts ClamAV itself (the image's entrypoint needs root's rights over its
+      # files), with the signatures fetched into a directory of the pod's.
+      - equal: { path: "spec.template.spec.containers[0].command", value: [sh, -c] }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: "exec clamd --config-file=/tmp/clamd.conf" }
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: writable-0, mountPath: /var/lib/clamav }
       - exists: { path: "spec.template.spec.containers[0].readinessProbe.tcpSocket" }
       - notExists: { path: "spec.template.spec.containers[0].envFrom" }
 

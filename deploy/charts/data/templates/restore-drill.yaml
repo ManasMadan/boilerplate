@@ -18,6 +18,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 data:
@@ -70,6 +71,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 ---
@@ -78,6 +80,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 rules:
@@ -95,6 +98,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 roleRef:
@@ -110,6 +114,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ $drill }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -130,6 +135,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -150,11 +156,7 @@ spec:
           serviceAccountName: {{ $name }}
           restartPolicy: Never
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 65534
-            runAsGroup: 65534
-            seccompProfile:
-              type: RuntimeDefault
+            {{- include "data.podSecurity" $ | nindent 12 }}
           containers:
             - name: drill
               image: {{ $pg.drill.image }}
@@ -173,7 +175,7 @@ spec:
                 - { name: HOME, value: /tmp }
               resources:
                 requests: { cpu: 10m, memory: 32Mi }
-                limits: { memory: 128Mi }
+                limits: { cpu: 200m, memory: 128Mi }
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true

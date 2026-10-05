@@ -14,6 +14,7 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: mailpit-selfsigned
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -23,6 +24,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: mailpit-ca
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -36,6 +38,7 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: mailpit-ca
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -47,6 +50,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: mailpit
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -59,6 +63,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mailpit
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
     app.kubernetes.io/name: mailpit
@@ -76,11 +81,7 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        seccompProfile:
-          type: RuntimeDefault
+        {{- include "data.podSecurity" $ | nindent 8 }}
       containers:
         - name: mailpit
           image: {{ $m.image }}
@@ -116,6 +117,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mailpit
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -131,6 +133,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mailpit
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:

@@ -85,6 +85,21 @@ argocd.argoproj.io/sync-wave: {{ index . 1 | quote }}
 argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 {{- end -}}
 
+{{/*
+A pod's security context: one unprivileged user and group for every data service, above
+the node's own ids (so a container never shares one with a user of the machine), owning
+the volumes it mounts (fsGroup), with the runtime's default seccomp profile. None of the
+images needs a particular id: each writes only to its volumes and /tmp.
+*/}}
+{{- define "data.podSecurity" -}}
+runAsNonRoot: true
+runAsUser: 10001
+runAsGroup: 10001
+fsGroup: 10001
+seccompProfile:
+  type: RuntimeDefault
+{{- end -}}
+
 {{/* A container locked down for the restricted Pod Security Standard. */}}
 {{- define "data.containerSecurity" -}}
 allowPrivilegeEscalation: false

@@ -34,6 +34,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
     app.kubernetes.io/name: valkey
@@ -56,6 +57,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ $name }}-{{ $i }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" $ | nindent 4 }}
     app.kubernetes.io/name: valkey
@@ -79,6 +81,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
     app.kubernetes.io/name: valkey
@@ -97,12 +100,7 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 999
-        runAsGroup: 999
-        fsGroup: 999
-        seccompProfile:
-          type: RuntimeDefault
+        {{- include "data.podSecurity" $ | nindent 8 }}
       {{- if $ha }}
       # One node per machine where there are several: two on one machine go together.
       affinity:
@@ -192,7 +190,7 @@ spec:
             periodSeconds: 20
           resources:
             requests: { cpu: 10m, memory: 16Mi }
-            limits: { memory: 64Mi }
+            limits: { cpu: 100m, memory: 64Mi }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -225,6 +223,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ $name }}-proxy
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 data:
@@ -262,6 +261,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name }}-proxy
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
     app.kubernetes.io/name: valkey-proxy
@@ -282,11 +282,7 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 99
-        runAsGroup: 99
-        seccompProfile:
-          type: RuntimeDefault
+        {{- include "data.podSecurity" $ | nindent 8 }}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -337,6 +333,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -350,6 +347,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ $name }}-proxy
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -367,6 +365,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:

@@ -110,7 +110,7 @@ migrate:
   activeDeadlineSeconds: 600
   resources:
     requests: { cpu: 100m, memory: 256Mi }
-    limits: { memory: 512Mi }
+    limits: { cpu: "1", memory: 512Mi }
 
 # Re-encrypting stored secrets after a key rotation: a suspended CronJob that runs the
 # api's image with the api's environment, started by hand (templates/reencrypt-cronjob.yaml).
@@ -120,14 +120,18 @@ reencrypt:
   activeDeadlineSeconds: 1800
   resources:
     requests: { cpu: 100m, memory: 256Mi }
-    limits: { memory: 512Mi }
+    limits: { cpu: "1", memory: 512Mi }
 
 # What every service starts from; each entry under `services` overrides any of it.
 defaults:
   replicas: 2
+  # A CPU limit as well as a memory one for every container (the misconfiguration scan,
+  # scripts/misconfig.ts, fails without): a busy service slows itself down instead of its
+  # node's other pods. Raise it with the requests where a service needs more; an
+  # environment's values override any.
   resources:
     requests: { cpu: 100m, memory: 256Mi }
-    limits: { memory: 512Mi }
+    limits: { cpu: "1", memory: 512Mi }
   terminationGracePeriodSeconds: 30
   nodeSelector: {}
   tolerations: []
@@ -315,12 +319,39 @@ services:
     port: 3310
     tcpProbe: true
     replicas: 1
-    # Signature updates rewrite its database; it runs as the image's own user.
-    readOnlyRootFilesystem: false
-    runAsUser: 1000
+    # As every service: our own unprivileged user and a read-only root. The image's own
+    # entrypoint can't run that way (it hands its signature directory to its clamav user
+    # and edits its configuration in place), so this starts ClamAV itself: its settings in
+    # /tmp, the signatures fetched into an empty directory of the pod's (about 110 MB from
+    # database.clamav.net, a minute or two, on every new pod), then freshclam keeping them
+    # current and clamd serving on 3310.
+    command: [sh, -c]
+    args:
+      - |
+        set -eu
+        cat > /tmp/clamd.conf <<EOF
+        Foreground yes
+        TCPSocket 3310
+        DatabaseDirectory /var/lib/clamav
+        TemporaryDirectory /tmp
+        LogTime yes
+        EOF
+        cat > /tmp/freshclam.conf <<EOF
+        Foreground yes
+        DatabaseDirectory /var/lib/clamav
+        DatabaseMirror database.clamav.net
+        NotifyClamd /tmp/clamd.conf
+        EOF
+        # No clamd to tell yet, and nothing to test the first download against.
+        grep -v NotifyClamd /tmp/freshclam.conf > /tmp/freshclam-first.conf
+        echo "TestDatabases no" >> /tmp/freshclam-first.conf
+        freshclam --config-file=/tmp/freshclam-first.conf --stdout
+        freshclam --config-file=/tmp/freshclam.conf --daemon --checks=12 --stdout &
+        exec clamd --config-file=/tmp/clamd.conf
+    writablePaths: [/var/lib/clamav]
     resources:
       requests: { cpu: 200m, memory: 1536Mi }
-      limits: { memory: 3Gi }
+      limits: { cpu: "2", memory: 3Gi }
     allowFrom: [worker]
     secretFrom: none
     pdb:

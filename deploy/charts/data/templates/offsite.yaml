@@ -25,6 +25,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: {{ include "data.name" $ }}-offsite-{{ $source.role }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" $ | nindent 4 }}
 spec:
@@ -45,11 +46,7 @@ spec:
           restartPolicy: Never
           automountServiceAccountToken: false
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            seccompProfile:
-              type: RuntimeDefault
+            {{- include "data.podSecurity" $ | nindent 12 }}
           containers:
             - name: copy
               image: {{ $o.image }}

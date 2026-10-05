@@ -175,6 +175,38 @@ tests:
       - equal: { path: "spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef", value: { name: valkey, key: password } }
       - equal: { path: "spec.volumeClaimTemplates[0].spec.storageClassName", value: local-path }
 
+  - it: runs every data service as one unprivileged user of ours, with a CPU limit
+    templates: [credentials.yaml, offsite.yaml, preview-mail.yaml, restore-drill.yaml, storage.yaml, valkey.yaml]
+    set:
+      postgres.backups.enabled: true
+      postgres.drill.enabled: true
+      valkey.replication.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+      preview.enabled: true
+      preview.namespace: pr-1
+    # Every pod template: each one is locked down to a non-root user.
+    documentSelector: { path: spec.template.spec.securityContext.runAsNonRoot, value: true, matchMany: true }
+    asserts:
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.cpu" }
+
+  - it: runs the scheduled copies and the drill as the same user, with a CPU limit
+    templates: [offsite.yaml, restore-drill.yaml]
+    set:
+      postgres.backups.enabled: true
+      postgres.drill.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+    documentSelector: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot, value: true, matchMany: true }
+    asserts:
+      - equal: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - exists: { path: "spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu" }
+
   - it: lets the stack's services and KEDA's operator reach Valkey, nothing else
     template: valkey.yaml
     documentSelector: { path: kind, value: NetworkPolicy }

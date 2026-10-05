@@ -30,6 +30,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: {{ $cluster }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -120,6 +121,7 @@ apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
 metadata:
   name: {{ include "data.objectStore" . }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
@@ -146,6 +148,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
   name: {{ $cluster }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" . | nindent 4 }}
 spec:
