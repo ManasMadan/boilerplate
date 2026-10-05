@@ -19,6 +19,8 @@ import { env } from "./src/env";
 
 const config: NextConfig = {
   output: "standalone",
+  // The build checks the app's own types only; tsconfig.build.json says why.
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   // Workspace packages ship TypeScript source; Next compiles them like app code.
   transpilePackages: ["@repo/ui", "@repo/client", "@repo/contracts", "@repo/i18n"],
   // `<Link href>` and `router.push()` only accept routes that exist.

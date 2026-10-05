@@ -1,10 +1,12 @@
 /**
  * Every image the Dockerfiles build from is pinned by digest as well as tag, so a tag
  * moved upstream can't change what an image is built from until Renovate proposes it.
+ * And each build only needs what its pruned tree has.
  */
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { ROOT, runSync } from "./lib";
 
 const DIR = join(import.meta.dir, "../deploy/docker");
 const DIGEST = /@sha256:[0-9a-f]{64}$/;
@@ -30,5 +32,34 @@ describe("the Dockerfiles", () => {
     for (const ref of refs) {
       expect({ ref, pinned: DIGEST.test(ref) }).toEqual({ ref, pinned: true });
     }
+  });
+});
+
+describe("the web image's build", () => {
+  // `next build` type-checks the project next.config.ts's tsconfigPath names, in a tree
+  // pruned to the web app and its workspace dependencies, where no code generator has run
+  // (web.Dockerfile builds with --only): only their committed files are there.
+  it("type-checks only committed files of the app and the packages it depends on", () => {
+    const web = join(ROOT, "apps/web");
+    const config = readFileSync(join(web, "next.config.ts"), "utf8");
+    const tsconfig = /tsconfigPath: "([^"]+)"/.exec(config)?.[1] ?? "tsconfig.json";
+    const { dependencies, devDependencies } = JSON.parse(
+      readFileSync(join(web, "package.json"), "utf8"),
+    ) as Record<string, Record<string, string>>;
+    const pruned = [
+      "apps/web/",
+      ...Object.keys({ ...dependencies, ...devDependencies })
+        .filter((name) => name.startsWith("@repo/"))
+        .map((name) => `packages/${name.slice("@repo/".length)}/`),
+    ];
+    const committed = new Set(runSync("git", ["ls-files"], { cwd: ROOT }).stdout.split("\n"));
+    const listed = runSync("bunx", ["tsc", "--listFilesOnly", "-p", tsconfig], { cwd: web });
+    expect(listed.status).toBe(0);
+    const missing = listed.stdout
+      .split("\n")
+      .filter((file) => file && !file.includes("/node_modules/"))
+      .map((file) => relative(ROOT, file))
+      .filter((file) => !(committed.has(file) && pruned.some((dir) => file.startsWith(dir))));
+    expect(missing).toEqual([]);
   });
 });
