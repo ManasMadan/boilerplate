@@ -7,7 +7,29 @@ exit-code: 1
 ignorefile: .trivyignore.yaml
 scan:
   # deploy/.rendered/isolated has passes of its own (scripts/misconfig.ts, ISOLATED_KINDS).
-  skip-dirs: [node_modules, "**/node_modules", apps/mobile, deploy/.rendered/isolated]
+  # Every folder .gitignore lists is build or test output: other checks write and delete
+  # files there while this one walks the tree (scripts/misconfig.test.ts keeps the two in
+  # step).
+  skip-dirs:
+    - apps/mobile
+    - deploy/.rendered/isolated
+    - "**/node_modules"
+    - "**/.venv"
+    - "**/.next"
+    - "**/out"
+    - "**/dist"
+    - "**/.turbo"
+    - "**/coverage"
+    - "**/playwright-report"
+    - "**/storybook-static"
+    - "**/test-results"
+    - "**/.vitest"
+    - "**/logs"
+    - "**/__pycache__"
+    - "**/.pytest_cache"
+    - "**/.ruff_cache"
+    - "**/.schemathesis"
+    - "**/.terraform"
   # No calls home: it asks GitHub for a newer release and sends usage counts otherwise.
   skip-version-check: true
   disable-telemetry: true

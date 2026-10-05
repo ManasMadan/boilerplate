@@ -254,4 +254,19 @@ describe("the misconfiguration scan", () => {
     expect(ci).toContain(`TRIVY: aquasec/trivy:${TRIVY_VERSION}\n`);
     expect(readFileSync(join(ROOT, ".gitignore"), "utf8")).toContain(`\n${RENDERED}/\n`);
   });
+
+  // Trivy doesn't read .gitignore, and the pre-push hook runs it beside the suites that
+  // write and delete their output: a folder it walks into mid-change fails the scan.
+  it("skips every folder .gitignore lists", () => {
+    const skipped = /skip-dirs:\n((?:\s+- .+\n)+)/
+      .exec(readFileSync(join(ROOT, "trivy.yaml"), "utf8"))?.[1]
+      ?.match(/- "?([^"\n]+)"?/g)
+      ?.map((line) => line.replace(/^- "?|"?$/g, ""));
+    const FILES = [".env", ".DS_Store", ".coverage", "next-env.d.ts", "CLAUDE.local.md"];
+    const folders = readFileSync(join(ROOT, ".gitignore"), "utf8")
+      .split("\n")
+      .map((line) => line.replace(/^\*\*\//, "").replace(/\/$/, ""))
+      .filter((line) => /^[\w.-]+$/.test(line) && !FILES.includes(line));
+    expect(folders.filter((name) => !skipped?.includes(`**/${name}`))).toEqual([]);
+  });
 });
