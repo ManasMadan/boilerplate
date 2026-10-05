@@ -2491,6 +2491,16 @@ describe("todos", () => {
     expect(error.data.issues).toEqual([{ path: ["title"], code: "too_small" }]);
   });
 
+  it("refuses a version the database can't hold, instead of failing on it", async () => {
+    const { session } = await signedInUser();
+    const todo = await session.rpc.todo.create({ title: "versioned" });
+    const error = await expectError(
+      session.rpc.todo.setCompleted({ id: todo.id, completed: true, version: 2 ** 31 }),
+      "VALIDATION_FAILED",
+    );
+    expect(error.data.issues).toEqual([{ path: ["version"], code: "too_big" }]);
+  });
+
   it("keeps organizations apart", async () => {
     const alice = (await signedInUser()).session;
     const bob = (await signedInUser()).session;

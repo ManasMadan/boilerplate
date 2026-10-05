@@ -19,7 +19,7 @@ const todoSchema = z.object({
   title: z.string(),
   completed: z.boolean(),
   /** Send back on updates; a stale version is rejected with TODO_VERSION_CONFLICT. */
-  version: z.number().int(),
+  version: z.int32(),
   createdAt: z.date(),
 });
 export type Todo = z.infer<typeof todoSchema>;
@@ -33,7 +33,9 @@ export const createTodoInput = z.object({ title: todoTitle });
 export const setTodoCompletedInput = z.object({
   id: todoIdSchema,
   completed: z.boolean(),
-  version: z.number().int(),
+  // The column is a Postgres integer: a larger number can't match a row, and the
+  // database would refuse the query instead of answering a conflict.
+  version: z.int32(),
 });
 export const deleteTodoInput = z.object({ id: todoIdSchema });
 
