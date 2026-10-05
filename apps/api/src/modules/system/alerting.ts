@@ -5,14 +5,15 @@
  * it heard from recently means both are running. Anything else (no Watchdog, an old one,
  * no answer) is `stale`. Only the verdict leaves this file, never Alertmanager's answer.
  */
+import { MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import * as z from "zod";
 
 export type AlertingStatus = "ok" | "stale" | "off";
 
 /** How old the last Watchdog may be: a few of Prometheus's resends. */
-export const FRESH_MS = 10 * 60_000;
+export const FRESH_MS = 10 * MINUTE_MS;
 /** How long a verdict is reused: the endpoint is public, Alertmanager isn't asked per call. */
-export const CACHE_MS = 30_000;
+export const CACHE_MS = 30 * SECOND_MS;
 
 const alerts = z.array(z.object({ updatedAt: z.iso.datetime(), endsAt: z.iso.datetime() }));
 
@@ -25,7 +26,7 @@ export async function check(
   try {
     const response = await fetcher(
       `${url.replace(/\/$/, "")}/api/v2/alerts?filter=${encodeURIComponent('alertname="Watchdog"')}`,
-      { signal: AbortSignal.timeout(5000) },
+      { signal: AbortSignal.timeout(5 * SECOND_MS) },
     );
     if (!response.ok) {
       return "stale";
