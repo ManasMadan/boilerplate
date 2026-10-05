@@ -56,6 +56,20 @@ describe("the pre-commit checks", () => {
     expect(infra.most()).toBe(4);
   });
 
+  it("lints a staged workflow with actionlint and zizmor", async () => {
+    captureOutput();
+    const { run, started, finish } = steps();
+    const done = preCommit({ staged: [".github/workflows/ci.yml"], run, slots: 8 });
+    await finish();
+    expect(await done).toBe(0);
+    expect(started).toEqual([
+      LINT,
+      SECRETS,
+      "bun scripts/linters.ts actionlint",
+      "bun scripts/linters.ts zizmor",
+    ]);
+  });
+
   it("runs no more at once than it has slots", async () => {
     captureOutput();
     const { run, finish, most } = steps();

@@ -92,6 +92,8 @@
     "lint:unused": "knip",
     "lint:markers": "bun scripts/check-markers.ts",
     "lint:patterns": "bun scripts/check-patterns.ts",
+    "lint:actionlint": "bun scripts/linters.ts actionlint",
+    "lint:zizmor": "bun scripts/linters.ts zizmor",
     "format": "biome check --write .",
     "test": "turbo run test",
     "test:integration": "bun scripts/services.ts up && turbo run test:integration",

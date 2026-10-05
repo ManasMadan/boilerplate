@@ -125,6 +125,25 @@ describe("every workflow", () => {
     }
   });
 
+  it("never leaves a checkout's token in .git/config: a job that pushes passes it to the push", () => {
+    const persisting = files.flatMap((file) =>
+      Object.entries(workflow(file).jobs).flatMap(([name, job]) =>
+        (job.steps ?? [])
+          .filter((step) => step.uses?.startsWith("actions/checkout@"))
+          .filter((step) => step.with?.["persist-credentials"] !== false)
+          .map(() => `${file}: ${name}`),
+      ),
+    );
+    expect(persisting).toEqual([]);
+  });
+
+  it("caches nothing a release could pick up from an earlier run", () => {
+    const steps = workflow("release.yml").jobs.release?.steps ?? [];
+    expect(steps.some((step) => step.uses?.startsWith("actions/cache@"))).toBe(false);
+    const bun = steps.find((step) => step.uses?.startsWith("oven-sh/setup-bun@"));
+    expect(bun?.with?.["no-cache"]).toBe(true);
+  });
+
   it("pins every action by commit, with its version beside it", () => {
     const unpinned = files.flatMap((file) =>
       readFileSync(join(ROOT, ".github/workflows", file), "utf8")

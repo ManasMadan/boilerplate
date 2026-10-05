@@ -13,7 +13,9 @@
 # (`bunx eas-cli credentials`). Skipped until EAS_PROJECT_ID is set.
 name: Mobile
 
-on:
+# workflow_run runs with secrets whatever triggered the run it follows; the job checks
+# out that run's commit only when it was this repository's own push.
+on: # zizmor: ignore[dangerous-triggers]
   # Nothing ships before its checks pass: updates follow CI on master, store builds follow
   # a release that passed its checks (a version, with images, matching app.config.ts).
   workflow_run:

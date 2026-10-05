@@ -10,7 +10,12 @@ paths:
   branch.
 - Least privilege: the workflow sets `permissions: {}` and each job asks for exactly
   what it uses (`contents: read`, and more only where it writes). `actions/checkout`
-  with `persist-credentials: false` unless the job pushes.
+  always with `persist-credentials: false`: a job that pushes hands its token to the
+  fetch and push themselves (deploy.yml's staging bump), so it never sits in
+  `.git/config` (`scripts/workflows.test.ts` checks).
+- `bun run lint` runs actionlint and zizmor over the workflows (`scripts/linters.ts`).
+  A finding is fixed, not ignored; the rare exception is a `# zizmor: ignore[<audit>]`
+  with a row in docs/testing.md's Suppressions table saying why.
 - The first step of every job is `step-security/harden-runner` (`scripts/workflows.test.ts`
   refuses a job without it). A job whose traffic is known runs it with
   `egress-policy: block` and its `allowed-endpoints`; the rest run `audit`. To move one to

@@ -1,7 +1,8 @@
 /**
  * Every lint step, `bun run lint`: formatting and lint (Biome), architecture boundaries,
- * unused code (knip), shortcut markers, ruled-out code patterns, suppressions, and each
- * package's own lint (turbo). All of them run even when one fails, so one failure never
+ * unused code (knip), shortcut markers, ruled-out code patterns, suppressions, the
+ * linters that don't come from npm (scripts/linters.ts), and each package's own lint
+ * (turbo). All of them run even when one fails, so one failure never
  * hides another's results; it exits non-zero at the end if any failed. CI's lint job runs
  * the same command.
  */
@@ -15,6 +16,8 @@ export const STEPS: string[][] = [
   ["bun", "run", "lint:markers"],
   ["bun", "run", "lint:patterns"],
   ["bun", "run", "lint:suppressions"],
+  ["bun", "run", "lint:actionlint"],
+  ["bun", "run", "lint:zizmor"],
   ["bunx", "turbo", "run", "lint"],
 ];
 

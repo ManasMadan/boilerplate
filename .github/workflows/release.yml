@@ -31,9 +31,11 @@ jobs:
       # Every tag and master: the notes start at the previous tag, and the check needs master.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false, fetch-depth: 0 }
+      # No cache: a release must not run a Bun some earlier run put in the shared cache.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
+          no-cache: true
       - name: Check the tag
         env:
           GH_TOKEN: ${{ github.token }}

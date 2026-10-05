@@ -10,7 +10,9 @@
 # bump past master's protection, and packages must be writable by this repository.
 name: Deploy
 
-on:
+# workflow_run runs with secrets whatever triggered the run it follows; the build job
+# checks out that run's commit only when it was this repository's own push to master.
+on: # zizmor: ignore[dangerous-triggers]
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -177,11 +179,21 @@ jobs:
           fallback-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         # All of master's history: whether staging's commit comes before this one.
-        with: { ref: master, token: "${{ steps.bot.outputs.token }}", fetch-depth: 0 }
+        with:
+          ref: master
+          token: "${{ steps.bot.outputs.token }}"
+          fetch-depth: 0
+          persist-credentials: false
       # Runs finish out of order: a commit whose images come last must not move staging
       # back past a newer one. The push retries on top of whatever landed meanwhile.
       - name: Point staging at the new images
+        env:
+          # For this step's fetches and push only, never written to .git/config.
+          TOKEN: ${{ steps.bot.outputs.token }}
         run: |
+          basic=$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$basic"
+          git() { command git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic" "$@"; }
           file=deploy/environments/staging/stack.yaml
           for attempt in 1 2 3; do
             git fetch --quiet origin master

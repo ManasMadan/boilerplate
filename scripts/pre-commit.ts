@@ -2,7 +2,8 @@
  * The pre-commit hook's checks of the staged files, side by side: lint-staged (Biome,
  * ruff, prisma format, Squawk on new migrations, tofu fmt, the SOPS check), the secret
  * scan, and, when a staged file is one they read, the infrastructure misconfiguration
- * scan (Trivy) and the known-vulnerability scan (OSV). lint-staged is the only one that
+ * scan (Trivy), the known-vulnerability scan (OSV) and each linter of scripts/linters.ts
+ * (a workflow staged runs actionlint and zizmor). lint-staged is the only one that
  * writes (it fixes and restages files); the others only read, so they run beside it.
  * As many at once as the machine has cores, less one. A step's output is printed only
  * when it fails; after a failure no new step starts, but the running ones finish (a
@@ -11,6 +12,7 @@
 import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 import { fail, ok, ROOT, runMain, runSync } from "./lib";
+import { LINTERS } from "./linters";
 import { misconfigReads } from "./misconfig";
 import { osvReads } from "./osv";
 
@@ -29,6 +31,11 @@ export const STEPS: Step[] = [
     command: ["bun", "scripts/osv.ts"],
     when: (staged) => staged.some(osvReads),
   },
+  ...Object.entries(LINTERS).map(([name, linter]) => ({
+    name,
+    command: ["bun", "scripts/linters.ts", name],
+    when: (staged: string[]) => staged.some(linter.reads),
+  })),
 ];
 
 type Finished = { status: number | null; output: string };

@@ -90,8 +90,9 @@ jobs:
       # With uv: the Python service's own lint (ruff) is one of the steps.
       - uses: ./.github/actions/setup
         with: { python: "true" }
-      # Biome, boundaries, unused code (knip.jsonc), shortcut markers and each package's
-      # lint, all of them even when one fails (scripts/lint.ts).
+      # Biome, boundaries, unused code (knip.jsonc), shortcut markers, suppressions, the
+      # linters pinned in scripts/linters.ts (their images, from Docker Hub and GHCR) and
+      # each package's lint, all of them even when one fails (scripts/lint.ts).
       - run: bun run lint
 
   types:
