@@ -149,8 +149,8 @@ export function exceptionRows(root: string): Row[] {
     if (line.startsWith("## ")) {
       section = EXCEPTION_SECTIONS.find((name) => name === line.trim());
     } else if (section && line.startsWith("|")) {
-      const files = [...line.matchAll(/`([^`\s]+?)(?::\d+)?`/g)]
-        .map((m) => m[1] as string)
+      const files = [...line.matchAll(/`(?<path>[^`\s]+?)(?::\d+)?`/g)]
+        .flatMap((m) => m.groups?.path ?? [])
         .filter((path) => /[./]/.test(path));
       rows.push({ section, files, text: line });
     }
