@@ -80,7 +80,7 @@ export const withUser = (db: Db, userId: string) =>
 export function userTx<T>(db: Db, userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction(async (tx) => {
     await setScope(tx, "app.user_id", userId);
-    return fn(tx as Tx);
+    return fn(asTx(tx));
   }, TX_OPTIONS);
 }
 
@@ -94,16 +94,20 @@ declare const txBrand: unique symbol;
  */
 export type Tx = Prisma.TransactionClient & { readonly [txBrand]: true };
 
+/** Brands a transaction's client: the one place a Tx is made. */
+// type-coverage:ignore-next-line
+const asTx = (tx: Prisma.TransactionClient) => tx as Tx;
+
 const TX_OPTIONS = { maxWait: 10_000, timeout: 5_000 } as const;
 
 export function tenantTx<T>(db: Db, orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction(async (tx) => {
     await setScope(tx, "app.org_id", orgId);
-    return fn(tx as Tx);
+    return fn(asTx(tx));
   }, TX_OPTIONS);
 }
 
 /** A transaction on non-tenant data (same rules as tenantTx: database calls only inside). */
 export function transaction<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db.$transaction((tx) => fn(tx as Tx), TX_OPTIONS);
+  return db.$transaction((tx) => fn(asTx(tx)), TX_OPTIONS);
 }

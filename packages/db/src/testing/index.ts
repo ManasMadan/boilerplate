@@ -16,6 +16,7 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fieldOf } from "@repo/contracts/objects";
 import pg from "pg";
 
 export { factories } from "./factories";
@@ -127,7 +128,7 @@ function isRunning(pid: number) {
     return true;
   } catch (error) {
     // EPERM: it runs, as another user.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return fieldOf(error, "code") === "EPERM";
   }
 }
 
