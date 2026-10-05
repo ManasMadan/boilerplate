@@ -48,7 +48,9 @@ describe("preference sync", () => {
     await signUp();
     await auth("/update-user", { locale: "es" });
     await forget("locale");
-    await renderPage(<PreferenceSync timeZone="UTC" />, { url: "/dashboard" });
+    // A zone that isn't the browser's, wherever the test runs (CI's runners are on UTC).
+    const otherZone = browserZone === "UTC" ? "Asia/Tokyo" : "UTC";
+    await renderPage(<PreferenceSync timeZone={otherZone} />, { url: "/dashboard" });
     await expect.poll(() => cookie("locale")).toBe("es");
     expect(decodeURIComponent(cookie("tz") ?? "")).toBe(browserZone);
     expect(router.refreshes).toBe(1);
