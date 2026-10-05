@@ -63,13 +63,12 @@ export function ConnectedAppsCard() {
                     size="sm"
                     disabled={disconnect.isPending}
                     aria-label={`${t("disconnect")}: ${name}`}
+                    // A promise, not mutate's callbacks: those are dropped once the card
+                    // unmounts, as it does when a lost session sends the user to sign in.
                     onClick={() =>
-                      disconnect.mutate(
-                        { id: app.id },
-                        {
-                          onSuccess: () => toast.success(t("disconnected", { name })),
-                          onError: (error) => toast.error(errorMessage(error)),
-                        },
+                      disconnect.mutateAsync({ id: app.id }).then(
+                        () => toast.success(t("disconnected", { name })),
+                        (error: unknown) => toast.error(errorMessage(error)),
                       )
                     }
                   >
