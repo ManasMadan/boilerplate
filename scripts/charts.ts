@@ -3,10 +3,10 @@
  *
  *   1. helm lint, with values.schema.json (unknown or malformed values fail), and
  *      helm-unittest, for every chart of ours: deploy/charts/{stack,data} and the
- *      platform's (deploy/platform/{config,mail,jaeger});
+ *      platform's (deploy/platform/{config,mail,jaeger,alerts});
  *   2. renders both application charts for every environment in deploy/environments,
- *      as Argo CD would, and validates each manifest against the Kubernetes API and the
- *      CRDs it uses (Gateway API, KEDA, CloudNativePG, Barman Cloud) with kubeconform;
+ *      as Argo CD would, and validates each manifest against the Kubernetes API of the
+ *      version the clusters run (k3s's, infra/tofu/modules/k3s) and the CRDs it uses (Gateway API, KEDA, CloudNativePG, Barman Cloud) with kubeconform;
  *      and the optional features no environment turns on (OPTIONAL), the same way;
  *   3. the platform: our charts rendered and validated the same way, every add-on chart
  *      at its pinned version with our values (their own schemas reject unknown keys),
@@ -24,11 +24,23 @@ import { join } from "node:path";
 import { fail, ok, ROOT, runMain, runSync } from "./lib";
 import { recipientsFor, unsafeSecret } from "./secrets-check";
 
-const KUBERNETES_VERSION = "1.34.0";
+/** The Kubernetes version of the clusters' k3s release, which Renovate keeps current. */
+export function kubernetesVersion(root = ROOT) {
+  const variables = readFileSync(join(root, "infra/tofu/modules/k3s/variables.tf"), "utf8");
+  const version = /variable "k3s_version"[\s\S]*?default\s*=\s*"v(\d+\.\d+\.\d+)\+k3s\d+"/.exec(
+    variables,
+  )?.[1];
+  if (!version) {
+    throw new Error("No k3s_version default in infra/tofu/modules/k3s/variables.tf");
+  }
+  return version;
+}
 const KUBECONFORM_IMAGE = "ghcr.io/yannh/kubeconform:v0.7.0";
 const PROMETHEUS_IMAGE = "docker.io/prom/prometheus:v3.15.0";
+// The CRD schema catalog at a commit, not its moving main branch: Renovate proposes a
+// newer one (renovate.json5).
 const CRD_SCHEMAS =
-  "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json";
+  "https://raw.githubusercontent.com/datreeio/CRDs-catalog/4c8dc296d32b06d15ccde9668ff136c951f4d539/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json";
 
 /** What each environment's release needs besides its values file (set by Argo CD / CI). */
 const RELEASE_VALUES: Record<string, { stack: string[]; data: string[] }> = {
@@ -113,7 +125,7 @@ function kubeconformWith(exec: Checks["exec"], root: string) {
     "-cache",
     cache,
     "-kubernetes-version",
-    KUBERNETES_VERSION,
+    kubernetesVersion(root),
     "-schema-location",
     "default",
     "-schema-location",

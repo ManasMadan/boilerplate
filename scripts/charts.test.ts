@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { charts } from "./charts";
+import { dirname, join } from "node:path";
+import { charts, kubernetesVersion } from "./charts";
 import type { Ran } from "./lib";
 import { captureOutput, fakeRun } from "./stand-ins";
 
@@ -21,7 +30,7 @@ const VARIABLES = "infra/tofu/modules/bootstrap/variables.tf";
 function checkout() {
   const root = mkdtempSync(join(tmpdir(), "charts-"));
   roots.push(root);
-  for (const path of ["deploy", ".sops.yaml", VARIABLES]) {
+  for (const path of ["deploy", ".sops.yaml", VARIABLES, "infra/tofu/modules/k3s/variables.tf"]) {
     cpSync(join(REPO, path), join(root, path), { recursive: true });
   }
   return root;
@@ -150,7 +159,7 @@ describe("the charts check", () => {
     // The Argo CD manifests, validated as one stream.
     expect(inputs.at(-1)).toContain(readFileSync(join(root, "deploy/argocd/root.yaml"), "utf8"));
     expect(calls.at(-1)).toStartWith(
-      `kubeconform -strict -summary -cache ${root}/node_modules/.cache/kubeconform -kubernetes-version 1.34.0`,
+      `kubeconform -strict -summary -cache ${root}/node_modules/.cache/kubeconform -kubernetes-version ${kubernetesVersion()}`,
     );
     expect(options.every((given) => given.cwd === root)).toBe(true);
     expect(printed()).toContain("every committed secret is SOPS-encrypted (5 directories)");
@@ -222,5 +231,47 @@ describe("the charts check", () => {
     );
     expect(calls.some((line) => line.startsWith("helm template argocd"))).toBe(false);
     expect(printed()).toContain("every committed secret is SOPS-encrypted (3 directories)");
+  });
+});
+
+describe("the Kubernetes version", () => {
+  it("is the clusters' own, from their k3s release", () => {
+    const k3s = readFileSync(join(REPO, "infra/tofu/modules/k3s/variables.tf"), "utf8");
+    expect(k3s).toContain(`default = "v${kubernetesVersion()}+k3s`);
+  });
+
+  it("is the dev container's kubectl, to the minor version", () => {
+    const devcontainer = readFileSync(join(REPO, ".devcontainer/devcontainer.json"), "utf8");
+    const kubectl = /depName=kubernetes\/kubernetes\s*"version":\s*"(\d+\.\d+)\./.exec(
+      devcontainer,
+    )?.[1];
+    expect(kubectl).toBe(kubernetesVersion().split(".").slice(0, 2).join("."));
+  });
+
+  it("can't be read without a k3s release", () => {
+    const root = mkdtempSync(join(tmpdir(), "charts-"));
+    roots.push(root);
+    mkdirSync(join(root, "infra/tofu/modules/k3s"), { recursive: true });
+    writeFileSync(join(root, "infra/tofu/modules/k3s/variables.tf"), 'variable "nodes" {}\n');
+    expect(() => kubernetesVersion(root)).toThrow("No k3s_version default");
+  });
+});
+
+describe("every chart of ours", () => {
+  // Unknown or misspelled values fail `helm template` instead of doing nothing.
+  it("has a values schema that refuses keys it doesn't know", () => {
+    const charts = readdirSync(join(REPO, "deploy"), { recursive: true, encoding: "utf8" })
+      .filter((path) => path.endsWith("Chart.yaml") && !path.startsWith(".rendered"))
+      .map((path) => dirname(join("deploy", path)));
+    expect(charts.length).toBeGreaterThan(5);
+    const loose = charts.filter((chart) => {
+      const schema = join(REPO, chart, "values.schema.json");
+      return (
+        !existsSync(schema) ||
+        (JSON.parse(readFileSync(schema, "utf8")) as { additionalProperties?: unknown })
+          .additionalProperties !== false
+      );
+    });
+    expect(loose).toEqual([]);
   });
 });
