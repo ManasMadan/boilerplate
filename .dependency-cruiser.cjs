@@ -59,7 +59,7 @@ module.exports = {
       // every layer, so they are allowed.
       to: {
         path: "^packages/(contracts|jobs|email|client)/",
-        pathNot: "^packages/contracts/src/(errors|time|objects).ts$",
+        pathNot: "^packages/contracts/src/(errors|time|objects)\\.ts$",
       },
     },
     {
