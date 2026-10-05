@@ -51,8 +51,10 @@ paths:
   repository's own push (`workflow_run.event == 'push'` and
   `workflow_run.head_repository.full_name == github.repository` in its `if`;
   `scripts/workflows.test.ts` checks).
-- Pinned tool versions in workflows carry a `# renovate:` comment on the line above. A
-  tool downloaded outside an action is checked against the release's checksum, pinned
+- Pinned tool versions in workflows, actions and scripts carry a `# renovate:` comment on
+  the line above, except an action's own version input (`eas-version`,
+  `renovate-version`), which Renovate's github-actions manager updates by itself
+  (`scripts/pins.test.ts` checks both). A tool downloaded outside an action is checked against the release's checksum, pinned
   beside the version (kind in kind.yml, helm-unittest in ci.yml), with a Renovate rule
   that reminds the update to change both; never installed with verification off.
 - Changing a workflow changes how everything ships: say what it changes and why, and
