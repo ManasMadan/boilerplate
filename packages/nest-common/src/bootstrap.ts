@@ -6,7 +6,7 @@ import "reflect-metadata";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import underPressure from "@fastify/under-pressure";
-import type { INestApplication, Type } from "@nestjs/common";
+import type { Type } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { createLogger, type LogLevel } from "@repo/logger";
@@ -148,7 +148,7 @@ export async function createServer(
 export async function bootstrap(
   module: Type<unknown>,
   options: BootstrapOptions,
-): Promise<INestApplication> {
+): Promise<NestFastifyApplication> {
   const app = await createServer(module, options);
   await app.listen({ port: options.port, host: "0.0.0.0" });
   return app;
