@@ -23,7 +23,11 @@
         "uniwind-types.d.ts"
       ]
     },
+    // The web build fixes its rewrites' upstreams (API_URL, AI_URL) when it's built, so
+    // a build for other ports (the e2e run passes the checkout's .env, moved by
+    // `bun run setup --stack <n>`) is never a cache hit.
     "build": {
+      "env": ["API_URL", "AI_URL"],
       "dependsOn": ["^build", "gen", "^gen"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**", "storybook-static/**"]
     },

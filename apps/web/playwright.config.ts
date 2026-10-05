@@ -25,7 +25,8 @@ export default defineConfig({
   failOnFlakyTests: Boolean(process.env.CI),
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+    // The site's origin (the root .env's WEB_URL, or the e2e run's).
+    baseURL: process.env.E2E_BASE_URL ?? process.env.WEB_URL,
     trace: "retain-on-failure",
     locale: "en-US",
     // Matches the server's default zone, so the first page load doesn't refresh to

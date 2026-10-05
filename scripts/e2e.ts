@@ -11,9 +11,12 @@
  * served with the API on their own origin (apps/mobile/scripts/serve-web.ts). The load
  * smoke runs last, against the same stack, with the worker relaying what it writes.
  *
- * It refuses to start while anything already listens on the stack's ports: an older
- * server would answer instead and the run would test stale code. To iterate against a
- * stack you are already running (`bun dev`), use `bun run --cwd apps/web test:e2e`.
+ * Every service listens on this checkout's port for it (its .env's `*_PORT`, else
+ * .env.example's), so a checkout with its own stack (`bun run setup --stack <n>`) runs
+ * its suite while another runs theirs. It refuses to start while anything already
+ * listens on those ports: an older server would answer instead and the run would test
+ * stale code. To iterate against a stack you are already running (`bun dev`), use
+ * `bun run --cwd apps/web test:e2e`.
  *
  * Postgres, Valkey, Mailpit, RustFS and ClamAV come from `bun run db:up:full`
  * (CI starts its own); the services run as NODE_ENV=test, since production refuses the
@@ -23,51 +26,69 @@ import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process"
 import { mkdirSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { fail, listening, ok, ROOT, runSync } from "./lib";
+import { ENV_EXAMPLE_PATH, fail, listening, ok, ROOT, readEnv, runSync } from "./lib";
 
-const MOBILE_WEB = "http://localhost:3100";
+/** The ports the run's services listen on, each one of .env.example's `*_PORT`. */
+const PORTS = [
+  "STRIPE_FAKE_PORT",
+  "API_PORT",
+  "WORKER_PORT",
+  "NOTIFICATIONS_PORT",
+  "WEBHOOKS_PORT",
+  "AI_PORT",
+  "WEB_PORT",
+  "MOBILE_WEB_PORT",
+] as const;
+type Ports = Record<(typeof PORTS)[number], string>;
 
-const SERVICES = [
+/**
+ * This checkout's ports: `env`'s (the root .env's, which Bun loads for this script, or
+ * CI's), else .env.example's. A checkout with its own stack has them moved in its .env
+ * (`bun run setup --stack <n>`), so two checkouts' runs never meet.
+ */
+export function stackPorts(
+  env: Record<string, string | undefined>,
+  example = readEnv(ENV_EXAMPLE_PATH),
+) {
+  const port = (key: string) => {
+    const value = env[key] || example.get(key);
+    if (!value) throw new Error(`${key} is in neither .env nor .env.example`);
+    return [key, value];
+  };
+  return Object.fromEntries(PORTS.map(port)) as Ports;
+}
+
+const local = (port: string, path: string) => `http://localhost:${port}${path}`;
+const health = (port: string) => local(port, "/health/dependencies");
+
+/** What the run starts, in order, and the URL that answers once each is ready. */
+const services = (ports: Ports): { name: string; cwd: string; run: string[]; ready?: string }[] => [
   {
     name: "fake-stripe",
     cwd: "packages/fake-stripe",
     run: ["start"],
-    ready: "http://127.0.0.1:12111/__fake/state",
+    ready: `http://127.0.0.1:${ports.STRIPE_FAKE_PORT}/__fake/state`,
   },
-  {
-    name: "api",
-    cwd: "apps/api",
-    run: ["start"],
-    ready: "http://localhost:3001/health/dependencies",
-  },
-  {
-    name: "worker",
-    cwd: "apps/worker",
-    run: ["start"],
-    ready: "http://localhost:3002/health/dependencies",
-  },
+  { name: "api", cwd: "apps/api", run: ["start"], ready: health(ports.API_PORT) },
+  { name: "worker", cwd: "apps/worker", run: ["start"], ready: health(ports.WORKER_PORT) },
   {
     name: "notifications",
     cwd: "apps/notifications",
     run: ["start"],
-    ready: "http://localhost:3003/health/dependencies",
+    ready: health(ports.NOTIFICATIONS_PORT),
   },
+  { name: "webhooks", cwd: "apps/webhooks", run: ["start"], ready: health(ports.WEBHOOKS_PORT) },
+  { name: "ai", cwd: "apps/ai", run: ["start"], ready: health(ports.AI_PORT) },
+  { name: "ai-worker", cwd: "apps/ai", run: ["worker"] },
+  { name: "web", cwd: "apps/web", run: ["start"], ready: local(ports.WEB_PORT, "/healthz") },
   {
-    name: "webhooks",
-    cwd: "apps/webhooks",
-    run: ["start"],
-    ready: "http://localhost:3004/health/dependencies",
+    name: "mobile-web",
+    cwd: "apps/mobile",
+    run: ["serve:web"],
+    ready: local(ports.MOBILE_WEB_PORT, "/healthz"),
   },
-  {
-    name: "ai",
-    cwd: "apps/ai",
-    run: ["start"],
-    ready: "http://localhost:8000/health/dependencies",
-  },
-  { name: "ai-worker", cwd: "apps/ai", run: ["worker"], ready: undefined },
-  { name: "web", cwd: "apps/web", run: ["start"], ready: "http://localhost:3000/healthz" },
-  { name: "mobile-web", cwd: "apps/mobile", run: ["serve:web"], ready: `${MOBILE_WEB}/healthz` },
-] as const;
+];
+type Service = ReturnType<typeof services>[number];
 
 const BUILT = ["@repo/api", "@repo/worker", "@repo/notifications", "@repo/webhooks", "@repo/web"];
 const READY_TIMEOUT_MS = 90_000;
@@ -94,6 +115,8 @@ export interface Stack {
   exit: (code: number) => unknown;
   logs: string;
   readyTimeoutMs: number;
+  /** The environment the run starts from: Bun loads the root .env into it, CI sets its own. */
+  env: Record<string, string | undefined>;
 }
 
 const REAL: Stack = {
@@ -107,6 +130,7 @@ const REAL: Stack = {
   exit: process.exit.bind(process),
   logs: join(ROOT, "logs"),
   readyTimeoutMs: READY_TIMEOUT_MS,
+  env: process.env,
 };
 
 type Running = { name: string; process: Pick<ChildProcess, "pid" | "exitCode"> };
@@ -123,10 +147,12 @@ async function ready(stack: Stack, url: string, child: Pick<ChildProcess, "exitC
   return false;
 }
 
-/** The services whose port something else already listens on. */
-async function busyServices(stack: Stack) {
+/** The services whose port something else already listens on, with that port's URL. */
+async function busyServices(stack: Stack, all: Service[]) {
   const listeningNow = await Promise.all(
-    SERVICES.map(async (s) => (s.ready && (await stack.isListening(s.ready)) ? s : undefined)),
+    all.map(async ({ name, ready }) =>
+      ready && (await stack.isListening(ready)) ? { name, ready } : undefined,
+    ),
   );
   return listeningNow.filter((s) => s !== undefined);
 }
@@ -158,7 +184,7 @@ function build(stack: Stack) {
     const built = stack.run(command, rest, {
       cwd: ROOT,
       stdio: "inherit",
-      env: { ...process.env, NODE_ENV: "production" },
+      env: { ...stack.env, NODE_ENV: "production" },
     });
     if (built.status !== 0) return built.status ?? 1;
   }
@@ -180,19 +206,26 @@ function stopAll(stack: Stack, running: Running[]) {
 }
 
 /** Starts every service, each logging to its own file, then waits until each is ready. */
-async function startAll(stack: Stack, running: Running[]) {
-  for (const service of SERVICES) {
+async function startAll(stack: Stack, running: Running[], ports: Ports) {
+  const all = services(ports);
+  for (const service of all) {
     const log = openSync(join(stack.logs, `${service.name}.log`), "w");
     const child = stack.start("bun", ["run", ...service.run], {
       cwd: join(ROOT, service.cwd),
-      // The mobile web build signs users in from its own origin.
-      env: { ...process.env, NODE_ENV: "test", APP_ORIGINS: MOBILE_WEB },
+      // Each listens on its port (the package scripts read them); the mobile web build
+      // signs users in from its own origin.
+      env: {
+        ...stack.env,
+        ...ports,
+        NODE_ENV: "test",
+        APP_ORIGINS: local(ports.MOBILE_WEB_PORT, ""),
+      },
       stdio: ["ignore", log, log],
       detached: true,
     });
     running.push({ name: service.name, process: child });
   }
-  for (const [index, service] of SERVICES.entries()) {
+  for (const [index, service] of all.entries()) {
     const child = running[index]?.process;
     if (!service.ready || !child) continue;
     if (!(await ready(stack, service.ready, child))) {
@@ -205,19 +238,22 @@ async function startAll(stack: Stack, running: Running[]) {
 }
 
 /** Runs each suite against the running stack; 0 when all pass, else a failing one's code. */
-function runSuites(stack: Stack, apps: string[], playwrightArgs: string[]) {
+function runSuites(stack: Stack, apps: string[], playwrightArgs: string[], ports: Ports) {
   let status = 0;
+  // The suites find the stack by its ports (the k6 smoke reaches the API on API_PORT).
+  const env = { ...stack.env, ...ports };
   for (const app of apps) {
     const suite =
       app === "load"
         ? stack.run("bun", ["run", "test:load"], {
             cwd: join(ROOT, "load"),
             stdio: "inherit",
-            env: { ...process.env, NODE_ENV: "test" },
+            env: { ...env, NODE_ENV: "test" },
           })
         : stack.run("bunx", ["playwright", "test", ...playwrightArgs], {
             cwd: join(ROOT, `apps/${app}`),
             stdio: "inherit",
+            env,
           });
     if (suite.status !== 0) status = suite.status ?? 1;
   }
@@ -230,8 +266,9 @@ export async function e2e(
   given: Partial<Stack> = {},
 ): Promise<number> {
   const stack = { ...REAL, ...given };
+  const ports = stackPorts(stack.env);
 
-  const busy = await busyServices(stack);
+  const busy = await busyServices(stack, services(ports));
   if (busy.length > 0) {
     for (const s of busy) fail(`${s.name}: something already listens on ${new URL(s.ready).host}`);
     console.error(
@@ -261,8 +298,8 @@ export async function e2e(
   });
 
   try {
-    await startAll(stack, running);
-    return runSuites(stack, suites.apps, suites.playwrightArgs);
+    await startAll(stack, running, ports);
+    return runSuites(stack, suites.apps, suites.playwrightArgs, ports);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
     return 1;

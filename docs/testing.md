@@ -232,7 +232,10 @@ file below 100%, or one no test loads.
 3. runs the web Playwright suite, the mobile one, then the k6 smoke;
 4. stops everything.
 
-It refuses to start while something already listens on the stack's ports, so an old
+Everything listens on this checkout's ports (its `.env`'s `*_PORT`, else
+`.env.example`'s), so a checkout with its own stack (`bun run setup --stack <n>`,
+[environment.md](environment.md#local-service-ports)) runs its suite while another runs
+theirs. It refuses to start while something already listens on those ports, so an old
 server can't answer instead.
 
 In CI a failed test is retried up to twice, to tell a flaky one from a broken one, but a
@@ -299,8 +302,8 @@ PROFILE=load DURATION=30m bun run test:load      # soak
 
 It signs in `LOAD_USERS` users first through the API's own auth
 (`bun run --cwd apps/api load:users`, sessions in `load/.sessions.json`, since sign-in is
-rate limited per IP), then runs k6 in Docker against `BASE_URL` (default
-`http://host.docker.internal:3001`). The traffic is signed-in users reading and changing
+rate limited per IP), then runs k6 in Docker against `BASE_URL` (default the API's port on the host,
+`http://host.docker.internal:<API_PORT>`). The traffic is signed-in users reading and changing
 todos over `/api/v1`, which exercises the session, membership, row-level security,
 optimistic versions and the outbox. The thresholds in `load/api.ts` are the latency and
 error budget; the run fails when one does.

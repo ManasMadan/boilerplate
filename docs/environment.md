@@ -138,7 +138,9 @@ stack 1) needs registering too.
 
 ## Local app ports
 
-Where each app listens on this machine: `bun dev` and the dev tools read them. Deployed, nothing reads them: the stack
+Where each app listens on this machine: `bun dev`, the e2e run and the dev tools read
+them, and so does `scripts/e2e.ts`, which hands them to every service and suite it starts
+(CI has no `.env`, so it gets these defaults). Deployed, nothing reads them: the stack
 chart sets `PORT` and each image has its own.
 
 | Variable | Default | Read by |

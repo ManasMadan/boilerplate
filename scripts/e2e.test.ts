@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { e2e, listeningAt, type Stack } from "./e2e";
+import { e2e, listeningAt, type Stack, stackPorts } from "./e2e";
 import { ROOT } from "./lib";
 import { captureOutput, fakeRun } from "./stand-ins";
 
@@ -16,10 +16,12 @@ function stack(overrides: Partial<Stack> = {}) {
   const killed: number[] = [];
   const handlers = new Map<string, () => void>();
   const exits: number[] = [];
+  const environments: Record<string, string | undefined>[] = [];
   const given: Partial<Stack> = {
     run: commands.run,
     start: (_, args, options) => {
       started.push(`${options.cwd} ${args.join(" ")}`);
+      environments.push(options.env ?? {});
       return { pid: 1000 + started.length, exitCode: null };
     },
     kill: (pid) => {
@@ -31,9 +33,12 @@ function stack(overrides: Partial<Stack> = {}) {
     onSignal: (signal, handler) => handlers.set(signal, handler),
     exit: (code) => exits.push(code),
     logs: mkdtempSync(join(tmpdir(), "e2e-logs-")),
+    // Not the developer's .env, which Bun loads into process.env: .env.example's ports.
+    env: {},
     ...overrides,
   };
-  return { given, calls: commands.calls, started, killed, handlers, exits };
+  const ran = commands.options;
+  return { given, calls: commands.calls, ran, started, environments, killed, handlers, exits };
 }
 
 describe("the e2e run", () => {
@@ -136,6 +141,35 @@ describe("the e2e run", () => {
     expect(await e2e([], given)).toBe(1);
     expect(printed()).toContain("api: something already listens on localhost:3001");
     expect(calls).toEqual([]);
+  });
+
+  it("runs on this checkout's ports, and gives them to every service and suite", async () => {
+    captureOutput();
+    const asked: string[] = [];
+    const moved = { API_PORT: "3101", WEB_PORT: "3100", MOBILE_WEB_PORT: "3105" };
+    const { given, ran, environments } = stack({
+      env: { ...moved, WEB_URL: "http://localhost:3100" },
+      fetch: async (url) => {
+        asked.push(url);
+        return { ok: true };
+      },
+    });
+    expect(await e2e([], given)).toBe(0);
+    expect(asked).toContain("http://localhost:3101/health/dependencies");
+    expect(asked).toContain("http://localhost:3100/healthz");
+    expect(asked).toContain("http://127.0.0.1:12111/__fake/state");
+    for (const env of environments) {
+      expect(env).toMatchObject({ ...moved, NODE_ENV: "test", WORKER_PORT: "3002" });
+      expect(env.APP_ORIGINS).toBe("http://localhost:3105");
+    }
+    // The suites: Playwright twice, then k6, each told where the stack is.
+    for (const { env } of ran.slice(2)) {
+      expect(env).toMatchObject({ ...moved, WEB_URL: "http://localhost:3100" });
+    }
+  });
+
+  it("knows no port that .env.example doesn't name", () => {
+    expect(() => stackPorts({}, new Map())).toThrow("STRIPE_FAKE_PORT is in neither");
   });
 
   it("refuses an unknown app, and stops when a build fails", async () => {

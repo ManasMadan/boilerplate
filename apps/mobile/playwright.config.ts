@@ -20,7 +20,8 @@ export default defineConfig({
   failOnFlakyTests: Boolean(process.env.CI),
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: process.env.E2E_MOBILE_URL ?? "http://localhost:3100",
+    // The web build on this checkout's port (the root .env's, or the e2e run's).
+    baseURL: process.env.E2E_MOBILE_URL ?? `http://localhost:${process.env.MOBILE_WEB_PORT}`,
     trace: "retain-on-failure",
     locale: "en-US",
     timezoneId: "UTC",

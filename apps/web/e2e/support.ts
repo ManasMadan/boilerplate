@@ -21,7 +21,10 @@ import { Redis } from "ioredis";
 export { totp };
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:58025";
-export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+/** The site's origin: E2E_BASE_URL, else WEB_URL (the root .env's, or the e2e run's). */
+const site = process.env.E2E_BASE_URL ?? process.env.WEB_URL;
+if (!site) throw new Error("Set WEB_URL (the root .env has it) or E2E_BASE_URL.");
+export const BASE_URL = site;
 
 const randomIp = () => `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
 

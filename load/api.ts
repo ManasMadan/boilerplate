@@ -19,7 +19,12 @@ import exec from "k6/execution";
 import http, { type RefinedResponse } from "k6/http";
 import type { Options, Scenario } from "k6/options";
 
-const BASE_URL = (__ENV.BASE_URL ?? "http://host.docker.internal:3001").replace(/\/$/, "");
+// The API on this checkout's port (API_PORT, from the root .env or the e2e run).
+if (!__ENV.BASE_URL && !__ENV.API_PORT) throw new Error("Set BASE_URL, or API_PORT (.env has it)");
+const BASE_URL = (__ENV.BASE_URL ?? `http://host.docker.internal:${__ENV.API_PORT}`).replace(
+  /\/$/,
+  "",
+);
 const PROFILE = __ENV.PROFILE ?? "smoke";
 const TARGET_RPS = Number(__ENV.TARGET_RPS ?? 200);
 const DURATION = __ENV.DURATION ?? "5m";
