@@ -8,6 +8,7 @@ import { mkdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { $ } from "bun";
 
+// biome-ignore lint/suspicious/noUndeclaredEnvVars: Claude Code sets it for its hooks, which turbo never runs
 export const ROOT = process.env.CLAUDE_PROJECT_DIR ?? join(import.meta.dirname, "../..");
 export const STATE_DIR = join(ROOT, ".claude/.state");
 mkdirSync(STATE_DIR, { recursive: true });

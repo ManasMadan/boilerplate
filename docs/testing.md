@@ -243,6 +243,11 @@ file below 100%, or one no test loads.
 | File | Suppression | Why |
 |---|---|---|
 | `apps/web/src/lib/cookies.ts` | `biome-ignore lint/suspicious/noDocumentCookie` | the Cookie Store API isn't in every browser yet |
+| `packages/ui/src/components/field.tsx` | `biome-ignore lint/a11y/useSemanticElements` | `Field` is a `div` with the group role: a fieldset brings its own border, padding and minimum width into every form row (`FieldSet` is the fieldset, for a group of fields) |
+| `packages/ui/src/components/input-otp.tsx` | `biome-ignore lint/a11y/useSemanticElements` | the separator holds an icon, which an `hr` can't |
+| `packages/ui/src/components/label.tsx` | `biome-ignore lint/a11y/noLabelWithoutControl` | `Label` is a wrapper: the caller ties it to its control (`htmlFor`, or the control inside it) through props the rule can't see |
+| `scripts/restore-drill.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | the rule asks turbo.json to declare what a task reads, and turbo never runs this script |
+| `.claude/hooks/lib.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | Claude Code sets `CLAUDE_PROJECT_DIR` for its hooks, which turbo never runs |
 | `apps/ai/app/embeddings.py` | `# noqa: SIM905` | a stop-word list reads as prose on one line |
 | `apps/ai/app/documents.py` | `# pyright: ignore[reportMissingTypeStubs]` | langgraph ships no stubs |
 | `apps/ai/app/summaries.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType]` | langgraph ships no stubs, and its graph, config and checkpointer types are unknown |

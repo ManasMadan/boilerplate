@@ -156,7 +156,8 @@
         "apps/api/src/seed.ts",
         "apps/api/src/load-users.ts",
         "apps/api/src/reencrypt.ts",
-        "deploy/docker/*.mjs"
+        "deploy/docker/*.mjs",
+        ".claude/hooks/**"
       ],
       "linter": {
         "rules": {
@@ -172,28 +173,6 @@
         "parser": {
           "allowComments": true,
           "allowTrailingCommas": false
-        }
-      }
-    },
-    {
-      "includes": ["packages/ui/src/components/**"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "useSemanticElements": "off",
-            "noLabelWithoutControl": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [".claude/hooks/**", "scripts/**"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noUndeclaredEnvVars": "off",
-            "noConsole": "off"
-          }
         }
       }
     }

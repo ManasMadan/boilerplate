@@ -49,6 +49,7 @@ function identical(before: string[], after: string[]) {
 /** Dumps `source`, restores it into a scratch database and compares them; the exit code. */
 export function restoreDrill(
   source = process.argv[2] ?? "app",
+  // biome-ignore lint/suspicious/noUndeclaredEnvVars: a script turbo never runs, so turbo.json has no task to declare it on
   container = process.env.PG_CONTAINER,
   run = runSync,
 ): number {
