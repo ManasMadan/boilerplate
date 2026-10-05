@@ -67,8 +67,22 @@ export function replacements({ name, owner, product, bundleId }: Identity): [str
 }
 
 export function rewrite(text: string, identity: Identity) {
+  // One pass, so a replacement never rewrites what another wrote (a lowercase owner
+  // would turn the registry's lowercase path back into the owner's spelling). The first
+  // pair for a text wins, as alternatives in the pattern do.
+  const pairs = replacements(identity);
+  const to = new Map<string, string>();
+  for (const [from, into] of pairs) {
+    if (!to.has(from)) {
+      to.set(from, into);
+    }
+  }
+  const pattern = new RegExp(
+    pairs.map(([from]) => from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+    "g",
+  );
   // A function replacement: a string one would read `$&` or `$$` in the product as patterns.
-  return replacements(identity).reduce((out, [from, to]) => out.replaceAll(from, () => to), text);
+  return text.replace(pattern, (match) => to.get(match) ?? match);
 }
 
 /** The identity from the command line, with its defaults; throws on a bad value. */
@@ -134,9 +148,8 @@ export function rename(root: string, identity: Identity) {
   }
   const self = join(root, "scripts/rename.ts");
   if (tracked.includes("scripts/rename.ts")) {
-    const lines = Object.entries(identity).map(
-      ([key, value]) => `  ${key}: ${JSON.stringify(value)},`,
-    );
+    const keys: (keyof Identity)[] = ["name", "owner", "product", "bundleId"];
+    const lines = keys.map((key) => `  ${key}: ${JSON.stringify(identity[key])},`);
     const text = readFileSync(self, "utf8").replace(
       /export const OLD: Identity = \{[^}]*\};/,
       `export const OLD: Identity = {\n${lines.join("\n")}\n};`,

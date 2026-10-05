@@ -43,6 +43,15 @@ describe("renaming the project", () => {
     }
   });
 
+  it("never rewrites what it wrote: a lowercase owner leaves the registry path lowercase", () => {
+    const lower = identityFrom(["shop", "--owner", "Acme-Co"]);
+    const owner = OLD.owner.toLowerCase();
+    expect(rewrite(`ghcr.io/${owner}/${OLD.name}/api and @${OLD.owner}`, lower)).toBe(
+      "ghcr.io/acme-co/shop/api and @Acme-Co",
+    );
+    expect(rewrite("ghcr.io/acme-co/shop", lower)).toBe("ghcr.io/acme-co/shop");
+  });
+
   it("writes the product as given, `$` and all", () => {
     const pricey = identityFrom(["shop", "--owner", "me", "--product", "Shop $& $$ $1"]);
     expect(rewrite(`appName: "${OLD.product}"`, pricey)).toBe('appName: "Shop $& $$ $1"');
