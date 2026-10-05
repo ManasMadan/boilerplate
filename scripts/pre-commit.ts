@@ -1,12 +1,13 @@
 /**
- * The pre-commit hook's checks of the staged files, side by side: lint-staged (Biome,
- * ruff, prisma format, Squawk on new migrations, tofu fmt, the SOPS check), the secret
- * scan, and, when a staged file is one they read, the infrastructure misconfiguration
- * scan (Trivy), the known-vulnerability scan (OSV) and each linter of scripts/linters.ts
- * (a staged workflow runs actionlint and zizmor, a shell script shellcheck, a Dockerfile
- * hadolint, OpenTofu tflint). lint-staged is the only one that
- * writes (it fixes and restages files); the others only read, so they run beside it.
- * As many at once as the machine has cores, less one. A step's output is printed only
+ * The pre-commit hook's checks of the staged files: lint-staged (Biome, ruff, prisma
+ * format, Squawk on new migrations, tofu fmt, the SOPS check), then side by side the
+ * secret scan and, when a staged file is one they read, the infrastructure
+ * misconfiguration scan (Trivy), the known-vulnerability scan (OSV) and each linter of
+ * scripts/linters.ts (a staged workflow runs actionlint and zizmor, a shell script
+ * shellcheck, a Dockerfile hadolint, OpenTofu tflint). lint-staged writes: it fixes and
+ * restages files, hiding and restoring the unstaged changes around that, so for a moment
+ * files the others read are gone or half-written. They start once it has finished, and
+ * see the tree it leaves. As many at once as the machine has cores, less one. A step's output is printed only
  * when it fails; after a failure no new step starts, but the running ones finish (a
  * lint-staged stopped halfway could leave its backup of unstaged changes behind).
  */
@@ -17,10 +18,16 @@ import { LINTERS } from "./linters";
 import { misconfigReads } from "./misconfig";
 import { osvReads } from "./osv";
 
-type Step = { name: string; command: string[]; when: (staged: string[]) => boolean };
+type Step = {
+  name: string;
+  command: string[];
+  when: (staged: string[]) => boolean;
+  /** Changes the working tree: runs alone, before the others. */
+  writes?: boolean;
+};
 
 export const STEPS: Step[] = [
-  { name: "lint-staged", command: ["bunx", "lint-staged"], when: () => true },
+  { name: "lint-staged", command: ["bunx", "lint-staged"], when: () => true, writes: true },
   { name: "Secrets (gitleaks)", command: ["bun", "scripts/secret-scan.ts"], when: () => true },
   {
     name: "Infrastructure misconfigurations (Trivy)",
@@ -76,8 +83,9 @@ export async function preCommit({
   run = start,
   slots = Math.max(1, availableParallelism() - 1),
 } = {}): Promise<number> {
-  const queue = STEPS.filter((step) => step.when(staged));
+  const steps = STEPS.filter((step) => step.when(staged));
   let failed = false;
+  let queue: Step[] = [];
   const worker = async () => {
     for (let step = queue.shift(); step && !failed; step = queue.shift()) {
       const began = performance.now();
@@ -92,7 +100,15 @@ export async function preCommit({
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(slots, queue.length) }, worker));
+  // The writers one at a time, then the readers side by side.
+  const phases: [Step[], number][] = [
+    [steps.filter((step) => step.writes), 1],
+    [steps.filter((step) => !step.writes), slots],
+  ];
+  for (const [group, width] of phases) {
+    queue = group;
+    await Promise.all(Array.from({ length: Math.min(width, queue.length) }, worker));
+  }
   return failed ? 1 : 0;
 }
 

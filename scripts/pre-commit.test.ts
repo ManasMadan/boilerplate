@@ -22,6 +22,11 @@ function steps(fails: string[] = []) {
       });
     });
   };
+  /** Finishes the oldest running step. */
+  const finishOne = async () => {
+    pending.shift()?.();
+    await Bun.sleep(0);
+  };
   /** Finishes every step started so far, oldest first, until none is left. */
   const finish = async () => {
     for (let next = pending.shift(); next; next = pending.shift()) {
@@ -29,7 +34,7 @@ function steps(fails: string[] = []) {
       await Bun.sleep(0);
     }
   };
-  return { run, started, finish, most: () => most };
+  return { run, started, finish, finishOne, most: () => most };
 }
 
 const LINT = "bunx lint-staged";
@@ -49,11 +54,27 @@ describe("the pre-commit checks", () => {
     const infra = steps();
     const staged = ["deploy/docker/web.Dockerfile", "deploy/charts/stack/values.yaml", "bun.lock"];
     const all = preCommit({ staged, run: infra.run, slots: 8 });
-    await Bun.sleep(0);
-    expect(infra.started).toEqual([LINT, SECRETS, TRIVY, OSV, "bun scripts/linters.ts hadolint"]);
     await infra.finish();
     expect(await all).toBe(0);
-    expect(infra.most()).toBe(5);
+    expect(infra.started).toEqual([LINT, SECRETS, TRIVY, OSV, "bun scripts/linters.ts hadolint"]);
+    expect(infra.most()).toBe(4);
+  });
+
+  // lint-staged hides and restores the unstaged changes around its fixes: a scan reading
+  // the tree meanwhile finds files missing (.env.example, .trivyignore.yaml) and fails.
+  it("starts nothing else while lint-staged runs, then the scans together", async () => {
+    captureOutput();
+    const { run, started, finishOne } = steps();
+    const done = preCommit({ staged: ["bun.lock", "trivy.yaml"], run, slots: 8 });
+    await Bun.sleep(5);
+    expect(started).toEqual([LINT]);
+    await finishOne();
+    await Bun.sleep(5);
+    expect(started).toEqual([LINT, SECRETS, TRIVY, OSV]);
+    await finishOne();
+    await finishOne();
+    await finishOne();
+    expect(await done).toBe(0);
   });
 
   it("lints a staged workflow with actionlint and zizmor", async () => {

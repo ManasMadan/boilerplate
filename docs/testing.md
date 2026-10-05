@@ -13,10 +13,11 @@
 | Evals | `apps/ai/evals` | `bun run --cwd apps/ai evals` | nothing with the local stand-ins |
 | Restore drill | `scripts/restore-drill.ts` | `bun run db:restore-drill` | the local Postgres container |
 
-On commit, the pre-commit hook (`scripts/pre-commit.ts`) checks the staged files, its
-steps side by side (as many as the machine has cores, less one): lint-staged formats and
-lints them (Biome, ruff, prisma format, Squawk on new migrations, `tofu fmt`, the SOPS
-check) and restages what it fixed; gitleaks scans them for secrets
+On commit, the pre-commit hook (`scripts/pre-commit.ts`) checks the staged files. First
+lint-staged formats and lints them (Biome, ruff, prisma format, Squawk on new migrations,
+`tofu fmt`, the SOPS check) and restages what it fixed, alone, since it hides and
+restores the unstaged changes while it works. Then the scans run side by side (as many as
+the machine has cores, less one): gitleaks scans them for secrets
 (`scripts/secret-scan.ts`); a staged Dockerfile, or anything under `deploy/` or `infra/`,
 adds Trivy's misconfiguration scan (`scripts/misconfig.ts`); a staged `bun.lock` or
 `apps/ai/uv.lock` adds OSV's (`scripts/osv.ts`); a staged workflow adds actionlint and
