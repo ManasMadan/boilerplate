@@ -33,8 +33,9 @@ fixes for what usually goes wrong.
    anything touching the database, queues or HTTP, `bun run test:integration`.
    `bun run test:e2e` builds and starts its own stack, so stop `bun dev` first. The git
    hooks help: on commit they format and lint the staged files (Biome, ruff, Prisma,
-   `tofu fmt`, Squawk on migrations) and scan them for secrets with gitleaks (installed,
-   or through Docker); on push they run types and unit tests for the packages you
+   `tofu fmt`, Squawk on migrations), scan them for secrets with gitleaks, and run CI's
+   Trivy and OSV scans when you stage infrastructure code or a lockfile (each tool
+   installed at CI's version, or through Docker); on push they run types and unit tests for the packages you
    changed and the repo's scripts and Claude Code hooks.
 4. Open a pull request. Its title becomes the squashed commit, so it follows
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:

@@ -13,6 +13,19 @@
 | Evals | `apps/ai/evals` | `bun run --cwd apps/ai evals` | nothing with the local stand-ins |
 | Restore drill | `scripts/restore-drill.ts` | `bun run db:restore-drill` | the local Postgres container |
 
+On commit, the pre-commit hook (`scripts/pre-commit.ts`) checks the staged files, its
+steps side by side (as many as the machine has cores, less one): lint-staged formats and
+lints them (Biome, ruff, prisma format, Squawk on new migrations, `tofu fmt`, the SOPS
+check) and restages what it fixed; gitleaks scans them for secrets
+(`scripts/secret-scan.ts`); a staged Dockerfile, or anything under `deploy/` or `infra/`,
+adds Trivy's misconfiguration scan (`scripts/misconfig.ts`); a staged `bun.lock` or
+`apps/ai/uv.lock` adds OSV's (`scripts/osv.ts`). The two scans are the Security
+workflow's, with the same versions and configuration (`trivy.yaml`, `osv-scanner.toml`),
+so what passes the hook passes those jobs. Each uses a local binary of CI's version, else
+its image in Docker; with neither, the commit stops and says so. Only a failed step's
+output is printed. With a Dockerfile, a chart and `bun.lock` staged, the hook takes about
+five seconds, most of it OSV asking osv.dev.
+
 Before pushing: `bun run lint`, `bun run check-types`, `bun run test`, and for anything
 touching the database, queues or HTTP, `bun run test:integration`. The pre-push hook
 (`.husky/pre-push`) holds the push to the same rule as CI: it type-checks, then

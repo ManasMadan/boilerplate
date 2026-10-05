@@ -1,5 +1,6 @@
-# Formats and lints only the staged files (seconds, not minutes): Biome, ruff, prisma
-# format, Squawk on new migrations and tofu fmt (package.json's lint-staged), then scans
-# them for secrets with gitleaks so none reaches history. The full suite runs in CI.
-bunx lint-staged
-bun scripts/secret-scan.ts
+# The staged files' checks, side by side (scripts/pre-commit.ts): lint-staged's formatters
+# and linters (Biome, ruff, prisma format, Squawk on new migrations, tofu fmt, the SOPS
+# check), the secret scan (gitleaks), and, when the staged files include what they read,
+# the infrastructure misconfiguration scan (Trivy) and the known-vulnerability scan (OSV),
+# as CI runs them. The full suite runs in CI.
+bun scripts/pre-commit.ts

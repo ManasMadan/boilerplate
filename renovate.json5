@@ -133,6 +133,11 @@
       groupName: "trivy",
     },
     {
+      description: "OSV-Scanner: the Security workflow's action and the pre-commit hook's image",
+      matchPackageNames: ["google/osv-scanner-action", "ghcr.io/google/osv-scanner"],
+      groupName: "osv-scanner",
+    },
+    {
       description: "Helm: the CLI in CI and its unittest plugin",
       matchPackageNames: ["helm", "helm/helm", "helm-unittest/helm-unittest"],
       groupName: "helm",
