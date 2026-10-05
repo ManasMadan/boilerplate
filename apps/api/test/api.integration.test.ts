@@ -1167,6 +1167,21 @@ describe("webhook endpoints", () => {
     }
   });
 
+  it("refuses a host name longer than DNS allows, as invalid rather than a DNS outage", async () => {
+    const { session } = await signedInUser();
+    const tooLong = `https://${`${"a".repeat(63)}.`.repeat(4)}example/hook`;
+    const created = await expectError(
+      session.rpc.webhooks.createEndpoint({ url: tooLong }),
+      "VALIDATION_FAILED",
+    );
+    expect(created.data.issues).toEqual([{ path: ["url"], code: "invalid_format" }]);
+    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
+    await expectError(
+      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url: tooLong }),
+      "VALIDATION_FAILED",
+    );
+  });
+
   it("turns an endpoint off and on, and records who changed what", async () => {
     const { session } = await signedInUser();
     const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });

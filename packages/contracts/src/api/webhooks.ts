@@ -65,7 +65,9 @@ export const webhookDeliverySchema = z.object({
 });
 export type WebhookDelivery = z.infer<typeof webhookDeliverySchema>;
 
-const endpointUrl = z.url({ protocol: /^https?$/ }).max(2048);
+// A DNS name is at most 253 characters: a longer host can never resolve, and the lookup
+// refuses it as malformed (EINVAL), which would otherwise read as DNS being down.
+const endpointUrl = z.url({ protocol: /^https?$/, hostname: /^.{1,253}$/ }).max(2048);
 const endpointFields = {
   description: z.string().trim().max(200).optional(),
   events: z.array(z.enum(webhookEvents)).max(webhookEvents.length).optional(),
