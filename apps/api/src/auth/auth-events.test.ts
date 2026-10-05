@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { userIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it } from "vitest";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 
@@ -45,9 +47,10 @@ describe("auth audit events", () => {
     [{ event: "phone-removed" }, "auth.phone_changed.v1", { change: "removed" }],
     [{ event: "app-connected", clientId: "c1" }, "auth.app_connected.v1", { clientId: "c1" }],
   ] as const)("records the alert %o as %s", (change, name, payload) => {
-    expect(auditEventForAlert(change, "u1")).toEqual({
+    const userId = userIdSchema.parse(randomUUID());
+    expect(auditEventForAlert(change, userId)).toEqual({
       name,
-      payload: { userId: "u1", ...payload },
+      payload: { userId, ...payload },
     });
   });
 });

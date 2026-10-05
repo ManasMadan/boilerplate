@@ -18,6 +18,7 @@ import {
   OTP_LENGTH,
   PENDING_INVITATION_LIMIT,
 } from "@repo/contracts/auth";
+import { orgIdSchema } from "@repo/contracts/ids";
 import {
   AI_MCP_PATH,
   IDENTITY_SCOPES,
@@ -37,6 +38,7 @@ import { type OrganizationOptions, organization } from "better-auth/plugins/orga
 import type { Env } from "../env";
 import { features } from "../features";
 import { type AuthContext } from "./auth-context";
+import { membershipOf, orgIdOf, userIdOf } from "./ids";
 import { orgAccess, orgRoles } from "./org-access";
 
 const INVITATION_DAYS = 7;
@@ -87,33 +89,40 @@ function membershipHooks({
 }: AuthContext): NonNullable<OrganizationOptions["organizationHooks"]> {
   return {
     afterAddMember: async ({ member, organization: org }) => {
-      await memberships.forget(org.id, member.userId);
+      const { orgId, userId } = membershipOf(member, org);
+      await memberships.forget(orgId, userId);
       await record(
         "org.member_added.v1",
         member.id,
-        { organizationId: org.id, userId: member.userId, role: member.role },
-        { actorId: actor(member.userId), orgId: org.id },
+        { organizationId: orgId, userId, role: member.role },
+        { actorId: actor(userId), orgId },
       );
     },
     afterAcceptInvitation: async ({ member, organization: org }) => {
-      await memberships.forget(org.id, member.userId);
+      const { orgId, userId } = membershipOf(member, org);
+      await memberships.forget(orgId, userId);
       await record(
         "org.member_added.v1",
         member.id,
-        { organizationId: org.id, userId: member.userId, role: member.role },
-        { actorId: member.userId, orgId: org.id },
+        { organizationId: orgId, userId, role: member.role },
+        { actorId: userId, orgId },
       );
     },
     afterRemoveMember: async ({ member, organization: org }) => {
-      await memberRemoved({ ...member, organizationId: org.id }, actor(member.userId));
+      const { orgId, userId } = membershipOf(member, org);
+      await memberRemoved(
+        { id: member.id, userId, role: member.role, organizationId: orgId },
+        actor(userId),
+      );
     },
     afterUpdateMemberRole: async ({ member, previousRole, organization: org }) => {
-      await memberships.forget(org.id, member.userId);
+      const { orgId, userId } = membershipOf(member, org);
+      await memberships.forget(orgId, userId);
       await record(
         "org.member_role_changed.v1",
         member.id,
-        { organizationId: org.id, userId: member.userId, role: member.role, previousRole },
-        { actorId: actor(member.userId), orgId: org.id },
+        { organizationId: orgId, userId, role: member.role, previousRole },
+        { actorId: actor(userId), orgId },
       );
     },
   };
@@ -133,21 +142,23 @@ function workspaceHooks({
     beforeCreateOrganization: async ({ organization: org }) => refusePersonal(org),
     beforeUpdateOrganization: async ({ organization: org }) => refusePersonal(org),
     afterCreateOrganization: async ({ organization: org, user }) => {
-      await memberships.forget(org.id, user.id);
+      const [orgId, userId] = [orgIdOf(org), userIdOf(user)];
+      await memberships.forget(orgId, userId);
       await record(
         "org.created.v1",
-        org.id,
-        { organizationId: org.id, name: org.name },
-        { actorId: user.id, orgId: org.id },
+        orgId,
+        { organizationId: orgId, name: org.name },
+        { actorId: userId, orgId },
       );
     },
     beforeDeleteOrganization: async ({ organization: org }) => {
-      await billing.cancelFor(org.id);
-      await memberships.forgetOrganization(org.id);
+      const orgId = orgIdOf(org);
+      await billing.cancelFor(orgId);
+      await memberships.forgetOrganization(orgId);
     },
     // Invitations count towards the member limit, so a full plan can't over-invite.
     beforeCreateInvitation: async ({ organization: org }) => {
-      const { members: limit } = await billing.entitlements(org.id);
+      const { members: limit } = await billing.entitlements(orgIdOf(org));
       if (limit === null) return;
       const [members, pending] = await Promise.all([
         db.member.count({ where: { organizationId: org.id } }),
@@ -161,24 +172,26 @@ function workspaceHooks({
       }
     },
     afterDeleteOrganization: async ({ organization: org, user }) => {
+      const orgId = orgIdOf(org);
       await record(
         "org.deleted.v1",
-        org.id,
-        { organizationId: org.id },
-        { actorId: user.id, orgId: org.id },
+        orgId,
+        { organizationId: orgId },
+        { actorId: userIdOf(user), orgId },
       );
     },
     afterCreateInvitation: async ({ invitation, inviter, organization: org }) => {
+      const orgId = orgIdOf(org);
       await record(
         "org.invitation_sent.v1",
         invitation.id,
         {
-          organizationId: org.id,
+          organizationId: orgId,
           invitationId: invitation.id,
           email: invitation.email,
           role: String(invitation.role),
         },
-        { actorId: inviter.id, orgId: org.id },
+        { actorId: userIdOf(inviter), orgId },
       );
     },
   };
@@ -195,7 +208,7 @@ export function organizationPlugin(context: AuthContext) {
     invitationLimit: PENDING_INVITATION_LIMIT,
     // The plan's member limit (packages/contracts billing); null means none.
     membershipLimit: async (_user, org) =>
-      (await billing.entitlements(org.id)).members ?? Number.MAX_SAFE_INTEGER,
+      (await billing.entitlements(orgIdOf(org))).members ?? Number.MAX_SAFE_INTEGER,
     // Every membership change is audited (in the organization's own log, so its admins
     // see it) and forgets the cached role, so access follows immediately.
     organizationHooks: { ...workspaceHooks(context), ...membershipHooks(context) },
@@ -290,7 +303,8 @@ export function mcpPlugin({ env, memberships }: AuthContext) {
     },
     customAccessTokenClaims: async ({ user, referenceId }) => {
       // The consent named a workspace; it must still be one of the user's.
-      if (!user || !referenceId || !(await memberships.role(referenceId, user.id))) {
+      const orgId = orgIdSchema.safeParse(referenceId);
+      if (!user || !orgId.success || !(await memberships.role(orgId.data, userIdOf(user)))) {
         throw new APIError("FORBIDDEN", { error: "access_denied" });
       }
       return { [ORG_CLAIM]: referenceId };

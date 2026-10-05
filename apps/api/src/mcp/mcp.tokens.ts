@@ -5,6 +5,7 @@
  * (after a rotation) reloads them, at most every KEY_RELOAD_MS: otherwise any made-up key
  * id would cost a database query (the Python side waits the same).
  */
+import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
 import { ORG_CLAIM } from "@repo/contracts/mcp";
 import {
   createLocalJWKSet,
@@ -16,8 +17,8 @@ import {
 } from "jose";
 
 export interface McpCaller {
-  userId: string;
-  orgId: string;
+  userId: UserId;
+  orgId: OrgId;
   clientId: string;
   scopes: ReadonlySet<string>;
   token: string;
@@ -33,7 +34,7 @@ export interface TokenVerifierOptions {
   issuer: string;
   audience: string;
   /** auth.mcp_grant_active: the approval exists and the user is still a member. */
-  grantActive: (clientId: string, userId: string, orgId: string) => Promise<boolean>;
+  grantActive: (clientId: string, userId: UserId, orgId: OrgId) => Promise<boolean>;
   /** The clock, for tests. */
   now?: () => number;
 }
@@ -71,23 +72,20 @@ export function createTokenVerifier(options: TokenVerifierOptions) {
           error instanceof errors.JWTExpired ? "The access token expired" : "Invalid access token",
       };
     }
-    const orgId = payload[ORG_CLAIM];
+    const userId = userIdSchema.safeParse(payload.sub).data;
+    const orgId = orgIdSchema.safeParse(payload[ORG_CLAIM]).data;
     const clientId = payload.azp;
-    if (
-      typeof payload.sub !== "string" ||
-      typeof orgId !== "string" ||
-      typeof clientId !== "string"
-    ) {
+    if (!userId || !orgId || typeof clientId !== "string") {
       return { ok: false, description: "The access token names no workspace" };
     }
-    if (!(await options.grantActive(clientId, payload.sub, orgId))) {
+    if (!(await options.grantActive(clientId, userId, orgId))) {
       return { ok: false, description: "The app was disconnected or left the workspace" };
     }
     const scope = typeof payload.scope === "string" ? payload.scope : "";
     return {
       ok: true,
       caller: {
-        userId: payload.sub,
+        userId,
         orgId,
         clientId,
         scopes: new Set(scope.split(" ").filter(Boolean)),

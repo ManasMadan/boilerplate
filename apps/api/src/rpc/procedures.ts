@@ -35,6 +35,7 @@ import {
 } from "@repo/contracts/api";
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
+import type { ApiKeyId, OrgId, UserId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
@@ -48,6 +49,7 @@ import {
   updateContext,
 } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
+import { sessionWithIds } from "../auth/ids";
 import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
 
@@ -61,10 +63,10 @@ export interface RpcContext {
 
 /** Who an organization-scoped call acts as. `apiKeyId` is set when an API key made it. */
 export interface OrgCaller {
-  orgId: string;
-  userId: string;
+  orgId: OrgId;
+  userId: UserId;
   role: OrgRole;
-  apiKeyId: string | null;
+  apiKeyId: ApiKeyId | null;
   /** When the session signed in; null for an API key, which never counts as fresh. */
   signedInAt: Date | null;
 }
@@ -180,6 +182,12 @@ function limitSpender(redis: Redis) {
   };
 }
 
+/** The request's session, if any, with its user's and workspace's ids branded. */
+async function signedIn(auth: Auth, headers: Headers) {
+  const result = await auth.api.getSession({ headers });
+  return result && sessionWithIds(result);
+}
+
 /**
  * Who an organization-scoped call acts as: one organization, one user, their role there.
  *   - a signed-in person: the session's active organization. Membership is re-checked
@@ -200,7 +208,7 @@ function orgCallerFor(
       if (!scope) throw new AppError("FORBIDDEN");
       return authenticateApiKey(apiKey, scope);
     }
-    const result = await auth.api.getSession({ headers });
+    const result = await signedIn(auth, headers);
     if (!result) throw new AppError("UNAUTHENTICATED");
     updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });
     const orgId = result.session.activeOrganizationId;
@@ -245,7 +253,7 @@ export function createProcedures(
         "~orpc": { meta },
       },
     }) => {
-      const result = await auth.api.getSession({ headers: context.headers });
+      const result = await signedIn(auth, context.headers);
       if (!result) throw new AppError("UNAUTHENTICATED");
       // The column is NOT NULL; better-auth types optional fields as nullable.
       updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });

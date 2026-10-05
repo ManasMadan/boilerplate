@@ -1,8 +1,17 @@
 import { ORPCError, ValidationError } from "@orpc/server";
+import type { ApiKeyId, OrgId, UserId } from "@repo/contracts/ids";
 import { Prisma } from "@repo/db";
 import { AppError } from "@repo/nest-common";
-import { describe, expect, it, vi } from "vitest";
-import { rateLimitKey, toContractError } from "./procedures";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { type OrgCaller, rateLimitKey, toContractError } from "./procedures";
+
+describe("who an organization-scoped call acts as", () => {
+  it("hands routers branded ids, so a service can't get them swapped", () => {
+    expectTypeOf<OrgCaller["orgId"]>().toEqualTypeOf<OrgId>();
+    expectTypeOf<OrgCaller["userId"]>().toEqualTypeOf<UserId>();
+    expectTypeOf<OrgCaller["apiKeyId"]>().toEqualTypeOf<ApiKeyId | null>();
+  });
+});
 
 describe("errors from procedures", () => {
   it("logs an AppError of 500 or more, with its cause: it's our fault", () => {

@@ -4,6 +4,8 @@ import { createTokenVerifier, KEY_RELOAD_MS } from "./mcp.tokens";
 
 const ISSUER = "https://site.test/api/auth";
 const AUDIENCE = "https://site.test/api/mcp";
+const ORG = "0199a3c4-0000-7000-8000-00000000000a";
+const USER = "0199a3c4-0000-7000-8000-00000000000b";
 
 async function keyPair(kid: string) {
   const { publicKey, privateKey } = await generateKeyPair("EdDSA", { crv: "Ed25519" });
@@ -15,9 +17,9 @@ async function sign(
   claims: Record<string, unknown> = {},
   options: { issuer?: string; audience?: string; expiresIn?: string } = {},
 ) {
-  return new SignJWT({ org: "org-1", azp: "client-1", scope: "todos:read", ...claims })
+  return new SignJWT({ org: ORG, azp: "client-1", scope: "todos:read", ...claims })
     .setProtectedHeader({ alg: "EdDSA", kid: key.kid })
-    .setSubject("user-1")
+    .setSubject(USER)
     .setIssuer(options.issuer ?? ISSUER)
     .setAudience(options.audience ?? AUDIENCE)
     .setIssuedAt()
@@ -47,10 +49,10 @@ describe("MCP access tokens", () => {
     const result = await verify(await sign(key, { scope: "todos:read todos:write" }));
     expect(result).toMatchObject({
       ok: true,
-      caller: { userId: "user-1", orgId: "org-1", clientId: "client-1" },
+      caller: { userId: USER, orgId: ORG, clientId: "client-1" },
     });
     expect(result.ok && [...result.caller.scopes]).toEqual(["todos:read", "todos:write"]);
-    expect(calls).toEqual([["client-1", "user-1", "org-1"]]);
+    expect(calls).toEqual([["client-1", USER, ORG]]);
   });
 
   it.each([
@@ -74,6 +76,7 @@ describe("MCP access tokens", () => {
     const key = await keyPair("k1");
     const { verify } = verifierFor(() => ({ keys: [key.jwk] }));
     expect(await verify(await sign(key, { org: undefined }))).toMatchObject({ ok: false });
+    expect(await verify(await sign(key, { org: "org-1" }))).toMatchObject({ ok: false });
     expect(await verify(await sign(key, { azp: undefined }))).toMatchObject({ ok: false });
   });
 

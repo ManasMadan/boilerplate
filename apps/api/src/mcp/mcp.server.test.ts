@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { orgIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { AppError, runWithContext } from "@repo/nest-common";
 import { describe, expect, it, vi } from "vitest";
 import type { TodoService } from "../modules/todo";
@@ -8,7 +10,13 @@ import { createMcpServer } from "./mcp.server";
 async function connect(scopes: string[], list: () => Promise<unknown> = async () => []) {
   const logError = vi.fn();
   const server = createMcpServer(
-    { userId: "u", orgId: "o", clientId: "c", scopes: new Set(scopes), token: "t" },
+    {
+      userId: userIdSchema.parse(randomUUID()),
+      orgId: orgIdSchema.parse(randomUUID()),
+      clientId: "c",
+      scopes: new Set(scopes),
+      token: "t",
+    },
     {
       todos: { list } as unknown as TodoService,
       describeError: async (error) => `described ${error.code}`,

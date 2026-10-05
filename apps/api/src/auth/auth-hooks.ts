@@ -5,17 +5,18 @@
  */
 import { NAME_MAX_LENGTH } from "@repo/contracts/auth";
 import type { AuthErrorCode } from "@repo/contracts/errors";
+import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
 import { fieldOf, required } from "@repo/contracts/objects";
 import { parseOrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
 import { isLocale, isTimeZone, negotiateLocale } from "@repo/i18n";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
-import * as z from "zod";
 import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
-import type { AuthContext, RemovedMember } from "./auth-context";
+import type { AuthContext } from "./auth-context";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
+import { orgIdOf, removedMemberSchema, userIdOf } from "./ids";
 import { type SecurityAlert, securityAlertFor } from "./security-alerts";
 
 /** The paths that create an account from a social provider's profile (Google's). */
@@ -58,14 +59,6 @@ const requestOf = (ctx: { body?: unknown; query?: unknown }) => ({
   query: ctx.query,
 });
 
-/** The member better-auth returns from leaving an organization (other fields kept). */
-const removedMember = z.looseObject({
-  id: z.string(),
-  userId: z.string(),
-  role: z.string(),
-  organizationId: z.string(),
-}) satisfies z.ZodType<RemovedMember>;
-
 /**
  * The mobile app's sign-in goes through this redirect; left alone it sends anyone
  * anywhere over https from our own domain (phishing, planted OAuth state).
@@ -90,7 +83,7 @@ async function sendSecurityAlert(
   account: { id: string; phoneNumber: string | null },
   headers: Headers | undefined,
 ) {
-  const userId = account.id;
+  const userId = userIdOf(account);
   const locale = await localeFor(alert.email, headers);
   await transaction(db, async (tx) => {
     await emitAnyEvent(tx, auditEventForAlert(alert, userId), userId, {
@@ -147,7 +140,7 @@ export function requestHooks(context: AuthContext) {
       if (isAPIError(ctx.context.returned)) return;
       // Hooks get no session; the member who left is the one returned.
       if (ctx.path === "/organization/leave") {
-        const member = removedMember.parse(ctx.context.returned);
+        const member = removedMemberSchema.parse(ctx.context.returned);
         await memberRemoved(member, member.userId);
         return;
       }
@@ -179,22 +172,24 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
       // Every user gets a personal workspace, so tenant-scoped features work from the
       // first sign-in, for solo users and teams alike.
       after: async (user) => {
+        const userId = userIdOf(user);
         await transaction(db, async (tx) => {
           const org = await tx.organization.create({
             data: {
               name: user.name,
-              slug: `personal-${user.id}`,
+              slug: `personal-${userId}`,
               metadata: JSON.stringify({ personal: true }),
-              members: { create: { userId: user.id, role: "owner" } },
+              members: { create: { userId, role: "owner" } },
             },
           });
-          const origin = { actorId: user.id, orgId: org.id };
-          await emitEvent(tx, "auth.signed_up.v1", user.id, { userId: user.id }, origin);
+          const orgId = orgIdOf(org);
+          const origin = { actorId: userId, orgId };
+          await emitEvent(tx, "auth.signed_up.v1", userId, { userId }, origin);
           await emitEvent(
             tx,
             "org.created.v1",
-            org.id,
-            { organizationId: org.id, name: org.name },
+            orgId,
+            { organizationId: orgId, name: org.name },
             origin,
           );
         });
@@ -202,11 +197,12 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
     },
     delete: {
       after: async (user) => {
+        const userId = userIdOf(user);
         await record(
           "auth.account_deleted.v1",
-          user.id,
-          { userId: user.id },
-          { actorId: user.id, orgId: null },
+          userId,
+          { userId },
+          { actorId: userId, orgId: null },
         );
       },
     },
@@ -256,21 +252,23 @@ function sessionHooks({ db, record, actor }: AuthContext): DatabaseHooks["sessio
         };
       },
       after: async (session, ctx) => {
+        const userId = userIdSchema.parse(session.userId);
         await record(
           "auth.session_started.v1",
           session.id,
-          { userId: session.userId, sessionId: session.id, method: sessionMethod(ctx?.path) },
-          { actorId: session.userId, orgId: null },
+          { userId, sessionId: session.id, method: sessionMethod(ctx?.path) },
+          { actorId: userId, orgId: null },
         );
       },
     },
     delete: {
       after: async (session, ctx) => {
+        const userId = userIdSchema.parse(session.userId);
         await record(
           "auth.session_ended.v1",
           session.id,
-          { userId: session.userId, sessionId: session.id, reason: sessionEndReason(ctx?.path) },
-          { actorId: actor(session.userId), orgId: null },
+          { userId, sessionId: session.id, reason: sessionEndReason(ctx?.path) },
+          { actorId: actor(userId), orgId: null },
         );
       },
     },
@@ -285,7 +283,7 @@ export function databaseHooks(context: AuthContext): DatabaseHooks {
  * The workspaces an account owns that it alone belongs to; throws when a shared one would
  * be left without an owner.
  */
-async function soleWorkspaces({ db }: AuthContext, userId: string) {
+async function soleWorkspaces({ db }: AuthContext, userId: UserId) {
   const owned = await db.member.findMany({
     where: { userId, role: "owner" },
     select: {
@@ -293,10 +291,10 @@ async function soleWorkspaces({ db }: AuthContext, userId: string) {
       organization: { select: { members: { select: { userId: true, role: true } } } },
     },
   });
-  const soleMember: string[] = [];
+  const soleMember: OrgId[] = [];
   for (const { organizationId, organization } of owned) {
     const others = organization.members.filter((member) => member.userId !== userId);
-    if (others.length === 0) soleMember.push(organizationId);
+    if (others.length === 0) soleMember.push(orgIdSchema.parse(organizationId));
     else if (!others.some((member) => parseOrgRole(member.role) === "owner")) {
       throw new APIError("BAD_REQUEST", {
         code: "ORGANIZATION_NEEDS_OWNER" satisfies AuthErrorCode,
@@ -319,14 +317,13 @@ export function accountDeletion(context: AuthContext): DeleteUser {
   return {
     enabled: true,
     beforeDelete: async (user) => {
-      const soleMember = await soleWorkspaces(context, user.id);
-      leavingWithAccount.set(
-        user.id,
-        await db.member.findMany({
-          where: { userId: user.id, organizationId: { notIn: soleMember } },
-          select: { id: true, userId: true, role: true, organizationId: true },
-        }),
-      );
+      const userId = userIdOf(user);
+      const soleMember = await soleWorkspaces(context, userId);
+      const shared = await db.member.findMany({
+        where: { userId, organizationId: { notIn: soleMember } },
+        select: { id: true, userId: true, role: true, organizationId: true },
+      });
+      leavingWithAccount.set(userId, removedMemberSchema.array().parse(shared));
       // Nothing may keep charging for a workspace that's going away.
       for (const organizationId of soleMember) await billing.cancelFor(organizationId);
       await transaction(db, async (tx) => {
@@ -337,7 +334,7 @@ export function accountDeletion(context: AuthContext): DeleteUser {
             "org.deleted.v1",
             organizationId,
             { organizationId },
-            { actorId: user.id, orgId: organizationId },
+            { actorId: userId, orgId: organizationId },
           );
         }
       });
@@ -345,10 +342,11 @@ export function accountDeletion(context: AuthContext): DeleteUser {
     // The memberships went with the account (the rows cascade), past the organization
     // hooks: end them the same way a removal does.
     afterDelete: async (user) => {
+      const userId = userIdOf(user);
       // beforeDelete ran first, in the same request.
-      const left = required(leavingWithAccount.get(user.id), "the memberships the account left");
-      leavingWithAccount.delete(user.id);
-      for (const member of left) await memberRemoved(member, user.id);
+      const left = required(leavingWithAccount.get(userId), "the memberships the account left");
+      leavingWithAccount.delete(userId);
+      for (const member of left) await memberRemoved(member, userId);
     },
   };
 }

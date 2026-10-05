@@ -9,6 +9,7 @@
  * account deletion, which better-auth's hooks miss), so a removed member loses access
  * on their very next request.
  */
+import { type OrgId, type UserId, userIdSchema } from "@repo/contracts/ids";
 import { type OrgRole, orgRoleSchema, parseOrgRole } from "@repo/contracts/roles";
 import type { Db } from "@repo/db";
 import { CacheService, type Redis } from "@repo/nest-common";
@@ -17,14 +18,14 @@ const TTL_SECONDS = 300;
 
 export function createMemberships(db: Db, redis: Redis) {
   const cache = new CacheService(redis, "membership");
-  const key = (orgId: string, userId: string) => `${orgId}:${userId}`;
+  const key = (orgId: OrgId, userId: UserId) => `${orgId}:${userId}`;
 
   return {
     /**
      * The user's role in the organization, or null when they aren't a member or their
      * stored role isn't one this knows (see @repo/contracts/roles: it fails closed).
      */
-    role(orgId: string, userId: string): Promise<OrgRole | null> {
+    role(orgId: OrgId, userId: UserId): Promise<OrgRole | null> {
       return cache.wrap(key(orgId, userId), TTL_SECONDS, orgRoleSchema.nullable(), async () => {
         const member = await db.member.findFirst({
           where: { organizationId: orgId, userId },
@@ -34,16 +35,18 @@ export function createMemberships(db: Db, redis: Redis) {
       });
     },
     /** Call after any change to this membership. */
-    forget(orgId: string, userId: string) {
+    forget(orgId: OrgId, userId: UserId) {
       return cache.invalidate(key(orgId, userId));
     },
     /** Call before deleting an organization: forgets every member's cached role. */
-    async forgetOrganization(orgId: string) {
+    async forgetOrganization(orgId: OrgId) {
       const members = await db.member.findMany({
         where: { organizationId: orgId },
         select: { userId: true },
       });
-      await Promise.all(members.map((member) => cache.invalidate(key(orgId, member.userId))));
+      await Promise.all(
+        members.map((member) => cache.invalidate(key(orgId, userIdSchema.parse(member.userId)))),
+      );
     },
   };
 }

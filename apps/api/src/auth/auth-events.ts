@@ -7,6 +7,7 @@
  * transaction). A crash in between loses the audit entry, never the change.
  */
 import type { EventPayload } from "@repo/contracts/events";
+import type { UserId } from "@repo/contracts/ids";
 import type { AnyEvent } from "../outbox";
 import type { SecurityChange } from "./security-alerts";
 
@@ -51,7 +52,7 @@ export function sessionEndReason(path: string | undefined): SessionEndReason {
 }
 
 /** The audit event for a security alert (both describe the same account change). */
-export function auditEventForAlert(change: SecurityChange, userId: string): AnyEvent {
+export function auditEventForAlert(change: SecurityChange, userId: UserId): AnyEvent {
   switch (change.event) {
     case "password-changed":
       return { name: "auth.password_changed.v1", payload: { userId } };
