@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatPrisma } from "./format-prisma";
 import { ROOT } from "./lib";
+import { STEPS } from "./lint";
 import { lintMigrations } from "./lint-migrations";
 import { captureOutput, fakeRun } from "./stand-ins";
 
@@ -10,10 +12,21 @@ afterEach(() => mock.restore());
 describe("formatting the Prisma schema", () => {
   it("formats the whole schema from its package, and exits as Prisma does", () => {
     const { run, calls, options } = fakeRun(() => ({ status: 2 }));
-    expect(formatPrisma(run)).toBe(2);
+    expect(formatPrisma([], run)).toBe(2);
     expect(calls).toEqual(["bunx prisma format"]);
     expect(options[0]?.cwd).toBe(join(ROOT, "packages/db"));
-    expect(formatPrisma(fakeRun(() => ({ status: null })).run)).toBe(1);
+    expect(formatPrisma([], fakeRun(() => ({ status: null })).run)).toBe(1);
+  });
+
+  it("only checks it in bun run lint, so a commit made without the hook fails CI", () => {
+    const { run, calls } = fakeRun(() => ({ status: 1 }));
+    expect(formatPrisma(["--check"], run)).toBe(1);
+    expect(calls).toEqual(["bunx prisma format --check"]);
+    const { scripts } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(scripts["lint:prisma"]).toBe("bun scripts/format-prisma.ts --check");
+    expect(STEPS.map((step) => step.join(" "))).toContain("bun run lint:prisma");
   });
 });
 

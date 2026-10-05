@@ -438,7 +438,8 @@ The evals run on every change with the local stand-ins; see
 
 | Command | What it checks |
 |---|---|
-| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser, the web render-only check and `scripts/check-layers.ts`), `lint:unused`, `lint:markers`, `lint:patterns`, `lint:suppressions`, the linters below, and each package's `lint` (ruff for Python), all of them even when one fails, with a summary at the end (`scripts/lint.ts`); CI runs the same command |
+| `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser, the web render-only check and `scripts/check-layers.ts`), `lint:unused`, `lint:markers`, `lint:patterns`, `lint:suppressions`, `lint:prisma`, the linters below, and each package's `lint` (ruff for Python), all of them even when one fails, with a summary at the end (`scripts/lint.ts`); CI runs the same command |
+| `bun run lint:prisma` | the Prisma schema is as `prisma format` writes it (`--check`): the pre-commit hook formats it, and this catches a commit made without the hook |
 | `bun run lint:actionlint`, `lint:zizmor` | the workflows: actionlint (with shellcheck on every `run:` block) and zizmor's security audits, offline, with `.github/zizmor.yml`. Each at the version `scripts/linters.ts` pins: a local binary of it, else its image in Docker |
 | `bun run lint:shellcheck` | every shell script: `*.sh`, the git hooks in `.husky/`, and any file whose first line runs a shell. A `.shellcheckrc` says which shell for the scripts that have no first line saying so (the hooks and the data chart's scripts, all run with `sh`) |
 | `bun run lint:hadolint` | every Dockerfile (`deploy/docker/`, `.devcontainer/Dockerfile`) |
