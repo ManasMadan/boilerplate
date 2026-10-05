@@ -61,13 +61,18 @@ platform's own prompt in place of the browser's (`apps/mobile/src/lib/passkeys.t
 react-native-passkeys). The relying party stays the site's host: iOS and Android show the
 prompt only for the domain the build is associated with (`webcredentials:` in
 `app.config.ts`, and `get_login_creds` in `assetlinks.json`), so a passkey made on the
-site works in the app and the other way round. The challenge cookie travels like the
-session cookie, through the Expo plugin.
+site works in the app and the other way round. That association is optional and off
+until configured: the site serves its files only with all four of `APPLE_TEAM_ID`,
+`IOS_BUNDLE_ID`, `ANDROID_PACKAGE` and `ANDROID_CERT_FINGERPRINTS` set (a partial set
+stops the web app), and a build claims the domain only with its platform's identifier
+([web-and-mobile.md](web-and-mobile.md), "Universal links and App Links"). Without it
+the app's passkey prompt fails. The challenge cookie travels like the session cookie,
+through the Expo plugin.
 
 The API checks each answer's origin (`passkeyOrigins` in `apps/api/src/auth/auth.ts`):
-`WEB_URL`, `APP_ORIGINS` (the mobile app's web build) and, for each of
-`ANDROID_CERT_FINGERPRINTS`, `android:apk-key-hash:<the certificate's SHA-256 in
-base64url>`, which is what Android's Credential Manager reports for an app. iOS reports the
+`WEB_URL`, `APP_ORIGINS` (the mobile app's web build) and, only when
+`ANDROID_CERT_FINGERPRINTS` is set, `android:apk-key-hash:<the certificate's SHA-256 in
+base64url>` for each, which is what Android's Credential Manager reports for an app. iOS reports the
 site's own origin. Adding one needs a recent sign-in, as on the web: the app's settings
 ask the user to sign in again.
 

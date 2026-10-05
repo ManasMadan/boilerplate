@@ -127,7 +127,7 @@ screenshots are identical on every machine and in CI.
   prompt from react-native-passkeys (`src/lib/passkeys.ts`): AuthenticationServices on
   iOS, Credential Manager on Android, WebAuthn on the web build. A device offers the
   passkeys of the site the build is associated with (`webcredentials`, below), so they
-  work only in a build on the https site that serves the association files.
+  work only once that optional feature is on, in a build for its https site.
 - Native projects (`ios/`, `android/`) come from `expo prebuild` and aren't committed.
 
 | Command (`bun run --cwd apps/mobile …`) | What it does |
@@ -168,8 +168,8 @@ credentials`). See [repository-settings.md](repository-settings.md).
 
 ### Universal links and App Links
 
-Besides its `boilerplate://` scheme (sign-in callbacks, the captcha's answer), the app
-opens the site's own https links: an invitation link sent by email opens the invitation
+An optional feature, off until it's configured. Besides its `boilerplate://` scheme
+(sign-in callbacks, the captcha's answer), the app then opens the site's own https links: an invitation link sent by email opens the invitation
 in the app when it's installed, and in the browser when it isn't. A custom scheme isn't
 verified, so any other app can register the same one; an https link is, because each
 platform checks a file on the site's own host before it lets the app handle the link.
@@ -185,11 +185,14 @@ URL, and trades the id and a secret it kept for the session afterwards, once
 A caught link holds only the id. This is the protection RFC 8252 gives native apps with
 PKCE, so the callback doesn't need a verified link.
 
-The app side is in `apps/mobile/app.config.ts`. When `EXPO_PUBLIC_API_URL` is https, the
-build claims that host: `ios.associatedDomains` with `applinks:` (links) and
-`webcredentials:` (passkeys), and on Android an `intentFilters` entry with
-`autoVerify: true` for `https://<host>/invitations/`. A development build on a LAN
-address claims nothing, since neither platform can verify plain http. Associated domains
+The app side is in `apps/mobile/app.config.ts`. A build whose `EXPO_PUBLIC_API_URL` is
+https claims that host for each platform whose identifier it's built with, the same
+variable the site reads: with `APPLE_TEAM_ID`, `ios.associatedDomains` with `applinks:`
+(links) and `webcredentials:` (passkeys); with `ANDROID_CERT_FINGERPRINTS`, an Android
+`intentFilters` entry with `autoVerify: true` for `https://<host>/invitations/`. Without
+them it claims nothing, since the site then serves no file to verify the claim against;
+neither does a development build on a LAN address, since neither platform can verify
+plain http. Associated domains
 are native settings, so they reach users only through a store build. Expo Router opens
 an https link at its path, so `https://<host>/invitations/<id>` lands on
 `invitations/[id]` like `boilerplate://invitations/<id>` does.
@@ -203,12 +206,14 @@ from configuration alone, so the app stays render-only:
 | `/.well-known/apple-app-site-association` | the app id `<team id>.<bundle id>` for links (`/invitations/*`) and passkeys, as `application/json` | `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` |
 | `/.well-known/assetlinks.json` | the package and its signing certificates' SHA-256 fingerprints, for links (`handle_all_urls`) and passkeys (`get_login_creds`) | `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` |
 
-Until all four variables are set both answer 404, never a file with made-up ids, and a
-site on an https `WEB_URL` (any deployment) refuses to start
-(`apps/web/src/instrumentation.ts`). Local development and the end-to-end runs use
-http and start without them. Each deployed environment names the build that talks to
-it, in its web service's `env` (`deploy/environments/<env>/stack.yaml`): production the
-production variant, staging and previews the preview variant. The proxy and the gateway
+Like the API's optional features (`apps/api/src/features.ts`), it's on exactly when its
+variables are: with none of the four set (the default everywhere) both answer 404, never
+a file with made-up ids, and the site starts as usual; with all four, both are served;
+with only some, the web app refuses to start and names the missing ones
+(`apps/web/src/instrumentation.ts`). Each deployed environment names the build that talks
+to it, in its web service's `env` (`deploy/environments/<env>/stack.yaml` has them
+commented out): production the production variant, staging and previews the preview
+variant. The proxy and the gateway
 leave `/.well-known/` paths other than the OAuth ones to the web app.
 
 To turn them on:
@@ -217,8 +222,10 @@ To turn them on:
    of the Play app signing key (Play Console, Test and release, App integrity) and of
    the EAS upload key (`bunx eas-cli credentials`, Android, Keystore). Use the bundle id
    and package your rename gave the app.
-2. Set them for each environment's web service, and build the app with
-   `EXPO_PUBLIC_API_URL` on that environment's https site (the EAS environment).
+2. Set all four for each environment's web service, and `ANDROID_CERT_FINGERPRINTS`
+   for its api (Android passkeys, [auth.md](auth.md#passkeys-on-mobile)). Build the app
+   with `EXPO_PUBLIC_API_URL` on that environment's https site and the same
+   `APPLE_TEAM_ID` and `ANDROID_CERT_FINGERPRINTS` (the EAS environment).
 3. Check them: `curl -i https://<site host>/.well-known/apple-app-site-association`
    (200, `application/json`, no redirect), Google's
    [Statement List tester](https://developers.google.com/digital-asset-links/tools/generator)

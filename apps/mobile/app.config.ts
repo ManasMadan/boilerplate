@@ -3,15 +3,16 @@
  * environment at build time:
  *
  *   EXPO_PUBLIC_API_URL  the site's origin, where /rpc and /api/auth are served (the same
- *                        URL the web app is on; the gateway routes them to apps/api). On
- *                        https, its links open the app and its passkeys work here: the
- *                        site serves the association files iOS and Android check
- *                        (apps/web/src/lib/app-links.ts)
+ *                        URL the web app is on; the gateway routes them to apps/api)
  *   APP_VARIANT          "development" | "preview" | "production": the app's name and
  *                        identifiers, so all three can be installed side by side
  *   EAS_PROJECT_ID       the project id `eas init` prints. With it, builds take
  *                        over-the-air updates from their channel (eas.json: development,
  *                        preview, production); without it there are no updates
+ *   APPLE_TEAM_ID,       the same values the site has (apps/web/src/lib/app-links.ts):
+ *   ANDROID_CERT_        with one set and an https site, the build claims that site's
+ *   FINGERPRINTS         links and passkeys on iOS, or Android. Unset, it claims nothing,
+ *                        since the site then serves no association file to check
  *
  * Native identifiers (bundle id, package) are set here once and never renamed after the
  * first store release.
@@ -24,17 +25,19 @@ const name = variant === "production" ? "Boilerplate" : `Boilerplate (${variant}
 const projectId = process.env.EAS_PROJECT_ID;
 
 /**
- * The site's host when it's served over https: iOS and Android only trust an app with a
- * site's links (universal links, App Links) and passkeys after fetching its association
- * files over https, so a development build on a LAN address has none.
+ * The site's host, when it serves the association files a platform checks before it
+ * trusts the app with the site's links (universal links, App Links) and passkeys: over
+ * https only (a development build on a LAN address has none), and only once the site has
+ * that platform's identifier (`identifier`, the same variable the site reads).
  */
-function siteHost() {
+function linkedHost(identifier: string | undefined) {
   const site = process.env.EXPO_PUBLIC_API_URL;
-  return site?.startsWith("https://") ? new URL(site).hostname : undefined;
+  return identifier && site?.startsWith("https://") ? new URL(site).hostname : undefined;
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const host = siteHost();
+  const iosHost = linkedHost(process.env.APPLE_TEAM_ID);
+  const androidHost = linkedHost(process.env.ANDROID_CERT_FINGERPRINTS);
   return {
     ...config,
     name,
@@ -50,7 +53,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       bundleIdentifier: `com.boilerplate.app${suffix}`,
       supportsTablet: true,
       infoPlist: { ITSAppUsesNonExemptEncryption: false },
-      ...(host && { associatedDomains: [`applinks:${host}`, `webcredentials:${host}`] }),
+      ...(iosHost && {
+        associatedDomains: [`applinks:${iosHost}`, `webcredentials:${iosHost}`],
+      }),
     },
     android: {
       package: `com.boilerplate.app${suffix}`,
@@ -62,12 +67,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
       // The paths match the site's assetlinks.json (apps/web/src/lib/app-links.ts); a link
       // to any other page stays in the browser.
-      ...(host && {
+      ...(androidHost && {
         intentFilters: [
           {
             action: "VIEW",
             autoVerify: true,
-            data: [{ scheme: "https", host, pathPrefix: "/invitations/" }],
+            data: [{ scheme: "https", host: androidHost, pathPrefix: "/invitations/" }],
             category: ["BROWSABLE", "DEFAULT"],
           },
         ],

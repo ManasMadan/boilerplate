@@ -18,7 +18,8 @@ own variables, from the stack chart's values and its `<release>-<service>` Secre
   with a readable message. Empty strings count as unset.
 - **Features switch on when their block is present.** Google sign-in, captcha, files,
   billing and AI are on exactly when their variables are set (`apps/api/src/features.ts`);
-  push platforms likewise (`apps/notifications/src/env.ts`). A half-configured feature
+  push platforms likewise (`apps/notifications/src/env.ts`), and the mobile app's links
+  and passkeys (`apps/web/src/lib/app-links.ts`). A half-configured feature
   (a Google client id without its secret, two of three FCM values) fails at boot.
   Disabled features answer `FEATURE_DISABLED`, and clients read the same map from
   `system.info` to hide their UI.
@@ -287,7 +288,7 @@ Server-only: nothing environment-specific is built into the browser bundle.
 | `WEB_URL` | required | This site's origin (canonical URLs, sitemap). |
 | `API_URL`, `AI_URL`, `STORAGE_ORIGIN` | see above | |
 | `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | unset | The iOS app (`ABCDE12345`, `com.boilerplate.app`): `/.well-known/apple-app-site-association` names it for links and passkeys. |
-| `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` | unset | The Android app and the SHA-256 fingerprints of its signing certificates, comma-separated (`AB:CD:…`): `/.well-known/assetlinks.json` names them. With any of the four unset both files answer 404, and a site on an https `WEB_URL` (every deployment) refuses to start. The API reads the fingerprints too ("Auth and the API"). |
+| `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` | unset | The Android app and the SHA-256 fingerprints of its signing certificates, comma-separated (`AB:CD:…`): `/.well-known/assetlinks.json` names them. Optional, all four or none: with none set both files answer 404; with only some, the web app refuses to start and names the missing ones. The API and the mobile build read the fingerprints too ("Auth and the API", "Mobile"). |
 | `RELEASE` | `dev` | Sent to the API as `x-app-version`. |
 | `SKIP_ENV_VALIDATION` | unset | `1` only for `next typegen` inside `check-types`. |
 
@@ -300,6 +301,7 @@ Read at build time (`app.config.ts`, `src/lib/config.ts`).
 | `EXPO_PUBLIC_API_URL` | `http://localhost:3000` | The site's origin; on a phone use your machine's LAN address. EAS builds get it per EAS environment (`bunx eas-cli env:create --environment production --name EXPO_PUBLIC_API_URL --value …`). |
 | `EAS_PROJECT_ID` | empty | From `bunx eas-cli init`. Enables over-the-air updates; only EAS builds need it. |
 | `APP_VARIANT` | `development` | `development`, `preview` or `production`: app name and identifiers. Set by the profiles in `eas.json`. |
+| `APPLE_TEAM_ID`, `ANDROID_CERT_FINGERPRINTS` | unset | The same values the web app has (above). With one set and an https `EXPO_PUBLIC_API_URL`, the build claims the site's links and passkeys on that platform (`associatedDomains`, `intentFilters`); unset, it claims nothing. Set per EAS environment for store builds. |
 
 ## Tests and tooling
 

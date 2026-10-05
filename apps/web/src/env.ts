@@ -19,8 +19,8 @@ export const envSchema = {
   // files from (presigned URLs), allowed by the Content-Security-Policy.
   STORAGE_ORIGIN: z.url().optional(),
   // The mobile app this site opens https links in (universal links, App Links) and shares
-  // passkeys with: src/lib/app-links.ts serves its association files from them. Required
-  // on an https site (src/instrumentation.ts).
+  // passkeys with: src/lib/app-links.ts serves its association files from them. Optional:
+  // all four or none (a partial set stops the server, src/instrumentation.ts).
   APPLE_TEAM_ID: z
     .string()
     .regex(/^[A-Z0-9]{10}$/, "the 10-character team id from Apple's developer account")

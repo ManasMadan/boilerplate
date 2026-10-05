@@ -17,20 +17,21 @@ services:
   web:
     autoscaling: { enabled: false }
     storage: none
-    env:
-      # The mobile app build that talks to this site (the preview variant): its https
-      # links open the app and its passkeys work there. The web app refuses to start
-      # until all four are set (docs/web-and-mobile.md, "Universal links and App Links").
-      APPLE_TEAM_ID: ""
-      IOS_BUNDLE_ID: com.boilerplate.app.preview
-      ANDROID_PACKAGE: com.boilerplate.app.preview
-      ANDROID_CERT_FINGERPRINTS: &android-certs ""
+    # Optional: the mobile app's https links and passkeys (docs/web-and-mobile.md,
+    # "Universal links and App Links"), for the build that talks to this site
+    # (the preview variant). Off while unset; set all four or none (a partial set stops the
+    # web app), and give the api the same fingerprints.
+    # env:
+    #   APPLE_TEAM_ID: ABCDE12345
+    #   IOS_BUNDLE_ID: com.boilerplate.app.preview
+    #   ANDROID_PACKAGE: com.boilerplate.app.preview
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
   api:
     autoscaling: { enabled: false }
-    env:
-      # Passkeys made in the Android app come from its certificates, the web's above
-      # (apps/api/src/auth/auth.ts).
-      ANDROID_CERT_FINGERPRINTS: *android-certs
+    # With the mobile app's links on (web, above): passkeys made in the Android app come
+    # from its certificates (apps/api/src/auth/auth.ts).
+    # env:
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
     # No file uploads (no ClamAV, no uploads bucket: see data.yaml).
     storage: none
   worker:

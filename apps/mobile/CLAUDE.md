@@ -40,7 +40,7 @@ Expo (expo-router, React Native, Uniwind). Uses the same `@repo/client` hooks an
   CLI waits for input when it isn't run in a terminal, so copy a new component from the
   registry JSON instead (`https://reactnativereusables.com/r/uniwind/<name>.json`) and
   install the dependencies it lists with `bunx expo install`.
-- Https links and passkeys work only in a build whose `EXPO_PUBLIC_API_URL` is https,
-  once that site serves its association files (docs/web-and-mobile.md, "Universal links
-  and App Links"). A development build on a LAN address shows the passkey button, but
-  the device's prompt fails there.
+- Https links and passkeys are optional: they work only in a build whose
+  `EXPO_PUBLIC_API_URL` is https and that has `APPLE_TEAM_ID` / `ANDROID_CERT_FINGERPRINTS`,
+  for a site that serves its association files (docs/web-and-mobile.md, "Universal links
+  and App Links"). Elsewhere the passkey button shows, but the device's prompt fails.
