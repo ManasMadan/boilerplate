@@ -7,6 +7,7 @@
  * files migration's row-level security), and what processing it gets (apps/worker
  * files processor).
  */
+import { keysOf } from "./objects";
 export const uploadPurposes = {
   /** A profile picture: re-encoded to a square WebP, metadata (EXIF, GPS) stripped. */
   avatar: {
@@ -16,10 +17,7 @@ export const uploadPurposes = {
 } as const satisfies Record<string, { types: readonly string[]; maxBytes: number }>;
 
 export type UploadPurpose = keyof typeof uploadPurposes;
-export const uploadPurposeNames = Object.keys(uploadPurposes) as [
-  UploadPurpose,
-  ...UploadPurpose[],
-];
+export const uploadPurposeNames = keysOf(uploadPurposes);
 
 export const fileStatuses = ["pending", "processing", "ready", "rejected"] as const;
 

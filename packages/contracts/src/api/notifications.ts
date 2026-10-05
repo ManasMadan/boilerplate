@@ -6,24 +6,15 @@ import {
   notificationCategories,
   notificationChannels,
 } from "../notifications";
+import { keysOf } from "../objects";
 import { page, pageInput } from "../pagination";
 import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
 const errors = errorsOf("UNSUBSCRIBE_LINK_INVALID");
 
-const inAppType = z.enum(
-  Object.keys(inAppNotifications) as [
-    keyof typeof inAppNotifications,
-    ...(keyof typeof inAppNotifications)[],
-  ],
-);
-export const notificationCategorySchema = z.enum(
-  Object.keys(notificationCategories) as [
-    keyof typeof notificationCategories,
-    ...(keyof typeof notificationCategories)[],
-  ],
-);
+const inAppType = z.enum(keysOf(inAppNotifications));
+export const notificationCategorySchema = z.enum(keysOf(notificationCategories));
 
 export const notificationSchema = z.object({
   id: z.uuid(),

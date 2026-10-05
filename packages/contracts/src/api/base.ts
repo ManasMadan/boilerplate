@@ -49,6 +49,9 @@ export const errorResponse = z.object({
 
 /** The oRPC error map for these codes, with their catalog statuses and the one data shape. */
 export function errorsOf<C extends ErrorCode>(...codes: C[]) {
+  // TypeScript can't type an object built from a list of keys (Object.fromEntries gives a
+  // string record), and clients need each code's own entry to type its error.
+  // type-coverage:ignore-next-line
   return Object.fromEntries(
     codes.map((code) => [code, { status: ERROR_CODES[code], data: errorData }]),
   ) as { [K in C]: { status: (typeof ERROR_CODES)[K]; data: typeof errorData } };

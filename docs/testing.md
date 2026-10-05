@@ -239,6 +239,7 @@ better-typed call can say it instead.
 
 | File | Line | Why |
 |---|---|---|
+| `packages/contracts/src/api/base.ts` | `errorsOf`'s `Object.fromEntries(...) as {...}` | TypeScript can't type an object built from a list of keys, and oRPC clients need each code's own entry to type its error |
 
 ## End to end
 

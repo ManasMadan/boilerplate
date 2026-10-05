@@ -10,6 +10,7 @@
  * (`BillingService.require` in apps/api), and hide or badge it in clients from
  * `billing.overview`.
  */
+import { keysOf } from "./objects";
 export const plans = {
   free: { entitlements: { members: 3, webhooks: false } },
   /** Per seat: the subscription's quantity follows the member count. */
@@ -24,7 +25,7 @@ export interface Entitlements {
 }
 
 export type PlanName = keyof typeof plans;
-export const planNames = Object.keys(plans) as [PlanName, ...PlanName[]];
+export const planNames = keysOf(plans);
 export const billingIntervals = ["month", "year"] as const;
 export type BillingInterval = (typeof billingIntervals)[number];
 export type Entitlement = keyof Entitlements;

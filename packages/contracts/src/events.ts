@@ -12,6 +12,7 @@
  * subscribe to it. The audit log records every event automatically.
  */
 import * as z from "zod";
+import { keysOf } from "./objects";
 
 const todoEvent = z.object({ todoId: z.uuid(), title: z.string() });
 const userEvent = z.object({ userId: z.uuid() });
@@ -120,7 +121,7 @@ export const events = {
 export type EventName = keyof typeof events;
 export type EventPayload<N extends EventName> = z.infer<(typeof events)[N]>;
 
-export const eventNames = Object.keys(events) as [EventName, ...EventName[]];
+export const eventNames = keysOf(events);
 
 /** Events the audit log doesn't record: their payloads hold addresses, and the change they're about has its own event. */
 export const unauditedEvents: ReadonlySet<string> = new Set<EventName>([

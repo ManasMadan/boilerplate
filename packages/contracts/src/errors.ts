@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { keysOf } from "./objects";
 
 /**
  * Every error code the API can return. Clients translate codes with the `errors.<CODE>`
@@ -111,7 +112,7 @@ export type ErrorParams<C extends ErrorCode> = C extends keyof typeof ERROR_PARA
   ? z.infer<(typeof ERROR_PARAMS)[C]> & ParamsFree
   : ParamsFree;
 
-export const errorCode = z.enum(Object.keys(ERROR_CODES) as ErrorCode[]);
+export const errorCode = z.enum(keysOf(ERROR_CODES));
 
 export const isErrorCode = (value: unknown): value is ErrorCode =>
   typeof value === "string" && Object.hasOwn(ERROR_CODES, value);

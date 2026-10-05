@@ -9,6 +9,7 @@
  * templates at it.
  */
 import * as z from "zod";
+import { entriesOf } from "./objects";
 
 export const notificationChannels = ["in_app", "email", "push", "sms"] as const;
 export type NotificationChannel = (typeof notificationChannels)[number];
@@ -23,12 +24,7 @@ export const notificationCategories = {
 export type NotificationCategory = keyof typeof notificationCategories;
 
 /** Categories users can change, with the channels they can change them on. */
-export const mutableCategories = (
-  Object.entries(notificationCategories) as [
-    NotificationCategory,
-    (typeof notificationCategories)[NotificationCategory],
-  ][]
-)
+export const mutableCategories = entriesOf(notificationCategories)
   .filter(([, category]) => category.mutable)
   .map(([name, category]) => ({ name, channels: category.channels }));
 

@@ -4,6 +4,7 @@ import { isErrorCode } from "./errors";
 import { fileContentPath } from "./files";
 import { AI_MCP_PATH, MCP_PATH, mcpResource } from "./mcp";
 import { formatMoney } from "./money";
+import { entriesOf, hasKey, keysOf } from "./objects";
 import { pageInput, toPage } from "./pagination";
 
 describe("toPage", () => {
@@ -55,5 +56,18 @@ describe("resource paths", () => {
 
   it("serves a file's content under the REST API", () => {
     expect(fileContentPath("f1")).toBe("/api/v1/files/f1/content");
+  });
+});
+
+describe("keysOf, entriesOf and hasKey", () => {
+  it("see an object's own keys only, not inherited ones", () => {
+    const object = Object.assign(Object.create({ inherited: 1 }), { a: 1, b: 2 });
+    expect(keysOf(object)).toEqual(["a", "b"]);
+    expect(entriesOf({ a: 1, b: 2 })).toEqual([
+      ["a", 1],
+      ["b", 2],
+    ]);
+    expect(hasKey({ a: 1 }, "a")).toBe(true);
+    expect(hasKey({ a: 1 }, "toString")).toBe(false);
   });
 });
