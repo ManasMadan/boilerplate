@@ -69,8 +69,7 @@ jobs:
             *.cache-from=type=gha,scope=${{ matrix.image }}-amd64
 
   # A closed pull request's preview images (sha-<each of its commits>) are never deployed
-  # again: master's commits are new ones (squash and rebase merges both rewrite them),
-  # with images of their own.
+  # again: master's commits are new ones (squash merges), with images of their own.
   cleanup:
     name: Delete the preview's images
     if: >-

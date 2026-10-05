@@ -40,13 +40,16 @@ fixes for what usually goes wrong.
    (`scripts/pre-push.ts`, see [docs/testing.md](docs/testing.md#before-a-push)). That can
    take a while for a change to shared code, and the end-to-end suite in it needs
    `bun dev` stopped; `git push --no-verify` skips it and leaves CI to decide.
-4. Open a pull request. A squash merge makes its title the commit, and a rebase merge
-   keeps every commit, so the title and each commit message follow
+4. Open a pull request. It's squash-merged, so its title becomes the one commit on
+   master and follows
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:
    `feat(api): add todo sharing`, `fix(web): keep the draft on reload`. The scopes are in
    `commitlint.config.ts`. `feat` and `fix` end up in the changelog and the next version.
 
-CI must pass (the **CI passed** check). With a single maintainer the ruleset asks for no
+The branch must be up to date with master ("Update branch" on the pull request does it)
+and the four gates must pass on it: **CI passed**, **Security passed**, **Kubernetes
+passed** and **Infrastructure passed**. Auto-merge is on, so a pull request set to merge
+lands as soon as they do. With a single maintainer the ruleset asks for no
 approval (GitHub doesn't let you approve your own pull request); once there's a team, it
 asks for one from a code owner (docs/repository-settings.md).
 
