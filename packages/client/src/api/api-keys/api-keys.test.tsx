@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/client";
 import type { ApiKey } from "@repo/contracts/api";
+import { apiKeyIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
 import { useCreateApiKeyMutation } from "./create";
@@ -14,7 +15,7 @@ describe("API keys", () => {
         list: os.apiKeys.list.handler(() => keys),
         create: os.apiKeys.create.handler(({ input }) => {
           const apiKey: ApiKey = {
-            id: id(keys.length + 1),
+            id: apiKeyIdSchema.parse(id(keys.length + 1)),
             name: input.name,
             start: "bp_abc",
             scopes: input.scopes,

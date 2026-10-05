@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/client";
 import type { Todo } from "@repo/contracts/api";
+import { todoIdSchema } from "@repo/contracts/ids";
 import { toPage } from "@repo/contracts/pagination";
 import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
@@ -10,7 +11,7 @@ import { useTodoListInfiniteQuery } from "./list";
 import { useTodoSetCompletedMutation } from "./set-completed";
 
 const todo = (n: number): Todo => ({
-  id: id(n),
+  id: todoIdSchema.parse(id(n)),
   title: `Todo ${n}`,
   completed: false,
   version: 1,

@@ -1,13 +1,14 @@
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { FileInfo } from "@repo/contracts/api";
+import { fileIdSchema } from "@repo/contracts/ids";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
 import { useFileQuery } from "./get";
 import { checkUpload, UploadFailedError, useUploadFileMutation } from "./upload";
 
 const file = (status: FileInfo["status"]): FileInfo => ({
-  id: id(1),
+  id: fileIdSchema.parse(id(1)),
   purpose: "avatar",
   status,
   filename: "me.png",

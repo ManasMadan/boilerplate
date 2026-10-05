@@ -1,4 +1,5 @@
 import type { WebhookEndpoint } from "@repo/contracts/api";
+import { webhookEndpointIdSchema } from "@repo/contracts/ids";
 import { toPage } from "@repo/contracts/pagination";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
@@ -24,7 +25,7 @@ describe("webhook endpoints", () => {
         listEndpoints: os.webhooks.listEndpoints.handler(() => endpoints),
         createEndpoint: os.webhooks.createEndpoint.handler(({ input }) => {
           const endpoint: WebhookEndpoint = {
-            id: id(1),
+            id: webhookEndpointIdSchema.parse(id(1)),
             url: input.url,
             description: input.description ?? "",
             events: input.events ?? [],

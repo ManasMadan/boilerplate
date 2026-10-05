@@ -1,4 +1,5 @@
 import type { ConnectedApp } from "@repo/contracts/api";
+import { orgIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
 import { useDisconnectAppMutation } from "./disconnect";
@@ -9,7 +10,7 @@ const app = (n: number): ConnectedApp => ({
   clientId: `client-${n}`,
   name: `App ${n}`,
   uri: null,
-  workspace: { id: id(50), name: "Acme" },
+  workspace: { id: orgIdSchema.parse(id(50)), name: "Acme" },
   scopes: ["todos:read"],
   connectedAt: new Date(0),
   lastUsedAt: null,

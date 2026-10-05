@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/client";
 import type { AiDocument, AssistantEvent } from "@repo/contracts/api";
+import { documentIdSchema } from "@repo/contracts/ids";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
 import { useAddDocumentMutation } from "./add-document";
@@ -9,7 +10,7 @@ import { useRemoveDocumentMutation } from "./remove-document";
 import { useAiSentimentMutation } from "./sentiment";
 
 const document = (n: number, status: AiDocument["status"]): AiDocument => ({
-  id: id(n),
+  id: documentIdSchema.parse(id(n)),
   title: `Doc ${n}`,
   status,
   error: null,

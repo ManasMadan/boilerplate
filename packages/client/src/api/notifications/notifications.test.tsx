@@ -1,4 +1,5 @@
 import type { AppNotification, NotificationPreferences } from "@repo/contracts/api";
+import { notificationIdSchema } from "@repo/contracts/ids";
 import { toPage } from "@repo/contracts/pagination";
 import { describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn } from "../../../test/stand-in";
@@ -13,7 +14,7 @@ import { useUnsubscribeMutation } from "./unsubscribe";
 import { useUpdateNotificationPreferencesMutation } from "./update-preferences";
 
 const notification = (n: number): AppNotification => ({
-  id: id(n),
+  id: notificationIdSchema.parse(id(n)),
   type: "todo.reminder",
   data: { todoId: id(100 + n), title: `Todo ${n}` },
   link: null,
