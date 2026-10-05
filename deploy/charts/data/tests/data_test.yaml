@@ -529,6 +529,24 @@ tests:
         documentSelector: { path: kind, value: Namespace }
       - equal: { path: 'spec.hard["requests.memory"]', value: 8Gi }
         documentSelector: { path: kind, value: ResourceQuota }
+      # CPU and memory, requested and limited: every container sets all four.
+      - equal: { path: 'spec.hard["limits.cpu"]', value: "16" }
+        documentSelector: { path: kind, value: ResourceQuota }
+      - equal:
+          path: spec.limits
+          value:
+            - type: Container
+              defaultRequest: { cpu: 50m, memory: 128Mi }
+              default: { cpu: 500m, memory: 512Mi }
+              min: { cpu: 10m, memory: 16Mi }
+              max: { cpu: "2", memory: 4Gi }
+        documentSelector: { path: kind, value: LimitRange }
+
+  - it: needs a preview's quota in full, CPU limits included
+    template: preview.yaml
+    values: [values/quota-without-cpu.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: "missing property 'limits.cpu'" }
 
   - it: catches a preview's mail in a Mailpit of its own, over TLS from its own authority
     template: preview-mail.yaml

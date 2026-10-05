@@ -51,7 +51,8 @@ changes nothing, so a rerun costs one short-lived pod and a line in Argo CD's hi
 
 ## How every pod runs
 
-Every container of both charts runs as user and group 10001 (never root, never an id of
+Every container of both charts, and of the platform's own (`platform/mail`,
+`platform/jaeger`, `platform/alerts`), runs as user and group 10001 (never root, never an id of
 the node's own users), on a read-only root filesystem with every capability dropped,
 writing only to its volumes and an empty `/tmp`, and with a CPU limit as well as a
 memory one: a busy or runaway process slows itself down rather than its node's other
@@ -60,8 +61,9 @@ services, one CPU each; two for ClamAV and Postgres), and an environment's value
 override them. Every object names its release's namespace. ClamAV starts itself rather
 than through its image's entrypoint, which needs root's rights over its own files: each
 new pod fetches the signatures (about 110 MB, from database.clamav.net) before it takes
-connections, then keeps them current. `bun scripts/misconfig.ts` renders both charts for
-every environment and fails on any setting Trivy finds that breaks these rules.
+connections, then keeps them current. `bun scripts/misconfig.ts` renders every chart of
+ours (the application's for every environment, the platform's with a cluster's values)
+and fails on any setting Trivy finds that breaks these rules.
 
 ## Network policies
 
@@ -352,11 +354,16 @@ Stalwart runs on every cluster (`platform/mail`, namespace `mail`), on the node
 OpenTofu labels `boilerplate.dev/mail=true`: SPF and reverse DNS name that node's
 address, so mail must leave from it. Its ports (25, 465, 587, 993) are a LoadBalancer
 Service that k3s's ServiceLB answers only on that node, with a certificate for its
-host name from cert-manager. OpenTofu publishes the DNS records (the host, MX, SPF,
+host name from cert-manager. Inside the pod the server listens on unprivileged ports
+(2525, 4650, 5870, 9930; the chart's `mail.listeners`), which the Service maps the mail
+ports to, so it runs like every other pod: as 10001, on a read-only root, with no
+capability. The image's binary carries the capability to bind low ports, which the
+kernel refuses to start without, so the pod runs a copy of it that doesn't. OpenTofu publishes the DNS records (the host, MX, SPF,
 DKIM, DMARC), from the same DKIM key as `dkim.key` in the `stalwart` Secret.
 
 Stalwart keeps its settings in its database and only takes them through its management
-API. The chart applies them (`plan.ndjson`: logs to stdout, the domain with our DKIM key
+API. The chart applies them (`plan.ndjson`: logs to stdout, the listeners, exactly
+these, the domain with our DKIM key
 and certificate, the host name, the `no-reply` account the notifications service submits
 as, the webhook) on every start, with the recovery administrator of a short-lived
 recovery-mode server, before the real one starts; the administrator never works on the

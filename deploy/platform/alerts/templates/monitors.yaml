@@ -15,6 +15,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
   name: {{ $m.name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "alerts.labels" $ | nindent 4 }}
 spec:

@@ -12,6 +12,7 @@ apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
   name: email
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "alerts.labels" $ | nindent 4 }}
 spec:

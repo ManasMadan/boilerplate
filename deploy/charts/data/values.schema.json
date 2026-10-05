@@ -171,7 +171,22 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "namespace": { "type": "string" },
-        "quota": { "type": "object", "additionalProperties": { "type": "string" } },
+        "quota": {
+          "type": "object",
+          "required": ["requests.cpu", "requests.memory", "limits.cpu", "limits.memory"],
+          "additionalProperties": { "type": "string" }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["defaultRequest", "default", "min", "max"],
+          "properties": {
+            "defaultRequest": { "$ref": "#/$defs/cpuMemory" },
+            "default": { "$ref": "#/$defs/cpuMemory" },
+            "min": { "$ref": "#/$defs/cpuMemory" },
+            "max": { "$ref": "#/$defs/cpuMemory" }
+          }
+        },
         "mailpit": {
           "type": "object",
           "additionalProperties": false,
@@ -228,6 +243,12 @@
         "requests": { "type": "object", "additionalProperties": { "type": "string" } },
         "limits": { "type": "object", "additionalProperties": { "type": "string" } }
       }
+    },
+    "cpuMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
     },
     "bucket": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$" }
   }

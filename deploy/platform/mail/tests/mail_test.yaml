@@ -25,10 +25,10 @@ tests:
       - equal:
           path: spec.ports
           value:
-            - { name: smtp, port: 25, targetPort: smtp }
-            - { name: submissions, port: 465, targetPort: submissions }
-            - { name: submission, port: 587, targetPort: submission }
             - { name: imaps, port: 993, targetPort: imaps }
+            - { name: smtp, port: 25, targetPort: smtp }
+            - { name: submission, port: 587, targetPort: submission }
+            - { name: submissions, port: 465, targetPort: submissions }
       - equal:
           path: metadata.annotations
           value:
@@ -96,7 +96,7 @@ tests:
       - equal: { path: spec.policyTypes, value: [Ingress] }
       - equal:
           path: spec.ingress
-          value: [{ ports: [{ port: 25 }, { port: 465 }, { port: 587 }, { port: 993 }] }]
+          value: [{ ports: [{ port: 9930 }, { port: 2525 }, { port: 5870 }, { port: 4650 }] }]
       - equal: { path: spec.podSelector.matchLabels, value: { app.kubernetes.io/name: stalwart, app.kubernetes.io/instance: stalwart } }
 
   - it: delivers directly unless a relay is set
@@ -144,20 +144,61 @@ tests:
           content: { name: STALWART_RECOVERY_ADMIN, value: admin:$(ADMIN_PASSWORD) }
       - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: 'until \[ -e /run/provision/stopped \]' }
 
-  - it: runs locked down, with only the capability to bind mail ports
+  - it: runs locked down, with no capability at all, as our own user
     template: statefulset.yaml
     asserts:
-      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 2000 }
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }
       - equal: { path: spec.template.spec.automountServiceAccountToken, value: false }
       - equal:
           path: "spec.template.spec.containers[0].securityContext"
           value:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
-            capabilities: { drop: [ALL], add: [NET_BIND_SERVICE] }
+            capabilities: { drop: [ALL] }
+      - equal:
+          path: "spec.template.spec.initContainers[1].securityContext.capabilities"
+          value: { drop: [ALL] }
       - equal:
           path: "spec.template.spec.initContainers[2].securityContext.capabilities"
           value: { drop: [ALL] }
+      # A copy of the server binary, without the image's file capability, which the
+      # kernel won't grant a container that dropped it.
+      - matchRegex: { path: "spec.template.spec.initContainers[0].args[0]", pattern: 'cp /usr/local/bin/stalwart /run/provision/stalwart' }
+      - matchRegex: { path: "spec.template.spec.initContainers[1].args[0]", pattern: '/run/provision/stalwart --config' }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: '/run/provision/stalwart --config' }
+
+  - it: listens on unprivileged ports, which the Service maps the mail ports to
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: "spec.template.spec.containers[0].ports"
+          value:
+            - { name: imaps, containerPort: 9930 }
+            - { name: smtp, containerPort: 2525 }
+            - { name: submission, containerPort: 5870 }
+            - { name: submissions, containerPort: 4650 }
+            - { name: http, containerPort: 8080 }
+
+  - it: has the server listen on those ports, and on nothing else but management
+    template: configmap.yaml
+    asserts:
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '(?m)^\{"@type":"reconcile","matchOn":\["name"\],"object":"NetworkListener","value":\{"http":\{"bind":\{"\[::\]:8080":true\},"name":"http","protocol":"http","tlsImplicit":false\},"imaps":\{"bind":\{"\[::\]:9930":true\},"name":"imaps","protocol":"imap","tlsImplicit":true\},"smtp":\{"bind":\{"\[::\]:2525":true\},"name":"smtp","protocol":"smtp","tlsImplicit":false\},"submission":\{"bind":\{"\[::\]:5870":true\},"name":"submission","protocol":"smtp","tlsImplicit":false\},"submissions":\{"bind":\{"\[::\]:4650":true\},"name":"submissions","protocol":"smtp","tlsImplicit":true\}\}\}$'
+
+  - it: limits every container's CPU and memory
+    template: statefulset.yaml
+    asserts:
+      - exists: { path: "spec.template.spec.initContainers[0].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.initContainers[1].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.initContainers[2].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.cpu" }
+
+  - it: puts every object in the release's namespace
+    templates: [certificate.yaml, configmap.yaml, networkpolicy.yaml, service.yaml, statefulset.yaml]
+    asserts:
+      - equal: { path: metadata.namespace, value: mail }
 
   - it: reads the certificate, DKIM key and webhook key from their Secrets
     template: statefulset.yaml

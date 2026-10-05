@@ -189,8 +189,18 @@ preview:
   quota:
     requests.cpu: "4"
     requests.memory: 8Gi
+    # Every container has a CPU limit: room for all of a preview's at once (one CPU per
+    # service, two for Postgres, less for the rest), with a migration running.
+    limits.cpu: "16"
     limits.memory: 12Gi
     persistentvolumeclaims: "4"
+  # The preview namespace's LimitRange for a container: what one gets when it sets
+  # nothing, and the least and most it may set (the largest here is Postgres's two CPUs).
+  limits:
+    defaultRequest: { cpu: 50m, memory: 128Mi }
+    default: { cpu: 500m, memory: 512Mi }
+    min: { cpu: 10m, memory: 16Mi }
+    max: { cpu: "2", memory: 4Gi }
   # Where a preview's mail goes instead of out (templates/preview-mail.yaml).
   mailpit:
     enabled: true

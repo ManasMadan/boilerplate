@@ -86,4 +86,4 @@ storage:
   storageClass: local-path
 resources:
   requests: { cpu: 100m, memory: 256Mi }
-  limits: { memory: 1Gi }
+  limits: { cpu: "1", memory: 1Gi }

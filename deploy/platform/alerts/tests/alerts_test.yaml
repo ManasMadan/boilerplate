@@ -77,3 +77,8 @@ tests:
         documentIndex: 0
       - equal: { path: spec.podMetricsEndpoints, value: [{ port: metrics, path: /stats/prometheus }] }
         documentIndex: 2
+
+  - it: puts every object in the release's namespace
+    templates: [alertmanager.yaml, monitors.yaml, rules.yaml]
+    asserts:
+      - equal: { path: metadata.namespace, value: observability }
