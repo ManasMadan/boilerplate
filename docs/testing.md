@@ -368,7 +368,7 @@ for those areas.
 | Job | Runs |
 |---|---|
 | Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, each package's lint) |
-| Type-check | `bun run check-types`, then `bun run type-coverage` (no `any` in any workspace's source) |
+| Type-check | `bun run check-types`, then `bun run type-coverage` (strict: no `any`, type assertion or non-null `!` in any workspace's source, but the Type-coverage exceptions) |
 | Unit tests | `bun run test` |
 | Components | the stories with coverage, `test:visual` |
 | Integration tests | migrations, the drift check, then every package's `coverage` except Python's and the stories', and the scripts' and hooks' |

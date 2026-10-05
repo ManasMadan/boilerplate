@@ -12,7 +12,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | Develop (core profile: web, api, notifications, worker, webhooks) | `bun dev` |
 | Develop with every service (AI and its worker, RustFS, ClamAV, Stalwart, Jaeger, Expo, email previews) | `bun dev:full` |
 | Lint, formatting, architecture boundaries | `bun run lint` (`bun run format` to fix) |
-| Types | `bun run check-types`; no `any` in the source: `bun run type-coverage [<workspace>]` |
+| Types | `bun run check-types`; no `any` and no casts in the source: `bun run type-coverage [<workspace>]` |
 | Unit tests (fast, cached) | `bun run test` |
 | Integration tests (real Postgres/Valkey/Mailpit) | `bun run test:integration` |
 | Coverage: every suite merged, every file at 100% (needs the full profile) | `bun run test:coverage` |

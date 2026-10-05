@@ -1,10 +1,13 @@
 /**
- * No `any` in the source: type-coverage, for every TypeScript workspace, at 100%. An
- * `any` turns off checking for everything that flows from it (a JSON body, a job's data,
- * a library's loosely typed result), so each must become `unknown` or a real type.
- * Tests, stories, test setup and generated code are left out; type assertions are
- * allowed (the stricter mode counts them too, and some are the idiomatic way to say
- * what a library can't, like `Object.keys(x) as K[]`).
+ * No `any` and no casts in the source: type-coverage in its strict mode, for every
+ * TypeScript workspace, at 100%. An `any` turns off checking for everything that flows
+ * from it (a JSON body, a job's data, a library's generic left at its default), and a
+ * type assertion or a non-null `!` is a claim the compiler can't check, so each becomes
+ * a parse, a type guard, a check that throws (`required` in @repo/contracts/objects) or
+ * a better-typed call. `as const` is fine. The few lines with no typed alternative carry
+ * the tool's ignore comment and are listed in docs/testing.md (Type-coverage
+ * exceptions), which the suppressions check enforces. Tests, stories, test setup and
+ * generated code are left out.
  *
  *   bun run type-coverage              every workspace
  *   bun run type-coverage apps/api     one, with each `any` it finds
@@ -36,7 +39,15 @@ export function workspaces(root = ROOT): string[] {
 /** Checks each workspace; the ones below 100%. */
 export function check(paths: string[], run: Run = runSync): string[] {
   return paths.filter((path) => {
-    const args = ["type-coverage", "-p", `${path}/tsconfig.json`, "--at-least", "100", "--detail"];
+    const args = [
+      "type-coverage",
+      "-p",
+      `${path}/tsconfig.json`,
+      "--strict",
+      "--at-least",
+      "100",
+      "--detail",
+    ];
     for (const pattern of IGNORED) args.push("--ignore-files", pattern);
     const result = run("bunx", args, { cwd: ROOT });
     if (result.status === 0) {

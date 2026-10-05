@@ -10,12 +10,16 @@ paths:
 The principles in `CLAUDE.md` apply everywhere; this is what they mean line by line.
 
 - **No escape hatches.** No `any`, `as any`, `as unknown as`, `@ts-ignore`,
-  `@ts-expect-error`, non-null `!` on a value that can be missing, `# type: ignore`,
-  bare `# pyright: ignore`, `# noqa`, or `biome-ignore`. A new one is refused by the edit
-  hook unless `docs/testing.md` lists the file with its reason. Fix the type instead. An
-  implicit `any` counts too (a library's loose result, `instanceof` on a generic class,
-  a `Job` without its type argument): `bun run type-coverage` fails on any in the source,
-  in CI's type-check job. Make it `unknown` and parse it, or give it its type.
+  `@ts-expect-error`, non-null `!`, `# type: ignore`, bare `# pyright: ignore`, `# noqa`,
+  or `biome-ignore`. A new one is refused by the edit hook unless `docs/testing.md` lists
+  the file with its reason. Fix the type instead. An implicit `any` counts too (a
+  library's loose result, `instanceof` on a generic class, a library generic left at its
+  default like BullMQ's `Job`, which is `UncheckedJob` here), and so does every type
+  assertion: `bun run type-coverage`, in strict mode, fails on any of them in the source,
+  in CI's type-check job. Make it `unknown` and parse it, give it its type, narrow it with
+  a guard, or check it with `required`, `fieldOf` or `keysOf` (`@repo/contracts/objects`);
+  `as const` and `satisfies` are fine. A line with truly no typed alternative takes the
+  tool's ignore comment and a row in `docs/testing.md`'s Type-coverage exceptions.
 - **Parse, don't cast.** Data from outside the process (HTTP, queues, env, files, third
   parties, the database's JSON columns, other services) goes through a schema (zod,
   Pydantic) at the boundary; inside, types come from those schemas. No hand-written

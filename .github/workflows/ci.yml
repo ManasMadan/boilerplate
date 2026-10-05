@@ -123,7 +123,7 @@ jobs:
           key: tsc-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.sha }}
           restore-keys: tsc-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
       - run: bun run check-types
-      # No `any` in the source, every workspace (scripts/type-coverage.ts).
+      # No `any` and no casts in the source, every workspace (scripts/type-coverage.ts, strict).
       - run: bun run type-coverage
 
   unit:

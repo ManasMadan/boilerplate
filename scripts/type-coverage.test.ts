@@ -14,7 +14,7 @@ describe("type coverage", () => {
     expect(found).not.toContain("packages/typescript-config");
   });
 
-  it("asks for 100% outside tests and generated code, and names what falls short", () => {
+  it("asks for 100% in strict mode outside tests and generated code, and names what falls short", () => {
     const printed = captureOutput();
     const { run, calls } = fakeRun((line) =>
       line.includes("apps/web/")
@@ -22,7 +22,7 @@ describe("type coverage", () => {
         : undefined,
     );
     expect(check(["apps/api", "apps/web"], run)).toEqual(["apps/web"]);
-    expect(calls[0]).toContain("-p apps/api/tsconfig.json --at-least 100");
+    expect(calls[0]).toContain("-p apps/api/tsconfig.json --strict --at-least 100");
     expect(calls[0]).toContain("--ignore-files **/*.test.ts");
     expect(calls[0]).toContain("--ignore-files **/generated/**");
     expect(printed()).toContain("apps/web/src/page.tsx:3:7: data");
