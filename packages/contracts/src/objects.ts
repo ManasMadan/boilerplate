@@ -1,7 +1,8 @@
 /**
- * Typed `Object.keys` and friends, for the literal objects the contracts are built from
- * (a catalog, a map of plans). `Object.keys` says `string[]`, because an object may have
- * more keys than its type names; these check each key at runtime instead of casting.
+ * Checks for what TypeScript types more loosely than the code knows it to be, instead of
+ * casts. `Object.keys` says `string[]`, because an object may have more keys than its
+ * type names, so `keysOf` checks each key; `fieldOf` reads a field of a thrown value;
+ * `required` is a value the code knows is there, and says which when it isn't.
  */
 
 /** Whether `key` is one of the object's own keys. */
@@ -29,4 +30,14 @@ export function fieldOf(value: unknown, key: string): unknown {
 
 function hasField<K extends string>(value: unknown, key: K): value is Record<K, unknown> {
   return typeof value === "object" && value !== null && key in value;
+}
+
+/**
+ * A value the code knows is present (the first of a list it just checked, a field a
+ * library types as optional but always sets, a variable the environment's schema
+ * requires when its feature is on). Throws, naming it, if it isn't.
+ */
+export function required<T>(value: T | null | undefined, what: string): T {
+  if (value === null || value === undefined) throw new Error(`${what} is missing`);
+  return value;
 }

@@ -4,7 +4,7 @@ import { isErrorCode } from "./errors";
 import { fileContentPath } from "./files";
 import { AI_MCP_PATH, MCP_PATH, mcpResource } from "./mcp";
 import { formatMoney } from "./money";
-import { entriesOf, fieldOf, hasKey, keysOf } from "./objects";
+import { entriesOf, fieldOf, hasKey, keysOf, required } from "./objects";
 import { pageInput, toPage } from "./pagination";
 
 describe("toPage", () => {
@@ -79,5 +79,14 @@ describe("fieldOf", () => {
     expect(fieldOf({}, "code")).toBeUndefined();
     expect(fieldOf("EPERM", "code")).toBeUndefined();
     expect(fieldOf(null, "code")).toBeUndefined();
+  });
+});
+
+describe("required", () => {
+  it("returns a present value, falsy ones too, and names a missing one", () => {
+    expect(required(0, "count")).toBe(0);
+    expect(required("", "name")).toBe("");
+    expect(() => required(undefined, "the first key")).toThrow("the first key is missing");
+    expect(() => required(null, "url")).toThrow("url is missing");
   });
 });
