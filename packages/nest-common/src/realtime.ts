@@ -90,20 +90,19 @@ class Hub<S extends z.ZodType> {
     try {
       // Inside the try: if subscribing fails, the finally still undoes the rest.
       await Promise.all(channels.map((channel) => this.retain(channel)));
-      // The buffer is empty each time round: the inner loop drains it, and nothing
-      // arrives between that and setting `wake` (no await in between).
+      // Drain before each wait: a message can arrive before the first one, in the same
+      // read as Redis's confirmation of the subscription, while `retain` is still
+      // resolving. Nothing arrives between the empty check and setting `wake` (no await).
       while (!signal.aborted) {
+        const next = buffer.shift();
+        if (next !== undefined) {
+          yield next;
+          continue;
+        }
         await new Promise<void>((resolve) => {
           wake = resolve;
         });
         wake = undefined;
-        while (!signal.aborted) {
-          const next = buffer.shift();
-          if (next === undefined) {
-            break;
-          }
-          yield next;
-        }
       }
     } finally {
       signal.removeEventListener("abort", onAbort);

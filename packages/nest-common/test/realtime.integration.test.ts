@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getEventListeners } from "node:events";
 import { eventually } from "@repo/testing/eventually";
 import { Redis } from "ioredis";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import * as z from "zod";
 import { createRealtime } from "../src/realtime";
 import { redisDatabase } from "../src/testing";
@@ -39,7 +39,7 @@ async function collect(channels: string[], count: number, publish: () => Promise
   await eventually(
     () => received.length,
     (n) => n === count,
-    { timeout: 2_000 },
+    { interval: 10 },
   );
   controller.abort();
   await reading;
@@ -59,7 +59,7 @@ async function subscribed(channel: string, count: number) {
   await eventually(
     () => subscribers(channel),
     (n) => n >= count,
-    { timeout: 2_000, interval: 10 },
+    { interval: 10 },
   );
 }
 
@@ -122,6 +122,41 @@ describe("RealtimeHub", () => {
       number,
     ];
     expect(subscribers).toBe(0);
+  });
+
+  it("delivers a message that arrives in the same read as the subscription's confirmation", async () => {
+    // On a busy machine Redis's confirmation and the first message can reach the client
+    // together, so the message is handled before stream() is past subscribing. Holding the
+    // subscriber's socket until both are sent makes that happen every time.
+    const subscriber = redis.duplicate();
+    vi.spyOn(redis, "duplicate").mockReturnValueOnce(subscriber);
+    const racing = new RealtimeHub(redis);
+    await subscriber.ping();
+    const channel = `user:${randomUUID()}`;
+    const controller = new AbortController();
+    const stream = racing.stream([channel], controller.signal);
+    subscriber.stream.pause();
+    const first = stream.next();
+    await subscribed(channel, 1);
+    await publishRealtime(redis, channel, { type: "todos.changed" });
+    // Both replies, in Redis's protocol, are in the socket's buffer before it's resumed.
+    const bulk = (...parts: string[]) =>
+      `*${parts.length}\r\n${parts.map((part) => `$${Buffer.byteLength(part)}\r\n${part}\r\n`).join("")}`;
+    const name = `realtime:${channel}`;
+    const bytes =
+      bulk("subscribe", name).length +
+      ":1\r\n".length +
+      bulk("message", name, JSON.stringify({ type: "todos.changed" })).length;
+    await eventually(
+      () => subscriber.stream.readableLength,
+      (length) => length === bytes,
+      { interval: 10 },
+    );
+    subscriber.stream.resume();
+    expect(await first).toEqual({ done: false, value: { type: "todos.changed" } });
+    controller.abort();
+    await stream.return(undefined);
+    await racing.close();
   });
 
   it("keeps a channel subscribed until the last of its streams ends", async () => {
