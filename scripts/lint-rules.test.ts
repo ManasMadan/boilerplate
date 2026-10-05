@@ -83,7 +83,8 @@ beforeAll(() => {
   );
   // Biome's own report, in a test: a wrong shape fails the assertions below.
   diagnostics = (JSON.parse(ran.stdout.toString()) as { diagnostics: Diagnostic[] }).diagnostics;
-});
+  // Starting Biome takes a few seconds on a busy machine; Bun's default is five.
+}, 30_000);
 
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
