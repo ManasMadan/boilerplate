@@ -8,7 +8,8 @@ server for documents. Internal only: callers sign a short-lived JWT with
 ## Commands (from the repo root)
 
 - Lint and format check: `uv run --project apps/ai ruff check apps/ai` and
-  `uv run --project apps/ai ruff format --check apps/ai` (or `bun run lint`)
+  `uv run --project apps/ai ruff format --check apps/ai`; `bun run --cwd apps/ai lint`
+  runs both and deptry (dependencies), and `bun run lint` runs that too
 - Types: `bun run --filter @repo/ai check-types` (basedpyright, strict)
 - Unit tests: `bun run --filter @repo/ai test`
 - Integration tests (Postgres and Redis): `bun run db:up`, then

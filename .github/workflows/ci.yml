@@ -87,7 +87,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      # With uv: the Python service's own lint (ruff) is one of the steps.
+      # With uv: the Python service's own lint (ruff, deptry) is one of the steps.
       - uses: ./.github/actions/setup
         with: { python: "true" }
       # Biome, boundaries, unused code (knip.jsonc), shortcut markers, suppressions, the

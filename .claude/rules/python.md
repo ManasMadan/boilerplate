@@ -17,7 +17,11 @@ paths:
   with the rule named and a reason after it (`# pyright: ignore[rule]  # why`); an ignore
   that no longer suppresses anything is an error. No file-level relaxations.
 - ruff adds async, FastAPI, timezone, pytest, bandit, blind-except, print and annotation
-  checks to the defaults. Output goes through `app/log.py`, not `print`.
+  checks to the defaults, and Biome's complexity limits (McCabe 15, at most 12 branches
+  and 50 statements a function). Output goes through `app/log.py`, not `print`.
+- deptry (in `bun run lint`) fails on a dependency nothing imports, an import that isn't
+  a declared dependency (a transitive one included), and a dev dependency the service's
+  code imports: `uv add` what you import.
 - Request and response models live in `app/schemas.py`. Constrain every field
   (`Field(min_length=..., max_length=..., ge=..., le=...)`, `Literal` for enums): the
   constraints are both runtime validation and the OpenAPI document. Request models take
