@@ -30,6 +30,7 @@ scan:
     - "**/.ruff_cache"
     - "**/.schemathesis"
     - "**/.terraform"
+    - "**/.playwright-cli"
   # No calls home: it asks GitHub for a newer release and sends usage counts otherwise.
   skip-version-check: true
   disable-telemetry: true
