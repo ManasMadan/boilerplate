@@ -50,10 +50,10 @@ describe("the pre-commit checks", () => {
     const staged = ["deploy/docker/web.Dockerfile", "deploy/charts/stack/values.yaml", "bun.lock"];
     const all = preCommit({ staged, run: infra.run, slots: 8 });
     await Bun.sleep(0);
-    expect(infra.started).toEqual([LINT, SECRETS, TRIVY, OSV]);
+    expect(infra.started).toEqual([LINT, SECRETS, TRIVY, OSV, "bun scripts/linters.ts hadolint"]);
     await infra.finish();
     expect(await all).toBe(0);
-    expect(infra.most()).toBe(4);
+    expect(infra.most()).toBe(5);
   });
 
   it("lints a staged workflow with actionlint and zizmor", async () => {
@@ -67,6 +67,20 @@ describe("the pre-commit checks", () => {
       SECRETS,
       "bun scripts/linters.ts actionlint",
       "bun scripts/linters.ts zizmor",
+    ]);
+  });
+
+  it("lints a staged shell script, Dockerfile and OpenTofu file with their linters", async () => {
+    captureOutput();
+    const { run, started, finish } = steps();
+    const staged = [".husky/pre-commit", ".devcontainer/Dockerfile", "infra/tofu/envs/k3s/main.tf"];
+    const done = preCommit({ staged, run, slots: 8 });
+    await finish();
+    expect(await done).toBe(0);
+    expect(started.filter((line) => line.startsWith("bun scripts/linters.ts"))).toEqual([
+      "bun scripts/linters.ts shellcheck",
+      "bun scripts/linters.ts hadolint",
+      "bun scripts/linters.ts tflint",
     ]);
   });
 

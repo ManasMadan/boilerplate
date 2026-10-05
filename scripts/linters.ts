@@ -6,11 +6,15 @@
  *
  *   actionlint   the workflows, and shellcheck on their `run:` blocks
  *   zizmor       the workflows' and actions' security (.github/zizmor.yml), offline
+ *   shellcheck   every shell script: *.sh, the git hooks, and any file whose first line
+ *                runs a shell (a .shellcheckrc beside scripts without one says which)
+ *   hadolint     every Dockerfile
+ *   tflint       the OpenTofu code (infra/tofu/.tflint.hcl)
  *
  * Each uses a local binary of its version, else its image in Docker; with neither, it
  * fails and says how to get one, rather than skipping the check.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
@@ -21,13 +25,32 @@ type Linter = {
   version: string;
   /** Where its releases are, to install that version. */
   releases: string;
-  /** Whether it checks `path` (from the repository root). */
-  reads: (path: string) => boolean;
-  /** Its arguments, given the files it checks. */
-  args: (files: string[]) => string[];
+  /** Whether it checks `path` (from the repository root `root`). */
+  reads: (path: string, root: string) => boolean;
+  /** Its arguments, given the files it checks and the repository root. */
+  args: (files: string[], root: string) => string[];
 };
 
-export const LINTERS = {
+/**
+ * A shell script: a .sh file, a git hook, or a file without an extension whose first line
+ * runs a shell shellcheck reads.
+ */
+export function isShellScript(path: string, root: string): boolean {
+  if (/\.(sh|bash)$/.test(path) || /^\.husky\/[^/.][^/]*$/.test(path)) {
+    return true;
+  }
+  const file = join(root, path);
+  return (
+    /(^|\/)[^/.]+$/.test(path) &&
+    existsSync(file) &&
+    /^#!\s*\S*\b(env\s+)?(sh|bash|dash|ksh)\b/.test(readFileSync(file, "utf8"))
+  );
+}
+
+export const LINTERS: Record<
+  "actionlint" | "zizmor" | "shellcheck" | "hadolint" | "tflint",
+  Linter
+> = {
   actionlint: {
     image: "rhysd/actionlint",
     // renovate: datasource=docker depName=rhysd/actionlint
@@ -45,7 +68,38 @@ export const LINTERS = {
     // Offline: the same audits with or without a GitHub token in the environment.
     args: () => ["--offline", "--config=.github/zizmor.yml", ".github"],
   },
-} satisfies Record<string, Linter>;
+  shellcheck: {
+    image: "koalaman/shellcheck",
+    // renovate: datasource=docker depName=koalaman/shellcheck
+    version: "v0.11.0",
+    releases: "https://github.com/koalaman/shellcheck/releases",
+    reads: isShellScript,
+    args: (files) => files,
+  },
+  hadolint: {
+    image: "hadolint/hadolint",
+    // renovate: datasource=docker depName=hadolint/hadolint
+    version: "v2.15.1",
+    releases: "https://github.com/hadolint/hadolint/releases",
+    reads: (path) => /(^|\/)[^/]*Dockerfile$/.test(path),
+    args: (files) => files,
+  },
+  tflint: {
+    image: "ghcr.io/terraform-linters/tflint",
+    // renovate: datasource=docker depName=ghcr.io/terraform-linters/tflint
+    version: "v0.64.0",
+    releases: "https://github.com/terraform-linters/tflint/releases",
+    reads: (path) => /^infra\/tofu\/.+\.(tf|hcl)$/.test(path),
+    // Every module and environment; the configuration by its full path, which tflint
+    // otherwise looks for in each module's own folder.
+    args: (_, root) => [
+      "--chdir=infra/tofu",
+      "--recursive",
+      `--config=${root}/infra/tofu/.tflint.hcl`,
+      "--format=compact",
+    ],
+  },
+};
 
 /** Every file under `root` git tracks or would (new ones too), that still exists. */
 export function repositoryFiles(run: Run = runSync, root = ROOT): string[] {
@@ -80,7 +134,7 @@ export function lint(argv = process.argv.slice(2), run = runSync, root = ROOT): 
     fail(`Which linter? One of ${Object.keys(LINTERS).join(", ")}.`);
     return 1;
   }
-  const files = repositoryFiles(run, root).filter(linter.reads);
+  const files = repositoryFiles(run, root).filter((path) => linter.reads(path, root));
   if (files.length === 0) {
     ok(`${name}: nothing to check`);
     return 0;
@@ -93,7 +147,8 @@ export function lint(argv = process.argv.slice(2), run = runSync, root = ROOT): 
     return 1;
   }
   return (
-    run(program, [...rest, ...linter.args(files)], { cwd: root, stdio: "inherit" }).status ?? 1
+    run(program, [...rest, ...linter.args(files, root)], { cwd: root, stdio: "inherit" }).status ??
+    1
   );
 }
 

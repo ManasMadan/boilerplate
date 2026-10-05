@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ROOT } from "./lib";
 import { STEPS } from "./lint";
-import { LINTERS, lint } from "./linters";
+import { isShellScript, LINTERS, lint } from "./linters";
 import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -20,7 +20,7 @@ function checkout(files: string[]) {
   return { root, listed };
 }
 
-const { actionlint, zizmor } = LINTERS;
+const { actionlint, zizmor, hadolint, tflint } = LINTERS;
 
 describe("the pinned linters", () => {
   it("run a local binary of the pinned version over the files they read, and fail as it does", () => {
@@ -86,10 +86,44 @@ describe("the pinned linters", () => {
   });
 
   it("read what each checks", () => {
-    expect(actionlint.reads(".github/workflows/ci.yml")).toBe(true);
-    expect(actionlint.reads(".github/actions/setup/action.yml")).toBe(false);
-    expect(zizmor.reads(".github/actions/setup/action.yml")).toBe(true);
-    expect(zizmor.reads("deploy/charts/stack/values.yaml")).toBe(false);
+    expect(actionlint.reads(".github/workflows/ci.yml", ROOT)).toBe(true);
+    expect(actionlint.reads(".github/actions/setup/action.yml", ROOT)).toBe(false);
+    expect(zizmor.reads(".github/actions/setup/action.yml", ROOT)).toBe(true);
+    expect(zizmor.reads("deploy/charts/stack/values.yaml", ROOT)).toBe(false);
+    for (const path of [".devcontainer/Dockerfile", "deploy/docker/web.Dockerfile"]) {
+      expect(hadolint.reads(path, ROOT)).toBe(true);
+    }
+    expect(hadolint.reads("scripts/dockerfiles.test.ts", ROOT)).toBe(false);
+    expect(tflint.reads("infra/tofu/modules/k3s/main.tf", ROOT)).toBe(true);
+    expect(tflint.reads("infra/tofu/README.md", ROOT)).toBe(false);
+  });
+
+  it("find every shell script: by its extension, as a git hook, or by its first line", () => {
+    const { root } = checkout([".husky/pre-commit"]);
+    const scripts: Record<string, string> = {
+      "bin/deploy": "#!/usr/bin/env bash\nset -e\n",
+      "bin/posix": "#!/bin/sh\n",
+      "bin/tool": "#!/usr/bin/env bun\n",
+      LICENSE: "MIT\n",
+    };
+    for (const [path, text] of Object.entries(scripts)) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    const shell = (path: string) => isShellScript(path, root);
+    expect(["a/x.sh", "b.bash", ".husky/pre-commit", "bin/deploy", "bin/posix"].every(shell)).toBe(
+      true,
+    );
+    expect([".husky/.shellcheckrc", "bin/tool", "LICENSE", "bin/gone", "a/x.ts"].some(shell)).toBe(
+      false,
+    );
+  });
+
+  it("give shellcheck and hadolint the files, tflint its configuration by its full path", () => {
+    expect(LINTERS.shellcheck.args(["a.sh"], "/repo")).toEqual(["a.sh"]);
+    expect(hadolint.args(["Dockerfile"], "/repo")).toEqual(["Dockerfile"]);
+    // Every module reads it, and tflint would look for it in each module's own folder.
+    expect(tflint.args([], "/repo")).toContain("--config=/repo/infra/tofu/.tflint.hcl");
   });
 
   it("are each a `bun run lint:<name>` script, and a step of `bun run lint`", () => {

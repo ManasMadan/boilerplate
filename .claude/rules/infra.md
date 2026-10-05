@@ -26,7 +26,12 @@ a real cluster or cloud account. The checks below are offline.
 - OpenTofu: modules in `infra/tofu/modules/<name>` (k3s, cloudflare or rfc2136 for DNS, bootstrap), one root
   in `infra/tofu/envs/k3s` used per environment through tfvars. Every module has
   `tests/*.tftest.hcl` with `mock_provider`, so tests need no credentials.
-  `bun run infra:check` runs fmt, validate and every test.
+  `bun run infra:check` runs fmt, validate and every test; `bun run lint:tflint` (part of
+  `bun run lint`) runs tflint with every rule of its Terraform ruleset, so an output or
+  variable needs a description and a provider is declared where it's used.
+- Dockerfiles pass hadolint and shell scripts shellcheck (`bun run lint:hadolint`,
+  `lint:shellcheck`). A chart script runs under `sh`, which its folder's `.shellcheckrc`
+  tells shellcheck.
 - Everything runs in the cluster: no managed databases, caches, storage, secret
   managers or mail services. Third-party APIs (AI providers, Twilio, push, Stripe,
   Google, Turnstile) and Cloudflare in front (optional: `dns.provider = "rfc2136"` runs

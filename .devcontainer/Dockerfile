@@ -10,5 +10,8 @@ COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
-# The base image's own non-root user, which VS Code and Codespaces connect as anyway.
+# The base image's own non-root user, which VS Code and Codespaces connect as anyway. By
+# name, not its id: the dev container features this image takes (docker-in-docker, for
+# one) find the user to set up by its name.
+# hadolint ignore=DL3066
 USER node

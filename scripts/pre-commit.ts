@@ -3,7 +3,8 @@
  * ruff, prisma format, Squawk on new migrations, tofu fmt, the SOPS check), the secret
  * scan, and, when a staged file is one they read, the infrastructure misconfiguration
  * scan (Trivy), the known-vulnerability scan (OSV) and each linter of scripts/linters.ts
- * (a workflow staged runs actionlint and zizmor). lint-staged is the only one that
+ * (a staged workflow runs actionlint and zizmor, a shell script shellcheck, a Dockerfile
+ * hadolint, OpenTofu tflint). lint-staged is the only one that
  * writes (it fixes and restages files); the others only read, so they run beside it.
  * As many at once as the machine has cores, less one. A step's output is printed only
  * when it fails; after a failure no new step starts, but the running ones finish (a
@@ -34,7 +35,7 @@ export const STEPS: Step[] = [
   ...Object.entries(LINTERS).map(([name, linter]) => ({
     name,
     command: ["bun", "scripts/linters.ts", name],
-    when: (staged: string[]) => staged.some(linter.reads),
+    when: (staged: string[]) => staged.some((path) => linter.reads(path, ROOT)),
   })),
 ];
 

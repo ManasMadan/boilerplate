@@ -20,7 +20,8 @@ check) and restages what it fixed; gitleaks scans them for secrets
 (`scripts/secret-scan.ts`); a staged Dockerfile, or anything under `deploy/` or `infra/`,
 adds Trivy's misconfiguration scan (`scripts/misconfig.ts`); a staged `bun.lock` or
 `apps/ai/uv.lock` adds OSV's (`scripts/osv.ts`); a staged workflow adds actionlint and
-zizmor (`scripts/linters.ts`). The two scans are the Security workflow's, with the same
+zizmor, a shell script shellcheck, a Dockerfile hadolint and OpenTofu tflint
+(`scripts/linters.ts`). The two scans are the Security workflow's, with the same
 versions and configuration (`trivy.yaml`, `osv-scanner.toml`), and the linters are the
 lint job's, so what passes the hook passes those jobs. Each uses a local binary of CI's
 version, else its image in Docker; with neither, the commit stops and says so. Only a failed step's
@@ -259,6 +260,7 @@ file below 100%, or one no test loads.
 | `.claude/hooks/lib.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | Claude Code sets `CLAUDE_PROJECT_DIR` for its hooks, which turbo never runs |
 | `.github/workflows/deploy.yml` | `# zizmor: ignore[dangerous-triggers]` | `workflow_run` is how a deploy follows CI on master; the job that checks out the run's commit runs only for this repository's own push (`scripts/workflows.test.ts` checks) |
 | `.github/workflows/mobile.yml` | `# zizmor: ignore[dangerous-triggers]` | the same, for the app updates that follow CI and the store builds that follow a release |
+| `.devcontainer/Dockerfile` | `# hadolint ignore=DL3066` | `USER node` by name, not its id: the dev container features the image takes (docker-in-docker, for one) find the user to set up by its name |
 | `.github/zizmor.yml` | `self-repository` off | GitHub's `uses: $/...` syntax for this repository's own actions, which actionlint (in the same lint job) doesn't read yet |
 | `biome.jsonc` | `noExcessiveLinesPerFunction` off in tests, end-to-end specs and stories | a `describe` block is as long as its list of cases |
 | `biome.jsonc` | `noSkippedTests` off in `apps/web/e2e/captcha.spec.ts` and `apps/web/e2e/google.spec.ts` | Playwright's conditional skip, for the two browser tests that need real credentials (both under Skipped tests) |
@@ -438,6 +440,9 @@ The evals run on every change with the local stand-ins; see
 |---|---|
 | `bun run lint` | Biome, `lint:boundaries` (dependency-cruiser, the web render-only check and `scripts/check-layers.ts`), `lint:unused`, `lint:markers`, `lint:patterns`, `lint:suppressions`, the linters below, and each package's `lint` (ruff for Python), all of them even when one fails, with a summary at the end (`scripts/lint.ts`); CI runs the same command |
 | `bun run lint:actionlint`, `lint:zizmor` | the workflows: actionlint (with shellcheck on every `run:` block) and zizmor's security audits, offline, with `.github/zizmor.yml`. Each at the version `scripts/linters.ts` pins: a local binary of it, else its image in Docker |
+| `bun run lint:shellcheck` | every shell script: `*.sh`, the git hooks in `.husky/`, and any file whose first line runs a shell. A `.shellcheckrc` says which shell for the scripts that have no first line saying so (the hooks and the data chart's scripts, all run with `sh`) |
+| `bun run lint:hadolint` | every Dockerfile (`deploy/docker/`, `.devcontainer/Dockerfile`) |
+| `bun run lint:tflint` | the OpenTofu modules and environment, with every rule of the Terraform ruleset bundled with tflint (`infra/tofu/.tflint.hcl`) |
 | `bun run lint:unused` | knip (`knip.jsonc`): unused files, exports and dependencies, and dependencies used but not declared |
 | `bun run lint:markers` | no `ponytail:` markers in tracked source (`scripts/check-markers.ts`): a comment says why in plain words |
 | `bun run lint:patterns` | code shapes Biome can't see (`scripts/check-patterns.ts`): in services' and packages' `src/`, parsed JSON cast to a type, a type argument on `$queryRaw`, an optional chain three deep, a role compared with `"member"`, an error sent without `sendError`; in tests, a fixed sleep outside a polling loop |
@@ -459,7 +464,7 @@ for those areas.
 
 | Job | Runs |
 |---|---|
-| Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, suppressions, the workflows' linters, each package's lint) |
+| Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, suppressions, the linters of the workflows, shell scripts, Dockerfiles and OpenTofu, each package's lint) |
 | Type-check | `bun run check-types`, then `bun run type-coverage` (strict: no `any`, type assertion or non-null `!` in any workspace's source, but the Type-coverage exceptions) |
 | Unit tests | `bun run test` |
 | Components | the stories with coverage, `test:visual` |

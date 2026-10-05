@@ -1,5 +1,6 @@
 output "api_url" {
-  value = module.k3s.api_url
+  description = "The address of the cluster's Kubernetes API."
+  value       = module.k3s.api_url
 }
 
 output "kubeconfig" {
@@ -15,7 +16,8 @@ output "cloud_init" {
 }
 
 output "dns_records" {
-  value = flatten(concat(module.cloudflare[*].records, module.rfc2136[*].records))
+  description = "Every DNS record the environment creates, as name, type and content."
+  value       = flatten(concat(module.cloudflare[*].records, module.rfc2136[*].records))
 }
 
 output "cloudflare_dns_api_token" {
