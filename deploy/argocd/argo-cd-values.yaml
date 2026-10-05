@@ -79,6 +79,9 @@ repoServer:
 # deploy/platform/secrets/<environment>/ on the cluster hosting previews. Without it,
 # nothing is posted; Argo CD runs the same.
 notifications:
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 256Mi }
   secret:
     create: false
   notifiers:
@@ -129,10 +132,6 @@ applicationSet:
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 500m, memory: 256Mi }
-notifications:
-  resources:
-    requests: { cpu: 10m, memory: 64Mi }
-    limits: { cpu: 200m, memory: 256Mi }
 dex:
   resources:
     requests: { cpu: 10m, memory: 64Mi }

@@ -281,3 +281,29 @@ describe("every chart of ours", () => {
     expect(loose).toEqual([]);
   });
 });
+
+describe("the values files", () => {
+  // Helm keeps the last of two keys of the same name without a word, so a block added for
+  // one setting can silently replace a whole section written above it.
+  it("never repeat a top-level key", () => {
+    const files = [
+      ...readdirSync(join(REPO, "deploy"), { recursive: true, encoding: "utf8" })
+        .filter((path) => /(^|\/)values[^/]*\.yaml$|argo-cd-values\.yaml$/.test(path))
+        .filter((path) => !path.startsWith(".rendered") && !path.includes("/tests/"))
+        .map((path) => join("deploy", path)),
+      ...readdirSync(join(REPO, "deploy/platform/values")).map(
+        (f) => `deploy/platform/values/${f}`,
+      ),
+      ...readdirSync(join(REPO, "deploy/environments"), { recursive: true, encoding: "utf8" })
+        .filter((path) => path.endsWith(".yaml") && !path.includes("secrets"))
+        .map((path) => `deploy/environments/${path}`),
+    ];
+    expect(files.length).toBeGreaterThan(10);
+    const repeated = [...new Set(files)].flatMap((file) => {
+      const keys: string[] =
+        readFileSync(join(REPO, file), "utf8").match(/^[A-Za-z][\w.-]*(?=:)/gm) ?? [];
+      return keys.filter((key, i) => keys.indexOf(key) !== i).map((key) => `${file}: ${key}`);
+    });
+    expect(repeated).toEqual([]);
+  });
+});
