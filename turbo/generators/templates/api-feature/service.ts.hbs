@@ -24,7 +24,9 @@ export class {{pascalCase name}}Service {
 
   async delete(orgId: OrgId, id: string) {
     await tenantTx(this.database.write, orgId, async (tx) => {
-      if (!(await this.repository.delete(tx, id))) throw new AppError("NOT_FOUND");
+      if (!(await this.repository.delete(tx, id))) {
+        throw new AppError("NOT_FOUND");
+      }
       await emitEvent(tx, "{{snakeCase item}}.deleted.v1", id, { {{camelCase item}}Id: id });
     });
   }

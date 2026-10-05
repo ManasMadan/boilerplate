@@ -10,7 +10,9 @@ describe("{{kebabCase name}}", () => {
     const workspace = async () => {
       const { session } = await signedInUser();
       const { activeOrganizationId: orgId } = await session.rpc.user.me();
-      if (!orgId) throw new Error("A new user has a personal workspace");
+      if (!orgId) {
+        throw new Error("A new user has a personal workspace");
+      }
       const insert = () => withTenant(db, orgId).{{model}}.create({ data: { ...row, orgId } });
       return { session, insert };
     };
