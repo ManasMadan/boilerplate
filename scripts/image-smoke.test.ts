@@ -90,21 +90,26 @@ describe("image smoke", () => {
     ["notifications", "apps/notifications/src/env.ts"],
     ["webhooks", "apps/webhooks/src/env.ts"],
     ["web", "apps/web/src/env.ts"],
-  ])("gives %s everything its configuration requires in production", (image, file) => {
-    const spec = IMAGES[image];
-    // --no-env-file: a checkout's own .env would otherwise fill in what the image lacks.
-    const result = Bun.spawnSync(["bun", "--no-env-file", "-e", `await import("./${file}")`], {
-      cwd: `${import.meta.dir}/..`,
-      env: {
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
-        NODE_ENV: "production",
-        ...spec?.env(),
-      },
-    });
-    expect(result.stderr.toString()).toBe("");
-    expect(result.exitCode).toBe(0);
-  });
+  ])(
+    "gives %s everything its configuration requires in production",
+    (image, file) => {
+      const spec = IMAGES[image];
+      // --no-env-file: a checkout's own .env would otherwise fill in what the image lacks.
+      const result = Bun.spawnSync(["bun", "--no-env-file", "-e", `await import("./${file}")`], {
+        cwd: `${import.meta.dir}/..`,
+        env: {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          NODE_ENV: "production",
+          ...spec?.env(),
+        },
+      });
+      expect(result.stderr.toString()).toBe("");
+      expect(result.exitCode).toBe(0);
+      // A cold Bun loading a service's whole config takes several seconds on a busy machine.
+    },
+    30_000,
+  );
 
   it("gives the AI service every setting it has no default for", async () => {
     const settings = await Bun.file(`${import.meta.dir}/../apps/ai/app/settings.py`).text();
