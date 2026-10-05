@@ -96,6 +96,10 @@ module.exports = {
         "/\\.next/",
         "/\\.venv/",
         "/storybook-static/",
+        // What test runs write: reports with their own scripts, rewritten while lint reads.
+        "/coverage/",
+        "/playwright-report/",
+        "/test-results/",
       ],
     },
     tsPreCompilationDeps: true,
