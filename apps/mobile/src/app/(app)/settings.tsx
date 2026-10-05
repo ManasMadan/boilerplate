@@ -1,18 +1,23 @@
 import { useApiErrorMessage } from "@repo/client";
 import { useRegisterDeviceMutation } from "@repo/client/api/notifications/register-device";
+import { authErrorKey } from "@repo/client/auth/errors";
+import { usePasskeysQuery } from "@repo/client/auth/passkeys";
+import { authKeys } from "@repo/client/auth/query";
 import { useWorkspacesQuery } from "@repo/client/auth/workspaces";
 import { type Locale, locales } from "@repo/i18n/locales";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { useTranslations } from "use-intl";
+import { useFormatter, useTranslations } from "use-intl";
 import { Screen } from "@/components/screen";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
+import { useAuthErrorMessage } from "@/hooks/use-auth";
 import { authClient } from "@/lib/auth-client";
 import { appVersion } from "@/lib/config";
+import { addPasskey, passkeysSupported } from "@/lib/passkeys";
 import { devicePushToken, type PushState, pushState } from "@/lib/push";
 
 export default function Settings() {
@@ -67,6 +72,7 @@ export default function Settings() {
           </Button>
         </CardContent>
       </Card>
+      <Passkeys onFailure={setFailure} onSignInAgain={signOut} />
       <Card>
         <CardHeader>
           <CardTitle>{t("settings.workspace")}</CardTitle>
@@ -121,6 +127,92 @@ export default function Settings() {
         </Text>
       </View>
     </Screen>
+  );
+}
+
+/** The account's passkeys, as in the web app's security settings: add one here, remove any. */
+function Passkeys({
+  onFailure,
+  onSignInAgain,
+}: {
+  onFailure: (message: string) => void;
+  onSignInAgain: () => void;
+}) {
+  const t = useTranslations("settings.security");
+  const format = useFormatter();
+  const errorMessage = useAuthErrorMessage();
+  const queryClient = useQueryClient();
+  const passkeys = usePasskeysQuery(authClient);
+  const [staleSession, setStaleSession] = useState(false);
+  const [added, setAdded] = useState(false);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: authKeys.passkeys() });
+
+  async function add() {
+    setAdded(false);
+    const { error } = await addPasskey();
+    if (error) {
+      // Adding one needs a recent sign-in (the API's fresh-session window).
+      if (authErrorKey(error) === "SESSION_EXPIRED") {
+        setStaleSession(true);
+      } else {
+        onFailure(errorMessage(error));
+      }
+      return;
+    }
+    await refresh();
+    setAdded(true);
+  }
+
+  async function remove(id: string) {
+    const { error } = await authClient.passkey.deletePasskey({ id });
+    if (error) {
+      onFailure(errorMessage(error));
+    }
+    await refresh();
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("passkeys.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="gap-3">
+        <Text className="text-muted-foreground">{t("passkeys.description")}</Text>
+        {passkeys.data?.length === 0 ? (
+          <Text className="text-muted-foreground">{t("passkeys.empty")}</Text>
+        ) : null}
+        {passkeys.data?.map((passkey) => (
+          <View key={passkey.id} className="flex-row items-center justify-between gap-3">
+            <View>
+              <Text>{passkey.name ?? t("passkeys.unnamed")}</Text>
+              {passkey.createdAt ? (
+                <Text className="text-sm text-muted-foreground">
+                  {format.dateTime(new Date(passkey.createdAt), { dateStyle: "medium" })}
+                </Text>
+              ) : null}
+            </View>
+            <Button variant="outline" size="sm" onPress={() => remove(passkey.id)}>
+              <Text>{t("passkeys.remove")}</Text>
+            </Button>
+          </View>
+        ))}
+        {added ? <Text role="status">{t("passkeys.added")}</Text> : null}
+        {staleSession ? (
+          <View className="gap-2">
+            <Text className="font-medium">{t("reauth.title")}</Text>
+            <Text className="text-muted-foreground">{t("reauth.body")}</Text>
+            <Button onPress={onSignInAgain}>
+              <Text>{t("reauth.action")}</Text>
+            </Button>
+          </View>
+        ) : null}
+        {!staleSession && passkeysSupported() ? (
+          <Button variant="outline" onPress={add}>
+            <Text>{t("passkeys.add")}</Text>
+          </Button>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

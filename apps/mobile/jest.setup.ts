@@ -30,6 +30,13 @@ jest.mock("expo-constants", () => {
   };
 });
 
+// Passkeys use the device's own prompt: tests say what the person did there.
+jest.mock("react-native-passkeys", () => ({
+  isSupported: jest.fn(() => true),
+  get: jest.fn(),
+  create: jest.fn(),
+}));
+
 // Push needs a real device: tests run like a simulator unless they say otherwise.
 jest.mock("expo-device", () => ({ isDevice: false }));
 jest.mock("expo-notifications", () => ({ setNotificationHandler: jest.fn() }));

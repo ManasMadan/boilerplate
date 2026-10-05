@@ -341,7 +341,7 @@ Each is optional; turn on the ones you use, per environment.
       - Links that open the app: the team id, bundle id, package and signing
         fingerprints in each environment's web `env` ([web-and-mobile.md](web-and-mobile.md),
         "Universal links and App Links"); a deployed site won't start without them.
-        Mobile passkeys aren't implemented.
+        The app's passkeys need the same files.
       - The bundle id, package and scheme in `apps/mobile/app.config.ts` can't change
         after the first store release: rename them before it.
 

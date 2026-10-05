@@ -166,7 +166,8 @@ written anywhere else, so a new app gets its variable here.
 | `BETTER_AUTH_SECRETS` | api | unset | Rotating the one above: `2:<secret>,1:<secret>`, newest first (each at least 32 characters). The newest signs and encrypts; the rest, and `BETTER_AUTH_SECRET`, still decrypt. Then `bun run secrets:reencrypt`. See the rotate-secrets runbook (`.claude/skills/rotate-secrets/SKILL.md`). |
 | `BETTER_AUTH_URL` | api (req.), ai | `http://localhost:3000` | The site's public origin. The API is served on it (`/rpc`, `/api`), so cookies are first-party; OAuth callbacks, the OAuth issuer and MCP resource URLs are built from it. The AI service needs it (with `API_URL`) for its MCP server. |
 | `WEB_URL` | api (req.), web (req.), notifications, `apps/mobile/scripts/serve-web.ts` | `http://localhost:3000` | The web app's origin: the API's CORS and trusted origin, links in messages, canonical URLs. Notifications: required in production. The mobile web build's server forwards the captcha page to it. |
-| `APP_ORIGINS` | api | `http://localhost:3005` | Other origins allowed to sign users in, comma-separated (the mobile app's web build). Native apps need nothing here. |
+| `APP_ORIGINS` | api | `http://localhost:3005` | Other origins allowed to sign users in, comma-separated (the mobile app's web build), passkeys included. Native apps need nothing here. |
+| `ANDROID_CERT_FINGERPRINTS` | api, web | unset | SHA-256 fingerprints of the Android app's signing certificates, comma-separated. The API accepts passkeys from the app signed with each (Android reports the app, not the site, as their origin); the web app names them in `assetlinks.json`. |
 | `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | major.minor.patch. The mobile app sends its version as `x-app-version`; one below this (a pre-release comes before its release) or one that isn't a version at all gets `CLIENT_OUTDATED`, and the app shows its update screen. The web app sends none. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | api | empty | Both set: "Sign in with Google" (`google` feature). Redirect URI: `${BETTER_AUTH_URL}/api/auth/callback/google`. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | api | empty | Both set: Cloudflare Turnstile on sign-up, emailed codes and password reset (`captcha` feature). The site key reaches browsers through `system.info`. Cloudflare's always-pass test keys are in `.env.example`. |
@@ -286,7 +287,7 @@ Server-only: nothing environment-specific is built into the browser bundle.
 | `WEB_URL` | required | This site's origin (canonical URLs, sitemap). |
 | `API_URL`, `AI_URL`, `STORAGE_ORIGIN` | see above | |
 | `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | unset | The iOS app (`ABCDE12345`, `com.boilerplate.app`): `/.well-known/apple-app-site-association` names it for links and passkeys. |
-| `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` | unset | The Android app and the SHA-256 fingerprints of its signing certificates, comma-separated (`AB:CD:…`): `/.well-known/assetlinks.json` names them. With any of the four unset both files answer 404, and a site on an https `WEB_URL` (every deployment) refuses to start. |
+| `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` | unset | The Android app and the SHA-256 fingerprints of its signing certificates, comma-separated (`AB:CD:…`): `/.well-known/assetlinks.json` names them. With any of the four unset both files answer 404, and a site on an https `WEB_URL` (every deployment) refuses to start. The API reads the fingerprints too ("Auth and the API"). |
 | `RELEASE` | `dev` | Sent to the API as `x-app-version`. |
 | `SKIP_ENV_VALIDATION` | unset | `1` only for `next typegen` inside `check-types`. |
 

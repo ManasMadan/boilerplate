@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAuthErrorMessage, useAuthSchemas } from "@/hooks/use-auth";
 import { authClient, signInWithGoogle } from "@/lib/auth-client";
+import { passkeysSupported, signInWithPasskey } from "@/lib/passkeys";
 
 export default function SignIn() {
   const t = useTranslations();
@@ -45,9 +46,10 @@ export default function SignIn() {
     }
   });
 
-  const google = async () => {
+  // Google and passkeys: no form, just whether that made a session, and why not.
+  const signInWith = async (method: () => Promise<{ signedIn: boolean; error: unknown }>) => {
     setFailure(undefined);
-    const { signedIn, error } = await signInWithGoogle();
+    const { signedIn, error } = await method();
     if (error) {
       setFailure(errorMessage(error));
     }
@@ -88,8 +90,13 @@ export default function SignIn() {
       <Button onPress={submit} disabled={form.formState.isSubmitting}>
         <Text>{t("common.signIn")}</Text>
       </Button>
+      {passkeysSupported() ? (
+        <Button variant="outline" onPress={() => signInWith(signInWithPasskey)}>
+          <Text>{t("auth.passkey")}</Text>
+        </Button>
+      ) : null}
       {system?.features.google ? (
-        <Button variant="outline" onPress={google}>
+        <Button variant="outline" onPress={() => signInWith(signInWithGoogle)}>
           <Text>{t("auth.google")}</Text>
         </Button>
       ) : null}

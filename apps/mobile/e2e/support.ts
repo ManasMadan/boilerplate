@@ -59,3 +59,22 @@ export async function signUp(page: Page, user: User = newUser()) {
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
   return user;
 }
+
+/**
+ * A passkey authenticator built into the browser (Chrome's virtual one), which answers
+ * every prompt as if the person had confirmed it.
+ */
+export async function addPasskeyAuthenticator(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: {
+      protocol: "ctap2",
+      transport: "internal",
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+}

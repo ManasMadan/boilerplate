@@ -122,7 +122,12 @@ screenshots are identical on every machine and in CI.
   it too.
 - **Links**: `boilerplate://` links, and the site's https invitation links once the
   site serves the association files ("Universal links and App Links" below).
-- **Not there yet**: passkeys (web only for now).
+- **Passkeys**: sign-in with one, and adding and removing them in settings, through the
+  same better-auth endpoints as the web app's passkey client, with the device's own
+  prompt from react-native-passkeys (`src/lib/passkeys.ts`): AuthenticationServices on
+  iOS, Credential Manager on Android, WebAuthn on the web build. A device offers the
+  passkeys of the site the build is associated with (`webcredentials`, below), so they
+  work only in a build on the https site that serves the association files.
 - Native projects (`ios/`, `android/`) come from `expo prebuild` and aren't committed.
 
 | Command (`bun run --cwd apps/mobile …`) | What it does |

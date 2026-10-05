@@ -24,9 +24,13 @@ services:
       APPLE_TEAM_ID: ""
       IOS_BUNDLE_ID: com.boilerplate.app.preview
       ANDROID_PACKAGE: com.boilerplate.app.preview
-      ANDROID_CERT_FINGERPRINTS: ""
+      ANDROID_CERT_FINGERPRINTS: &android-certs ""
   api:
     autoscaling: { enabled: false }
+    env:
+      # Passkeys made in the Android app come from its certificates, the web's above
+      # (apps/api/src/auth/auth.ts).
+      ANDROID_CERT_FINGERPRINTS: *android-certs
     # No file uploads (no ClamAV, no uploads bucket: see data.yaml).
     storage: none
   worker:

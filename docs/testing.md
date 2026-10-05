@@ -322,11 +322,12 @@ CI runs the suite with the captcha on, with Cloudflare's always-pass test keys (
   routing, the protected routes and the real auth and API clients all run. The network is
   faked at `fetch` with `fakeApi` (`test/fake-api.ts`), which answers each path the way
   the API does; only native modules without a JavaScript stand-in (secure storage, push,
-  the build's manifest) are mocked, in `jest.setup.ts`.
+  the passkey prompt, the build's manifest) are mocked, in `jest.setup.ts`.
 - `bun run test:e2e --app mobile`: the app's screens rendered with react-native-web and
   driven by Playwright (`apps/mobile/e2e`), against the API on the mobile web build's own
   origin. With the captcha on (CI's test keys), sign-up and resending a code open the web
-  app's captcha page in a popup, which passes and closes by itself.
+  app's captcha page in a popup, which passes and closes by itself. Passkeys go through
+  Chrome's virtual authenticator (`addPasskeyAuthenticator` in `e2e/support.ts`).
 - Maestro flows for what only a native build can check, run by hand
   (`apps/mobile/maestro/README.md`).
 

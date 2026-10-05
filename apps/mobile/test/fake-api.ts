@@ -2,8 +2,8 @@
  * The API, faked at fetch: the app's real auth client (better-auth) and API client (oRPC)
  * run unchanged, and each request is answered by the handler for its path the way the
  * server answers it: plain JSON under /api/auth, `{ json }` bodies under /rpc. Unless a
- * test says otherwise the server has no session, no optional features and no todos;
- * `server.session` is what get-session answers with.
+ * test says otherwise the server has no session, no optional features, no todos and no
+ * passkeys; `server.session` is what get-session answers with.
  *
  *   const calls = fakeApi({ "/api/auth/sign-in/email": () => fail(401, "INVALID_EMAIL_OR_PASSWORD") });
  */
@@ -53,6 +53,7 @@ export function fakeApi(overrides: Record<string, Handler> = {}): Call[] {
     "/api/auth/get-session": () => server.session,
     "/rpc/system/info": () => ({ features: {}, minimumClientVersion: "0.0.0" }),
     "/rpc/todo/list": () => ({ items: [], nextCursor: null }),
+    "/api/auth/passkey/list-user-passkeys": () => [],
     ...overrides,
   };
   const calls: Call[] = [];

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { passkeyOrigins } from "./auth";
 import { newUserFields } from "./auth-hooks";
 
 const headers = (values: Record<string, string>) => new Headers(values);
@@ -34,5 +35,31 @@ describe("a new account's row", () => {
       "Asia/Kolkata",
     );
     expect(newUserFields({ name: "A", timezone: "Mars/Olympus" }, null).timezone).toBe("UTC");
+  });
+});
+
+describe("passkeys", () => {
+  const site = {
+    WEB_URL: "https://app.example.com",
+    APP_ORIGINS: [],
+    ANDROID_CERT_FINGERPRINTS: [],
+  };
+
+  it("come from the site, and from the Android app signed with each certificate", () => {
+    // The certificate's SHA-256 as Credential Manager reports it: base64url, unpadded
+    // (these 0xFF bytes would be "//…8=" in plain base64).
+    const certificate = Array.from({ length: 32 }, () => "FF").join(":");
+    expect(passkeyOrigins({ ...site, ANDROID_CERT_FINGERPRINTS: [certificate] })).toEqual([
+      "https://app.example.com",
+      `android:apk-key-hash:${"_".repeat(42)}8`,
+    ]);
+    expect(passkeyOrigins(site)).toEqual(["https://app.example.com"]);
+  });
+
+  it("come from the product's other origins too (the mobile app's web build)", () => {
+    expect(passkeyOrigins({ ...site, APP_ORIGINS: ["http://localhost:3005"] })).toEqual([
+      "https://app.example.com",
+      "http://localhost:3005",
+    ]);
   });
 });

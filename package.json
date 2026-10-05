@@ -67,6 +67,7 @@
       "prisma": "^7.10.0",
       "react": "19.2.3",
       "react-dom": "19.2.3",
+      "react-native-passkeys": "^0.4.2",
       "reflect-metadata": "^0.2.2",
       "rxjs": "^7.8.2",
       "stripe": "^22.6.2",

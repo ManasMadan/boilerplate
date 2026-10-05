@@ -1,6 +1,6 @@
 /** The app's screens (rendered for the web) against the real stack. */
 import { totp } from "@repo/testing/totp";
-import { expect, newUser, nextCode, signUp, test } from "./support";
+import { addPasskeyAuthenticator, expect, newUser, nextCode, signUp, test } from "./support";
 
 test("sign up, verify the email and land on the todos", async ({ page }) => {
   await signUp(page);
@@ -68,6 +68,18 @@ test("reset a forgotten password and sign in with the new one", async ({ page })
   await expect(page.getByRole("alert")).toHaveText("That email and password don't match.");
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
+});
+
+test("add a passkey in settings, then sign in with it", async ({ page }) => {
+  await addPasskeyAuthenticator(page);
+  await signUp(page);
+  await page.getByRole("tab", { name: /Settings/ }).click();
+  await page.getByRole("button", { name: "Add a passkey" }).click();
+  await expect(page.getByText("Passkey added")).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+
+  await page.getByRole("button", { name: "Sign in with a passkey" }).click();
   await expect(page.getByPlaceholder("What needs doing?")).toBeVisible();
 });
 

@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import * as WebBrowser from "expo-web-browser";
+import * as Passkeys from "react-native-passkeys";
 // Tests live outside src/app: every file there is a route.
 import { aSession, fail, fakeApi, openApp, server } from "../../test/app";
 
@@ -175,6 +176,87 @@ describe("signing in", () => {
         );
       },
     );
+  });
+
+  describe("with a passkey", () => {
+    const options = { challenge: "challenge-1", rpId: "app.example.com" };
+    const credential = {
+      id: "credential-1",
+      rawId: "credential-1",
+      type: "public-key" as const,
+      response: { clientDataJSON: "data", authenticatorData: "auth", signature: "sig" },
+      clientExtensionResults: {},
+    };
+    const withPasskey = (overrides: Parameters<typeof fakeApi>[0] = {}) =>
+      fakeApi({
+        "/api/auth/passkey/generate-authenticate-options": () => options,
+        "/api/auth/passkey/verify-authentication": () => {
+          server.session = aSession();
+          return { session: server.session.session, user: server.session.user };
+        },
+        ...overrides,
+      });
+    const usePasskey = async () =>
+      fireEvent.press(await screen.findByText("Sign in with a passkey"));
+
+    afterEach(() => jest.mocked(Passkeys.isSupported).mockReturnValue(true));
+
+    it("isn't offered on a device without passkeys", async () => {
+      jest.mocked(Passkeys.isSupported).mockReturnValue(false);
+      fakeApi();
+      await openApp("/sign-in");
+      expect(await screen.findByText("Welcome back")).toBeOnTheScreen();
+      expect(screen.queryByText("Sign in with a passkey")).toBeNull();
+    });
+
+    it("signs in with the device's passkey for the site", async () => {
+      jest.mocked(Passkeys.get).mockResolvedValue(credential);
+      const calls = withPasskey();
+      const app = await openApp("/sign-in");
+      await usePasskey();
+      expect(
+        await screen.findByText("Nothing to do. Add your first todo above."),
+      ).toBeOnTheScreen();
+      expect(app.pathname()).toBe("/");
+      expect(Passkeys.get).toHaveBeenCalledWith(options);
+      const verify = calls.find((call) => call.path === "/api/auth/passkey/verify-authentication");
+      expect(verify?.input).toEqual({ response: credential });
+    });
+
+    it("says so when the person closes the prompt", async () => {
+      jest.mocked(Passkeys.get).mockRejectedValue(new Error("UserCancelled"));
+      const calls = withPasskey();
+      await openApp("/sign-in");
+      await usePasskey();
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The passkey prompt was closed before finishing. Try again, or use your password.",
+      );
+      expect(calls.map((call) => call.path)).not.toContain(
+        "/api/auth/passkey/verify-authentication",
+      );
+    });
+
+    it("says so when the server doesn't accept the passkey", async () => {
+      jest.mocked(Passkeys.get).mockResolvedValue(credential);
+      withPasskey({
+        "/api/auth/passkey/verify-authentication": () => fail(400, "AUTHENTICATION_FAILED"),
+      });
+      const app = await openApp("/sign-in");
+      await usePasskey();
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "The passkey couldn't be verified.",
+      );
+      expect(app.pathname()).toBe("/sign-in");
+    });
+
+    it("says so when the sign-in can't start", async () => {
+      withPasskey({ "/api/auth/passkey/generate-authenticate-options": () => fail(500) });
+      await openApp("/sign-in");
+      await usePasskey();
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Something went wrong. Please try again.",
+      );
+    });
   });
 
   it("links to creating an account", async () => {

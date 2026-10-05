@@ -16,7 +16,7 @@ Auth never sends email itself: codes, invitations and alerts are queued on
 |---|---|---|---|
 | Email and password | yes | yes | 8 to 128 characters. Passwords found in public breaches are refused (Have I Been Pwned, k-anonymity; `PASSWORD_BREACH_CHECK`, on in production). No session until the email is verified. |
 | Emailed codes | yes | yes | 6 digits, 5 minutes, stored hashed. They verify the address after sign-up (and sign the user in), reset a forgotten password, and change the email (a code from the current and one from the new address). Signing in unverified sends a fresh code. |
-| Passkeys | yes | no | WebAuthn, relying party = the `WEB_URL` host. |
+| Passkeys | yes | yes | WebAuthn, relying party = the `WEB_URL` host. Mobile uses the device's own prompt (react-native-passkeys) on the same endpoints; see "Passkeys on mobile" below. |
 | Google | yes | yes | On when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. Google accounts link to an existing account with the same verified email; OAuth tokens are encrypted at rest. |
 | Two-factor (TOTP) | yes | yes | A second step after the password, with 10 backup codes and an option to trust the device. |
 
@@ -52,6 +52,24 @@ ships with it.
   URL, and trades both for the session cookies at `POST /mobile/sign-in/finish`, once.
   A hand-off lasts 10 minutes, and one wrong secret burns it (`SIGN_IN_INCOMPLETE`).
 - `trustedOrigins` (CSRF) are `WEB_URL`, `APP_ORIGINS` and the mobile scheme.
+
+## Passkeys on mobile
+
+The app signs in with a passkey and adds one through the same endpoints as the web
+app's passkey client (`/passkey/generate-*-options`, then `/passkey/verify-*`), with the
+platform's own prompt in place of the browser's (`apps/mobile/src/lib/passkeys.ts`,
+react-native-passkeys). The relying party stays the site's host: iOS and Android show the
+prompt only for the domain the build is associated with (`webcredentials:` in
+`app.config.ts`, and `get_login_creds` in `assetlinks.json`), so a passkey made on the
+site works in the app and the other way round. The challenge cookie travels like the
+session cookie, through the Expo plugin.
+
+The API checks each answer's origin (`passkeyOrigins` in `apps/api/src/auth/auth.ts`):
+`WEB_URL`, `APP_ORIGINS` (the mobile app's web build) and, for each of
+`ANDROID_CERT_FINGERPRINTS`, `android:apk-key-hash:<the certificate's SHA-256 in
+base64url>`, which is what Android's Credential Manager reports for an app. iOS reports the
+site's own origin. Adding one needs a recent sign-in, as on the web: the app's settings
+ask the user to sign in again.
 
 ## Organizations and roles
 

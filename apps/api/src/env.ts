@@ -57,6 +57,17 @@ export const envSchema = {
    */
   APP_ORIGINS: csv.prefault("").pipe(z.array(z.url())),
 
+  /**
+   * SHA-256 fingerprints of the Android app's signing certificates (comma-separated,
+   * AB:CD:...), the same as the web app's. A passkey made in the app is signed for the
+   * app, not the site, so these are origins passkeys may come from (src/auth/auth.ts).
+   */
+  ANDROID_CERT_FINGERPRINTS: csv
+    .prefault("")
+    .pipe(
+      z.array(z.string().regex(/^([0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$/, "a SHA-256 fingerprint")),
+    ),
+
   /** Oldest web/mobile app version still supported; older clients get CLIENT_OUTDATED. */
   MINIMUM_CLIENT_VERSION: z
     .string()

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as Notifications from "expo-notifications";
 import { Suspense } from "react";
+import * as Passkeys from "react-native-passkeys";
 import Settings from "@/app/(app)/settings";
 import { ApiProvider } from "@/lib/api";
 import { I18nProvider } from "@/lib/i18n";
@@ -202,5 +203,130 @@ describe("push notifications", () => {
       "We can't reach the server. Check your connection and try again.",
     );
     expect(screen.getByText("Get notifications on this device")).toBeOnTheScreen();
+  });
+});
+
+describe("passkeys", () => {
+  const LIST = "/api/auth/passkey/list-user-passkeys";
+  const options = {
+    challenge: "challenge-1",
+    rp: { id: "app.example.com", name: "Boilerplate" },
+    user: { id: "user-1", name: "ada@example.com", displayName: "Ada" },
+    pubKeyCredParams: [{ type: "public-key" as const, alg: -7 }],
+  };
+  const credential = {
+    id: "credential-1",
+    rawId: "credential-1",
+    type: "public-key" as const,
+    response: { clientDataJSON: "data", attestationObject: "attestation" },
+    clientExtensionResults: {},
+  };
+  const addPasskey = async () => fireEvent.press(await screen.findByText("Add a passkey"));
+  afterEach(() => jest.mocked(Passkeys.isSupported).mockReturnValue(true));
+
+  it("lists the account's passkeys and removes one", async () => {
+    let passkeys = [
+      { id: "passkey-1", name: "iPhone", createdAt: "2026-01-02T12:00:00.000Z" },
+      { id: "passkey-2", name: null, createdAt: null },
+    ];
+    const calls = signedIn({
+      [LIST]: () => passkeys,
+      "/api/auth/passkey/delete-passkey": (input) => {
+        passkeys = passkeys.filter((passkey) => passkey.id !== input.id);
+        return { status: true };
+      },
+    });
+    await openApp("/settings");
+    expect(await screen.findByText("iPhone")).toBeOnTheScreen();
+    expect(screen.getByText("Jan 2, 2026")).toBeOnTheScreen();
+    // One without a name.
+    expect(screen.getByText("Passkey")).toBeOnTheScreen();
+    const [removeFirst] = screen.getAllByText("Remove");
+    if (!removeFirst) {
+      throw new Error("No Remove button");
+    }
+    await fireEvent.press(removeFirst);
+    await waitFor(() => expect(screen.queryByText("iPhone")).toBeNull());
+    expect(callsTo(calls, "/api/auth/passkey/delete-passkey")[0]?.input).toEqual({
+      id: "passkey-1",
+    });
+  });
+
+  it("says when there are none", async () => {
+    signedIn();
+    await openApp("/settings");
+    expect(await screen.findByText("No passkeys yet.")).toBeOnTheScreen();
+  });
+
+  it("says why one couldn't be removed", async () => {
+    signedIn({
+      [LIST]: () => [{ id: "passkey-1", name: "iPhone", createdAt: null }],
+      "/api/auth/passkey/delete-passkey": () => fail(500),
+    });
+    await openApp("/settings");
+    await fireEvent.press(await screen.findByText("Remove"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong. Please try again.",
+    );
+    expect(screen.getByText("iPhone")).toBeOnTheScreen();
+  });
+
+  it("adds one with the device's prompt", async () => {
+    jest.mocked(Passkeys.create).mockResolvedValue({
+      ...credential,
+      response: { ...credential.response, getPublicKey: () => null },
+    });
+    let passkeys: { id: string; name: string; createdAt: null }[] = [];
+    const calls = signedIn({
+      [LIST]: () => passkeys,
+      "/api/auth/passkey/generate-register-options": () => options,
+      "/api/auth/passkey/verify-registration": () => {
+        passkeys = [{ id: "passkey-1", name: "Pixel", createdAt: null }];
+        return passkeys[0];
+      },
+    });
+    await openApp("/settings");
+    await addPasskey();
+    expect(await screen.findByRole("status")).toHaveTextContent("Passkey added");
+    expect(await screen.findByText("Pixel")).toBeOnTheScreen();
+    expect(Passkeys.create).toHaveBeenCalledWith(options);
+    expect(callsTo(calls, "/api/auth/passkey/verify-registration")[0]?.input).toEqual({
+      response: credential,
+    });
+  });
+
+  it("adds none when the person closes the prompt", async () => {
+    jest.mocked(Passkeys.create).mockRejectedValue(new Error("UserCancelled"));
+    const calls = signedIn({ "/api/auth/passkey/generate-register-options": () => options });
+    await openApp("/settings");
+    await addPasskey();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The passkey prompt was closed before finishing. Try again, or use your password.",
+    );
+    expect(callsTo(calls, "/api/auth/passkey/verify-registration")).toHaveLength(0);
+  });
+
+  it("asks to sign in again when the session is too old to add one", async () => {
+    signedIn({
+      "/api/auth/passkey/generate-register-options": () => fail(403, "SESSION_NOT_FRESH"),
+      "/api/auth/sign-out": () => {
+        server.session = null;
+        return { success: true };
+      },
+    });
+    const app = await openApp("/settings");
+    await addPasskey();
+    expect(await screen.findByText("Confirm it's you")).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText("Sign in again"));
+    expect(await screen.findByText("Welcome back")).toBeOnTheScreen();
+    expect(app.pathname()).toBe("/sign-in");
+  });
+
+  it("can't be added on a device without passkeys", async () => {
+    jest.mocked(Passkeys.isSupported).mockReturnValue(false);
+    signedIn();
+    await openApp("/settings");
+    expect(await screen.findByText("No passkeys yet.")).toBeOnTheScreen();
+    expect(screen.queryByText("Add a passkey")).toBeNull();
   });
 });

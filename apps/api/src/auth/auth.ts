@@ -111,6 +111,22 @@ function socialProviders(env: Env) {
 }
 
 /**
+ * Where passkeys may be made and used: the site, the product's other origins (the
+ * mobile app's web build) and the Android app. iOS reports the site's origin for the app
+ * too (its associated domain), but Android's Credential Manager reports the app's own,
+ * `android:apk-key-hash:` and its signing certificate's SHA-256 in base64url.
+ */
+export function passkeyOrigins(
+  env: Pick<Env, "WEB_URL" | "APP_ORIGINS" | "ANDROID_CERT_FINGERPRINTS">,
+) {
+  const app = env.ANDROID_CERT_FINGERPRINTS.map(
+    (fingerprint) =>
+      `android:apk-key-hash:${Buffer.from(fingerprint.replaceAll(":", ""), "hex").toString("base64url")}`,
+  );
+  return [env.WEB_URL, ...env.APP_ORIGINS, ...app];
+}
+
+/**
  * Its arguments as a tuple, the type better-auth infers from a plugin list written inline:
  * it reads each plugin's own types (the organization plugin's session fields, for one)
  * from its position. A plain array would merge them into one union and lose those.
@@ -132,7 +148,11 @@ function plugins(context: AuthContext) {
       issuer: "Boilerplate",
       backupCodeOptions: { amount: 10, storeBackupCodes: "encrypted" },
     }),
-    passkey({ rpID: new URL(env.WEB_URL).hostname, rpName: "Boilerplate", origin: env.WEB_URL }),
+    passkey({
+      rpID: new URL(env.WEB_URL).hostname,
+      rpName: "Boilerplate",
+      origin: passkeyOrigins(env),
+    }),
     // Rejects passwords found in public breaches (k-anonymity: only a hash prefix is sent).
     haveIBeenPwned({ enabled: env.PASSWORD_BREACH_CHECK === "on" }),
     organizationPlugin(context),
