@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { WebhookDeliveryError } from "@repo/contracts/api";
+import { HOUR_MS } from "@repo/contracts/time";
 import { tenantTx, withTenant } from "@repo/db";
 import {
   type Database,
@@ -30,7 +31,6 @@ import { signatureHeaders } from "./signing";
 export type AttemptResult = "succeeded" | "retry" | "failed" | "skipped";
 
 const USER_AGENT = "Boilerplate-Webhooks/1.0 (+https://www.standardwebhooks.com)";
-const HOUR = 3_600_000;
 
 @Injectable()
 export class DeliveryService {
@@ -192,7 +192,7 @@ export class DeliveryService {
         select: { createdAt: true },
       });
       const failingFor = firstFailureSince ? Date.now() - firstFailureSince.createdAt.getTime() : 0;
-      if (failingFor < env.WEBHOOK_AUTO_DISABLE_HOURS * HOUR) return;
+      if (failingFor < env.WEBHOOK_AUTO_DISABLE_HOURS * HOUR_MS) return;
 
       const { count } = await tx.webhookEndpoint.updateMany({
         where: { id: endpointId, disabledAt: null },

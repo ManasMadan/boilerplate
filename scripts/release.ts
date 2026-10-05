@@ -11,6 +11,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { HOUR_MS } from "../packages/contracts/src/time";
 import { fail, ok, ROOT, type Run, runSync } from "./lib";
 
 const TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -18,7 +19,7 @@ const MOBILE_CONFIG = "apps/mobile/app.config.ts";
 const PRODUCTION = "deploy/environments/production/release.yaml";
 const STAGING = "deploy/environments/staging/stack.yaml";
 /** How long release.yml waits for CI and deploy.yml to finish on the tagged commit. */
-const DEPLOY_WAIT_MS = 60 * 60_000;
+const DEPLOY_WAIT_MS = HOUR_MS;
 
 /**
  * The sections of the notes, in order; other types (chore, docs, test, …) are left out.

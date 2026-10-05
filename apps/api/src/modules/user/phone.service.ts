@@ -20,6 +20,7 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { PHONE_CODE_EXPIRES_IN, PHONE_CODE_LENGTH } from "@repo/contracts/auth";
+import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { transaction } from "@repo/db";
 import { localeOrDefault } from "@repo/i18n";
 import {
@@ -41,7 +42,6 @@ import { emitEvent } from "../../outbox";
 import { UserRepository } from "./user.repository";
 
 const MAX_ATTEMPTS = 5;
-const MINUTE = 60;
 
 const codeKey = (userId: string) => `phone-code:${userId}`;
 const hashCode = (userId: string, code: string) =>
@@ -63,7 +63,7 @@ export class PhoneService {
     this.perNumber = createRateLimiter(redis, {
       name: "phone-code-number",
       points: 3,
-      windowSeconds: 60 * MINUTE,
+      windowSeconds: HOUR_S,
       onRedisError: "deny",
     });
   }
@@ -92,7 +92,7 @@ export class PhoneService {
       {
         template: "auth.phone-code",
         to: { phone: phoneNumber, locale: localeOrDefault(locale) },
-        data: { code, expiresInMinutes: Math.round(PHONE_CODE_EXPIRES_IN / MINUTE) },
+        data: { code, expiresInMinutes: Math.round(PHONE_CODE_EXPIRES_IN / MINUTE_S) },
       },
       { jobId: randomUUID(), meta: jobMetaFromContext() },
     );

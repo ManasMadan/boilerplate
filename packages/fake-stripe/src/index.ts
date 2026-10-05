@@ -17,6 +17,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { DAY_S } from "@repo/contracts/time";
 import Stripe from "stripe";
 
 export interface FakeStripeOptions {
@@ -232,7 +233,7 @@ class Fake {
       object: "subscription_item",
       quantity: Number(line.quantity ?? 1),
       current_period_start: start,
-      current_period_end: start + (price.interval === "month" ? 30 : 365) * 86_400,
+      current_period_end: start + (price.interval === "month" ? 30 : 365) * DAY_S,
       price: {
         id: line.price,
         object: "price",
@@ -247,7 +248,7 @@ class Fake {
       status: trialDays > 0 ? "trialing" : "active",
       metadata: data.metadata ?? {},
       cancel_at_period_end: false,
-      trial_end: trialDays > 0 ? start + trialDays * 86_400 : null,
+      trial_end: trialDays > 0 ? start + trialDays * DAY_S : null,
       canceled_at: null,
       created: start,
       default_payment_method: paymentMethod,

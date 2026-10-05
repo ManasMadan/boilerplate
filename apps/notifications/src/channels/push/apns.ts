@@ -5,6 +5,7 @@
  * kept-open connection, opened again after an error or Apple's GOAWAY.
  */
 import { type ClientHttp2Session, connect } from "node:http2";
+import { MINUTE_MS, PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import { importPKCS8, SignJWT } from "jose";
 import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
@@ -21,7 +22,7 @@ export interface ApnsConfig {
   timeoutMs?: number;
 }
 
-const REFRESH_MS = 50 * 60_000;
+const REFRESH_MS = 50 * MINUTE_MS;
 /** The reasons that mean the token will never work again (Apple's error list). */
 const DEAD_TOKEN = new Set(["BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic"]);
 const apnsError = z.object({ reason: z.string() });
@@ -81,7 +82,7 @@ export class ApnsTransport implements PushTransport {
       });
       let status = 0;
       let text = "";
-      request.setTimeout(this.config.timeoutMs ?? 10_000, () => {
+      request.setTimeout(this.config.timeoutMs ?? PROVIDER_TIMEOUT_MS, () => {
         request.close();
         resolve({ failed: "APNs timed out" });
       });

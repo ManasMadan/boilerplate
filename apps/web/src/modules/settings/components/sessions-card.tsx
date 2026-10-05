@@ -2,6 +2,7 @@
 
 import { authKeys } from "@repo/client/auth/query";
 import { useSessionsQuery } from "@repo/client/auth/sessions";
+import { MINUTE_MS } from "@repo/contracts/time";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import {
@@ -49,7 +50,7 @@ export function SessionsCard() {
   const t = useTranslations("settings.security.sessions");
   const format = useFormatter();
   // An explicit, ticking "now" keeps server and client renders in agreement.
-  const now = useNow({ updateInterval: 60_000 });
+  const now = useNow({ updateInterval: MINUTE_MS });
   const errorMessage = useAuthErrorMessage();
   const queryClient = useQueryClient();
   const { data: current } = authClient.useSession();

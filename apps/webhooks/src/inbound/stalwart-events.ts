@@ -4,10 +4,11 @@
  * them; everything here is pure so it's tested against real payloads.
  */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { MINUTE_MS } from "@repo/contracts/time";
 import * as z from "zod";
 
 /** Stalwart's discardAfter default is five minutes; the rest is room for clock skew. */
-const TOLERANCE_MS = 10 * 60 * 1000;
+const TOLERANCE_MS = 10 * MINUTE_MS;
 
 const stalwartEvent = z.object({
   id: z.string(),

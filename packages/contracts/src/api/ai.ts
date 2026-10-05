@@ -5,6 +5,7 @@
  */
 import { eventIterator } from "@orpc/contract";
 import * as z from "zod";
+import { HOUR_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
@@ -74,7 +75,7 @@ export const aiContract = {
   addDocument: route("POST", "/ai/documents", "Add a document for the assistant")
     .meta({
       apiKeyScope: "documents:write",
-      rateLimit: { name: "ai-documents", points: 30, windowSeconds: 60 * 60, per: "user" },
+      rateLimit: { name: "ai-documents", points: 30, windowSeconds: HOUR_S, per: "user" },
     })
     .input(
       z.object({

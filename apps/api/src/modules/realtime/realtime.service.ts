@@ -8,10 +8,11 @@
  */
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import { realtimeChannel } from "@repo/contracts/realtime";
+import { MINUTE_MS } from "@repo/contracts/time";
 import { AppError, InjectPinoLogger, InjectRedis, PinoLogger, type Redis } from "@repo/nest-common";
 import { RealtimeHub } from "../../realtime";
 
-const STREAM_LIFETIME_MS = 10 * 60_000;
+const STREAM_LIFETIME_MS = 10 * MINUTE_MS;
 const MAX_STREAMS_PER_USER = 10;
 
 @Injectable()

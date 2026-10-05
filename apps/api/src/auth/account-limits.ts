@@ -10,6 +10,7 @@
  * spending its attempts; a passkey or an existing session still works meanwhile.
  */
 import { createHash } from "node:crypto";
+import { HOUR_S } from "@repo/contracts/time";
 import { createRateLimiter, type Redis } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
 
@@ -90,8 +91,6 @@ export function createAccountLimits(redis: Redis) {
   };
 }
 
-const HOUR = 60 * 60;
-
 /**
  * Emails our domain sends to an address someone else typed: sign-in and verification
  * codes, and invitations. Limited where they're sent, whatever endpoint asked, per
@@ -100,9 +99,9 @@ const HOUR = 60 * 60;
  */
 export const EMAIL_LIMITS = {
   /** Codes to one address, for any purpose. */
-  codesPerRecipient: { points: 10, windowSeconds: HOUR },
-  invitationsPerRecipient: { points: 3, windowSeconds: 24 * HOUR },
-  invitationsPerInviter: { points: 30, windowSeconds: HOUR },
+  codesPerRecipient: { points: 10, windowSeconds: HOUR_S },
+  invitationsPerRecipient: { points: 3, windowSeconds: 24 * HOUR_S },
+  invitationsPerInviter: { points: 30, windowSeconds: HOUR_S },
 };
 
 export function createEmailLimits(redis: Redis) {

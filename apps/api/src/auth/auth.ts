@@ -26,6 +26,7 @@ import {
   PASSWORD_MIN_LENGTH,
   userAdditionalFields,
 } from "@repo/contracts/auth";
+import { DAY_S, MINUTE_S } from "@repo/contracts/time";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins/admin";
@@ -34,7 +35,7 @@ import { jwt } from "better-auth/plugins/jwt";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Env } from "../env";
 import { features } from "../features";
-import { type AuthContext, type AuthDependencies, authContext, DAY, MINUTE } from "./auth-context";
+import { type AuthContext, type AuthDependencies, authContext } from "./auth-context";
 import { accountDeletion, databaseHooks, requestHooks } from "./auth-hooks";
 import {
   apiKeyPlugin,
@@ -57,9 +58,9 @@ const API_KEY_PLUGIN_PATHS = [
 const MOBILE_SCHEME = "boilerplate";
 
 const SESSION = {
-  expiresIn: 7 * DAY,
+  expiresIn: 7 * DAY_S,
   // Sliding expiry: an active session is extended at most once a day.
-  updateAge: DAY,
+  updateAge: DAY_S,
   // Keep the durable copy so users can see and revoke their devices.
   storeSessionInDatabase: true,
   // "Sudo mode": listing devices, adding a passkey and unlinking a social account need a
@@ -73,18 +74,18 @@ const SESSION = {
 const RATE_LIMIT = {
   enabled: true,
   storage: "secondary-storage",
-  window: MINUTE,
+  window: MINUTE_S,
   max: 100,
   // Brute-force protection on the endpoints that guess secrets.
   customRules: {
-    "/sign-in/email": { window: MINUTE, max: 5 },
-    "/sign-up/email": { window: MINUTE, max: 5 },
-    "/email-otp/*": { window: MINUTE, max: 5 },
-    "/two-factor/*": { window: MINUTE, max: 5 },
-    "/forget-password/*": { window: MINUTE, max: 3 },
+    "/sign-in/email": { window: MINUTE_S, max: 5 },
+    "/sign-up/email": { window: MINUTE_S, max: 5 },
+    "/email-otp/*": { window: MINUTE_S, max: 5 },
+    "/two-factor/*": { window: MINUTE_S, max: 5 },
+    "/forget-password/*": { window: MINUTE_S, max: 3 },
     // Anyone may register an MCP client (it still needs a user's consent to get a token),
     // so registration is limited per address.
-    "/oauth2/register": { window: MINUTE, max: 5 },
+    "/oauth2/register": { window: MINUTE_S, max: 5 },
   },
 } satisfies BetterAuthOptions["rateLimit"];
 
@@ -135,13 +136,13 @@ function plugins(context: AuthContext) {
     // Rejects passwords found in public breaches (k-anonymity: only a hash prefix is sent).
     haveIBeenPwned({ enabled: env.PASSWORD_BREACH_CHECK === "on" }),
     organizationPlugin(context),
-    admin({ impersonationSessionDuration: 60 * MINUTE }),
+    admin({ impersonationSessionDuration: 60 * MINUTE_S }),
     apiKeyPlugin(),
     // Signing keys for OAuth access tokens, published at /api/auth/jwks so each MCP
     // server verifies tokens itself. Keys rotate; old ones stay published for the grace
     // period so tokens signed just before a rotation still verify.
     jwt({
-      jwks: { rotationInterval: 90 * DAY, gracePeriod: 30 * DAY },
+      jwks: { rotationInterval: 90 * DAY_S, gracePeriod: 30 * DAY_S },
       // Sessions stay cookies; only the OAuth flow issues JWTs.
       disableSettingJwtHeader: true,
     }),

@@ -3,6 +3,8 @@
  * @repo/nest-common's fragments; add new ones here, to .env.example and to
  * docs/environment.md.
  */
+
+import { MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import { coreEnv, csv, databaseEnv, port, redisEnv } from "@repo/nest-common";
 import { createEnv } from "@t3-oss/env-core";
 import * as z from "zod";
@@ -28,7 +30,7 @@ export const envSchema = {
   STALWART_WEBHOOK_SECRET: csv.pipe(z.array(z.string().min(32)).min(1)).optional(),
 
   WEBHOOK_DELIVERY_CONCURRENCY: positive.default(20),
-  WEBHOOK_TIMEOUT_MS: positive.max(60_000).default(15_000),
+  WEBHOOK_TIMEOUT_MS: positive.max(MINUTE_MS).default(15 * SECOND_MS),
   // An endpoint failing for this long without a single success is disabled.
   WEBHOOK_AUTO_DISABLE_HOURS: positive.default(120),
   // Exact private IPs endpoints may point to, for local development and tests only

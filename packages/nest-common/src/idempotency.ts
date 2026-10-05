@@ -15,11 +15,13 @@
  * A replayed result is parsed with the caller's schema: one that no longer matches fails
  * the request rather than run the operation twice or return the wrong type.
  */
+
+import { DAY_S } from "@repo/contracts/time";
 import type { Redis } from "ioredis";
 import * as z from "zod";
 import { AppError } from "./errors";
 
-const TTL_SECONDS = 24 * 60 * 60;
+const TTL_SECONDS = DAY_S;
 const LOCK_SECONDS = 60;
 
 /** What the store keeps under a key: the claim, then the result. Null once it's expired. */

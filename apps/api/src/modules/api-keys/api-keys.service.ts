@@ -18,14 +18,13 @@ import {
   MAX_API_KEY_DAYS,
 } from "@repo/contracts/api";
 import type { OrgRole } from "@repo/contracts/roles";
+import { DAY_S } from "@repo/contracts/time";
 import { transaction } from "@repo/db";
 import { AppError, type Database, InjectDatabase } from "@repo/nest-common";
 import * as z from "zod";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "../../auth/auth.module";
 import { emitEvent } from "../../outbox";
 import { type ApiKeyRow, ApiKeysRepository } from "./api-keys.repository";
-
-const DAY_SECONDS = 24 * 60 * 60;
 
 /** Who a verified key acts as, for the procedure it called. */
 export interface ApiKeyCaller {
@@ -107,7 +106,7 @@ export class ApiKeysService {
         userId,
         name: input.name,
         // Every key expires: null (the contract's old "never") means the longest.
-        expiresIn: (input.expiresInDays ?? MAX_API_KEY_DAYS) * DAY_SECONDS,
+        expiresIn: (input.expiresInDays ?? MAX_API_KEY_DAYS) * DAY_S,
         permissions: toPermissions(input.scopes),
         metadata: { createdBy: userId },
       },

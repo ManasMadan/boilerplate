@@ -33,6 +33,7 @@ import {
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MINUTE_MS } from "../packages/contracts/src/time";
 import { fail, ok, ROOT, type Run, runSync } from "./lib";
 
 const CLUSTER = "boilerplate";
@@ -378,7 +379,7 @@ class KindCluster {
 
   /** Waits for a Job to succeed or fail, for up to five minutes; its last status. */
   private async jobStatus(job: string) {
-    const deadline = Date.now() + 5 * 60_000;
+    const deadline = Date.now() + 5 * MINUTE_MS;
     let status = "";
     while (Date.now() < deadline) {
       status = this.kubectl([

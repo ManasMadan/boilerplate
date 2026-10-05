@@ -30,6 +30,10 @@ The principles in `CLAUDE.md` apply everywhere; this is what they mean line by l
   errors or logs.
 - **Reuse.** Before writing a helper, search `packages/` (and `scripts/lib.ts` for
   scripts). One implementation per concern.
+- **Durations carry their unit.** Redis, better-auth and BullMQ's job ages take seconds;
+  timers, `Date` and fetch timeouts take milliseconds. Write `2 * HOUR_MS` or
+  `7 * DAY_S` from `@repo/contracts/time`, never `3_600_000` or `24 * 60 * 60`
+  (`scripts/durations.test.ts` refuses those).
 - **Small and plain.** Functions do one thing; no speculative options, factories or
   interfaces with one implementation, except the seams the README lists. Names say what
   a thing is; no abbreviations a reader has to decode. Biome holds every TypeScript

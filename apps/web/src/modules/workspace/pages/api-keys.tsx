@@ -11,6 +11,7 @@ import {
   type ApiKey,
   createApiKeyInput,
 } from "@repo/contracts/api";
+import { MINUTE_MS } from "@repo/contracts/time";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -114,7 +115,7 @@ function KeyRow({ apiKey }: { apiKey: ApiKey }) {
   const tCommon = useTranslations("common");
   const format = useFormatter();
   // An explicit, ticking "now" keeps server and client renders in agreement.
-  const now = useNow({ updateInterval: 60_000 });
+  const now = useNow({ updateInterval: MINUTE_MS });
   const errorMessage = useApiErrorMessage();
   const revoke = useRevokeApiKeyMutation();
   const date = (value: Date) => format.dateTime(value, { dateStyle: "medium" });

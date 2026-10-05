@@ -28,6 +28,7 @@ import {
   mcpResource,
   ORG_CLAIM,
 } from "@repo/contracts/mcp";
+import { DAY_S, MINUTE_MS, MINUTE_S } from "@repo/contracts/time";
 import { jobMetaFromContext } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
@@ -35,7 +36,7 @@ import { emailOTP } from "better-auth/plugins/email-otp";
 import { type OrganizationOptions, organization } from "better-auth/plugins/organization";
 import type { Env } from "../env";
 import { features } from "../features";
-import { type AuthContext, DAY, MINUTE } from "./auth-context";
+import { type AuthContext } from "./auth-context";
 import { orgAccess, orgRoles } from "./org-access";
 
 const INVITATION_DAYS = 7;
@@ -69,7 +70,7 @@ export function emailOtpPlugin({ emailLimits, notifications, localeFor }: AuthCo
         {
           template: "auth.otp",
           to: { email, locale: await localeFor(email, ctx?.headers) },
-          data: { otp, purpose: type, expiresInMinutes: Math.round(OTP_EXPIRES_IN / MINUTE) },
+          data: { otp, purpose: type, expiresInMinutes: Math.round(OTP_EXPIRES_IN / MINUTE_S) },
         },
         { jobId: randomUUID(), meta: jobMetaFromContext() },
       );
@@ -189,7 +190,7 @@ export function organizationPlugin(context: AuthContext) {
     creatorRole: "owner",
     ac: orgAccess,
     roles: orgRoles,
-    invitationExpiresIn: INVITATION_DAYS * DAY,
+    invitationExpiresIn: INVITATION_DAYS * DAY_S,
     organizationLimit: ORGANIZATION_LIMIT,
     invitationLimit: PENDING_INVITATION_LIMIT,
     // The plan's member limit (packages/contracts billing); null means none.
@@ -231,7 +232,7 @@ export function apiKeyPlugin() {
     keyExpiration: { maxExpiresIn: Math.max(...API_KEY_EXPIRY_DAYS) },
     rateLimit: {
       enabled: true,
-      timeWindow: MINUTE * 1000,
+      timeWindow: MINUTE_MS,
       maxRequests: API_KEY_REQUESTS_PER_MINUTE,
     },
   });

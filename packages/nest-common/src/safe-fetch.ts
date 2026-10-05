@@ -21,6 +21,7 @@
  */
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
+import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import ipaddr from "ipaddr.js";
 import { Agent, fetch as undiciFetch } from "undici";
 import { AppError } from "./errors";
@@ -132,7 +133,7 @@ export async function safeFetch(
   options: SafeFetchOptions = {},
 ): Promise<SafeFetchResponse> {
   const {
-    timeoutMs = 10_000,
+    timeoutMs = PROVIDER_TIMEOUT_MS,
     maxResponseBytes = 1_000_000,
     allowHttp = false,
     followRedirects = true,

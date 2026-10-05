@@ -5,6 +5,7 @@
  * endpoint is a browser push service (the subscription came from a client).
  */
 import { isWebPushEndpoint } from "@repo/contracts/notifications";
+import { DAY_S, PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import webPush from "web-push";
 import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
@@ -58,7 +59,7 @@ export class WebPushTransport implements PushTransport {
           publicKey: this.config.publicKey,
           privateKey: this.config.privateKey,
         },
-        TTL: 24 * 3600,
+        TTL: DAY_S,
         ...(message.collapseKey && { topic: message.collapseKey.replaceAll(/[^\w-]/g, "") }),
       },
     );
@@ -70,7 +71,7 @@ export class WebPushTransport implements PushTransport {
         // The encrypted payload, as bytes fetch accepts (a Node Buffer isn't typed as one).
         body: new Uint8Array(request.body),
         redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
     } catch (error) {
       return { ok: false, gone: false, error: `Web Push: ${(error as Error).message}` };

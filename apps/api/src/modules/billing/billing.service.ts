@@ -23,6 +23,7 @@ import {
   subscriptionStatuses,
   unlimited,
 } from "@repo/contracts/billing";
+import { DAY_S, HOUR_MS } from "@repo/contracts/time";
 import { tenantTx } from "@repo/db";
 import {
   AppError,
@@ -63,7 +64,7 @@ export async function fromStripe<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /** How long Stripe keeps a checkout session open (its default, 24 hours). */
-const CHECKOUT_SESSION_SECONDS = 24 * 60 * 60;
+const CHECKOUT_SESSION_SECONDS = DAY_S;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
@@ -161,7 +162,7 @@ export class BillingService {
       }
     }
     const settings = new URL("/settings/billing", env.WEB_URL);
-    const hour = Math.floor(Date.now() / 3_600_000);
+    const hour = Math.floor(Date.now() / HOUR_MS);
     const session = await fromStripe(() =>
       stripe.checkout.sessions.create(
         {

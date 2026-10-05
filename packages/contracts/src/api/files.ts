@@ -6,6 +6,7 @@
  */
 import * as z from "zod";
 import { fileRejections, fileStatuses, uploadPurposeNames } from "../files";
+import { HOUR_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
@@ -36,7 +37,7 @@ const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
 
 export const filesContract = {
   createUpload: route("POST", "/files/uploads", "Start an upload")
-    .meta({ rateLimit: { name: "file-uploads", points: 30, windowSeconds: 60 * 60, per: "user" } })
+    .meta({ rateLimit: { name: "file-uploads", points: 30, windowSeconds: HOUR_S, per: "user" } })
     .input(
       z.object({
         purpose: z.enum(uploadPurposeNames),

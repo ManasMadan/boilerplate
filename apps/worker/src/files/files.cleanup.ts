@@ -6,6 +6,7 @@
  *     database trigger queues them) are deleted from storage.
  */
 import { Inject, Injectable } from "@nestjs/common";
+import { HOUR_MS } from "@repo/contracts/time";
 import { type Database, InjectDatabase, STORAGE, type Storage } from "@repo/nest-common";
 
 const STALE_HOURS = 24;
@@ -24,7 +25,7 @@ export class FilesCleanup {
     const { count: stale } = await db.file.deleteMany({
       where: {
         status: { in: ["pending", "processing", "rejected"] },
-        createdAt: { lt: new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000) },
+        createdAt: { lt: new Date(Date.now() - STALE_HOURS * HOUR_MS) },
       },
     });
     let objects = 0;

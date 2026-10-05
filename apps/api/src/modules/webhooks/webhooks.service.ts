@@ -13,6 +13,7 @@ import {
 } from "@repo/contracts/api";
 import type { EventPayload, WebhookEventName } from "@repo/contracts/events";
 import { type PageInput, toPage } from "@repo/contracts/pagination";
+import { HOUR_MS } from "@repo/contracts/time";
 import { tenantTx } from "@repo/db";
 import type { Producer } from "@repo/jobs";
 import {
@@ -163,7 +164,7 @@ export class WebhooksService implements OnApplicationShutdown {
         secret: this.box.encrypt(secret, webhookSecretContext(id)),
         // Same row, so the same context: the ciphertext moves as it is.
         previousSecret: current.secret,
-        previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000),
+        previousSecretExpiresAt: new Date(Date.now() + WEBHOOK_SECRET_OVERLAP_HOURS * HOUR_MS),
       });
       await emitEvent(tx, "webhook.secret_rotated.v1", id, { endpointId: id });
       return { secret };

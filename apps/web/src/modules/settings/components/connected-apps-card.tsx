@@ -3,6 +3,7 @@
 import { useApiErrorMessage } from "@repo/client";
 import { useDisconnectAppMutation } from "@repo/client/api/apps/disconnect";
 import { useConnectedAppsQuery } from "@repo/client/api/apps/list";
+import { MINUTE_MS } from "@repo/contracts/time";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -23,7 +24,7 @@ export function ConnectedAppsCard() {
   const t = useTranslations("settings.security.apps");
   const format = useFormatter();
   // An explicit, ticking "now" keeps server and client renders in agreement.
-  const now = useNow({ updateInterval: 60_000 });
+  const now = useNow({ updateInterval: MINUTE_MS });
   const errorMessage = useApiErrorMessage();
   const apps = useConnectedAppsQuery();
   const disconnect = useDisconnectAppMutation();

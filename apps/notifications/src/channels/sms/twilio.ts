@@ -2,6 +2,8 @@
  * Twilio's Messages API (one form-encoded POST, basic auth). `from` is a sender number in
  * E.164, or a Messaging Service SID ("MG...") to let Twilio pick the sender per country.
  */
+
+import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import * as z from "zod";
 import type { SmsResult, SmsTransport } from "./sms-transport";
 
@@ -46,7 +48,7 @@ export class TwilioTransport implements SmsTransport {
           "content-type": "application/x-www-form-urlencoded",
         },
         body: form,
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
     } catch (error) {
       return {

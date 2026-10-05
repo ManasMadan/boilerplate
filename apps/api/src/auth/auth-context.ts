@@ -16,9 +16,6 @@ import { type EventOrigin, emitEvent } from "../outbox";
 import { createAccountLimits, createEmailLimits } from "./account-limits";
 import type { Memberships } from "./memberships";
 
-export const MINUTE = 60;
-export const DAY = 24 * 60 * MINUTE;
-
 export interface AuthDependencies {
   env: Env;
   db: Db;

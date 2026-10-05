@@ -3,6 +3,8 @@
  * with its private key (jose) is exchanged for an OAuth access token (cached until
  * shortly before it expires). No SDK: the protocol is two HTTPS calls.
  */
+
+import { MINUTE_MS, PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import { importPKCS8, SignJWT } from "jose";
 import * as z from "zod";
 import type { PushMessage, PushResult, PushTransport } from "./push-transport";
@@ -41,7 +43,7 @@ export class FcmTransport implements PushTransport {
   constructor(private readonly config: FcmConfig) {}
 
   private async token() {
-    if (this.accessToken && this.accessToken.expiresAt > Date.now() + 60_000)
+    if (this.accessToken && this.accessToken.expiresAt > Date.now() + MINUTE_MS)
       return this.accessToken.value;
     const tokenUrl = this.config.tokenUrl ?? "https://oauth2.googleapis.com/token";
     this.key ??= importPKCS8(this.config.privateKey, "RS256");
@@ -61,7 +63,7 @@ export class FcmTransport implements PushTransport {
         grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion,
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
     if (!response.ok)
       throw new Error(`FCM auth failed: ${response.status} ${await response.text()}`);
@@ -86,7 +88,7 @@ export class FcmTransport implements PushTransport {
           android: message.collapseKey ? { collapse_key: message.collapseKey } : undefined,
         },
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
     if (response.ok)
       return { ok: true, providerMessageId: sendResponse.parse(await response.json()).name };

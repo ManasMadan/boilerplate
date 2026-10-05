@@ -21,6 +21,7 @@ import {
   unauditedEvents,
   webhookEvents,
 } from "@repo/contracts/events";
+import { DAY_S, HOUR_MS, HOUR_S, MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import { locales } from "@repo/i18n";
 import type { JobsOptions } from "bullmq";
 import * as z from "zod";
@@ -161,20 +162,18 @@ const deferredDelivery = z.object({
 });
 export type NotificationTemplate = NotificationPayload["template"];
 
-const DAY = 24 * 60 * 60;
-
 /**
  * When failed webhook deliveries are retried, after the first attempt (Standard Webhooks'
  * recommended schedule): 5s, 5m, 30m, 2h, 5h, 10h, 10h.
  */
 export const WEBHOOK_RETRY_DELAYS_MS = [
-  5_000,
-  5 * 60_000,
-  30 * 60_000,
-  2 * 3_600_000,
-  5 * 3_600_000,
-  10 * 3_600_000,
-  10 * 3_600_000,
+  5 * SECOND_MS,
+  5 * MINUTE_MS,
+  30 * MINUTE_MS,
+  2 * HOUR_MS,
+  5 * HOUR_MS,
+  10 * HOUR_MS,
+  10 * HOUR_MS,
 ];
 
 const aiDocumentJob = z.object({ documentId: z.uuid(), orgId: z.uuid() });
@@ -197,7 +196,7 @@ export const queues = {
    */
   "notifications-critical": {
     jobs: { send: notificationPayload, deferred: deferredDelivery },
-    options: { ...retrying, removeOnComplete: true, removeOnFail: { age: 60 * 60 } },
+    options: { ...retrying, removeOnComplete: true, removeOnFail: { age: HOUR_S } },
   },
   /** Everything else users are notified about: reminders, digests, product updates. */
   "notifications-bulk": {
@@ -211,8 +210,8 @@ export const queues = {
     },
     options: {
       ...retrying,
-      removeOnComplete: { age: DAY, count: 10_000 },
-      removeOnFail: { age: 7 * DAY },
+      removeOnComplete: { age: DAY_S, count: 10_000 },
+      removeOnFail: { age: 7 * DAY_S },
     },
   },
   /**
@@ -223,16 +222,16 @@ export const queues = {
    */
   "events-audit": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   "events-webhooks": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   /** Domain events that notify someone (apps/notifications maps them to templates). */
   "events-notifications": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   /** Live UI updates (apps/worker → Redis pub/sub → the api's SSE streams); short-lived. */
   "events-realtime": {
@@ -241,12 +240,12 @@ export const queues = {
       attempts: 3,
       backoff: { type: "fixed", delay: 1_000 },
       removeOnComplete: true,
-      removeOnFail: { age: DAY },
+      removeOnFail: { age: DAY_S },
     },
   },
   "events-billing": {
     jobs: { event: eventEnvelope },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 30 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 30 * DAY_S } },
   },
   /**
    * Outgoing customer webhooks (apps/webhooks). One job per delivery (jobId = delivery
@@ -264,8 +263,8 @@ export const queues = {
     options: {
       attempts: 8,
       backoff: { type: "webhook" },
-      removeOnComplete: { age: DAY },
-      removeOnFail: { age: 7 * DAY },
+      removeOnComplete: { age: DAY_S },
+      removeOnFail: { age: 7 * DAY_S },
     },
   },
   /** Scheduled housekeeping in apps/worker (retention, partitions). */
@@ -275,7 +274,7 @@ export const queues = {
    */
   files: {
     jobs: { process: z.object({ fileId: z.uuid() }) },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
   },
   /**
    * Indexing a document for the assistant (apps/ai produces and consumes it; the payload
@@ -288,7 +287,7 @@ export const queues = {
       /** Summarize an indexed document (queued after indexing when a model is configured). */
       summarize: aiDocumentJob,
     },
-    options: { ...retrying, removeOnComplete: { age: DAY }, removeOnFail: { age: 7 * DAY } },
+    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
   },
   maintenance: {
     jobs: {
@@ -299,9 +298,9 @@ export const queues = {
     },
     options: {
       attempts: 3,
-      backoff: { type: "exponential", delay: 60_000, jitter: 0.5 },
+      backoff: { type: "exponential", delay: MINUTE_MS, jitter: 0.5 },
       removeOnComplete: { count: 100 },
-      removeOnFail: { age: 30 * DAY },
+      removeOnFail: { age: 30 * DAY_S },
     },
   },
 } as const satisfies Record<string, { jobs: Record<string, z.ZodType>; options: JobsOptions }>;

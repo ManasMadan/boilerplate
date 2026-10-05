@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { phoneCodeSchema, phoneNumberSchema } from "../auth";
+import { HOUR_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf } from "./base";
 
 /** The codes this module's procedures throw, on top of the common ones. */
@@ -38,14 +39,14 @@ export const userContract = {
    */
   sendPhoneCode: route("POST", "/me/phone/code", "Text a verification code")
     .meta({
-      rateLimit: { name: "phone-code-user", points: 5, windowSeconds: 60 * 60, per: "user" },
+      rateLimit: { name: "phone-code-user", points: 5, windowSeconds: HOUR_S, per: "user" },
     })
     .input(z.object({ phoneNumber: phoneNumberSchema }))
     .output(z.object({ expiresInSeconds: z.number().int() })),
   /** Saves the number once the texted code matches (PHONE_CODE_INVALID otherwise). */
   verifyPhone: route("POST", "/me/phone/verify", "Verify and save a phone number")
     .meta({
-      rateLimit: { name: "phone-code-verify", points: 20, windowSeconds: 60 * 60, per: "user" },
+      rateLimit: { name: "phone-code-verify", points: 20, windowSeconds: HOUR_S, per: "user" },
     })
     .input(z.object({ phoneNumber: phoneNumberSchema, code: phoneCodeSchema }))
     .output(meSchema),
