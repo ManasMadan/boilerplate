@@ -51,6 +51,8 @@ export interface Captcha {
   widget: ReactNode;
   /** True once a submit can go through (as soon as the page knows, when captcha is off). */
   ready: boolean;
+  /** The widget's current token, or null (none yet, expired, or captcha off). */
+  token: string | null;
   /** Headers carrying the token, for better-auth's captcha plugin. */
   headers(): Record<string, string>;
   /** Get a fresh token after a submit: each one is valid once. */
@@ -125,6 +127,7 @@ export function useCaptcha(): Captcha {
     ) : null,
     // Until system.info answers, a submit might lack the token the API then requires.
     ready: system !== undefined && (!siteKey || token !== null),
+    token,
     headers: (): Record<string, string> =>
       siteKey && token ? { "x-captcha-response": token } : {},
     reset,

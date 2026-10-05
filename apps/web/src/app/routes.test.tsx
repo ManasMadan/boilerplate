@@ -7,6 +7,7 @@ import { isValidElement, type ReactElement, Suspense } from "react";
 import { describe, expect, it } from "vitest";
 import { AssistantPage } from "@/modules/assistant";
 import {
+  CaptchaPage,
   ForgotPasswordPage,
   ResetPasswordPage,
   SignInPage,
@@ -56,6 +57,7 @@ import * as signIn from "./(auth)/sign-in/page";
 import * as signUp from "./(auth)/sign-up/page";
 import * as twoFactor from "./(auth)/two-factor/page";
 import * as verifyEmail from "./(auth)/verify-email/page";
+import * as captcha from "./captcha/page";
 import * as privacy from "./privacy/page";
 import * as terms from "./terms/page";
 import * as unsubscribe from "./unsubscribe/page";
@@ -122,6 +124,7 @@ describe("route files", () => {
     for (const [route, page, title] of [
       [consent, OAuthConsentPage, en.oauth.title],
       [unsubscribe, UnsubscribePage, en.unsubscribe.title],
+      [captcha, CaptchaPage, en.captcha.title],
     ] as const) {
       const element = await rendered(route.default);
       expect(element.type).toBe(Suspense);

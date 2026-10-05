@@ -823,6 +823,12 @@
     "manage": "Gestionar todos los ajustes de notificaciones",
     "missing": "Esta página necesita el enlace de uno de nuestros correos."
   },
+  "captcha": {
+    "title": "Control de seguridad",
+    "description": "Completa el control para continuar en la app.",
+    "invalidReturn": "Esta página solo funciona cuando la abre la app.",
+    "backToApp": "Volver a la app"
+  },
   "sms": {
     "phoneCode": "{code} es tu código de verificación de Boilerplate. Caduca en {expiresInMinutes, number} minutos. No lo compartas con nadie.",
     "securityAlert": {
