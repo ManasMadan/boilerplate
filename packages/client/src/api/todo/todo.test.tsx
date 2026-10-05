@@ -178,6 +178,26 @@ describe("completing a todo", () => {
   });
 });
 
+describe("several changes at once", () => {
+  it("refetches when they settle together, too", async () => {
+    const server = todoApi(2);
+    const { result, item, titles } = renderTodos(server);
+    await vi.waitFor(() => expect(titles()).toEqual(["Todo 2", "Todo 1"]));
+    const releaseFirst = server.hold();
+    const releaseSecond = server.hold();
+    const changes = Promise.all([
+      result.current.setCompleted.mutateAsync({ id: id(1), completed: true, version: 1 }),
+      result.current.remove.mutateAsync({ id: id(2) }),
+    ]);
+    await vi.waitFor(() => expect(titles()).toEqual(["Todo 1"]));
+    releaseFirst();
+    releaseSecond();
+    await changes;
+    await vi.waitFor(() => expect(server.lists()).toBe(2));
+    expect(item(1)).toMatchObject({ completed: true, version: 2 });
+  });
+});
+
 describe("deleting a todo", () => {
   it("removes it at once", async () => {
     const server = todoApi(2);
