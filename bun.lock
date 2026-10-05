@@ -20,6 +20,7 @@
         "turbo": "^2.11.5",
         "type-coverage": "2.29.7",
         "typescript": "catalog:",
+        "zod": "catalog:",
       },
     },
     "apps/ai": {

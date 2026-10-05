@@ -135,11 +135,7 @@ describe("which files unit tests must cover", () => {
       root,
     );
     expect(suites.map((suite) => [suite.cwd, suite.command.join(" "), suite.lcov])).toEqual([
-      [
-        root,
-        "bun --no-env-file test --coverage ./scripts/ ./.claude/hooks/",
-        "coverage/bun/lcov.info",
-      ],
+      [root, "bun test --coverage ./scripts/ ./.claude/hooks/", "coverage/bun/lcov.info"],
       [
         join(root, "packages/p"),
         "bun run test --coverage --coverage.reportsDirectory=coverage/unit",

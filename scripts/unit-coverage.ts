@@ -47,8 +47,18 @@ export function parseDiff(diff: string): Map<string, Set<number>> {
   return changed;
 }
 
-type Git = (args: string[]) => string;
+export type Git = (args: string[]) => string;
 const git: Git = (args) => Bun.spawnSync(["git", ...args], { cwd: ROOT }).stdout.toString();
+
+/**
+ * The commit a push starts from: where HEAD meets the branch's upstream, or, for a branch
+ * never pushed, the default branch.
+ */
+export function pushBase(run: Git = git) {
+  const upstream = run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
+  const head = run(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).trim();
+  return run(["merge-base", "HEAD", upstream.trim() || head || "master"]).trim();
+}
 
 /**
  * What changed: the commits a push would send (since the branch's upstream, or, for a
@@ -57,9 +67,7 @@ const git: Git = (args) => Bun.spawnSync(["git", ...args], { cwd: ROOT }).stdout
  */
 export function changedLines(branch: boolean, run = git, root = ROOT) {
   if (branch) {
-    const upstream = run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
-    const head = run(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).trim();
-    const base = run(["merge-base", "HEAD", upstream.trim() || head || "master"]).trim();
+    const base = pushBase(run);
     return parseDiff(run(["diff", "-U0", "--no-color", "--no-ext-diff", base, "HEAD"]));
   }
   const changed = parseDiff(run(["diff", "-U0", "--no-color", "--no-ext-diff", "HEAD"]));
@@ -113,7 +121,7 @@ export function suitesFor(files: string[], root = ROOT): Suite[] {
     suites.push({
       cwd: root,
       // Paths, not names: `bun test` treats a bare word as a filter and skips dot folders.
-      command: ["bun", "--no-env-file", "test", "--coverage", "./scripts/", "./.claude/hooks/"],
+      command: ["bun", "test", "--coverage", "./scripts/", "./.claude/hooks/"],
       lcov: "coverage/bun/lcov.info",
       owns: BUN_SUITE,
     });

@@ -14,12 +14,16 @@
 
 Before pushing: `bun run lint`, `bun run check-types`, `bun run test`, and for anything
 touching the database, queues or HTTP, `bun run test:integration`. The pre-push hook
-(`.husky/pre-push`) runs types and unit tests for the affected packages, the scripts'
-and hooks' types and tests, the unit coverage of every line the push sends
-(`bun scripts/unit-coverage.ts --branch`, against the branch's upstream), and knip; the rest is yours to run, and CI
-runs it all. The unit coverage check counts scripts/, the hooks, and, in a package with
-no integration suite, a file with a unit test beside it; a package with integration
-tests (`test:integration`) is left to CI's diff-cover, which merges every suite.
+(`.husky/pre-push`) holds the push to the same rule as CI: it type-checks, then
+`bun scripts/push-coverage.ts` runs every suite (unit, integration, browser, mobile,
+Python) of the packages the push changes and of every package depending on them,
+measured from the branch's upstream, runs the scripts' and hooks' suite, and refuses the
+push unless every file under those folders is at 100% (`scripts/coverage.ts`). It needs
+Docker running and starts the core services and RustFS itself; ClamAV comes from the
+stand-in in `@repo/testing/fake-clamd` when it isn't running (CI runs the real one). A
+push that changes shared code runs most suites, so it takes a while. The Stop hook stays
+quick: it checks only the unit coverage of the lines a turn changed
+(`bun scripts/unit-coverage.ts`).
 
 ## Unit
 
@@ -38,6 +42,9 @@ Those need object storage and virus scanning, and are tagged `files` (vitest's
 `--tags-filter=!files` and its `test:integration:files` passes `--tags-filter=files`;
 `coverage` passes neither, so `bun run test:coverage` and CI's integration job, which
 starts every service, run them all. A new test that needs RustFS or ClamAV gets the tag.
+Where ClamAV doesn't fit (a small Docker VM), the worker's suite scans with
+`@repo/testing/fake-clamd`, a stand-in that speaks clamd's protocol and finds the EICAR
+test file; it's used only when nothing answers at `CLAMAV_URL`, and never in CI.
 
 What each profile needs: the start adds up the memory limits in `docker-compose.yml` of
 what isn't running yet, and refuses unless Docker has that free plus half a gigabyte of
@@ -170,15 +177,18 @@ file below 100%, or one no test loads.
   reports every workspace file its tests load, so a shared package gets credit from the
   apps that exercise it), mobile's jest (`src/**`), bun for `scripts/` and
   `.claude/hooks/` (`bunfig.toml`), and the Python service (`fail_under = 100`,
-  branches included, in `apps/ai/pyproject.toml`). Bun's report counts only for
-  `scripts/` and `.claude/hooks/`: it counts lines v8 doesn't, so its view of a package
-  file a script imports would show lines as missed that the package's own suite ran.
+  branches included, in `apps/ai/pyproject.toml`). Bun's report covers only `scripts/`
+  and `.claude/hooks/` (`coveragePathIgnorePatterns` leaves out the package files a
+  script's test loads, which their own suites cover) and fails below 100%
+  (`coverageThreshold`); mobile's jest fails below 100% too. The vitest runs write LCOV
+  only: a run's own summary would count every file its tests load from other packages.
 - A NestJS package's `vitest.config.ts` also adds `decoratorMetadata()` from
   `packages/vitest-config`: the compiler turns every injected constructor parameter into
   a branch that exists in no source line (a guard for import cycles), and this compiles
   it away so coverage counts only the code that was written.
 - The merged report is `coverage/merged.lcov`. CI runs diff-cover on it against the base
-  branch at 100%, so a pull request can't add or change a line without covering it.
+  branch at 100%, so a pull request can't add or change a line without covering it, and
+  the pre-push hook refuses a push that leaves any file it affects below 100%.
 - A file may be below 100% only if the table below lists it, with the reason and the
   test that covers its behaviour another way. The same goes for skipped tests and for
   lint or type suppressions (`biome-ignore`, `@ts-expect-error`, `# pyright: ignore`,
