@@ -7,7 +7,7 @@ bunx tsc -p turbo/generators
 # --no-env-file: the tests get the test environment, as in CI, not this checkout's .env
 # (Bun loads it into `bun <file>` and `bun test`, and every suite they start inherits it).
 bun --no-env-file test ./scripts/ ./.claude/hooks/
-# Every line the branch changes in a unit-tested file is covered by its unit tests (CI's
+# Every line this push sends in a unit-tested file is covered by its unit tests (CI's
 # diff-cover checks the rest against every suite merged).
 bun --no-env-file scripts/unit-coverage.ts --branch
 # Unused files, exports and dependencies (knip): quick, and CI fails on them.

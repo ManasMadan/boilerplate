@@ -51,13 +51,15 @@ type Git = (args: string[]) => string;
 const git: Git = (args) => Bun.spawnSync(["git", ...args], { cwd: ROOT }).stdout.toString();
 
 /**
- * What changed: the branch's commits since the merge base with the default branch, or
- * the working tree against HEAD, untracked files counted whole.
+ * What changed: the commits a push would send (since the branch's upstream, or, for a
+ * branch never pushed, since the merge base with the default branch), or the working
+ * tree against HEAD, untracked files counted whole.
  */
 export function changedLines(branch: boolean, run = git, root = ROOT) {
   if (branch) {
+    const upstream = run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
     const head = run(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).trim();
-    const base = run(["merge-base", "HEAD", head || "master"]).trim();
+    const base = run(["merge-base", "HEAD", upstream.trim() || head || "master"]).trim();
     return parseDiff(run(["diff", "-U0", "--no-color", "--no-ext-diff", base, "HEAD"]));
   }
   const changed = parseDiff(run(["diff", "-U0", "--no-color", "--no-ext-diff", "HEAD"]));

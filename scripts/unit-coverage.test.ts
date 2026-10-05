@@ -45,11 +45,22 @@ describe("reading a diff", () => {
     expect(parseDiff(diff)).toEqual(new Map([["a.ts", lines(2, 3, 4, 12)]]));
   });
 
+  it("is what a push sends: the commits its upstream lacks", () => {
+    const calls: string[] = [];
+    changedLines(true, (args) => {
+      calls.push(args.join(" "));
+      return args[0] === "rev-parse" ? "origin/feature\n" : "";
+    });
+    expect(calls).toContain("merge-base HEAD origin/feature");
+  });
+
   it("is the branch's commits since the merge base, or the working tree with new files whole", () => {
     const root = repo({ "new.ts": "a\nb\n" });
     const calls: string[] = [];
     const git = (args: string[]) => {
       calls.push(args.join(" "));
+      // A branch never pushed: no upstream.
+      if (args[0] === "rev-parse") return "";
       if (args[0] === "symbolic-ref") return "origin/main\n";
       if (args[0] === "merge-base") return "abc\n";
       if (args[0] === "ls-files") return "new.ts\n";
