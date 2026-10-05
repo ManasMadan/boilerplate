@@ -78,8 +78,8 @@ export interface Step {
   /** Steps in one lane run one at a time: the integration suites share Valkey's numbers. */
   lane?: string;
   /**
-   * Left to finish when another step fails: an install or a generator stopped half way
-   * leaves the checkout broken for the next run.
+   * Left to finish when another step fails: an install, a generator or a scratch worktree
+   * stopped half way leaves the checkout broken, or litters it, for the next run.
    */
   keep?: boolean;
   /** Roughly what it takes: cores (1 unless said), GB of the machine's memory and of Docker's. */
@@ -537,6 +537,8 @@ export const STEPS: Step[] = [
     areas: ["app"],
     needs: ["generated code", "services"],
     lane: "valkey",
+    // Stopped half way, it would leave its scratch worktree behind.
+    keep: true,
     cores: 3,
     memory: 4,
     run: (ctx) => passes(ctx, "bun", ["scripts/generators.ts"]),
