@@ -13,7 +13,8 @@ builds in the field all depend on it.
   schema with its inferred type, input schemas, then
   `base.meta(...).route({ method, path, tags, summary }).input(...).output(...)`.
   Register the file in `src/api/index.ts`.
-- Every input has bounds: max lengths, `PAGE_SIZE_MAX`, enums instead of free strings.
+- Every input has bounds: max lengths, `PAGE_SIZE_MAX`, enums instead of free strings,
+  `z.int32()` for a number stored in a Postgres `integer` (a larger one fails the query).
   Lists use `pageInput` / `page(item)` from `src/pagination.ts` (cursor only).
 - An id field uses its kind's branded schema from `src/ids.ts` (`orgIdSchema`,
   `userIdSchema`, `todoIdSchema`, ...), in inputs, outputs, events and job payloads, so
