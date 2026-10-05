@@ -39,6 +39,14 @@ digest, Helm charts, OpenTofu providers, and versions marked with a `# renovate:
   release's `kind-linux-amd64.sha256sum` before merging.
 - **Postgres majors** are disabled: a major needs a dump and restore or pg_upgrade,
   never a tag bump.
+- **Playwright.** `@playwright/test`, `playwright`, `playwright-core` and the
+  `mcr.microsoft.com/playwright` image the visual tests run in are one group, since the
+  screenshot baselines depend on the exact browser build. The image's tag (in
+  `packages/ui/package.json` and `scripts/docker-clean.ts`) must match the packages'
+  version, which `scripts/pins.test.ts` checks. If the image isn't published yet when
+  the packages are, wait for it rather than splitting the group. Run
+  `bun run --cwd packages/ui test:visual` on the branch; a browser change can move
+  pixels, and then `test:visual:update` and a look at the new screenshots.
 - **Renovate's own config.** `bun run lint:renovate` validates `renovate.json5` in
   strict mode with the Renovate version `renovate.yml` pins; the lint job and the
   pre-commit hook run it. After raising `renovate-version`, run it and fix any setting

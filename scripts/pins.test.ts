@@ -133,3 +133,68 @@ describe("every pinned version", () => {
     }
   });
 });
+
+describe("the Playwright image", () => {
+  // packages/ui's test:visual runs the installed @playwright/test in it: the screenshot
+  // baselines depend on that exact browser build, so image and packages move together
+  // (renovate.json5's "playwright" group).
+  const { version: installed } = JSON.parse(read("node_modules/@playwright/test/package.json")) as {
+    version: string;
+  };
+  const tags = Bun.spawnSync(
+    ["git", "grep", "-oE", String.raw`mcr\.microsoft\.com/playwright:[^ "]+`],
+    {
+      cwd: ROOT,
+    },
+  )
+    .stdout.toString()
+    .trim()
+    .split("\n");
+
+  it("is tagged with the installed Playwright version wherever it's named", () => {
+    expect(tags.length).toBeGreaterThan(1);
+    // `<file>:<image>:<tag>`
+    expect(new Set(tags.map((tag) => tag.split(":").at(-1)))).toEqual(
+      new Set([`v${installed}-noble`]),
+    );
+  });
+
+  it("is the version every package declares Playwright at", () => {
+    type Deps = Record<string, string> | undefined;
+    const files = ["", "apps/web/", "apps/mobile/", "packages/ui/"].map(
+      (dir) => `${dir}package.json`,
+    );
+    const manifests = files.map(
+      (file) =>
+        JSON.parse(read(file)) as {
+          dependencies?: Deps;
+          devDependencies?: Deps;
+          workspaces?: { catalog?: Deps };
+        },
+    );
+    const declared = manifests.flatMap((manifest) =>
+      [manifest.dependencies, manifest.devDependencies, manifest.workspaces?.catalog].flatMap(
+        (deps) =>
+          ["@playwright/test", "playwright", "playwright-core"].flatMap((name) =>
+            deps?.[name] ? [deps[name]] : [],
+          ),
+      ),
+    );
+    expect(declared.length).toBeGreaterThan(2);
+    expect(new Set(declared)).toEqual(new Set([installed]));
+  });
+
+  it("is found by Renovate's manager for the images the scripts run", () => {
+    const config = read("renovate.json5");
+    const block = config.slice(config.indexOf("Images the scripts run with `docker run`"));
+    const match = /matchStrings: \[\s*("[^\n]*"),?\s*\]/.exec(block)?.[1] ?? '""';
+    const pattern = new RegExp(String(JSON.parse(match)), "g");
+    for (const file of tags.map((tag) => tag.slice(0, tag.indexOf(":")))) {
+      const found = [...read(file).matchAll(pattern)].map((m) => m.groups?.depName);
+      expect({ file, found: found.includes("mcr.microsoft.com/playwright") }).toEqual({
+        file,
+        found: true,
+      });
+    }
+  });
+});

@@ -133,6 +133,11 @@
       groupName: "bun",
     },
     {
+      description: "Playwright: the packages and the image packages/ui's visual tests run them in (its test:visual, scripts/docker-clean.ts) move together, since the screenshot baselines depend on the exact browser build (scripts/pins.test.ts)",
+      matchPackageNames: ["@playwright/test", "playwright", "playwright-core", "mcr.microsoft.com/playwright"],
+      groupName: "playwright",
+    },
+    {
       description: "Node: .nvmrc (CI and local development) and EAS's builds",
       matchPackageNames: ["node"],
       groupName: "node",

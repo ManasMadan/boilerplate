@@ -458,7 +458,9 @@ rendered with `render` from `packages/ui/test/render.tsx`) for what a story does
 a part no story uses, an edge case. They take no screenshots, so they need no baselines.
 `bun run --cwd packages/ui test:visual` compares a screenshot of every story and theme
 with the committed baselines, in the Playwright Docker image;
-`test:visual:update` rewrites them.
+`test:visual:update` rewrites them. The image's tag must be the installed Playwright's
+version, and `scripts/pins.test.ts` fails when it isn't: the baselines depend on that
+exact browser build.
 
 ## Load
 
