@@ -56,7 +56,10 @@ export const bundledMessages: MessageSource = {
  * whose arguments arrive with it. The compiler can't pair those, so the ICU test checks
  * every message's arguments against English instead. Everywhere else, call `t` itself.
  */
-export type LooseTranslate = (key: string, values?: Record<string, string | number>) => string;
+export type LooseTranslate = ((key: string, values?: Record<string, string | number>) => string) & {
+  /** Whether the catalog has the key (a translator from `useTranslations` or `createTranslator`). */
+  has(key: string): boolean;
+};
 // type-coverage:ignore-next-line
 export const loosely = (t: object) => t as LooseTranslate;
 
