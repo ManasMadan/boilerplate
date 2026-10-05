@@ -202,14 +202,28 @@ are no per-package floors to negotiate: `bun run test:coverage` runs every suite
 coverage and then `bun scripts/coverage.ts`, which merges their reports and fails on any
 file below 100%, or one no test loads.
 
+- A source file is any `.ts`, `.tsx`, `.js`, `.mjs`, `.cjs` or `.py` file git tracks,
+  wherever it is, except tests and what only they run (`test/`, `tests/`, `e2e/`,
+  `maestro/`, `visual/`, `*.test.*`, stories, `jest.setup.ts`), generated code
+  (`generated/`, `*.gen.ts`, `*.d.ts`, `en.d.json.ts`) and configs (`*.config.*`,
+  `.storybook/`, `.dependency-cruiser.cjs`): `isSource` in `scripts/coverage.ts`. So
+  the evals, the web app's service worker, the packages' build scripts and presets, the
+  code generators, the load test and the images' checks count like the services, and a
+  new folder of code counts the day it lands; `scripts/coverage.test.ts` fails if the
+  rule narrows to a list of folders again.
 - Every suite writes LCOV: each vitest package (`coverage()` in `packages/vitest-config`
   reports every workspace file its tests load, so a shared package gets credit from the
-  apps that exercise it), mobile's jest (`src/**`), bun for `scripts/` and
-  `.claude/hooks/` (`bunfig.toml`), and the Python service (`fail_under = 100`,
-  branches included, in `apps/ai/pyproject.toml`). Bun's report covers only `scripts/`
-  and `.claude/hooks/` (`coveragePathIgnorePatterns` leaves out the package files a
-  script's test loads, which their own suites cover) and fails below 100%
-  (`coverageThreshold`); mobile's jest fails below 100% too. The vitest runs write LCOV
+  apps that exercise it), mobile's jest (`src/**`), bun (`bunfig.toml`), and the
+  Python service and its evals (`fail_under = 100`, branches included, in
+  `apps/ai/pyproject.toml`). Bun's runner answers for every source file no other suite
+  owns (`BUN_OWNS` in `scripts/coverage.ts`): `scripts/`, `.claude/hooks/`, and the
+  tooling outside the services' and packages' `src/`, whose tests are in `scripts/`
+  too (`check-peers.test.ts`, `load.test.ts`, `turbo-generators.test.ts`,
+  `build-presets.test.ts`, `package-scripts.test.ts`). Its report leaves out the
+  services' and packages' `src/` (`coveragePathIgnorePatterns`: a script's test may load
+  them, and their own suites cover them) and fails below 100% (`coverageThreshold`);
+  `bun scripts/coverage.ts --bun` checks only what it owns, branches too. Mobile's jest
+  fails below 100% too. The vitest runs write LCOV
   only: a run's own summary would count every file its tests load from other packages.
 - A NestJS package's `vitest.config.ts` also adds `decoratorMetadata()` from
   `packages/vitest-config`: the compiler turns every injected constructor parameter into

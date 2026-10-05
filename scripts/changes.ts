@@ -42,6 +42,10 @@ export function areasOf(file: string): Area[] {
   if (file.startsWith(".claude/") || /\.md$/.test(file) || file === "LICENSE") {
     return ["scripts"];
   }
+  if (file === "deploy/docker/check-peers.mjs") {
+    // Its tests are the scripts' (scripts/check-peers.test.ts).
+    return ["images", "scripts"];
+  }
   if (file.startsWith("deploy/docker/") || file === "docker-bake.hcl") {
     return ["images"];
   }

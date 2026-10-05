@@ -91,8 +91,38 @@ describe("which files the rule applies to", () => {
     ["packages/ai-client/src/generated/types.gen.ts", false],
     ["apps/ai/tests/test_errors.py", false],
     ["apps/api/vitest.config.ts", false],
+    ["apps/ai/evals/library.py", true],
+    ["apps/web/public/sw.js", true],
+    ["deploy/docker/check-peers.mjs", true],
+    ["packages/jobs/scripts/export-schemas.ts", true],
+    ["packages/vitest-config/index.ts", true],
+    ["turbo/generators/config.ts", true],
+    ["load/api.ts", true],
+    ["apps/web/test/services.ts", false],
+    ["apps/ai/tests/support.py", false],
+    ["apps/mobile/maestro/scripts/code.js", false],
+    ["apps/mobile/jest.setup.ts", false],
+    ["packages/ui/visual/serve.mjs", false],
+    ["apps/web/next.config.ts", false],
+    ["packages/ui/.storybook/preview.tsx", false],
+    [".dependency-cruiser.cjs", false],
+    ["packages/i18n/messages/en.d.json.ts", false],
+    ["README.md", false],
   ])("%s → %s", (path, expected) => {
     expect(isSource(path)).toBe(expected);
+  });
+
+  it("counts code in a folder it has never seen: only tests, generated code and configs are out", () => {
+    for (const path of [
+      "tools/release.ts",
+      "apps/new/lib/format.tsx",
+      "packages/new/bin/run.mjs",
+      "infra/scripts/rotate.py",
+      "deploy/docker/healthcheck.cjs",
+      "apps/web/public/worker.js",
+    ]) {
+      expect(isSource(path)).toBe(true);
+    }
   });
 });
 
@@ -172,6 +202,24 @@ describe("the check", () => {
       "coverage/bun/lcov.info": report("packages/pkg/src/index.ts", ["DA:1,0", "DA:2,0"]),
     });
     expect(run(["packages"], root).code).toBe(0);
+  });
+
+  it("checks only what Bun's runner owns with --bun", async () => {
+    const root = await repo({
+      "packages/pkg/src/index.ts": "",
+      "packages/pkg/scripts/gen.ts": "",
+      "deploy/check.mjs": "",
+      "coverage/bun/lcov.info": [
+        report("packages/pkg/scripts/gen.ts", ["DA:1,1"]),
+        report("deploy/check.mjs", ["DA:1,0"]),
+        report("packages/pkg/src/index.ts", ["DA:1,0"]),
+      ].join("\n"),
+    });
+    const { code, printed } = run(["--bun"], root);
+    expect(code).toBe(1);
+    expect(printed).toContain("deploy/check.mjs: lines 1");
+    expect(printed).not.toContain("packages/pkg/src");
+    expect(printed).toContain("2 source files, 1 reports: 1 below 100%.");
   });
 
   it("passes when every file in scope is covered", async () => {

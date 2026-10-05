@@ -2,8 +2,8 @@
  * Before a push leaves the machine: every file it can affect at 100%, across every suite,
  * as CI checks on the pull request. The packages its commits change and every package
  * that depends on them (turbo's `...[base]`) run their whole coverage suite (unit,
- * integration, browser, mobile, Python), the scripts and hooks run theirs, and
- * scripts/coverage.ts checks each file under those folders.
+ * integration, browser, mobile, Python), Bun's runs for the repo's tooling (the scripts,
+ * the hooks and the rest it owns), and scripts/coverage.ts checks each of those files.
  *
  *   bun scripts/push-coverage.ts      (the pre-push hook runs this)
  *
@@ -71,15 +71,11 @@ export function pushCoverage({ run = runSync, root = ROOT } = {}): number {
     fail("the scripts' or hooks' tests failed, or left a file below 100%");
     return 1;
   }
-  const checked = run(
-    "bun",
-    ["scripts/coverage.ts", ...packages, "scripts", ".claude/hooks"],
-    inherit,
-  );
+  const checked = run("bun", ["scripts/coverage.ts", ...packages, "--bun"], inherit);
   if (checked.status !== 0) {
     return 1;
   }
-  ok(`every file in ${packages.length} package(s), the scripts and the hooks at 100%`);
+  ok(`every file in ${packages.length} package(s) and the repo's tooling at 100%`);
   return 0;
 }
 

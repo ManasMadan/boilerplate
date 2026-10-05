@@ -23,6 +23,11 @@ behind a `package.json` script).
   and files and git repositories are temporary ones. Non-trivial logic gets a test.
 - Types: `tsc -p scripts` (part of `bun run check-types`); new files are covered by
   `scripts/tsconfig.json` automatically. knip treats every `scripts/*.ts` as an entry.
+- The rest of the tooling Bun runs (an app's or package's own `scripts/`, the build
+  presets, the code generators, the load test, `deploy/docker/check-peers.mjs`) is
+  tested from here too, at the same 100%: export the work as a function and end the
+  file with `import.meta.main && theFunction()` (a package can't import `runMain`),
+  then test the function from `scripts/<what>.test.ts`.
 - A script never prints a secret and never reads `.env` values it doesn't need;
   `readEnv` for what it does. Failures exit non-zero with a message that says how to fix
   them.

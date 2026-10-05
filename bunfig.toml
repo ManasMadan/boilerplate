@@ -27,15 +27,17 @@ peer = false
 minimumReleaseAge = 259200
 
 [test]
-# `bun test --coverage` (bun run test:coverage) writes LCOV for scripts/ and the Claude
-# Code hooks, merged with every other suite's by scripts/coverage.ts.
+# `bun test --coverage` (bun run test:coverage) writes LCOV for the repo's tooling (scripts/,
+# the Claude Code hooks, the packages' build scripts and presets, the code generators, the
+# load test, the images' checks: BUN_OWNS in scripts/coverage.ts), merged with every other
+# suite's by scripts/coverage.ts.
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage/bun"
 coverageSkipTestFiles = true
-# This suite answers for scripts/ and the Claude Code hooks only. Some of their tests load
-# the services' code (env schemas, say), which their own suites cover: reported here, it
-# would show as a low number for a file this suite never meant to test.
-coveragePathIgnorePatterns = ["apps/**", "packages/**", "load/**"]
+# This suite doesn't answer for the services' and packages' source. Some of its tests load
+# it (env schemas, say), which its own suites cover: reported here, it would show as a low
+# number for a file this suite never meant to test.
+coveragePathIgnorePatterns = ["apps/*/src/**", "apps/*/public/**", "apps/ai/**", "packages/*/src/**"]
 # Every file it answers for at 100%, or `bun test --coverage` fails (Bun measures lines
 # and functions; scripts/coverage.ts checks branches too, on the merged reports).
 coverageThreshold = { lines = 1.0, functions = 1.0 }

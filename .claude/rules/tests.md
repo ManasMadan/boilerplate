@@ -16,7 +16,7 @@ Which kind goes where:
 | Kind | Location | Runs with | Needs |
 |---|---|---|---|
 | Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached; the Stop hook runs it for affected packages, and fails on a changed line of a unit-tested file it doesn't cover, in packages without integration tests: `bun scripts/unit-coverage.ts`) | nothing |
-| Scripts and hooks | `scripts/*.test.ts`, `.claude/hooks/*.test.ts` (Bun's runner) | `bun test ./scripts/ ./.claude/hooks/` | nothing |
+| Scripts, hooks and the rest of the tooling | `scripts/*.test.ts`, `.claude/hooks/*.test.ts` (Bun's runner); the tooling outside `src/` (build scripts, presets, generators, the load test, `deploy/docker/check-peers.mjs`) is tested from `scripts/` too | `bun test ./scripts/ ./.claude/hooks/` | nothing |
 | Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` (the core services); suites tagged `files` (RustFS, ClamAV) with `bun run test:integration:files` | Docker (the command starts it) |
 | Web pages and components | `apps/web/test/**/*.test.tsx`, in Chromium against the real API | `bun run --filter @repo/web test:integration` | Docker, Chromium |
 | E2E (web) | `apps/web/e2e/*.spec.ts` | `bun run test:e2e --app web` | full stack |

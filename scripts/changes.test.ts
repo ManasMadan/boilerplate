@@ -51,6 +51,7 @@ describe("which CI jobs a pull request needs", () => {
 
   it("builds the images for a Dockerfile", () => {
     expect(areasOf("deploy/docker/web.Dockerfile")).toEqual(["images"]);
+    expect(areasOf("deploy/docker/check-peers.mjs")).toEqual(["images", "scripts"]);
   });
 
   it("builds and starts the images for their smoke test", () => {

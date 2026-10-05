@@ -11,6 +11,7 @@
  *   bun run test:coverage          run every suite with coverage (writes the reports)
  *   bun scripts/coverage.ts        merge them, check every file, write coverage/merged.lcov
  *   bun scripts/coverage.ts apps/web packages/ui   check only the files under these paths
+ *   bun scripts/coverage.ts --bun  check only the files Bun's runner answers for
  *
  * CI then runs diff-cover on coverage/merged.lcov, so a pull request can't add a line
  * without a test either.
@@ -135,10 +136,19 @@ export function toLcov(coverage: Map<string, FileCoverage>) {
 }
 
 /**
+ * What Bun's runner (the tests in scripts/ and .claude/hooks/) answers for: every source
+ * file no other suite owns. The services' and packages' src/ (and the web app's service
+ * worker) are vitest's and Jest's, the Python service is pytest's; the rest is the repo's
+ * tooling, all run by Bun: its scripts and hooks, the packages' build scripts and config
+ * presets, the code generators, the load test, the images' checks.
+ */
+export const BUN_OWNS = /^(?!apps\/ai\/|apps\/[^/]+\/(src|public)\/|packages\/[^/]+\/src\/)/;
+
+/**
  * Where the suites leave their reports, and the directory each one's paths are from.
- * Bun's report counts only for scripts/ and the hooks: it counts a function's first line
- * as code and v8 doesn't, so its view of a package file a script imports would add a
- * line the package's own suite never lists, and the merge would call it missed.
+ * Bun's report counts only for what it owns: it counts a function's first line as code
+ * and v8 doesn't, so its view of a package file a script imports would add a line the
+ * package's own suite never lists, and the merge would call it missed.
  */
 export function reports(root = ROOT): { path: string; base: string; owns?: RegExp }[] {
   return [
@@ -150,28 +160,36 @@ export function reports(root = ROOT): { path: string; base: string; owns?: RegEx
           }))
         : [],
     ),
-    { path: "coverage/bun/lcov.info", base: root, owns: /^(scripts|\.claude\/hooks)\// },
+    { path: "coverage/bun/lcov.info", base: root, owns: BUN_OWNS },
   ];
 }
 
+/** Code, in any of the repo's languages. */
+const CODE = /\.(ts|tsx|js|mjs|cjs|py)$/;
 /**
- * Source files the rule applies to: tracked code, not tests (stories are packages/ui's),
- * generated code or configs.
+ * Tests and what only they run: suites, their setup, fixtures and stand-ins, end-to-end
+ * and Maestro flows, the visual tests' server, stories.
+ */
+const TEST =
+  /\.(test|spec|stories)\.tsx?$|(^|\/)test_[^/]+\.py$|(^|\/)(test|tests|e2e|maestro|visual)\/|(^|\/)jest\.setup\.ts$/;
+/** Generated code: regenerated, never written by hand. */
+const GENERATED = /\/generated\/|\.gen\.ts$|\.d\.ts$|\.d\.json\.ts$/;
+/** Configuration a tool reads: `*.config.*`, Storybook's and dependency-cruiser's. */
+const CONFIG =
+  /(^|\/)[^/]+\.config\.[cm]?[jt]s$|(^|\/)\.storybook\/|(^|\/)\.dependency-cruiser\.cjs$/;
+
+/**
+ * Source files the rule applies to: every file of code git tracks, wherever it is, but
+ * tests, generated code and configs. A new folder of code is covered the day it lands.
  */
 export function isSource(path: string) {
-  return (
-    /^(apps\/[^/]+\/(src|app)|packages\/[^/]+\/src|scripts|\.claude\/hooks)\/.+\.(ts|tsx|py)$/.test(
-      path,
-    ) &&
-    !/\.(test|spec|stories)\.(ts|tsx)$|\.d\.ts$|\/generated\/|\.gen\.ts$|(^|\/)test_[^/]+\.py$/.test(
-      path,
-    )
-  );
+  return CODE.test(path) && !TEST.test(path) && !GENERATED.test(path) && !CONFIG.test(path);
 }
 
 /**
  * Merges the reports under `root`, writes coverage/merged.lcov and names every source file
- * under `scopes` (all of them when empty) below 100%; the exit code.
+ * under `scopes` (all of them when empty; `--bun` for the ones Bun's runner owns) below
+ * 100%; the exit code.
  */
 export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): number {
   const coverage = new Map<string, FileCoverage>();
@@ -187,7 +205,10 @@ export function checkCoverage(scopes = process.argv.slice(2), root = ROOT): numb
   const measured = new Map([...coverage].filter(([path]) => isSource(path)));
   writeFileSync(join(root, "coverage/merged.lcov"), `${toLcov(measured)}\n`);
   const inScope = (path: string) =>
-    scopes.length === 0 || scopes.some((scope) => path.startsWith(scope.replace(/\/?$/, "/")));
+    scopes.length === 0 ||
+    scopes.some((scope) =>
+      scope === "--bun" ? BUN_OWNS.test(path) : path.startsWith(scope.replace(/\/?$/, "/")),
+    );
   for (const path of measured.keys()) {
     if (!inScope(path)) {
       measured.delete(path);

@@ -14,6 +14,9 @@ templates are Handlebars files in `templates/<generator>/`.
 - Each generator also wires what it wrote in (routers, modules, registries), and formats
   every file it touched, so its output needs no follow-up edit. Commit scopes need
   nothing: `commitlint.config.ts` reads the workspace folders.
+- `config.ts`'s own logic (its questions, the event labels, the commands it runs) is
+  unit-tested in `scripts/turbo-generators.test.ts` against a stand-in for plop, at 100%
+  like every source file; the commands come in through `generator`'s second argument.
 - `bun scripts/generators.ts` runs every generator into a scratch worktree and checks
   the output (CI's generators job runs it `--in-place`). Run it after changing a
   template; it takes minutes, so in the background.

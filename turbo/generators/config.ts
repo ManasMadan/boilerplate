@@ -300,11 +300,16 @@ function packageGenerator(
   });
 }
 
-export default function generator(plop: PlopTypes.NodePlopAPI): void {
+/** Runs a command in `root` to the end, its output on the terminal; throws when it fails. */
+const runIn = (root: string) => (command: string, args: string[]) => {
+  execFileSync(command, args, { cwd: root, stdio: "inherit" });
+};
+
+export default function generator(
+  plop: PlopTypes.NodePlopAPI,
+  run = runIn(plop.getDestBasePath()),
+): void {
   const root = plop.getDestBasePath();
-  const run = (command: string, args: string[]) => {
-    execFileSync(command, args, { cwd: root, stdio: "inherit" });
-  };
 
   // Rewrites the touched files the way `bun run format` would (import order included),
   // so an insertion never has to know where it sorts.

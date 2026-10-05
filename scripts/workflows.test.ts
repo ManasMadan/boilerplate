@@ -966,7 +966,7 @@ describe("ci.yml's unit job", () => {
   it("holds the scripts and hooks to 100% on its own, since a change to them alone skips the coverage job", () => {
     const steps = workflow("ci.yml").jobs.unit?.steps ?? [];
     expect(steps.map((step) => step.run ?? "")).toContain(
-      "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts scripts .claude/hooks",
+      "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun",
     );
   });
 });

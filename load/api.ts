@@ -19,54 +19,50 @@ import exec from "k6/execution";
 import http, { type RefinedResponse } from "k6/http";
 import type { Options, Scenario } from "k6/options";
 
-// The API on this checkout's port (API_PORT, from the root .env or the e2e run).
-if (!__ENV.BASE_URL && !__ENV.API_PORT) {
-  throw new Error("Set BASE_URL, or API_PORT (.env has it)");
-}
-const BASE_URL = (__ENV.BASE_URL ?? `http://host.docker.internal:${__ENV.API_PORT}`).replace(
-  /\/$/,
-  "",
-);
-const PROFILE = __ENV.PROFILE ?? "smoke";
-const TARGET_RPS = Number(__ENV.TARGET_RPS ?? 200);
-const DURATION = __ENV.DURATION ?? "5m";
-
-const sessions = new SharedArray("sessions", () => {
-  const parsed: unknown = JSON.parse(open("./.sessions.json"));
-  const cookies = isList(parsed) ? parsed.filter((item) => typeof item === "string") : [];
-  if (!isList(parsed) || cookies.length !== parsed.length) {
-    throw new Error("load/.sessions.json must be a JSON list of session cookies");
+/** Where the API is: BASE_URL, or the API's port on this checkout (API_PORT, from .env). */
+export function baseUrl(env: Record<string, string | undefined>) {
+  if (!env.BASE_URL && !env.API_PORT) {
+    throw new Error("Set BASE_URL, or API_PORT (.env has it)");
   }
-  return cookies;
-});
+  return (env.BASE_URL ?? `http://host.docker.internal:${env.API_PORT}`).replace(/\/$/, "");
+}
 
-// Reads outnumber writes about 4 to 1 in a todo app; each write iteration makes 4 requests.
-const profiles: Record<string, Record<string, Scenario>> = {
-  smoke: {
-    read: {
-      executor: "constant-arrival-rate",
-      exec: "read",
-      rate: 4,
-      timeUnit: "1s",
-      duration: "30s",
-      preAllocatedVUs: 4,
-    },
-    write: {
-      executor: "constant-arrival-rate",
-      exec: "write",
-      rate: 1,
-      timeUnit: "1s",
-      duration: "30s",
-      preAllocatedVUs: 4,
-    },
-  },
-  load: {
-    read: ramp("read", TARGET_RPS * 0.8),
-    write: ramp("write", (TARGET_RPS * 0.2) / 4),
-  },
-};
+/**
+ * The scenarios of PROFILE: smoke (a few requests a second), or load (ramps to TARGET_RPS
+ * and holds it for DURATION). Reads outnumber writes about 4 to 1 in a todo app; each
+ * write iteration makes 4 requests.
+ */
+export function scenariosFor(env: Record<string, string | undefined>): Record<string, Scenario> {
+  const profile = env.PROFILE ?? "smoke";
+  const target = Number(env.TARGET_RPS ?? 200);
+  const duration = env.DURATION ?? "5m";
+  if (profile === "smoke") {
+    return {
+      read: constant("read", 4),
+      write: constant("write", 1),
+    };
+  }
+  if (profile === "load") {
+    return {
+      read: ramp("read", target * 0.8, duration),
+      write: ramp("write", (target * 0.2) / 4, duration),
+    };
+  }
+  throw new Error(`Unknown PROFILE "${profile}" (smoke or load)`);
+}
 
-function ramp(exec: string, rate: number): Scenario {
+function constant(exec: string, rate: number): Scenario {
+  return {
+    executor: "constant-arrival-rate",
+    exec,
+    rate,
+    timeUnit: "1s",
+    duration: "30s",
+    preAllocatedVUs: 4,
+  };
+}
+
+function ramp(exec: string, rate: number, duration: string): Scenario {
   return {
     executor: "ramping-arrival-rate",
     exec,
@@ -76,19 +72,27 @@ function ramp(exec: string, rate: number): Scenario {
     maxVUs: Math.ceil(rate * 2),
     stages: [
       { target: Math.ceil(rate), duration: "1m" },
-      { target: Math.ceil(rate), duration: DURATION },
+      { target: Math.ceil(rate), duration },
       { target: 0, duration: "30s" },
     ],
   };
 }
 
-const scenarios = profiles[PROFILE];
-if (!scenarios) {
-  throw new Error(`Unknown PROFILE "${PROFILE}" (smoke or load)`);
+/** The session cookies in load/.sessions.json's text. */
+export function cookiesIn(text: string): string[] {
+  const parsed: unknown = JSON.parse(text);
+  const cookies = isList(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  if (!isList(parsed) || cookies.length !== parsed.length) {
+    throw new Error("load/.sessions.json must be a JSON list of session cookies");
+  }
+  return cookies;
 }
 
+const BASE_URL = baseUrl(__ENV);
+const sessions = new SharedArray("sessions", () => cookiesIn(open("./.sessions.json")));
+
 export const options: Options = {
-  scenarios,
+  scenarios: scenariosFor(__ENV),
   thresholds: {
     // Any failed request (including 503 from load shedding) counts against the budget.
     http_req_failed: ["rate<0.01"],

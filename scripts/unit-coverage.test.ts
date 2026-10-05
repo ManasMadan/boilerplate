@@ -151,6 +151,9 @@ describe("which files unit tests must cover", () => {
       ],
     ]);
     expect(suitesFor(["docs/x.md"], root)).toEqual([]);
+    // The tooling outside scripts/ is Bun's too; a service's tests aren't.
+    expect(suitesFor(["deploy/docker/check-peers.mjs"], root)).toHaveLength(1);
+    expect(suitesFor(["apps/api/test/x.test.ts"], root)).toEqual([]);
   });
 });
 

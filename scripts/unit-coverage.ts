@@ -8,9 +8,10 @@
  *   bun scripts/unit-coverage.ts --branch   what the branch's commits change (since the
  *                                           merge base with the default branch)
  *
- * Only the files unit tests are meant to cover count: scripts/ and the Claude Code hooks
- * (Bun's runner is their only suite), and, in a package with no integration suite, a
- * source file with a unit test beside it (`src/x.test.ts` for `src/x.ts`). A package
+ * Only the files unit tests are meant to cover count: the repo's tooling (scripts/, the
+ * Claude Code hooks and the rest Bun's runner owns: BUN_OWNS in scripts/coverage.ts, its
+ * only suite), and, in a package with no integration suite, a source file with a unit
+ * test beside it (`src/x.test.ts` for `src/x.ts`). A package
  * with integration tests (`test:integration`) leans on them, which need Docker, for lines
  * no unit test reaches: CI's diff-cover over every suite merged checks those packages,
  * and every other file.
@@ -18,7 +19,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as z from "zod";
-import { type FileCoverage, isSource, mergeLcov } from "./coverage";
+import { BUN_OWNS, type FileCoverage, isSource, mergeLcov } from "./coverage";
 import { fail, ok, ROOT, runMain } from "./lib";
 import { coverageExceptions } from "./suppressions";
 
@@ -85,7 +86,8 @@ export function changedLines(branch: boolean, run = git, root = ROOT) {
   return changed;
 }
 
-const BUN_SUITE = /^(scripts|\.claude\/hooks)\/[^/]+\.ts$/;
+/** Where Bun's tests are: a change to one runs the suite. */
+const BUN_TESTS = /^(scripts|\.claude\/hooks)\//;
 const PACKAGE_FILE = /^((?:apps|packages)\/[^/]+)\/src\/.+\.tsx?$/;
 
 /** A unit suite with coverage: where it runs, what it runs, and where its report lands. */
@@ -120,7 +122,7 @@ export function unitCovered(path: string, root = ROOT) {
   if (!isSource(path)) {
     return false;
   }
-  if (BUN_SUITE.test(path)) {
+  if (BUN_OWNS.test(path)) {
     return true;
   }
   const inPackage = PACKAGE_FILE.exec(path);
@@ -132,16 +134,16 @@ export function unitCovered(path: string, root = ROOT) {
   return [".test.ts", ".test.tsx"].some((ext) => existsSync(join(root, `${sibling}${ext}`)));
 }
 
-/** The suites to run for `files`: Bun's for scripts/ and the hooks, vitest per package. */
+/** The suites to run for `files`: Bun's for the repo's tooling, vitest per package. */
 export function suitesFor(files: string[], root = ROOT): Suite[] {
   const suites: Suite[] = [];
-  if (files.some((file) => BUN_SUITE.test(file))) {
+  if (files.some((file) => BUN_TESTS.test(file) || (isSource(file) && BUN_OWNS.test(file)))) {
     suites.push({
       cwd: root,
       // Paths, not names: `bun test` treats a bare word as a filter and skips dot folders.
       command: ["bun", "test", "--coverage", "./scripts/", "./.claude/hooks/"],
       lcov: "coverage/bun/lcov.info",
-      owns: BUN_SUITE,
+      owns: BUN_OWNS,
     });
   }
   const packages = new Set(
@@ -192,7 +194,7 @@ export function uncovered(path: string, file: FileCoverage | undefined, lines: S
     return [...lines].sort((a, b) => a - b);
   }
   const missed = [...missedLines(file)].sort((a, b) => a - b);
-  if (!BUN_SUITE.test(path) && missed.some((number) => !lines.has(number))) {
+  if (!BUN_OWNS.test(path) && missed.some((number) => !lines.has(number))) {
     return [];
   }
   return missed.filter((number) => lines.has(number));

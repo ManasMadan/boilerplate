@@ -35,9 +35,9 @@ describe("the push's coverage", () => {
       "docker compose --profile files up -d --wait rustfs",
       "bunx turbo run coverage --filter=...[abc] --concurrency=2",
       "bun test --coverage ./scripts/ ./.claude/hooks/",
-      "bun scripts/coverage.ts apps/api packages/db scripts .claude/hooks",
+      "bun scripts/coverage.ts apps/api packages/db --bun",
     ]);
-    expect(output()).toContain("every file in 2 package(s), the scripts and the hooks at 100%");
+    expect(output()).toContain("every file in 2 package(s) and the repo's tooling at 100%");
   });
 
   it("checks only the scripts and hooks when no package is affected", () => {
@@ -47,7 +47,7 @@ describe("the push's coverage", () => {
     );
     expect(pushCoverage({ run, root: "/repo" })).toBe(0);
     expect(calls.some((line) => line.startsWith("docker"))).toBe(false);
-    expect(calls.at(-1)).toBe("bun scripts/coverage.ts scripts .claude/hooks");
+    expect(calls.at(-1)).toBe("bun scripts/coverage.ts --bun");
   });
 
   it("refuses the push when Docker or a service is down, or a suite fails", () => {

@@ -7,8 +7,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-const root = process.argv[2] ?? ".";
-
 function* packages(dir) {
   if (!existsSync(dir)) {
     return;
@@ -30,48 +28,59 @@ function* packages(dir) {
 
 /** Node's lookup: node_modules/<name> in the package's directory and every parent. */
 function resolvable(from, name) {
-  for (let dir = from; ; dir = dirname(dir)) {
-    if (existsSync(join(dir, "node_modules", name, "package.json"))) {
-      return true;
-    }
+  let dir = from;
+  while (!existsSync(join(dir, "node_modules", name, "package.json"))) {
     if (dirname(dir) === dir) {
       return false;
     }
+    dir = dirname(dir);
   }
+  return true;
 }
 
-const missing = [];
-const seen = new Set();
-const queue = [join(root, "node_modules")];
-while (queue.length > 0) {
-  for (const dir of packages(queue.pop())) {
-    const manifest = join(dir, "package.json");
-    if (seen.has(dir) || !existsSync(manifest)) {
-      continue;
-    }
-    seen.add(dir);
-    queue.push(join(dir, "node_modules"));
-    const {
-      name,
-      peerDependencies = {},
-      peerDependenciesMeta = {},
-    } = JSON.parse(readFileSync(manifest, "utf8"));
-    for (const peer of Object.keys(peerDependencies)) {
-      if (peerDependenciesMeta[peer]?.optional) {
+/** The required peers of the package in `dir` that it can't import. */
+function unresolved(dir) {
+  const {
+    name,
+    peerDependencies = {},
+    peerDependenciesMeta = {},
+  } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  return Object.keys(peerDependencies)
+    .filter((peer) => !peerDependenciesMeta[peer]?.optional && !resolvable(dir, peer))
+    .map((peer) => `${name} needs ${peer}`);
+}
+
+/** The packages installed under `root`, and each required peer none of them can import. */
+export function missingPeers(root) {
+  const missing = [];
+  const seen = new Set();
+  const queue = [join(root, "node_modules")];
+  while (queue.length > 0) {
+    for (const dir of packages(queue.pop())) {
+      if (seen.has(dir) || !existsSync(join(dir, "package.json"))) {
         continue;
       }
-      if (!resolvable(dir, peer)) {
-        missing.push(`${name} needs ${peer}`);
-      }
+      seen.add(dir);
+      queue.push(join(dir, "node_modules"));
+      missing.push(...unresolved(dir));
     }
   }
+  return { packages: seen.size, missing: [...new Set(missing)].sort() };
 }
 
-if (missing.length > 0) {
-  console.error(`Missing peer dependencies (declare them where the package is used):`);
-  for (const line of [...new Set(missing)].sort()) {
-    console.error(`  ${line}`);
+/** The check on `root`; the exit code. */
+export function main(root = process.argv[2] ?? ".") {
+  const { packages, missing } = missingPeers(root);
+  if (missing.length > 0) {
+    console.error("Missing peer dependencies (declare them where the package is used):");
+    for (const line of missing) {
+      console.error(`  ${line}`);
+    }
+    return 1;
   }
-  process.exit(1);
+  console.log(`Peer dependencies OK (${packages} packages).`);
+  return 0;
 }
-console.log(`Peer dependencies OK (${seen.size} packages).`);
+
+// Run as a script, not when a test imports it.
+import.meta.main && process.exit(main());

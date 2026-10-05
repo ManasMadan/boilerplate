@@ -145,9 +145,10 @@ jobs:
       # scripts' tests below, which read the docs, and nothing else.
       - if: needs.changes.outputs.app == 'true'
         run: bun run test
-      # The repo's own scripts and the Claude Code hooks, outside the workspaces turbo runs,
-      # each file at 100%: a change to them alone skips the coverage job below.
-      - run: bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts scripts .claude/hooks
+      # The repo's tooling, outside the workspaces turbo runs (the scripts, the Claude Code
+      # hooks, and the build scripts, presets, generators, load test and image checks Bun's
+      # runner owns), each file at 100%: a change to them alone skips the coverage job below.
+      - run: bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun
 
   components:
     name: Components (stories, a11y, screenshots)
@@ -281,7 +282,7 @@ jobs:
       # reports with the stories' and the Python service's and checks every file.
       - name: Tests with coverage
         run: bunx turbo run coverage --filter=!@repo/ai --filter=!@repo/ui
-      - name: The repo's scripts and Claude Code hooks, with coverage
+      - name: The repo's tooling (scripts, hooks and the rest Bun's runner owns), with coverage
         run: bun test --coverage ./scripts/ ./.claude/hooks/
       - name: Keep the coverage reports
         if: ${{ !cancelled() }}

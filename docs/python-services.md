@@ -182,7 +182,7 @@ follows the foreign keys into `auth` and drags those tables in too. The service 
 | `bun run --cwd apps/ai worker` | the queue worker alone |
 | `bun run --cwd apps/ai test` | pytest without the integration tests (part of `bun run test`) |
 | `bun run --cwd apps/ai test:integration` | the tests that need Postgres and Redis (part of `bun run test:integration`) |
-| `bun run --cwd apps/ai coverage` | every test, failing below 100% of lines and branches (`pyproject.toml`; nothing is excluded) |
+| `bun run --cwd apps/ai coverage` | every test, failing below 100% of lines and branches of `app/` and `evals/` (`pyproject.toml`; nothing is excluded) |
 | `bun run --cwd apps/ai evals` | the evals (below) |
 | `bun run --cwd apps/ai check-types` | basedpyright, strict, with `Any` refused (tests included) |
 | `bun run --cwd apps/ai lint` | ruff check and format check, and deptry (unused, missing or transitive-only dependencies) |

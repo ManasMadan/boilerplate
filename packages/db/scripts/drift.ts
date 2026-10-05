@@ -19,36 +19,49 @@ const IGNORED: { statement: string; why: string }[] = [
   },
 ];
 
-function diff(from: readonly string[]) {
-  const result = spawnSync(
-    "bunx",
-    ["prisma", "migrate", "diff", ...from, "--to-schema", "prisma/schema", "--script"],
-    { encoding: "utf8" },
-  );
-  if (result.status !== 0) {
-    process.stderr.write(result.stderr);
-    throw new Error("prisma migrate diff failed");
+/** What the check needs of `spawnSync`: a command's status and output, as text. */
+type Spawn = (
+  command: string,
+  args: string[],
+  options: { encoding: "utf8" },
+) => { status: number | null; stdout: string; stderr: string };
+
+/** The check, with `prisma migrate diff` run through `spawn`; the exit code. */
+export function drift(spawn: Spawn = spawnSync): number {
+  const diff = (from: readonly string[]) => {
+    const result = spawn(
+      "bunx",
+      ["prisma", "migrate", "diff", ...from, "--to-schema", "prisma/schema", "--script"],
+      { encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      process.stderr.write(result.stderr);
+      throw new Error("prisma migrate diff failed");
+    }
+    return result.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("--") && !line.startsWith("Loaded Prisma"));
+  };
+  let failed = false;
+  for (const [label, from] of [
+    ["migrations vs schema", ["--from-migrations", "prisma/migrations"]],
+    ["database vs schema", ["--from-config-datasource"]],
+  ] as const) {
+    const unexpected = diff(from).filter(
+      (line) => !IGNORED.some((ignored) => ignored.statement === line),
+    );
+    if (unexpected.length > 0) {
+      failed = true;
+      process.stderr.write(`Drift (${label}):\n${unexpected.map((l) => `  ${l}`).join("\n")}\n`);
+    }
   }
-  return result.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("--") && !line.startsWith("Loaded Prisma"));
+  if (failed) {
+    return 1;
+  }
+  process.stdout.write("No drift between migrations, schema and database.\n");
+  return 0;
 }
 
-let failed = false;
-for (const [label, from] of [
-  ["migrations vs schema", ["--from-migrations", "prisma/migrations"]],
-  ["database vs schema", ["--from-config-datasource"]],
-] as const) {
-  const unexpected = diff(from).filter(
-    (line) => !IGNORED.some((ignored) => ignored.statement === line),
-  );
-  if (unexpected.length > 0) {
-    failed = true;
-    process.stderr.write(`Drift (${label}):\n${unexpected.map((l) => `  ${l}`).join("\n")}\n`);
-  }
-}
-if (failed) {
-  process.exit(1);
-}
-process.stdout.write("No drift between migrations, schema and database.\n");
+// Run as `bun run drift`, not when a test imports it.
+import.meta.main && process.exit(drift());
