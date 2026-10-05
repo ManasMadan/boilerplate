@@ -126,7 +126,8 @@
     "test:coverage": "turbo run coverage && bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts",
     "lint:suppressions": "bun scripts/suppressions.ts",
     "rename": "bun scripts/rename.ts",
-    "type-coverage": "bun scripts/type-coverage.ts"
+    "type-coverage": "bun scripts/type-coverage.ts",
+    "codeql": "bun scripts/codeql.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

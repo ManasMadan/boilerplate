@@ -26,6 +26,18 @@ its image in Docker; with neither, the commit stops and says so. Only a failed s
 output is printed. With a Dockerfile, a chart and `bun.lock` staged, the hook takes about
 five seconds, most of it OSV asking osv.dev.
 
+CodeQL is too heavy for a commit: `bun run codeql` runs it on demand, as the Security
+workflow does (the languages and query suite from its CodeQL job, on every file git
+tracks or would, as it is on disk), and fails on what the master ruleset blocks a merge
+on: a security alert of high severity or above, or an alert of error level, each printed
+as `file:line rule message`. `--languages python,actions` limits it to some languages.
+It runs natively, with a `codeql` of the pinned version on the PATH or the CodeQL bundle
+it downloads once (about a gigabyte) into `~/.cache/boilerplate/codeql`, checked against
+its SHA-256; all three languages take a few minutes. The CodeQL CLI's license allows
+this on a public repository. A private project made from this template needs GitHub
+Advanced Security to run it; without that, remove its use deliberately rather than
+looking for a switch to skip it, as there is none.
+
 Before pushing: `bun run lint`, `bun run check-types`, `bun run test`, and for anything
 touching the database, queues or HTTP, `bun run test:integration`. The pre-push hook
 (`.husky/pre-push`) holds the push to the same rule as CI: it type-checks, then
