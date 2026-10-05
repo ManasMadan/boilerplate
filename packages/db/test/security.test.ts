@@ -3,16 +3,17 @@
  * application code: run as the real service roles against a fresh migrated database.
  */
 import { randomUUID } from "node:crypto";
+import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type Db, tenantTx, withTenant, withUser } from "../src";
+import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from "vitest";
+import { createDb, type Db, tenantTx, type userTx, withTenant, withUser } from "../src";
 import { createTestDatabase, type TestDatabase } from "../src/testing";
 
 let testDb: TestDatabase;
 let api: Db;
-const orgA = randomUUID();
-const orgB = randomUUID();
-const userId = randomUUID();
+const orgA = orgIdSchema.parse(randomUUID());
+const orgB = orgIdSchema.parse(randomUUID());
+const userId = userIdSchema.parse(randomUUID());
 
 async function asRole<T>(role: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = new pg.Client({ connectionString: testDb.urlFor(role) });
@@ -45,6 +46,17 @@ afterAll(async () => {
 });
 
 describe("row-level security", () => {
+  it("scopes by a workspace's or a user's id, never a plain string or the other kind", () => {
+    // Checked by the type checker: a user's id passed as the tenant doesn't compile.
+    expectTypeOf<Parameters<typeof withTenant>[1]>().toEqualTypeOf<OrgId>();
+    expectTypeOf<Parameters<typeof tenantTx>[1]>().toEqualTypeOf<OrgId>();
+    expectTypeOf<Parameters<typeof withUser>[1]>().toEqualTypeOf<UserId>();
+    expectTypeOf<Parameters<typeof userTx>[1]>().toEqualTypeOf<UserId>();
+    expectTypeOf<UserId>().not.toExtend<Parameters<typeof withTenant>[1]>();
+    expectTypeOf<OrgId>().not.toExtend<Parameters<typeof withUser>[1]>();
+    expectTypeOf<string>().not.toExtend<Parameters<typeof tenantTx>[1]>();
+  });
+
   it("shows a tenant only its own rows", async () => {
     const rows = await withTenant(api, orgA).todo.findMany();
     expect(rows.map((row) => row.title)).toEqual(["A1"]);

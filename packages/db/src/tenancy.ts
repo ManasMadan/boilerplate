@@ -22,6 +22,7 @@
  * Nested `$transaction` on a tenant client is blocked: Prisma would run each operation
  * in its own transaction there, silently breaking atomicity.
  */
+import type { OrgId, UserId } from "@repo/contracts/ids";
 import type { Db } from "./client";
 import type { Prisma } from "./generated/prisma/client";
 
@@ -53,7 +54,7 @@ function scoped(db: Db, name: string, scope: Scope, id: string, useInstead: stri
   });
 }
 
-export const withTenant = (db: Db, orgId: string) =>
+export const withTenant = (db: Db, orgId: OrgId) =>
   scoped(
     db,
     "tenant",
@@ -67,7 +68,7 @@ export const withTenant = (db: Db, orgId: string) =>
  * notifications, preferences, devices): row-level security on `app.user_id` scopes
  * every query to that user.
  */
-export const withUser = (db: Db, userId: string) =>
+export const withUser = (db: Db, userId: UserId) =>
   scoped(
     db,
     "user",
@@ -77,7 +78,7 @@ export const withUser = (db: Db, userId: string) =>
   );
 
 /** Like tenantTx, for per-user data (see withUser). */
-export function userTx<T>(db: Db, userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export function userTx<T>(db: Db, userId: UserId, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction(async (tx) => {
     await setScope(tx, "app.user_id", userId);
     return fn(asTx(tx));
@@ -100,7 +101,7 @@ const asTx = (tx: Prisma.TransactionClient) => tx as Tx;
 
 const TX_OPTIONS = { maxWait: 10_000, timeout: 5_000 } as const;
 
-export function tenantTx<T>(db: Db, orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export function tenantTx<T>(db: Db, orgId: OrgId, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction(async (tx) => {
     await setScope(tx, "app.org_id", orgId);
     return fn(asTx(tx));
