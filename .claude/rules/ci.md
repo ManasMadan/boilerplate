@@ -57,6 +57,8 @@ paths:
   repository's own push (`workflow_run.event == 'push'` and
   `workflow_run.head_repository.full_name == github.repository` in its `if`;
   `scripts/workflows.test.ts` checks).
+- Renovate's config is `renovate.json5` alone: `bun run lint:renovate` refuses any other
+  file Renovate would read first.
 - Pinned tool versions in workflows, actions and scripts carry a `# renovate:` comment on
   the line above, except an action's own version input (`eas-version`,
   `renovate-version`), which Renovate's github-actions manager updates by itself

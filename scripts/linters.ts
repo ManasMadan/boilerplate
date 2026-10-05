@@ -12,7 +12,7 @@
  *   tflint       the OpenTofu code (infra/tofu/.tflint.hcl)
  *   renovate     renovate.json5, by Renovate's config validator in strict mode (it also
  *                fails on settings Renovate would migrate), at the version renovate.yml
- *                runs Renovate at
+ *                runs Renovate at; and no other config file Renovate would read first
  *
  * Each uses a local binary of its version, else its image in Docker; with neither, it
  * fails and says how to get one, rather than skipping the check.
@@ -34,7 +34,21 @@ type Linter = {
   reads: (path: string, root: string) => boolean;
   /** Its arguments, given the files it checks and the repository root. */
   args: (files: string[], root: string) => string[];
+  /** Why the files it reads can't be checked as they are, if they can't. */
+  refuses?: (files: string[]) => string | undefined;
 };
+
+/** Renovate reads the first of these it finds, ahead of renovate.json5. */
+const OTHER_RENOVATE_CONFIGS = [
+  "renovate.json",
+  ".github/renovate.json",
+  ".github/renovate.json5",
+  ".gitlab/renovate.json",
+  ".gitlab/renovate.json5",
+  ".renovaterc",
+  ".renovaterc.json",
+  ".renovaterc.json5",
+];
 
 /**
  * A shell script: a .sh file, a git hook, or a file without an extension whose first line
@@ -115,7 +129,14 @@ export const LINTERS: Record<
     image: "renovate/renovate",
     version: renovateVersion(),
     releases: "https://github.com/renovatebot/renovate/releases",
-    reads: (path) => path === "renovate.json5",
+    reads: (path) => path === "renovate.json5" || OTHER_RENOVATE_CONFIGS.includes(path),
+    // A stray copy, tracked or not, would quietly replace the real config.
+    refuses: (files) => {
+      const others = files.filter((path) => path !== "renovate.json5");
+      return others.length > 0
+        ? `Renovate's config lives in renovate.json5 alone, and it would read ${others.join(", ")} first: delete it`
+        : undefined;
+    },
     // No file: it finds renovate.json5 and validates it as a repository's configuration
     // (a file named here is validated as Renovate's own, global one).
     args: () => ["--strict"],
@@ -160,6 +181,11 @@ export function lint(argv = process.argv.slice(2), run = runSync, root = ROOT): 
   if (files.length === 0) {
     ok(`${name}: nothing to check`);
     return 0;
+  }
+  const refusal = linter.refuses?.(files);
+  if (refusal) {
+    fail(refusal);
+    return 1;
   }
   const [program = "", ...rest] = command(name, linter, run, root) ?? [];
   if (!program) {

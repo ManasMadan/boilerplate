@@ -85,6 +85,15 @@ describe("the pinned linters", () => {
     expect(printed()).toContain(`One of ${Object.keys(LINTERS).join(", ")}.`);
   });
 
+  it("refuse any Renovate config but renovate.json5, which Renovate would read first", () => {
+    const printed = captureOutput();
+    const { root, listed } = checkout(["renovate.json5", "renovate.json"]);
+    const { run, calls } = fakeRun(() => listed);
+    expect(lint(["renovate"], run, root)).toBe(1);
+    expect(printed()).toContain("it would read renovate.json first: delete it");
+    expect(calls).toHaveLength(1);
+  });
+
   it("validate Renovate's config with its validator, at the version renovate.yml runs", () => {
     const { root, listed } = checkout(["renovate.json5", ".github/workflows/renovate.yml"]);
     writeFileSync(
