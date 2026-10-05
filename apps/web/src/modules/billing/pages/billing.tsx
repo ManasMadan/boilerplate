@@ -7,6 +7,7 @@ import { useBillingOverviewQuery } from "@repo/client/api/billing/overview";
 import { usePortalMutation } from "@repo/client/api/billing/portal";
 import type { BillingOverview } from "@repo/contracts/api";
 import { formatMoney } from "@repo/contracts/money";
+import { loosely } from "@repo/i18n";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -201,8 +202,8 @@ function Invoices() {
                   )}
                 </span>
                 <span>
-                  {t.has(`status.${invoice.status}` as "status.paid")
-                    ? t(`status.${invoice.status}` as "status.paid")
+                  {loosely(t).has(`status.${invoice.status}`)
+                    ? loosely(t)(`status.${invoice.status}`)
                     : invoice.status}
                 </span>
                 {invoice.url ? (

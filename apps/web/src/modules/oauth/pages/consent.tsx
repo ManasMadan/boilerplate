@@ -2,6 +2,7 @@
 
 import type { Workspace } from "@repo/client/auth";
 import { useOAuthClientQuery } from "@repo/client/auth/oauth-client";
+import { loosely } from "@repo/i18n";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -120,9 +121,7 @@ export function OAuthConsentPage() {
           <ul className="list-disc pl-5 text-sm text-muted-foreground">
             {scopes.map((scope) => (
               <li key={scope}>
-                {t.has(`scopes.${scope}` as "scopes.openid")
-                  ? t(`scopes.${scope}` as "scopes.openid")
-                  : scope}
+                {loosely(t).has(`scopes.${scope}`) ? loosely(t)(`scopes.${scope}`) : scope}
               </li>
             ))}
           </ul>

@@ -62,7 +62,7 @@ export function WorkspaceAuditPage() {
               {entries.map((entry) => (
                 <tr key={entry.id}>
                   <td className="py-2 pe-3">
-                    {tEvents.has(entry.name as Parameters<typeof tEvents>[0])
+                    {loosely(tEvents).has(entry.name)
                       ? loosely(tEvents)(entry.name, paramsOf(entry.payload))
                       : entry.name}
                   </td>
