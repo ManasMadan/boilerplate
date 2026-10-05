@@ -70,4 +70,13 @@ describe("the secret scan", () => {
     expect(secretScan(run)).toBe(1);
     expect(printed()).toContain("nothing was scanned");
   });
+
+  it("scans the commits of a range instead of the staged changes (the pre-push hook)", () => {
+    spyOn(process.stderr, "write").mockImplementation(() => true);
+    const { run, calls } = fakeRun();
+    expect(secretScan(run, ["--range=abc..HEAD"])).toBe(0);
+    expect(calls.at(-1)).toBe(
+      "gitleaks git --log-opts abc..HEAD --redact --verbose --no-banner --log-level=error .",
+    );
+  });
 });
