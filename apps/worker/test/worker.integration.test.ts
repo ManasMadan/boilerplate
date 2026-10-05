@@ -18,6 +18,7 @@ import {
 } from "@repo/nest-common";
 import { flushTestDatabase, redisDatabase } from "@repo/nest-common/testing";
 import { eventually } from "@repo/testing/eventually";
+import { type Clamd, clamdFor } from "@repo/testing/fake-clamd";
 import { Queue } from "bullmq";
 import pg from "pg";
 import sharp from "sharp";
@@ -31,8 +32,10 @@ let app: INestApplicationContext;
 let relay: Relay;
 let maintenance: Maintenance;
 let files: Files;
+let clamd: Clamd;
 
-// Local object storage and clamd (docker compose --profile files); CI runs the same.
+// Local object storage (docker compose --profile files) and clamd: ClamAV in CI, and
+// locally when it runs, else the stand-in from @repo/testing/fake-clamd.
 const S3 = {
   S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
   S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://localhost:59000",
@@ -116,13 +119,15 @@ async function jobIn(queue: string, jobId: string) {
 
 beforeAll(async () => {
   testDb = await createTestDatabase();
+  // ClamAV when it's running (always in CI), else the stand-in that finds EICAR.
+  clamd = await clamdFor(process.env.CLAMAV_URL ?? "tcp://localhost:53310");
   Object.assign(process.env, {
     WORKER_DATABASE_URL: testDb.urlFor("app_worker"),
     WORKER_DATABASE_DIRECT_URL: testDb.urlFor("app_worker"),
     REDIS_URL: redisDatabase(15),
     RELAY_POLL_INTERVAL_MS: "200",
     ...S3,
-    CLAMAV_URL: process.env.CLAMAV_URL ?? "tcp://localhost:53310",
+    CLAMAV_URL: clamd.url,
     // For the service main.ts starts, at the end.
     PORT: String(await freePort()),
     LOAD_SHEDDING: "off",
@@ -143,6 +148,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app?.close();
+  await clamd?.close();
   await testDb?.drop();
 });
 
