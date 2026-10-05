@@ -267,6 +267,11 @@ Everything listens on this checkout's ports (its `.env`'s `*_PORT`, else
 theirs. It refuses to start while something already listens on those ports, so an old
 server can't answer instead.
 
+When the API has Turnstile on (CI sets Cloudflare's always-pass test keys), the web
+suite's pages get the same stand-in widget as the browser tests (`test/turnstile.ts`),
+so a sign-up never waits on Cloudflare's real widget, which can hang on a CI runner.
+`captcha.spec.ts` alone loads the real one (`test.use({ realTurnstile: true })`).
+
 In CI a failed test is retried up to twice, to tell a flaky one from a broken one, but a
 test that only passed on a retry still fails the run (`failOnFlakyTests`): fix it rather
 than rerunning the job.

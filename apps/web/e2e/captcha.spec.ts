@@ -4,6 +4,8 @@ import { BASE_URL, expect, mailbox, newUser, test } from "./support";
 // (see .env.example) it checks the real widget and token flow end to end; it needs
 // internet access to challenges.cloudflare.com.
 test.describe("captcha", () => {
+  test.use({ realTurnstile: true });
+
   test.beforeEach(async ({ request }) => {
     const info = await (await request.post("/rpc/system/info", { data: { json: {} } })).json();
     test.skip(

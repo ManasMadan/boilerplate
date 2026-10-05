@@ -4,6 +4,11 @@
  * Each test (and each extra "device") gets its own client IP through X-Forwarded-For, so
  * the per-IP auth rate limits never make parallel tests fail each other. This works
  * locally because every hop is on loopback, which the API trusts (TRUSTED_PROXIES).
+ *
+ * Where the API has Turnstile on (CI uses Cloudflare's always-pass test keys), pages get a
+ * stand-in widget that hands over Cloudflare's dummy token at once, which those keys
+ * accept: a sign-up then never waits on Cloudflare's real widget, which can hang on a CI
+ * runner. captcha.spec.ts opts back into the real one with `realTurnstile`.
  */
 import { randomInt, randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
@@ -17,6 +22,7 @@ import {
 import { todoIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { totp } from "@repo/testing/totp";
 import { Redis } from "ioredis";
+import { FAKE_TURNSTILE } from "../test/turnstile";
 
 // Authenticator codes (RFC 6238), shared with the mobile suite.
 export { totp };
@@ -31,9 +37,22 @@ export const BASE_URL = site;
 
 const randomIp = () => `10.${randomInt(250)}.${randomInt(250)}.${randomInt(1, 250)}`;
 
-export const test = base.extend({
+async function standInTurnstile(context: BrowserContext) {
+  await context.route("https://challenges.cloudflare.com/turnstile/**", (route) =>
+    route.fulfill({ contentType: "text/javascript", body: FAKE_TURNSTILE }),
+  );
+}
+
+export const test = base.extend<{ realTurnstile: boolean }>({
+  realTurnstile: [false, { option: true }],
   extraHTTPHeaders: async ({ extraHTTPHeaders }, use) => {
     await use({ ...extraHTTPHeaders, "x-forwarded-for": randomIp() });
+  },
+  context: async ({ context, realTurnstile }, use) => {
+    if (!realTurnstile) {
+      await standInTurnstile(context);
+    }
+    await use(context);
   },
 });
 export { expect };
@@ -45,6 +64,7 @@ export async function newDevice(browser: Browser, options: { locale?: string } =
     locale: options.locale ?? "en-US",
     extraHTTPHeaders: { "x-forwarded-for": randomIp() },
   });
+  await standInTurnstile(context);
   return { context, page: await context.newPage() };
 }
 
