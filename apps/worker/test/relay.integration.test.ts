@@ -182,9 +182,11 @@ describe("outbox relay", () => {
     try {
       const relay = await relayWith(bus(), log);
       const booting = relay.onApplicationBootstrap();
+      // At least one: on a slow machine a second attempt can arrive before the check, and
+      // every one of them must be closed below.
       await eventually(
         () => sockets.length,
-        (count) => count === 1,
+        (count) => count >= 1,
       );
       await relay.onApplicationShutdown();
       await booting;
