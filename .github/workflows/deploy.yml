@@ -201,8 +201,11 @@ jobs:
 
   staging:
     name: Deploy to staging
-    # Only images with their attestations ship.
+    # Only images with their attestations ship. The bump is pushed to master as the GitHub
+    # App (docs/repository-settings.md): without one it's skipped, since the ruleset refuses
+    # any other push, and the images are still published.
     needs: [publish, attest]
+    if: vars.BOT_APP_CLIENT_ID != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: staging

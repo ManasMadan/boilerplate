@@ -55,15 +55,18 @@ describe("dropping a test database", () => {
     const testDb = await createTestDatabase();
     const service = new pg.Client({ connectionString: testDb.urlFor("app_api") });
     await service.connect();
-    // FORCE can't end another role's session: without the wait this drop fails. The
-    // connection closes only once the drop has counted it, so the drop is already waiting.
+    // FORCE can't end another role's session: the drop's first attempt fails while it's
+    // open (a session's last statement stays in pg_stat_activity), and it keeps trying
+    // until the connection is gone.
     const dropping = testDb.drop();
     await vi.waitFor(async () => {
       const { rows } = await client.query<{ n: number }>(
-        "SELECT count(*)::int AS n FROM pg_stat_activity WHERE query LIKE '%AS open FROM pg_stat_activity%' AND pid <> pg_backend_pid()",
+        "SELECT count(*)::int AS n FROM pg_stat_activity WHERE query = $1",
+        [`DROP DATABASE IF EXISTS ${testDb.name} WITH (FORCE)`],
       );
       expect(rows[0]?.n).toBeGreaterThan(0);
     });
+    expect(await exists(testDb.name)).toBe(true);
     await service.end();
     await dropping;
     expect(await exists(testDb.name)).toBe(false);

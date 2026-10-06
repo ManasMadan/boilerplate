@@ -706,6 +706,35 @@ describe("keeping in sync, edge cases", () => {
     expect(updates()).toBe(before);
   });
 
+  it("leaves Stripe alone when only our copy of the seats is behind", async () => {
+    // Stripe already has the member count, as when its webhook hasn't reached us yet: the
+    // copy here says otherwise, and nothing is sent.
+    const { owner, orgId } = await workspace();
+    await subscribe(owner.session);
+    const { BillingService } = await import("../src/modules/billing");
+    const billing = harness.app.get(BillingService) as unknown as {
+      repository: { current: (orgId: OrgId) => Promise<{ quantity: number } | null> };
+      syncSeats: (orgId: OrgId) => Promise<void>;
+    };
+    const current = billing.repository.current.bind(billing.repository);
+    const stale = vi.spyOn(billing.repository, "current").mockImplementationOnce(async (id) => {
+      const row = await current(id);
+      return row && { ...row, quantity: 5 };
+    });
+    const updated = () =>
+      stripe.events.filter(
+        (event) =>
+          event.type === "customer.subscription.updated" &&
+          (event.object as { metadata: { orgId?: string } }).metadata.orgId === orgId,
+      ).length;
+    const before = updated();
+    await billing.syncSeats(orgId);
+    expect(stale).toHaveBeenCalledOnce();
+    expect(stripe.subscriptionFor(orgId)?.items.data[0]?.quantity).toBe(1);
+    expect(updated()).toBe(before);
+    stale.mockRestore();
+  });
+
   it("lists a drafted renewal, which has no number or page yet", async () => {
     const { owner, orgId } = await workspace();
     await subscribe(owner.session);
