@@ -1,7 +1,7 @@
 /** Test databases left behind by a run that died are dropped by the next run. */
 import { spawnSync } from "node:child_process";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, dropAbandonedTestDatabases, isRunning } from "../src/testing";
 
 const admin = () => {
@@ -55,15 +55,11 @@ describe("dropping a test database", () => {
     const testDb = await createTestDatabase();
     const service = new pg.Client({ connectionString: testDb.urlFor("app_api") });
     await service.connect();
-    // FORCE can't end another role's session: without the wait this drop fails. The
-    // connection closes only once the drop has counted it, so the drop is already waiting.
+    // FORCE can't end another role's session: the drop's first attempts fail while it's
+    // open, and it keeps trying until the connection is gone.
     const dropping = testDb.drop();
-    await vi.waitFor(async () => {
-      const { rows } = await client.query<{ n: number }>(
-        "SELECT count(*)::int AS n FROM pg_stat_activity WHERE query LIKE '%AS open FROM pg_stat_activity%' AND pid <> pg_backend_pid()",
-      );
-      expect(rows[0]?.n).toBeGreaterThan(0);
-    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await exists(testDb.name)).toBe(true);
     await service.end();
     await dropping;
     expect(await exists(testDb.name)).toBe(false);

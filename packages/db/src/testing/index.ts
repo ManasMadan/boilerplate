@@ -190,20 +190,21 @@ export async function createTestDatabase(): Promise<TestDatabase> {
       const client = new pg.Client({ connectionString: urlFor("postgres", "migrator") });
       await client.connect();
       try {
-        // A client's disconnect ends its server backend a moment later, and FORCE can only
-        // end the migrator's own sessions: wait for the services' to go first.
+        // FORCE can only end the migrator's own sessions, and a client's disconnect ends
+        // its server backend a moment later (or a pool opens another): try again until
+        // the services' sessions are gone. A drop that fails changes nothing.
         const deadline = Date.now() + waitMs;
-        while (Date.now() < deadline) {
-          const { rows } = await client.query<{ open: number }>(
-            "SELECT count(*)::int AS open FROM pg_stat_activity WHERE datname = $1 AND usename <> current_user",
-            [name],
-          );
-          if (rows[0]?.open === 0) {
+        for (;;) {
+          try {
+            await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
             break;
+          } catch (error) {
+            if (Date.now() >= deadline) {
+              throw error;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 50));
           }
-          await new Promise((resolve) => setTimeout(resolve, 50));
         }
-        await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
       } catch (error) {
         // FORCE can only end the migrator's own sessions, so a connection a test left open
         // as another role fails the drop: name it, it's a leak in the test or the service.
