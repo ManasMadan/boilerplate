@@ -29,8 +29,12 @@ const TEMPLATE = "app_test";
  */
 const TEMPLATE_LOCK = 482_117_001;
 
-/** How long a test database's drop waits for the services' connections to close. */
-const BACKENDS_GONE_MS = 10_000;
+/**
+ * How long a test database's drop waits for the services' connections to close: longer
+ * than node-postgres's 10-second idle timeout, since a query that lands after an app has
+ * closed (a background task finishing) reopens one connection that then idles that long.
+ */
+const BACKENDS_GONE_MS = 15_000;
 
 /** Local role passwords match the role names (infra/postgres/init). */
 const ROLE_PASSWORDS: Record<string, string> = {
