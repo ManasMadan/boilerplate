@@ -339,6 +339,7 @@ file below 100%, or one no test loads.
 | `packages/ui/src/components/label.tsx` | `biome-ignore lint/a11y/noLabelWithoutControl` | `Label` is a wrapper: the caller ties it to its control (`htmlFor`, or the control inside it) through props the rule can't see |
 | `scripts/restore-drill.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | the rule asks turbo.json to declare what a task reads, and turbo never runs this script |
 | `.claude/hooks/lib.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | Claude Code sets `CLAUDE_PROJECT_DIR` for its hooks, which turbo never runs |
+| `.claude/hooks/session-start.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | Claude Code sets `CLAUDE_ENV_FILE` for its session-start hook, which turbo never runs |
 | `.github/workflows/deploy.yml` | `# zizmor: ignore[dangerous-triggers]` | `workflow_run` is how a deploy follows CI on master; the job that checks out the run's commit runs only for this repository's own push (`scripts/workflows.test.ts` checks) |
 | `.github/workflows/mobile.yml` | `# zizmor: ignore[dangerous-triggers]` | the same, for the app updates that follow CI and the store builds that follow a release |
 | `.devcontainer/Dockerfile` | `# hadolint ignore=DL3066` | `USER node` by name, not its id: the dev container features the image takes (docker-in-docker, for one) find the user to set up by its name |

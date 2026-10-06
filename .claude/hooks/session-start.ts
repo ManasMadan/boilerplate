@@ -60,6 +60,7 @@ export async function sessionStart(
     doctor = runDoctor,
     cache = join(STATE_DIR, "doctor.txt"),
     changed = changedFiles,
+    // biome-ignore lint/suspicious/noUndeclaredEnvVars: Claude Code sets it for its hooks, which turbo never runs
     envFile = process.env.CLAUDE_ENV_FILE,
   } = {},
 ): Promise<Record<string, unknown>> {
